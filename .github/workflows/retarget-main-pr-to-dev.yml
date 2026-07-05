@@ -13,6 +13,10 @@ permissions:
   issues: write
   pull-requests: write
 
+concurrency:
+  group: retarget-main-pr-to-dev-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   retarget:
     name: Retarget main PR base to dev
