@@ -1,0 +1,1616 @@
+<head>
+  <title>三国杀小抄</title>
+  <meta charset="utf-8" />
+  <style type="text/css">
+    .createIframe,
+    #seatUI,
+    #rogueUI,
+    .tooltip,
+    #sidebarHint,
+    .city,
+    .particle {
+      --my-background-image: url('https://web.sanguosha.com/220/h5_2/res/assets/bigPng/propGet.png');
+      --bg-primary: rgb(35, 32, 29);
+      --bg-secondary: rgb(30, 26, 23);
+      --bg-hover: rgb(55, 40, 32);
+      --text-gold: #f2de9c;
+      --text-gold-light: #c4b28a;
+      --text-red: #e56666;
+      --border-color: rgba(92, 78, 60, 0.5);
+      --shoupai-width: 33px;
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 12px;
+    }
+
+    ::-webkit-scrollbar-track {
+      border: 1px solid rgb(5, 5, 5);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgb(95, 86, 63);
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgb(44, 44, 44);
+    }
+
+    .body {
+      width: 100%;
+      padding: 0;
+      font-size: 13px;
+      background: var(--bg-primary);
+      /* 背景图的适应方式，可以根据需求调整 */
+      background-size: cover;
+      color: var(--text-gold);
+      display: flex;
+      flex-direction: column;
+      margin: 1px;
+      user-select: none;
+      /* 限制页面宽度不超过屏幕宽度 */
+      max-width: 100vw;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Arial, sans-serif;
+    }
+
+    .nav {
+      width: 100%;
+      background: var(--bg-primary);
+      position: sticky;
+      top: 0;
+      z-index: 10000;
+    }
+
+    .nav-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 4px;
+      padding: 8px;
+    }
+
+    .nav-item {
+      flex: 1 1 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-secondary);
+      border: 1px solid rgba(92, 78, 60, 0.5);
+      border-radius: 4px;
+      padding: 4px 8px;
+      color: var(--text-gold-light);
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .nav-item svg {
+      width: 13px;
+      height: 13px;
+      stroke-width: 2;
+      flex: 0 0 auto;
+    }
+
+    .nav-divider {
+      height: 1px;
+      width: 100%;
+      background: linear-gradient(90deg, transparent, var(--text-gold), transparent);
+    }
+
+    .text-sgs-red {
+      color: var(--text-red);
+    }
+
+    .nav1 {
+      font-weight: normal;
+      color: var(--text-gold-light);
+      background: transparent;
+      margin: 0;
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sha {
+      font-weight: normal;
+      color: var(--text-gold-light);
+      background: transparent;
+      margin: 0;
+      display: block;
+    }
+
+    #nav1:empty {
+      display: none;
+    }
+
+    .nav2 {
+      height: 20px;
+      width: 49%;
+      float: right;
+      text-align: center;
+      color: var(--text-gold);
+      background: var(--bg-primary);
+      margin-left: 3px;
+      border: 1px solid var(--text-gold);
+      display: block;
+      border-radius: 5px;
+    }
+
+    .nav2:hover {
+      color: var(--text-gold);
+      background: var(--bg-hover);
+      border: 1px solid var(--text-gold);
+    }
+
+    .nav2:focus {
+      background: var(--bg-hover);
+      box-shadow: 1px 1px 3px var(--text-gold);
+    }
+
+    .content {
+      margin: 1px;
+    }
+
+    .AC-head {
+      font-weight: bolder;
+      height: 66px;
+      width: 13%;
+      float: right;
+      text-align: center;
+      color: var(--text-gold);
+      background: var(--bg-primary);
+      margin: 1px;
+      border-radius: 5px;
+      border: 1px var(--bg-primary) solid;
+      box-shadow: 1px 0px 3px;
+      overflow: hidden;
+      font-size: 15px;
+    }
+
+    .AC-head:hover {
+      background: var(--bg-hover);
+      border: 1px var(--bg-primary) solid;
+      animation: blink 2s;
+      animation-iteration-count: infinite;
+    }
+
+    .AC-body {
+      height: 60px;
+      width: 79%;
+      float: left;
+      box-shadow: 1px 0px 3px;
+      border: 1px var(--bg-primary) solid;
+      color: var(--text-gold);
+      margin: 1px;
+      overflow: hidden;
+      border-radius: 5px;
+      background: var(--bg-primary);
+      resize: none;
+      font-size: 13px;
+    }
+
+    .invite-body {
+      height: 40px;
+      width: 92%;
+      float: left;
+      display: flex;
+      box-shadow: 1px 0px 3px;
+      border: 1px var(--bg-primary) solid;
+      color: var(--text-gold);
+      margin: 5px;
+      overflow: hidden;
+      border-radius: 5px;
+      background: var(--bg-primary);
+      resize: none;
+      font-size: 13px;
+    }
+
+    .orderContainer {
+      text-align: right;
+      vertical-align: bottom;
+    }
+
+    .order-head {
+      font-weight: bolder;
+      width: 10%;
+      height: 25px;
+      float: left;
+      text-align: center;
+      color: var(--text-gold);
+      margin-left: 3px;
+    }
+
+    .order-body:empty {
+      height: 35px;
+    }
+
+    .order-body {
+      position: relative;
+      padding: 5px;
+      height: auto;
+      width: 94%;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+      box-shadow: 1px 1px 3px;
+      z-index: 1;
+      margin: 1px;
+      overflow: hidden;
+      border-radius: 5px;
+    }
+
+    .order-body:after {
+      text-align: center;
+      content: var(--No-content, '座位号丨武将');
+      position: absolute;
+      bottom: 0;
+      right: 5px;
+      z-index: -1;
+      font: 800 20px 'Arial Black';
+      -webkit-text-fill-color: transparent;
+      -webkit-text-stroke-width: 1px;
+    }
+
+    .knownShouPai {
+      border: 1px var(--bg-primary) solid;
+      animation: blink 2s;
+      animation-iteration-count: infinite;
+    }
+
+    .knownCardsInHand {
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      display: none;
+      height: auto;
+    }
+
+    .knownCards:empty {
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      display: none;
+    }
+
+    .knownCards {
+      width: 94%;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      height: auto;
+    }
+
+    @keyframes blink {
+      50% {
+        border-color: var(--text-gold);
+      }
+    }
+
+    .paiduiCards:after {
+      text-align: center;
+      content: '牌堆';
+      position: absolute;
+      bottom: 0;
+      right: 5px;
+      z-index: -1;
+      font: 800 20px 'Arial Black';
+      -webkit-text-fill-color: transparent;
+      -webkit-text-stroke-width: 1px;
+    }
+
+    #deckEdgeUI .paiduiCards:after {
+      display: none;
+    }
+
+    .qipaiCards:after {
+      text-align: center;
+      content: '本回合弃牌堆';
+      position: absolute;
+      bottom: 0;
+      right: 5px;
+      z-index: -1;
+      font: 800 20px 'Arial Black';
+      -webkit-text-fill-color: transparent;
+      -webkit-text-stroke-width: 1px;
+    }
+
+    .knownCards:after {
+      text-align: center;
+      content: '场上手牌';
+      position: absolute;
+      bottom: 0;
+      right: 5px;
+      z-index: -1;
+      font: 800 20px 'Arial Black';
+      -webkit-text-fill-color: transparent;
+      -webkit-text-stroke-width: 1px;
+    }
+
+    #quanBian:after {
+      text-align: center;
+      content: '权变牌';
+      position: absolute;
+      bottom: 0;
+      right: 5px;
+      z-index: -1;
+      font: 800 20px 'Arial Black';
+      -webkit-text-fill-color: transparent;
+      -webkit-text-stroke-width: 1px;
+    }
+
+    #yanXi:after {
+      text-align: center;
+      content: '宴戏牌';
+      position: absolute;
+      bottom: 0;
+      right: 5px;
+      z-index: -1;
+      font: 800 20px 'Arial Black';
+      -webkit-text-fill-color: transparent;
+      -webkit-text-stroke-width: 1px;
+    }
+
+    .cardTypeDetail:after {
+      text-align: center;
+      content: '牌堆类型详情';
+      position: absolute;
+      bottom: 0;
+      right: 5px;
+      z-index: -1;
+      font: 800 20px 'Arial Black';
+      -webkit-text-fill-color: transparent;
+      -webkit-text-stroke-width: 1px;
+    }
+
+    .ding {
+      text-align: center;
+      width: 100%;
+      position: relative;
+      height: auto;
+      display: none;
+    }
+
+    .dingCards {
+      text-align: center;
+      position: relative;
+      height: auto;
+      min-height: 60px;
+      display: none;
+    }
+
+    .dingCards:after {
+      content: '第一张为牌堆顶';
+      position: absolute;
+      bottom: 0;
+      right: 5px;
+      z-index: -1;
+      font: 800 20px 'Arial Black';
+      -webkit-text-fill-color: transparent;
+      -webkit-text-stroke-width: 1px;
+    }
+
+    .di {
+      text-align: center;
+      width: 100%;
+      position: relative;
+      height: auto;
+      display: none;
+    }
+
+    .diCards {
+      text-align: center;
+      position: relative;
+      height: auto;
+      min-height: 60px;
+      display: none;
+    }
+
+    .diCards:after {
+      content: '第一张为牌堆底';
+      position: absolute;
+      bottom: 0;
+      right: 5px;
+      z-index: -1;
+      font: 800 20px 'Arial Black';
+      -webkit-text-fill-color: transparent;
+      -webkit-text-stroke-width: 1px;
+    }
+
+    .cardDetail {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .type {
+      width: 100%;
+    }
+
+    .cardTypeContainer {
+      width: 100%;
+      overflow: hidden;
+      display: block;
+    }
+
+    .type-head {
+      width: 10%;
+      float: left;
+      text-align: center;
+      color: var(--text-gold);
+      margin-left: 3px;
+      display: block;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .type-body {
+      padding: 5px;
+      width: 94%;
+      display: block;
+      box-shadow: 1px 1px 3px;
+      margin: 1px;
+      overflow: hidden;
+      border-radius: 5px;
+    }
+
+    .cardType {
+      font-size: 12px;
+      width: 25%;
+      height: 22px;
+      float: left;
+      text-align: center;
+      border: 1px;
+      margin: 0;
+      background: rgb(210, 200, 160);
+      box-shadow: inset 1px 1px 1px #000;
+    }
+
+    .cardType.active {
+      color: black;
+    }
+
+    .cardType.inactive {
+      color: gray;
+    }
+
+    .cardType:hover {
+      color: var(--text-gold);
+      background: var(--bg-hover);
+      border: 1px var(--bg-primary) solid;
+      animation: blink 2s;
+      animation-iteration-count: infinite;
+    }
+
+    .storeDetail {
+      font-size: 12px;
+      width: 50%;
+      height: 22px;
+      float: left;
+      text-align: center;
+      border: 1px;
+      margin: 0;
+      background: rgb(210, 200, 160);
+      box-shadow: inset 1px 1px 1px #000;
+    }
+
+    .detail {
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .detail-head {
+      width: 10%;
+      height: 25px;
+      float: left;
+      text-align: center;
+      color: var(--text-gold);
+      margin-left: 3px;
+    }
+
+    .detail-body {
+      min-height: 40px;
+      padding: 5px;
+      width: 94%;
+      display: block;
+      box-shadow: 1px 1px 3px;
+      margin: 1px;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .rogue-attr-head {
+      float: none;
+      width: auto;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .rogue-attr-body {
+      float: none;
+      width: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      min-height: 0;
+    }
+
+    .rogue-attr-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      border: 1px solid rgba(242, 222, 156, 0.6);
+      border-radius: 10px;
+      background: rgba(55, 40, 32, 0.8);
+      color: var(--text-gold);
+      font-size: 12px;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .panel-header {
+      background: var(--bg-primary);
+      color: var(--text-gold);
+      padding: 3px;
+      text-align: left;
+      border: none;
+      width: 100%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      border-radius: 5px;
+      border: 1px transparent solid;
+      font-size: 13px;
+    }
+
+    .triangle {
+      width: 0;
+      height: 0;
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      border-left: 6px solid var(--text-gold);
+      margin-right: 10px;
+      transition: transform 0.3s ease;
+    }
+
+    .panel-content {
+      width: 100%;
+      display: grid;
+      grid-template-rows: minmax(0, 0fr);
+      color: var(--text-gold);
+      overflow: hidden;
+      border-radius: 5px;
+      background: var(--bg-primary);
+      transition: grid-template-rows 0.3s ease-out;
+    }
+
+    .panel-header.active+.panel-content {
+      grid-template-rows: minmax(0, 1fr);
+    }
+
+    .panel-content-inner {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .panel-content.order>.panel-content-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .panel-header.active .triangle {
+      transform: rotate(90deg);
+    }
+
+    .panel-header.active {
+      color: var(--text-gold);
+      background: var(--bg-hover);
+    }
+
+    .panel-header:hover {
+      color: var(--text-gold);
+      background: var(--bg-hover);
+      border: 1px var(--bg-primary) solid;
+      animation: blink 2s;
+      animation-iteration-count: infinite;
+    }
+
+    .r {
+      color: rgb(240, 65, 85);
+    }
+
+    .suits-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 4px;
+      width: 100%;
+    }
+
+    .suitRec {
+      font-family:
+        -apple-system, BlinkMacSystemFont, 'Segoe UI Symbol', 'Segoe UI', Tahoma, Arial, sans-serif;
+      text-shadow:
+        1px 0 0 rgba(255, 255, 255, 0.7),
+        0 1px 0 rgba(255, 255, 255, 0.7),
+        -1px 0 0 rgba(255, 255, 255, 0.7),
+        0 -1px 0 rgba(255, 255, 255, 0.7);
+    }
+
+    .suit {
+      font-family:
+        -apple-system, BlinkMacSystemFont, 'Segoe UI Symbol', 'Segoe UI', Tahoma, Arial, sans-serif;
+    }
+
+    .suit-glyph {
+      display: inline-block;
+      line-height: 1;
+      min-width: 0.72em;
+      text-align: center;
+      font-size: 1.45em;
+      font-weight: 700;
+      font-family: 'SimSun', 'Songti SC', 'Segoe UI Symbol', 'Segoe UI', Tahoma, Arial, sans-serif;
+      vertical-align: -0.08em;
+    }
+
+    .suitRec .suit-glyph,
+    .suit .suit-glyph {
+      margin-right: 1px;
+    }
+
+    .phrase {
+      float: left;
+    }
+
+    .face {
+      width: 12.5%;
+      display: block;
+      float: left;
+    }
+
+    .face:hover {
+      width: 12.5%;
+      display: block;
+      float: left;
+      background: var(--text-gold);
+    }
+
+    #shandian {
+      width: 100%;
+      float: left;
+    }
+
+    .function {
+      width: 50%;
+      margin: 1px;
+    }
+
+    .jizhan {
+      width: 100%;
+      float: left;
+    }
+
+    .yanjiao {
+      width: 50%;
+      float: left;
+    }
+
+    .yanjiaospan {
+      border: 1px solid #0000;
+      box-sizing: border-box;
+    }
+
+    .yanjiaospan:hover {
+      border: 1px solid var(--text-gold);
+      cursor: pointer;
+    }
+
+    .calRes {
+      width: 98%;
+      height: 20px;
+      float: left;
+      text-align: center;
+      color: var(--text-gold);
+      background: var(--bg-primary);
+      border: 1px solid var(--text-gold);
+      display: block;
+      border-radius: 5px;
+      font-size: 13px;
+      margin: 1px;
+    }
+
+    /* 仅在按钮未被禁用时应用的 hover 效果 */
+    .calRes:not(:disabled):hover {
+      font-size: 12px;
+      color: var(--text-gold);
+      background: var(--bg-hover);
+      border: 1px var(--bg-primary) solid;
+      animation: blink 2s;
+      animation-iteration-count: infinite;
+    }
+
+    .mizhuBTN {
+      width: 48%;
+      height: 20px;
+      text-align: center;
+      color: var(--text-gold);
+      background: var(--bg-primary);
+      border: 1px solid var(--text-gold);
+      display: block;
+      border-radius: 5px;
+      font-size: 13px;
+    }
+
+    .mizhuBTN:hover {
+      color: var(--text-gold);
+      background: var(--bg-hover);
+      border: 1px var(--bg-primary) solid;
+      animation: blink 2s;
+      animation-iteration-count: infinite;
+    }
+
+    .mizhu {
+      width: 100%;
+      height: 20px;
+      float: left;
+      text-align: center;
+      color: var(--text-gold);
+      background: var(--bg-primary);
+      margin-left: 3px;
+      border: 1px solid var(--text-gold);
+      display: block;
+      border-radius: 5px;
+    }
+
+    .mizhu:hover {
+      color: var(--text-gold);
+      background: var(--bg-hover);
+      border: 1px var(--bg-primary) solid;
+      animation: blink 2s;
+      animation-iteration-count: infinite;
+    }
+
+    .res {
+      width: 100%;
+      float: left;
+    }
+
+    /* 超链接*/
+    a:link,
+    a:visited {
+      color: inherit;
+      /* or the specific color you want */
+      text-decoration: none;
+      /* Remove underline if desired */
+      display: inline-flex;
+      /* Use flexbox for centering */
+      text-decoration: underline;
+      /* 添加下划线 */
+      border-radius: 5px;
+      /* Rounded corners */
+      cursor: pointer;
+      /* Pointer cursor on hover */
+      align-items: center;
+      /* Vertically center */
+      justify-content: center;
+      /* Horizontally center */
+    }
+
+    a:hover {
+      color: var(--text-gold);
+      background: var(--bg-hover);
+      border: 1px var(--bg-primary) solid;
+      animation: blink 2s;
+      animation-iteration-count: infinite;
+    }
+
+    #donate {
+      position: relative;
+      color: var(--text-gold);
+      display: block;
+      text-align: center;
+    }
+
+    .uuid {
+      position: relative;
+      color: var(--text-gold);
+      display: block;
+      text-align: center;
+      /* Change cursor to pointer on hover */
+      cursor: pointer;
+    }
+
+    .uuid:hover {
+      color: var(--text-gold);
+      background: var(--bg-hover);
+      border: 1px var(--bg-primary) solid;
+      animation: blink 2s;
+      animation-iteration-count: infinite;
+    }
+
+    .uuid:active {
+      background: var(--bg-hover);
+    }
+
+    .width {
+      width: 100%;
+      height: 5px;
+    }
+
+    .switch-container-row {
+      display: flex;
+    }
+
+    .switch {
+      position: relative;
+      display: block;
+      margin-left: 10px;
+      /* 计算每个容器的宽度，考虑了左侧的 margin */
+      width: 56px;
+      height: 26px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--bg-primary);
+      -webkit-transition: 0.4s;
+      transition: 0.4s;
+      border-radius: 34px;
+      border: 1px solid var(--text-gold);
+      --slider-position: 2px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: '';
+      height: 20px;
+      width: 20px;
+      /* Default to 2px if the variable isn't set */
+      left: var(--slider-position, 2px);
+      bottom: 2px;
+      background-color: var(--text-gold);
+      -webkit-transition: 0.4s;
+      transition: 0.4s;
+      border-radius: 50%;
+    }
+
+    input:checked+.slider {
+      background-color: #ff7b54;
+    }
+
+    .switch input:checked+.slider:before {
+      transform: translateX(30px);
+    }
+
+    .status {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      /* 调整位置 */
+      left: 5px;
+      /* 文字颜色 */
+      color: #555;
+    }
+
+    .explanation {
+      margin: 0 10px;
+      display: flex;
+      width: 100%;
+    }
+
+    input:checked+.slider+.status:before {
+      content: '开';
+    }
+
+    input+.slider+.status:before {
+      content: '关';
+    }
+
+    .calRes:disabled {
+      background-color: #ccc;
+      color: #666;
+      cursor: not-allowed;
+    }
+
+    .markedCard {
+      order: 1;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      border-radius: 5px;
+      border: 1px solid black;
+      width: auto;
+      background-color: var(--bg-hover);
+      color: var(--text-gold);
+    }
+
+    .mark {
+      writing-mode: vertical-rl;
+      margin-right: 0px;
+      /* 按需调整间距 */
+      color: var(--text-gold);
+    }
+
+    .markedCard>.mark:only-child {
+      display: none;
+    }
+
+    .shoupai {
+      color: black;
+      --shoupai-width: 33px;
+      padding: 0;
+      position: relative;
+      font-weight: bolder;
+      margin-right: calc(32px - var(--shoupai-width));
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: var(--shoupai-width);
+      min-width: var(--shoupai-width);
+      height: 36px;
+      border: 1px solid black;
+      text-align: center;
+      background: rgba(210, 200, 160, 0.5);
+      border-radius: 5px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Arial, sans-serif;
+      /* 防止文本换行 */
+      white-space: nowrap;
+      text-shadow:
+        1px 0 0 rgba(255, 255, 255, 0.7),
+        0 1px 0 rgba(255, 255, 255, 0.7),
+        -1px 0 0 rgba(255, 255, 255, 0.7),
+        0 -1px 0 rgba(255, 255, 255, 0.7);
+      font-size: 13px;
+    }
+
+    /* 候选牌 */
+    .shoupai.candidate-card {
+      background: 0;
+    }
+
+    .shoupai .card-cn {
+      display: inline-block;
+      line-height: 1;
+      font-family: 'Segoe UI Symbol', 'Segoe UI', Tahoma, Arial, sans-serif;
+    }
+
+    .shoupai .card-name {
+      display: block;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.05;
+      font-size: 13px;
+    }
+
+    .shoupai .card-cn .suit-glyph {
+      min-width: 0.56em;
+      font-size: 1.45em;
+      margin-right: 0;
+      transform: none;
+    }
+
+    .shoupai .card-cn .rank-glyph {
+      display: inline-block;
+      margin-left: 1px;
+    }
+
+    .suit-heart,
+    .suit-diamond {
+      color: rgb(240, 65, 85);
+    }
+
+    .suit-spade {
+      color: #4a90e2;
+    }
+
+    .suit-club {
+      color: #4caf50;
+    }
+
+    .shoupai .card-cn-long {
+      font-size: 12px;
+      letter-spacing: -1px;
+    }
+
+    .shoupai .card-cn-long .suit-glyph {
+      font-size: 1.3em;
+    }
+
+    .shoupai.red-card {
+      color: red;
+    }
+
+    .shoupai.unknown-card {
+      background: 0;
+    }
+
+    .shoupai.unknown-card .shoupai {
+      background: 0;
+      pointer-events: none;
+    }
+
+    .order-body:not(.paiduiCards) .shoupai:disabled {
+      display: none;
+    }
+
+    .order-body:not(.paiduiCards) .shoupai.unknown-card {
+      width: auto;
+    }
+
+    .left {
+      width: 30%;
+      float: left;
+    }
+
+    .right {
+      width: 70%;
+      float: left;
+    }
+
+    input[type='checkbox']:disabled+.slider {
+      /* 禁用时 slider 的背景颜色变灰 */
+      background-color: gray;
+      /* 禁用时鼠标变为不可用状态 */
+      cursor: not-allowed;
+    }
+
+    .question-mark {
+      display: inline-block;
+      position: relative;
+      width: 15px;
+      height: 15px;
+      /* 垂直居中 */
+      line-height: 15px;
+      text-align: center;
+      border: 1px solid var(--text-gold);
+      border-radius: 50%;
+      margin-left: 2px;
+      transition: background-color 0.3s;
+    }
+
+    .question-mark:hover {
+      /* Hover效果，可以调整颜色 */
+      background-color: var(--bg-hover);
+      /* 鼠标划过时显示手型光标 */
+      cursor: pointer;
+    }
+
+    .tooltip {
+      position: fixed;
+      inset: auto;
+      margin: 0;
+      box-sizing: border-box;
+      background: rgba(51, 51, 51, 0.96);
+      text-align: center;
+      padding: 5px 8px;
+      border-radius: 5px;
+      border: none;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+      max-width: 200px;
+      white-space: pre-line;
+      z-index: 10000000001;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.1s ease-in-out;
+      color: var(--text-gold);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .tooltip:popover-open,
+    .tooltip.dialog-tooltip {
+      position: fixed;
+      inset: auto;
+      margin: 0;
+      z-index: 2147483647;
+    }
+
+    .tooltip.visible {
+      opacity: 1;
+    }
+
+    .tooltip.top {
+      margin-left: 0;
+    }
+
+    #sidebarHint {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 25px;
+      height: 100%;
+      background-color: rgba(55, 40, 32, 0.8);
+      color: var(--text-gold);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      font-size: 20px;
+      writing-mode: vertical-rl;
+      /* 保持文字直立 */
+      text-orientation: upright;
+    }
+
+
+
+    .sorderContainer {
+      /* 默认字体大小，可以根据需要调整 */
+      font-size: 13px;
+      width: 100%;
+      /* 使用Flexbox布局 */
+      display: flex;
+      /* 垂直居中对齐子元素 */
+      align-items: center;
+      width: 146px;
+      z-index: 10000000000;
+      user-select: none;
+      text-align: left;
+      transition: height 200ms;
+      position: fixed;
+      transform-origin: 0 0;
+    }
+
+    .sorder-head {
+      /* 使用Flexbox */
+      display: flex;
+      /* 垂直居中 */
+      align-items: center;
+      /* 水平居中 */
+      justify-content: center;
+      font-weight: bolder;
+      width: 10%;
+      height: 25px;
+      text-align: center;
+      color: var(--text-gold);
+      margin-left: 3px;
+    }
+
+    .sorder-body {
+      /* 子元素可以接收鼠标事件 */
+      pointer-events: auto;
+      height: auto;
+      width: 100%;
+      float: right;
+      display: flex;
+      flex-wrap: wrap;
+      /* 允许内容自动换行 */
+      overflow: hidden;
+      z-index: 1;
+      /* 设置一行内容的高度 */
+      max-height: 48px;
+    }
+
+    /* 使用 ::after 模拟省略号 */
+    .sorder-body.show-ellipsis::after {
+      content: '...';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      color: var(--text-gold);
+      font-weight: bold;
+      height: 20px;
+      background: linear-gradient(to bottom, rgba(255, 255, 255, 0), rgb(0 0 0 / 80%));
+      width: inherit;
+    }
+
+    /* 鼠标悬停时显示完整内容并隐藏省略号 */
+    .sorder-body:hover {
+      max-height: none;
+      overflow: visible;
+    }
+
+    .sorder-body:hover::after {
+      display: none;
+    }
+
+    .sorder-body:not(.paiduiCards) .shoupai:disabled {
+      display: none;
+    }
+
+    .sorder-body:not(.paiduiCards) .shoupai.unknown-card {
+      width: auto;
+    }
+
+    @keyframes fadeInLeftToRight {
+      0% {
+        clip-path: inset(0 100% 0 0);
+        opacity: 0;
+      }
+
+      100% {
+        clip-path: inset(0 0 0 0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes fadeOutRightToLeft {
+      0% {
+        clip-path: inset(0 0 0 0);
+        opacity: 1;
+      }
+
+      100% {
+        clip-path: inset(0 100% 0 0);
+        opacity: 0;
+      }
+    }
+
+    .city {
+      visibility: hidden;
+      transition:
+        opacity 1s ease-in-out,
+        visibility 1s ease-in-out;
+      background-color: rgba(55, 52, 39, 0.7);
+      color: var(--text-gold);
+      align-items: center;
+      justify-content: center;
+      border-radius: 5px;
+      text-align: center;
+      flex-direction: column;
+      /* 使flex布局垂直排列 */
+      padding: 5px;
+    }
+
+    hr {
+      width: 100%;
+      margin: 0;
+    }
+
+    .show {
+      animation:
+        fadeInLeftToRight 1s forwards,
+        blink 2s infinite;
+      visibility: visible;
+    }
+
+    .hide {
+      animation: fadeOutRightToLeft 1s forwards;
+      visibility: hidden;
+    }
+
+    .particle {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      background-color: var(--text-gold);
+      border-radius: 50%;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 10000000001;
+    }
+
+    .mouse-pressed .sorder-body {
+      pointer-events: none;
+    }
+
+    .mouse-pressed .sorder-body:hover {
+      pointer-events: none;
+    }
+
+    .jie-group-title {
+      color: var(--text-gold);
+      font-weight: bold;
+      margin: 0 0 10px 0;
+      padding: 8px 0 8px 0;
+      text-align: center;
+      position: relative;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    }
+
+    .jie-group-title::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--text-gold), transparent);
+      box-shadow: 0 0 10px rgba(242, 222, 156, 0.5);
+    }
+
+    /* 修复支持链接居中问题 */
+    a.jie-group-title {
+      display: block !important;
+      width: 100%;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"
+    integrity="sha512-7eHRwcbYkK4d9g/6tD/mhkf++eoTHwpNM9woBxtPUBWm67zeAfFC+HrdoE2GanKeocly/VxeLvIqwvCdk7qScg=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
+
+<div class="body">
+  <div class="nav">
+    <div class="nav-row">
+      <div class="nav-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-linecap="round" stroke-linejoin="round" data-lucide="hourglass"
+          class="lucide lucide-hourglass text-sgs-gold">
+          <path d="M5 22h14"></path>
+          <path d="M5 2h14"></path>
+          <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"></path>
+          <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"></path>
+        </svg>
+        <span class="nav1" id="phrase">判定(2)>出牌(4)</span>
+      </div>
+      <div class="nav-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-linecap="round" stroke-linejoin="round" data-lucide="sword" class="lucide lucide-sword text-sgs-red">
+          <path d="m11 19-6-6"></path>
+          <path d="m5 21-2-2"></path>
+          <path d="m8 16-4 4"></path>
+          <path d="M9.5 17.5 21 6V3h-3L6.5 14.5"></path>
+        </svg>
+        <span class="sha" id="sha">剩余: 1</span>
+      </div>
+    </div>
+    <div class="nav-divider"></div>
+  </div>
+  <div class="content" id="content">
+    <div class="orderAndShouPai" id="orderAndShouPai">
+      <button class="panel-header">
+        <span class="triangle"></span>
+        <b>武将手牌</b>
+      </button>
+      <div class="panel-content order" id="button">
+        <div class="panel-content-inner">
+          <div class="orderContainer" id="or1">
+            <div class="order-body No1" id="1" style="--No-content: '神诸葛亮丨一'">
+              <button class="shoupai">
+                <span class="card-cn suit-club"><span class="suit-glyph">♣︎</span><span
+                    class="rank-glyph">Q</span></span>
+                <span class="card-name">测试</span>
+              </button>
+              <button class="shoupai">
+                <span class="card-cn suit-club"><span class="suit-glyph">♣︎</span><span
+                    class="rank-glyph">Q</span></span>
+                <span class="card-name">测试</span>
+              </button>
+              <button class="shoupai">
+                <span class="card-cn suit-club"><span class="suit-glyph">♣︎</span><span
+                    class="rank-glyph">Q</span></span>
+                <span class="card-name">测试</span>
+              </button>
+              <button class="shoupai">
+                <span class="card-cn suit-club"><span class="suit-glyph">♣︎</span><span
+                    class="rank-glyph">Q</span></span>
+                <span class="card-name">测试</span>
+              </button>
+              <div class="markedCard">
+                <span class="mark">木马</span>
+                <button class="shoupai unknown-card">
+                  <span class="card-cn card-cn-long suit-heart"><span class="suit-glyph">♥︎</span><span
+                      class="rank-glyph">10</span></span>
+                  <span class="card-name">测试</span>
+                </button>
+                <button class="shoupai red-card">
+                  <span class="card-cn suit-diamond"><span class="suit-glyph">♦︎</span><span
+                      class="rank-glyph">K</span></span>
+                  <span class="card-name">测试</span>
+                </button>
+              </div>
+              <button class="shoupai">
+                <span class="card-cn suit-club"><span class="suit-glyph">♣︎</span><span
+                    class="rank-glyph">Q</span></span>
+                <span class="card-name">测试</span>
+              </button>
+              <button class="shoupai">
+                <span class="card-cn suit-club"><span class="suit-glyph">♣︎</span><span
+                    class="rank-glyph">Q</span></span>
+                <span class="card-name">测试</span>
+              </button>
+              <button class="shoupai">
+                <span class="card-cn suit-club"><span class="suit-glyph">♣︎</span><span
+                    class="rank-glyph">Q</span></span>
+                <span class="card-name">测试</span>
+              </button>
+              <button class="shoupai">
+                <span class="card-cn suit-club"><span class="suit-glyph">♣︎</span><span
+                    class="rank-glyph">Q</span></span>
+                <span class="card-name">测试</span>
+              </button>
+            </div>
+          </div>
+          <div class="orderContainer" id="or2">
+            <div class="order-body No2" id="2" style="--No-content: '卧龙诸葛丨二'">
+              <button class="shoupai unknown-card">
+                <span class="card-cn card-cn-long suit-heart"><span class="suit-glyph">♥︎</span><span
+                    class="rank-glyph">10</span></span>
+                <span class="card-name">暗牌</span>
+              </button>
+              <button class="shoupai unknown-card">
+                <span class="card-cn card-cn-long suit-heart"><span class="suit-glyph">♥︎</span><span
+                    class="rank-glyph">10</span></span>
+                <span class="card-name">样式</span>
+              </button>
+            </div>
+          </div>
+          <div class="orderContainer" id="or3" style="--No-content: '天候孔明丨三'">
+            <div class="order-body No3" id="3"></div>
+          </div>
+          <div class="orderContainer" id="or4" style="--No-content: '诸葛亮丨四'">
+            <div class="order-body No4" id="4"></div>
+          </div>
+          <div class="orderContainer" id="or5" style="--No-content: '武诸葛亮丨五'">
+            <div class="order-body No5" id="5"></div>
+          </div>
+          <div class="orderContainer" id="or6" style="--No-content: '卧龙凤雏丨六'">
+            <div class="order-body No6" id="6"></div>
+          </div>
+          <div class="orderContainer" id="or7" style="--No-content: '界卧龙诸葛丨七'">
+            <div class="order-body No7" id="7"></div>
+          </div>
+          <div class="orderContainer" id="or8" style="--No-content: '界诸葛亮丨八'">
+            <div class="order-body No8" id="8"></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="orderContainer">
+          <div class="order-body knownCards" id="knownCards"></div>
+        </div>
+        <div class="orderContainer">
+          <div class="order-body paiduiCards" id="paiduiCards"></div>
+        </div>
+        <div class="orderContainer">
+          <div class="order-body qipaiCards" id="qipaiCards"></div>
+        </div>
+        <div class="orderContainer">
+          <div class="knownCards quanBianYanXi" id="quanBian"></div>
+          <div class="knownCards quanBianYanXi" id="yanXi"></div>
+        </div>
+      </div>
+    </div>
+    <div class="width"></div>
+    <div class="cardDetail" id="cardDetail">
+      <div class="space"></div>
+      <div class="detail">
+        <div class="detail-body">
+          <div class="suits-grid">
+            <div class="suit suit-heart" id="heart"><span class="suit-glyph">♥︎</span>红桃 × 0</div>
+            <div class="suit suit-spade" id="spade"><span class="suit-glyph">♠︎</span>黑桃 × 0</div>
+            <div class="suit suit-club" id="club"><span class="suit-glyph">♣︎</span>梅花 × 0</div>
+            <div class="suit suit-diamond" id="diamond">
+              <span class="suit-glyph">♦︎</span>方片 × 0
+            </div>
+            <div class="suit r" id="hongsha">红杀 × 0</div>
+            <div class="suit" id="heisha">黑杀 × 0</div>
+            <span> 乱击/权变</span>
+            <div class="suitRec" id="suit"></div>
+          </div>
+          <br />
+          <span>上一张使用的牌</span><br />
+          <button class="shoupai red-card" id="lastUseCard">
+            <span class="card-name">＾＾</span>
+            <span class="card-name">•ω•</span>
+          </button>
+          <br>
+          <br>
+          <br>
+          <div id='guhuo' style='display: none'>蛊惑牌</div>
+          <div class='function yanjiao' id='yanjiao'>严教小抄</div>
+          <button class='function mizhuBTN' id='mizhu'>糜竺小抄</button>
+          <button class='function mizhu mySeatID' id='mySeatID1'>座位：1</button>
+          <button class='function mizhu mySeatID' id='mySeatID2'>座位：2</button>
+          <div class='function res' id='result'>结果样式：1 1 1 1 = 4</div>
+        </div>
+      </div>
+      <div class="width"></div>
+      <div class="type">
+        <div class="cardTypeContainer">
+          <div class="type-body type1" id="type1"></div>
+        </div>
+        <div class="cardTypeContainer">
+          <div class="type-body type2" id="type2"></div>
+        </div>
+        <div class="cardTypeContainer">
+          <div class="type-body type3" id="type3"></div>
+        </div>
+        <div class="cardTypeContainer">
+          <div class="type-body type4 typeNumber" id="type4"></div>
+        </div>
+        <div class="orderContainer">
+          <div class="knownCards cardTypeDetail" id="cardTypeDetail"></div>
+        </div>
+      </div>
+    </div>
+    <div class="width"></div>
+    <div class="width"></div>
+
+    <div class="store" id="store">
+      <div class="space"></div>
+      <button class="panel-header">
+        <span class="triangle"></span>
+        <b>山河图</b>
+      </button>
+      <div class="panel-content">
+        <div class="switch-container-row">
+          <div class="switch-container" data-tooltip="提前预测奇遇事件">
+            <span class="explanation">山河地图</span>
+            <label class="switch">
+              <input id="rogueCitySwitch" type="checkbox" />
+              <span class="slider"></span>
+              <span class="status"></span>
+            </label>
+          </div>
+        </div>
+        <div class="detail">
+          <div class="detail-head rogue-attr-head">结局倾向</div>
+          <div class="nav-divider"></div>
+          <div class="detail-body rogue-attr-body" id="rogueAttrInfo">
+            每局的选择都会最终指向不同结局
+          </div>
+        </div>
+        <div id='storeDetail'>
+          <button class="storeDetail">集市霸王·壹300</button>
+          <button class="storeDetail">集市霸王·贰200</button>
+          <button class="storeDetail">集市霸王·叁100</button>
+          <button class="storeDetail">会员商店·肆1100</button>
+          <button class="storeDetail">稳定承载1100</button>
+          <button class="storeDetail">极奢1100</button>
+        </div>
+      </div>
+    </div>
+    <button class="panel-header">
+      <span class="triangle"></span>
+      <b>设置</b>
+    </button>
+    <div class="setting panel-content">
+      <div class="switch-container-row">
+        <div class="switch-container" data-tooltip="明牌框展示在武将下面">
+          <span class="explanation">明牌框框</span>
+          <label class="switch">
+            <input id="seatUISwitch" type="checkbox" />
+            <span class="slider"></span>
+            <span class="status"></span>
+          </label>
+        </div>
+        <div class="switch-container" data-tooltip="会在自己手上的卡牌显示标签&#10;标明卡牌来源卡牌功能&#10;">
+          <span class="explanation">卡牌标签</span>
+          <label class="switch">
+            <input id="cardLabelSwitch" type="checkbox" />
+            <span class="slider"></span>
+            <span class="status"></span>
+          </label>
+        </div>
+        <div class="switch-container" data-tooltip="在浏览器控制台输出记牌器诊断日志">
+          <span class="explanation">调试日志</span>
+          <label class="switch">
+            <input id="debugLogSwitch" type="checkbox" />
+            <span class="slider"></span>
+            <span class="status"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="width"></div>
+    <div class="width"></div>
+    <div style="text-align: center">
+      <div class="width"></div>
+      <div class="uuid id" id="uuid">id：</div>
+      <div class="width"></div>
+      <div class="uuid nickName" id="nickName">昵称：</div>
+      <div class="width"></div>
+      <div class="width"></div>
+    </div>
+  </div>
+</div>

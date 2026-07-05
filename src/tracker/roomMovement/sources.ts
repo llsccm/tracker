@@ -1,0 +1,649 @@
+import { trackerLogger } from '@/utils/logger'
+import { POSITION_TOP } from '../candidate/cardPositions'
+import { getCompatibleMarkSpellIDs, type SpellIDInput } from '../candidate/markSpellID'
+import type { Card } from '../Card'
+import type {
+  PlayerLocationCandidate,
+  PublicPosition,
+  PublicZoneName,
+  SeatID,
+  SubZone
+} from '../types'
+import { RoomMovementHiddenMarkMethods } from './hiddenMarks'
+import type {
+  RoomMoveContext,
+  SourceZoneInput,
+  TakeSourceCardsOptions,
+  TakeSpecificSourceFallback
+} from './types'
+
+export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
+  takeCardsFromPublicZone(
+    count: number,
+    zoneID: SourceZoneInput = 'pile',
+    position: PublicPosition = POSITION_TOP
+  ): Card[] {
+    const sourceZone = this.room.getPublicZone(zoneID as PublicZoneName | null | undefined)
+    return sourceZone?.remove(count, position) ?? []
+  }
+
+  /**
+   * 优先从显式来源牌中取牌，不足时再按来源公共区补足。
+   * 用于协议已经修正出 sourceCards，但仍需要保持公共区有序关系一致的场景。
+   */
+  takeSpecificSourceCards(
+    cards: Card[] = [],
+    count: number,
+    fallback: TakeSpecificSourceFallback = {}
+  ): Card[] {
+    const uniqueCards = Array.from(new Set(cards)).filter(Boolean).slice(0, count)
+
+    uniqueCards.forEach((card) => {
+      this.room.zones.forEach((zone) => zone.removeCard(card))
+    })
+    // 显式 sourceCards 可能直接指向无席位 mark 空间里的实体，取走后必须同步摘账本。
+    this.removeUnassignedMarkSpaceCards(uniqueCards)
+
+    if (uniqueCards.length >= count) return uniqueCards
+
+    const selected = new Set(uniqueCards)
+    const fallbackCards = this.takeCardsFromPublicZone(
+      count - uniqueCards.length,
+      fallback.fromZone,
+      fallback.fromPosition
+    ).filter((card) => !selected.has(card))
+
+    return [...uniqueCards, ...fallbackCards]
+  }
+
+  /**
+   * 从某玩家指定子区取出暗牌占位实体。
+   */
+  takeUnknownCardsFromPlayer(
+    seatID: SeatID,
+    count: number,
+    subZone: SubZone = 'hand',
+    spellIDs: SpellIDInput | SpellIDInput[] = []
+  ): Card[] {
+    const playerCards: Card[] = []
+    if (!(count > 0)) return playerCards
+    const sourceSpellID = Array.isArray(spellIDs) ? (spellIDs[0] ?? null) : spellIDs
+    const markSpellIDs = subZone === 'mark' ? getCompatibleMarkSpellIDs(sourceSpellID) : []
+
+    for (const card of this.room.cards) {
+      if (
+        card.location === 'player' &&
+        card.subZone === subZone &&
+        card.seats.has(seatID) &&
+        card.isKnown !== true
+      ) {
+        if (
+          markSpellIDs.length > 0 &&
+          (card.spellID === null || !markSpellIDs.includes(card.spellID))
+        ) {
+          continue
+        }
+        playerCards.push(card)
+        if (playerCards.length >= count) break
+      }
+    }
+
+    return playerCards
+  }
+
+  /**
+   * 从玩家明确子区取出已经识别的实体牌。
+   * 装备/判定/部分标记区本身可见，即使协议用暗牌移动，也不能丢掉已有明牌身份。
+   */
+  takeKnownCardsFromPlayerSubZone(
+    seatID: SeatID,
+    count: number,
+    subZone: SubZone = 'hand',
+    spellID: SpellIDInput = null
+  ): Card[] {
+    const playerCards: Card[] = []
+    if (!(count > 0)) return playerCards
+    const markSpellIDs = subZone === 'mark' ? getCompatibleMarkSpellIDs(spellID) : []
+
+    for (const card of this.room.cards) {
+      if (
+        card.location !== 'player' ||
+        card.subZone !== subZone ||
+        card.seats.has(seatID) !== true ||
+        card.isKnown !== true ||
+        card.suspended === true ||
+        card.hasSubZoneCandidates?.()
+      ) {
+        continue
+      }
+
+      if (subZone === 'mark' && markSpellIDs.length > 0) {
+        if (card.spellID === null || !markSpellIDs.includes(card.spellID)) continue
+      }
+
+      playerCards.push(card)
+      if (playerCards.length >= count) break
+    }
+
+    return playerCards
+  }
+
+  /**
+   * 收集某座位当前仍在手牌区的实体牌，包含明牌、暗牌和候选明牌。
+   */
+  getPlayerHandCardsBySeat(seatID: SeatID): Card[] {
+    return this.room.cards.filter(
+      (card) => card.location === 'player' && card.subZone === 'hand' && card.seats.has(seatID)
+    )
+  }
+
+  /**
+   * 收集某座位当前手牌中的已知实体，用于随机获得/回牌堆时传播明牌候选。
+   */
+  getKnownHandCardsBySeat(seatID: SeatID): Card[] {
+    return this.getPlayerHandCardsBySeat(seatID).filter((card) => card.isKnown === true)
+  }
+
+  getSourceSpellID(context: RoomMoveContext): RoomMoveContext['spellID'] {
+    return context.fromSpellID ?? context.spellID ?? null
+  }
+
+  /**
+   * 已知牌从玩家区移出时，如果它本来只是“可能在来源区”，先收敛来源候选。
+   * 这样标记/手牌的数量约束能看到明确移出的那一张。
+   */
+  resolveKnownSourcePlayerCandidate(card: Card, context: RoomMoveContext): boolean {
+    const { fromSeat, fromSubZone } = context
+    const sourceSpellID = this.getSourceSpellID(context)
+    if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone) {
+      return false
+    }
+
+    const candidate: PlayerLocationCandidate = {
+      type: 'player',
+      seatID: fromSeat,
+      subZone: fromSubZone,
+      spellID: fromSubZone === 'mark' ? sourceSpellID : null
+    }
+
+    if (card.hasLocationCandidate?.(candidate)) {
+      return card.resolveLocationCandidate(candidate, 'moveKnown:sourcePlayerCandidate')
+    }
+
+    if (card.hasSubZoneCandidate?.(candidate)) {
+      return card.resolveSubZoneCandidate(candidate, 'moveKnown:sourcePlayerCandidate')
+    }
+
+    return false
+  }
+
+  /**
+   * 判断明牌实体是否已经处在协议声明的玩家来源区。
+   */
+  isCardInPlayerSource(card: Card, context: RoomMoveContext): boolean {
+    const { fromSeat, fromSubZone } = context
+    const sourceSpellID = this.getSourceSpellID(context)
+    if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone) {
+      return false
+    }
+
+    return (
+      card.location === 'player' &&
+      card.subZone === fromSubZone &&
+      card.seats.has(fromSeat) &&
+      (fromSubZone !== 'mark' ||
+        sourceSpellID === null ||
+        sourceSpellID === undefined ||
+        card.spellID === sourceSpellID)
+    )
+  }
+
+  // 公共区移动必须校验有序 Zone，而不能只看 card.location，避免玩家暗占位伪装成牌堆实体。
+  isCardInPublicSource(card: Card, context: RoomMoveContext): boolean {
+    const { fromZone } = context
+    const sourceZone = typeof fromZone === 'string' ? this.room.zones.get(fromZone) : undefined
+    return sourceZone?.cards.includes(card) === true
+  }
+
+  /**
+   * 从协议声明的玩家来源区寻找可被明牌置换的暗占位。
+   */
+  findUnknownPlayerSourcePlaceholder(
+    context: RoomMoveContext,
+    excludeCard: Card | null = null
+  ): Card | null {
+    const { fromSeat, fromSubZone } = context
+    const sourceSpellID = this.getSourceSpellID(context)
+    if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone) {
+      return null
+    }
+
+    return (
+      this.room.cards.find((card) => {
+        if (
+          card === excludeCard ||
+          context.knownCards.includes(card) ||
+          card.location !== 'player' ||
+          card.subZone !== fromSubZone ||
+          card.seats.has(fromSeat) !== true ||
+          card.isKnown === true ||
+          card.suspended === true
+        ) {
+          return false
+        }
+
+        return (
+          fromSubZone !== 'mark' ||
+          sourceSpellID === null ||
+          sourceSpellID === undefined ||
+          card.spellID === sourceSpellID
+        )
+      }) ?? null
+    )
+  }
+
+  /**
+   * 明牌替换来源占位后，挑选一个非来源候选位置留给被换出的暗牌。
+   */
+  getSourcePlaceholderReplacementCandidate(
+    card: Card,
+    context: RoomMoveContext
+  ): PlayerLocationCandidate | null {
+    const { fromSeat, fromSubZone } = context
+    const sourceSpellID = this.getSourceSpellID(context)
+    const candidates = this.getCardPlayerLocationCandidates(card)
+
+    return (
+      candidates.find((candidate) => {
+        const isSource =
+          Number(candidate.seatID) === Number(fromSeat) &&
+          candidate.subZone === fromSubZone &&
+          (fromSubZone !== 'mark' || candidate.spellID === sourceSpellID)
+
+        return !isSource
+      }) ?? null
+    )
+  }
+
+  /**
+   * 洗牌后暂停追踪的正 ID 再次从玩家手牌出现时，理论上应已有洗牌保留的 id=0 来源占位。
+   * 但旧状态或边缘路径可能没有留下占位；此时只为该 suspended 正 ID 补一个玩家区暗占位，
+   * 让后续 swapCardWithUnknown() 继续走统一的来源占位置换流程。
+   */
+  createPlayerSourcePlaceholderForSuspendedKnownCard(
+    card: Card,
+    context: RoomMoveContext
+  ): Card | null {
+    const { fromSeat, fromSubZone, sourceEvent } = context
+    if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat)) return null
+    if (fromSubZone !== 'hand') return null
+    if (card.location !== 'suspended' || card.id <= 0 || card.isKnown !== true) return null
+
+    const placeholder = this.room.createExternalCards([], 1)[0]
+    if (!placeholder) return null
+
+    placeholder.bindCandidates([fromSeat], 'hand', null, { known: false })
+    trackerLogger.info('暂停追踪正 ID 来源手牌缺少暗占位，已创建 id=0 兜底占位', {
+      reason: 'moveKnownCardsForContext:suspendedSourcePlaceholderFallback',
+      knownCardID: card.id,
+      placeholderCardID: placeholder.id,
+      fromSeat,
+      fromSubZone,
+      sourceEvent
+    })
+
+    return placeholder
+  }
+
+  /**
+   * 协议声明明牌来自玩家区，但本地实体还在别处时，用该玩家的暗占位替回原位置。
+   * 这保持了“牌的公开身份”和“玩家暗牌数量”同时正确。
+   */
+  swapKnownCardWithPlayerSourcePlaceholder(card: Card, context: RoomMoveContext): Card | null {
+    const placeholder = this.findUnknownPlayerSourcePlaceholder(context, card)
+    if (!placeholder) return null
+
+    const { fromSeat, fromSubZone } = context
+    const sourceSpellID = this.getSourceSpellID(context)
+    const replacementCandidate = this.getSourcePlaceholderReplacementCandidate(card, context)
+    const oldLocation = card.location
+    const oldSubZone = card.subZone
+    const oldSeats = new Set(Array.from(card.seats, Number))
+    const oldCombinationID = card.combinationID
+    const oldSpellID = card.spellID
+    const keepPlaceholderAtPreviousPublicPosition = this.hasPublicCandidateAt(card, oldLocation)
+
+    this.room.removeCardsFromConstraintGroups([placeholder])
+
+    card.location = 'player'
+    card.subZone = fromSubZone
+    card.spellID = fromSubZone === 'mark' ? sourceSpellID : null
+    card.setLocationCandidates([], 'swapKnownCardWithPlayerSourcePlaceholder:knownCard:candidates')
+    card.suspended = false
+    card.confirmKnown()
+    card.setSeats([fromSeat], 'swapKnownCardWithPlayerSourcePlaceholder:knownCard')
+    card.combinationID = null
+    this.room.markCounterDirty(card)
+
+    if (replacementCandidate) {
+      const oldPublicZone = this.room.zones.get(oldLocation as PublicZoneName)
+      if (oldPublicZone) {
+        trackerLogger.warn('来源占位置换跳过公共区回补，占位改为继承其它候选', {
+          knownCardID: card.id,
+          placeholderCardID: placeholder.id,
+          oldLocation,
+          oldPublicZoneCardCount: oldPublicZone.cards.length,
+          oldPublicZoneHasKnownCard: oldPublicZone.cards.includes(card),
+          fromSeat,
+          fromSubZone,
+          spellID: sourceSpellID,
+          replacementCandidate,
+          sourceEvent: context.sourceEvent
+        })
+      }
+
+      placeholder.bindCandidates(
+        [replacementCandidate.seatID],
+        replacementCandidate.subZone,
+        replacementCandidate.spellID,
+        { known: false }
+      )
+    } else if (oldLocation === 'player') {
+      placeholder.location = 'player'
+      placeholder.subZone = oldSubZone
+      placeholder.spellID = oldSpellID
+      placeholder.setLocationCandidates(
+        [],
+        'swapKnownCardWithPlayerSourcePlaceholder:placeholder:candidates'
+      )
+      placeholder.suspended = false
+      placeholder.setSeats(oldSeats, 'swapKnownCardWithPlayerSourcePlaceholder:placeholder')
+      placeholder.combinationID = oldCombinationID
+      this.room.markCounterDirty(placeholder)
+    } else {
+      this.restoreUnknownPlaceholderToPreviousPublicLocation(
+        card,
+        placeholder,
+        oldLocation,
+        keepPlaceholderAtPreviousPublicPosition
+      )
+    }
+
+    this.removeHiddenMarkPlaceholder(placeholder)
+    return placeholder
+  }
+
+  /**
+   * 把被置换出的暗占位放回明牌原来的公共区槽位，保持 Zone 顺序和数量。
+   */
+  restoreUnknownPlaceholderToPreviousPublicLocation(
+    card: Card,
+    placeholder: Card,
+    oldLocation: PublicZoneName | 'suspended',
+    keepPreviousPosition = false
+  ): void {
+    const zone = this.room.zones.get(oldLocation as PublicZoneName)
+    const oldZoneCardCount = zone?.cards.length ?? null
+    const oldZoneHasKnownCard = zone?.cards.includes(card) ?? false
+
+    if (oldLocation === 'suspended') {
+      placeholder.moveToPublicZone('outside')
+      trackerLogger.debug('暂停追踪来源占位置换后移出占位', {
+        knownCardID: card.id,
+        placeholderCardID: placeholder.id,
+        oldLocation,
+        keepPreviousPosition
+      })
+      return
+    }
+
+    if (zone) {
+      // 公共候选槽本来就是不确定位置，可以由占位继续承载；确定明牌槽则不能被占位污染。
+      if (keepPreviousPosition) {
+        placeholder.moveToPublicZone(oldLocation as PublicZoneName)
+        zone.replaceCard(card, placeholder)
+        return
+      }
+
+      zone.removeCard(card)
+      zone.add(placeholder, POSITION_TOP)
+      return
+    }
+
+    zone?.removeCard(card)
+    placeholder.moveToPublicZone('outside')
+    trackerLogger.warn('占位置换未回补公共区，已将占位移出追踪区', {
+      knownCardID: card.id,
+      placeholderCardID: placeholder.id,
+      oldLocation,
+      keepPreviousPosition,
+      oldZoneCardCount,
+      oldZoneCardCountAfter: zone?.cards.length ?? null,
+      oldZoneHasKnownCard
+    })
+  }
+
+  /**
+   * 判断卡牌是否仍带有指定公共区候选，用于决定占位是否要保留原槽。
+   */
+  hasPublicCandidateAt(card: Card, zoneID: PublicZoneName | 'suspended'): boolean {
+    if (!this.room.zones.has(zoneID as PublicZoneName)) return false
+
+    return (
+      card.publicCandidates?.some((candidate) => candidate.zone === zoneID) ||
+      card
+        .getLocationCandidates()
+        .some((candidate) => candidate.type === 'public' && candidate.zone === zoneID)
+    )
+  }
+
+  /**
+   * 从牌堆摸到明牌时，CardID 可能正被其他座位的暗手牌占位实体占用。
+   * 此时不能直接把该实体搬到当前玩家手里，而要先从牌堆取一张未知实体替回原暗位。
+   */
+  swapKnownCardWithPublicSourcePlaceholder(card: Card, context: RoomMoveContext): Card | null {
+    const { fromZone, fromPosition } = context
+    const sourceZone = typeof fromZone === 'string' ? this.room.zones.get(fromZone) : undefined
+    if (!sourceZone || sourceZone.cards.includes(card) || card.location !== 'player') return null
+    if (card.isKnown === true || card.suspended === true) return null
+
+    const replacement = this.takeCardsFromPublicZone(1, fromZone, fromPosition)[0]
+    if (!replacement) return null
+
+    const oldSubZone = card.subZone
+    const oldSeats = new Set(Array.from(card.seats, Number))
+    const oldCombinationID = card.combinationID
+    const oldSpellID = card.spellID
+
+    this.room.removeCardsFromConstraintGroups([replacement])
+    replacement.isKnown = false
+    replacement.setLocationCandidates([], 'swapKnownCardWithPublicSourcePlaceholder:candidates')
+    replacement.suspended = false
+    replacement.bindCandidates(Array.from(oldSeats), oldSubZone, oldSpellID, { known: false })
+    replacement.combinationID = oldCombinationID
+
+    this.replaceHiddenMarkPlaceholder(card, replacement)
+
+    trackerLogger.debug('公共区已知牌命中玩家暗占位，使用公共来源实体替回', {
+      cardID: card.id,
+      replacementCardID: replacement.id,
+      fromZone,
+      fromPosition,
+      oldSubZone,
+      oldSeats: Array.from(oldSeats)
+    })
+
+    return replacement
+  }
+
+  /**
+   * 根据来源信息取出暗牌占位；来源可能是游戏外、玩家区或公共区。
+   */
+  takeSourceCards(count: number, options: TakeSourceCardsOptions = {}): Card[] {
+    const {
+      sourceIsOutside,
+      fromSeat,
+      fromSubZone,
+      subZone,
+      spellID,
+      fromZone,
+      fromPosition,
+      fromSpellID,
+      sourceCards,
+      sourceEvent
+    } = options
+
+    if (sourceCards?.length) {
+      if (fromSeat !== null && !Number.isNaN(fromSeat)) {
+        const explicitCards = Array.from(new Set(sourceCards)).filter(Boolean).slice(0, count)
+        // 显式 sourceCards 也可能指向无席位 mark 空间实体，不能绕过账本清理。
+        this.removeUnassignedMarkSpaceCards(explicitCards)
+        return explicitCards
+      }
+
+      return this.takeSpecificSourceCards(sourceCards, count, { fromZone, fromPosition })
+    }
+
+    if (sourceIsOutside) {
+      const externalCards = this.room.createExternalCards([], count)
+      const placeholderCards = externalCards.filter((card) => card.id === 0)
+      if (placeholderCards.length > 0) {
+        trackerLogger.warn('游戏外来源创建 id=0 暗占位', {
+          reason: 'takeSourceCards:sourceOutside',
+          requestedCount: count,
+          createdPlaceholderCount: placeholderCards.length,
+          placeholderCardIDs: placeholderCards.map((card) => card.id),
+          fromSeat,
+          fromSubZone,
+          subZone,
+          spellID,
+          fromSpellID,
+          fromZone,
+          fromPosition,
+          sourceEvent
+        })
+      }
+      return externalCards
+    }
+
+    if (fromSeat !== null && !Number.isNaN(fromSeat)) {
+      const sourceSubZone = fromSubZone ?? subZone ?? 'hand'
+      const inferredSourceSpellID =
+        sourceSubZone === 'mark' ? this.getUnassignedMarkSpaceSpellIDFromProtocolID(fromSeat) : null
+      const sourceSpellID =
+        sourceSubZone === 'mark' ? (fromSpellID ?? spellID ?? inferredSourceSpellID) : spellID
+      const unknownCards = this.takeUnknownCardsFromPlayer(
+        fromSeat,
+        count,
+        sourceSubZone,
+        sourceSpellID
+      )
+
+      // 弹窗 mark 回牌堆时 FromID 可能是技能空间 ID，不一定能按座位取到实体。
+      // 先从 spellID 对应的无席位 mark 空间补足，避免误创建 id=0 fallback。
+      const unassignedUnknownCards =
+        sourceSubZone === 'mark' && unknownCards.length < count
+          ? this.takeUnassignedMarkSpaceCards(count - unknownCards.length, sourceSpellID)
+          : []
+
+      if (unassignedUnknownCards.length > 0) {
+        trackerLogger.debug('使用无席位标记暗占位补足来源', {
+          requestedCount: count,
+          takenBySeatCount: unknownCards.length,
+          takenUnassignedCount: unassignedUnknownCards.length,
+          fromSeat,
+          sourceSubZone,
+          sourceSpellID,
+          cardIDs: unassignedUnknownCards.map((card) => card.id)
+        })
+      }
+
+      const selectedUnknownCards = [...unknownCards, ...unassignedUnknownCards]
+
+      if (selectedUnknownCards.length >= count || sourceSubZone === 'hand') {
+        return selectedUnknownCards.slice(0, count)
+      }
+
+      const selected = new Set(selectedUnknownCards)
+      const knownCards = this.takeKnownCardsFromPlayerSubZone(
+        fromSeat,
+        count - selectedUnknownCards.length,
+        sourceSubZone,
+        sourceSpellID
+      ).filter((card) => !selected.has(card))
+
+      return [...selectedUnknownCards, ...knownCards]
+    }
+
+    return this.takeCardsFromPublicZone(count, fromZone, fromPosition)
+  }
+
+  /**
+   * 调整玩家总手牌数，所有摸牌/弃牌/转移都通过这里维护手牌额度。
+   */
+  adjustPlayerHandTotal(seatID: SeatID | null | undefined, delta: number): void {
+    if (seatID === null || seatID === undefined || delta === 0) return
+    this.room.getPlayer(seatID)?.applyObservedHandCountDelta(delta)
+  }
+
+  /**
+   * 当检测到某张已知物理牌 card 实际上正从 fromSeat 的手牌区移出，
+   * 但客户端当前记录其处于其他区域（如牌堆）时，执行位置与状态交换。
+   * @param card - 已知卡牌
+   * @param fromSeat - 来源玩家座位号
+   */
+  swapCardWithUnknown(card: Card, fromSeat: SeatID, excludeCards: Card[] = []): Card | null {
+    const excludedCards = new Set(excludeCards)
+    // 1. 查找该玩家手牌中当前未知的卡牌
+    const unknownCard = this.room.cards.find(
+      (sourceCard) =>
+        sourceCard !== card &&
+        !excludedCards.has(sourceCard) &&
+        sourceCard.location === 'player' &&
+        sourceCard.subZone === 'hand' &&
+        sourceCard.seats.has(fromSeat) &&
+        sourceCard.isKnown !== true
+    )
+
+    if (!unknownCard) return null
+
+    // 2. 交换物理位置和状态
+    const oldLocation = card.location
+    const oldSubZone = card.subZone
+    const oldSeats = new Set(Array.from(card.seats, Number))
+    const oldCombinationID = card.combinationID
+    const oldSpellID = card.spellID
+    const keepPlaceholderAtPreviousPublicPosition = this.hasPublicCandidateAt(card, oldLocation)
+
+    this.room.removeCardsFromConstraintGroups([unknownCard])
+
+    // 将 card 绑定到 fromSeat 的手牌区，并设为明牌
+    card.location = 'player'
+    card.subZone = 'hand'
+    card.isKnown = true
+    card.setSeats([fromSeat], 'swapCardWithUnknown:knownCard')
+    card.combinationID = null
+    card.spellID = null
+    this.room.markCounterDirty(card)
+
+    // 将 unknownCard 移至 card 原本所在的区域
+    unknownCard.location = oldLocation
+    unknownCard.subZone = oldSubZone
+    unknownCard.setSeats(oldSeats, 'swapCardWithUnknown:unknownCard')
+    unknownCard.combinationID = oldCombinationID
+    unknownCard.spellID = oldSpellID
+    this.room.markCounterDirty(unknownCard)
+
+    // 3. 更新公共区域（Zone）的有序关系引用
+    if (oldLocation !== 'player') {
+      this.restoreUnknownPlaceholderToPreviousPublicLocation(
+        card,
+        unknownCard,
+        oldLocation,
+        keepPlaceholderAtPreviousPublicPosition
+      )
+    }
+
+    return unknownCard
+  }
+}
