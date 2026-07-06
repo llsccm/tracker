@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  attachFastPathDebugApi,
+  detachFastPathDebugApi,
   getConvergenceTiming,
   getFastPathStats,
   resetFastPathStats
 } from '@/tracker/fastPathStats'
 import type { FastPathName } from '@/tracker/fastPathStats'
-import { createTestRoom } from './helpers/room'
+import { evaluateDeterministicMove } from '@/tracker/fastPathGate'
+import type { RoomMoveContext } from '@/tracker/roomMovement/types'
+import { createTestRoom, getCard } from './helpers/room'
 import { expectLocationIndexMatchesRebuild } from './helpers/locationIndex'
 
 // 覆盖 plans/cards-incremental-index-and-fast-path-plan.md §九 step 8：
@@ -60,6 +64,34 @@ describe('快路径 dry-run 数据 gate（step 8，4A）', () => {
     expect(s?.reasons.unknownCount).toBe(1)
   })
 
+  it('确定明牌的约束组成员检查使用反向索引并随移除更新', () => {
+    const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [1, 2, 3] })
+    const card = getCard(room, 1)
+    card.bindCandidates([1], 'hand', null, { known: true })
+    room.createConstraintGroup({
+      id: 'test:non-trivial-group',
+      cards: [card],
+      candidateSeats: [1, 2]
+    })
+
+    const context = {
+      cardCount: 1,
+      unknownCount: 0,
+      movedUnknownCards: [],
+      knownCards: [card],
+      hiddenMarkRecord: null
+    }
+
+    const moveContext = context as unknown as RoomMoveContext
+    expect(evaluateDeterministicMove(room, moveContext)).toEqual({
+      ok: false,
+      reason: 'cardInConstraintGroup'
+    })
+
+    room.removeCardsFromConstraintGroups([card])
+    expect(evaluateDeterministicMove(room, moveContext)).toEqual({ ok: true })
+  })
+
   it('命中率按命中/(命中+回退) 累计', () => {
     const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [1, 2, 3] })
     // 一次确定摸牌（命中）+ 一次纯暗牌摸牌（回退）。
@@ -69,6 +101,34 @@ describe('快路径 dry-run 数据 gate（step 8，4A）', () => {
     const s = statsFor('deterministicMove')
     expect(s?.total).toBe(2)
     expect(s?.hitRate).toBeCloseTo(0.5)
+  })
+
+  it('非 moveCards 收敛不写入 fastPathTiming', () => {
+    const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [1, 2, 3] })
+    room.resolveConstraints()
+    room.syncObservedPlayerHandCount(1, 0)
+
+    const t = getConvergenceTiming()
+    expect(t.totalMoves).toBe(0)
+    expect(t.phaseCalls).toBe(0)
+    expect(t.roundsTotal).toBe(0)
+  })
+
+  it('调试 API 由显式生命周期挂载和清理', () => {
+    const host: {
+      __dxcTracker?: {
+        fastPathStats?: typeof getFastPathStats
+        fastPathTiming?: typeof getConvergenceTiming
+      }
+    } = {}
+
+    expect(host.__dxcTracker).toBeUndefined()
+    attachFastPathDebugApi(host)
+    expect(host.__dxcTracker?.fastPathStats).toBe(getFastPathStats)
+    expect(host.__dxcTracker?.fastPathTiming).toBe(getConvergenceTiming)
+
+    detachFastPathDebugApi(host)
+    expect(host.__dxcTracker).toBeUndefined()
   })
 
   it('收敛耗时按 4A 本可命中/回退分桶累计', () => {
@@ -85,7 +145,7 @@ describe('快路径 dry-run 数据 gate（step 8，4A）', () => {
     expect(t.saveableMsUpperBound).toBeGreaterThanOrEqual(0)
     expect(t.totalMs).toBeGreaterThanOrEqual(t.saveableMsUpperBound)
     // 相位拆分：converge + tail 覆盖每次 resolveConstraints；convergeShare ∈ [0,1]。
-    expect(t.phaseCalls).toBeGreaterThanOrEqual(2)
+    expect(t.phaseCalls).toBe(2)
     expect(t.convergeShare).toBeGreaterThanOrEqual(0)
     expect(t.convergeShare).toBeLessThanOrEqual(1)
   })

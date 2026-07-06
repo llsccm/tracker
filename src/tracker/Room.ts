@@ -18,7 +18,8 @@ import {
   nowMs,
   recordConvergenceTime,
   recordConvergencePhases,
-  recordConvergenceBreakdown
+  recordConvergenceBreakdown,
+  isFastPathStatsEnabled
 } from './fastPathStats'
 import { trackerLogger } from '@/utils/logger'
 import type { ConstraintGroup } from './ConstraintGroup'
@@ -32,8 +33,14 @@ import type {
   SubZoneCandidate
 } from './types'
 
+const EMPTY_CONSTRAINT_GROUPS: ReadonlySet<ConstraintGroup> = new Set()
+
 interface RoomOptions {
   gameState?: GameState
+}
+
+interface ResolveConstraintsOptions {
+  recordFastPathTiming?: boolean
 }
 
 interface HandSlotCountSummary {
@@ -97,6 +104,7 @@ export class Room {
   declare moveEventHandlers: Map<SpellID | '*', ((event: any, room: Room) => any)[]>
   declare skillState: Map<SpellID | string, any>
   declare constraintGroups: Map<string | number, ConstraintGroup>
+  declare constraintGroupsByCard: WeakMap<Card, Set<ConstraintGroup>>
   declare constraintGroupSeq: number
   declare constraintGroupsDirty: boolean
   declare ambiguousKnownIndex: AmbiguousKnownIndex
@@ -153,6 +161,7 @@ export class Room {
 
     // 6. 局部约束组与明牌反查索引
     this.constraintGroups = new Map()
+    this.constraintGroupsByCard = new WeakMap()
     this.constraintGroupSeq = 0
     this.constraintGroupsDirty = false
     this.ambiguousKnownIndex = new AmbiguousKnownIndex(this)
@@ -606,6 +615,35 @@ export class Room {
     this.constraintGroupsDirty = true
   }
 
+  trackConstraintGroupCard(group: ConstraintGroup, card: Card): void {
+    let groups = this.constraintGroupsByCard.get(card)
+    if (!groups) {
+      groups = new Set()
+      this.constraintGroupsByCard.set(card, groups)
+    }
+    groups.add(group)
+  }
+
+  untrackConstraintGroupCard(group: ConstraintGroup, card: Card): void {
+    const groups = this.constraintGroupsByCard.get(card)
+    if (!groups) return
+    groups.delete(group)
+    if (groups.size === 0) {
+      this.constraintGroupsByCard.delete(card)
+    }
+  }
+
+  getConstraintGroupsForCard(card: Card): ReadonlySet<ConstraintGroup> {
+    return this.constraintGroupsByCard.get(card) ?? EMPTY_CONSTRAINT_GROUPS
+  }
+
+  deleteConstraintGroup(groupID: string | number): boolean {
+    const group = this.constraintGroups.get(groupID)
+    if (!group) return false
+    group.cards.forEach((card) => this.untrackConstraintGroupCard(group, card))
+    return this.constraintGroups.delete(groupID)
+  }
+
   /**
    * 将牌堆和弃牌堆中的实体牌重置后洗回牌堆。
    * 洗牌时实际牌堆只由“剩余牌堆 + 弃牌堆”组成，不再为了协议张数补 id=0 占位。
@@ -678,10 +716,7 @@ export class Room {
     // 这是“协议牌堆空间”的解释集合，不是实际 pile.cards。
     const pileSpaceRemainingCards = [...knownPileCards, ...suspendedIdentityCards]
 
-    recordTraversal(
-      'shufflePile:classify',
-      nonPileIdentityStatusCards.length
-    )
+    recordTraversal('shufflePile:classify', nonPileIdentityStatusCards.length)
 
     recycledCards.forEach((card) => card.reset())
     this.removeCardsFromConstraintGroups([...knownPileCards, ...suspendedIdentityCards])
@@ -845,7 +880,10 @@ export class Room {
       const actualSlotCount = knownCount + candidateCount + actualUnknownCount
 
       player.refreshUnknownCardCount({ knownCount, candidateCount })
-      if (actualUnknownCount === expectedUnknownCount && actualSlotCount === player.observedHandCount) {
+      if (
+        actualUnknownCount === expectedUnknownCount &&
+        actualSlotCount === player.observedHandCount
+      ) {
         return
       }
 
@@ -940,8 +978,9 @@ export class Room {
    * 执行房间级约束收敛，并同步玩家视图组、模糊明牌索引与计数器。
    * 这里保留三类核心收敛规则；低频的组创建、暂停追踪和列表同步在 RoomConstraints 中实现。
    */
-  resolveConstraints(): void {
+  resolveConstraints(options: ResolveConstraintsOptions = {}): void {
     const convergeStartedAt = nowMs()
+    const recordFastPathTiming = options.recordFastPathTiming === true
     let changed = true
     let limit = 100 // 限制循环上限防死锁
     let overbroadKnownCards: Card[] = []
@@ -953,7 +992,7 @@ export class Room {
     let playerCards = this.refreshPlayerSnapshot()
     // E2：上一轮触碰座位集；null 表示首轮，约束三无条件处理全部玩家。
     let previousTouchedSeats: Set<SeatID> | null = null
-    // 约束一/二/三 分块计时 + 轮数，供 XC.fastPathTiming() 定位 converge 大头。
+    // 约束一/二/三 分块计时 + 轮数，供 window.__dxcTracker.fastPathTiming() 定位 converge 大头。
     let rounds = 0
     let c1Ms = 0
     let c2Ms = 0
@@ -1120,20 +1159,22 @@ export class Room {
 
     this.publicZones.assertPublicZoneConsistency('resolveConstraints')
 
-    // 相位耗时：converge（4A 可跳过）vs tail（4A 仍要付），供数据 gate 判断 4A 能省到多少。
-    recordConvergencePhases(convergeEndedAt - convergeStartedAt, nowMs() - convergeEndedAt)
-    // converge 内部再拆：约束一/二/三各自耗时、轮数、组数、玩家牌数，定位 82ms 真实来源。
-    recordConvergenceBreakdown(
-      c1Ms,
-      c2Ms,
-      c3Ms,
-      rounds,
-      this.constraintGroups.size,
-      playerCards.length,
-      c1ChangedCount,
-      c2ChangedCount,
-      c3ChangedCount
-    )
+    if (recordFastPathTiming) {
+      // 相位耗时：converge（4A 可跳过）vs tail（4A 仍要付），与 moveCards hit/miss 桶同口径。
+      recordConvergencePhases(convergeEndedAt - convergeStartedAt, nowMs() - convergeEndedAt)
+      // converge 内部再拆：约束一/二/三各自耗时、轮数、组数、玩家牌数，定位真实来源。
+      recordConvergenceBreakdown(
+        c1Ms,
+        c2Ms,
+        c3Ms,
+        rounds,
+        this.constraintGroups.size,
+        playerCards.length,
+        c1ChangedCount,
+        c2ChangedCount,
+        c3ChangedCount
+      )
+    }
   }
 
   /**
@@ -1324,12 +1365,17 @@ export class Room {
     this.movement.createPublicMoveConstraintGroup(context)
 
     // dry-run 数据 gate：收敛前观测四条快路径的命中率，不改变收敛（plans/... step 8）。
-    const fastPathProbe = probeMoveFastPaths(this, context)
+    const fastPathStatsEnabled = isFastPathStatsEnabled()
+    const fastPathProbe = fastPathStatsEnabled
+      ? probeMoveFastPaths(this, context)
+      : { deterministicHit: false }
 
     // 执行状态收敛；计时以量化 4A 命中本可省下的收敛耗时（上界）。
-    const convergenceStartedAt = nowMs()
-    this.resolveConstraints()
-    recordConvergenceTime(fastPathProbe.deterministicHit, nowMs() - convergenceStartedAt)
+    const convergenceStartedAt = fastPathStatsEnabled ? nowMs() : 0
+    this.resolveConstraints({ recordFastPathTiming: fastPathStatsEnabled })
+    if (fastPathStatsEnabled) {
+      recordConvergenceTime(fastPathProbe.deterministicHit, nowMs() - convergenceStartedAt)
+    }
 
     trackerLogger.info('moveCards 完成', {
       ...summarizeMoveContext(context, { includeKnownCardIDs: true }),
@@ -1361,6 +1407,7 @@ export class Room {
     this.zones.clear()
     this.cards.forEach((card) => card.reset())
     this.constraintGroups.clear()
+    this.constraintGroupsByCard = new WeakMap()
     this.constraintGroupsDirty = false
     this.moveEventHandlers.clear()
     this.skillState.clear()

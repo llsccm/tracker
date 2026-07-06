@@ -1,4 +1,4 @@
-import { recordFastPathHit, recordFastPathRollback } from './fastPathStats'
+import { isFastPathStatsEnabled, recordFastPathHit, recordFastPathRollback } from './fastPathStats'
 import type { Card } from './Card'
 import type { ConstraintGroup } from './ConstraintGroup'
 import type { Room } from './Room'
@@ -57,8 +57,7 @@ function evaluateDeterministicCard(room: Room, card: Card): FastPathDecision {
   if (card.publicCandidates.length > 0) return no('cardPublicCandidates')
   // 落到玩家区时拥有者必须唯一；落到公共区无 seats，天然确定。
   if (card.location === 'player' && card.seats.size !== 1) return no('cardAmbiguousSeat')
-  for (const group of room.constraintGroups.values()) {
-    if (!group.cards.has(card)) continue
+  for (const group of room.getConstraintGroupsForCard(card)) {
     // 单候选席位、无额度约束的确定牌组对已确定牌不构成歧义，收敛对其是 no-op，故放行。
     // 把确定明牌移入手牌会顺带建这样一个平凡组（见 moveKnownCardsForContext）；不放行的话，
     // 计划明确列为 4A 命中的「确定弃牌回手牌」等场景会被误判回退。
@@ -86,6 +85,8 @@ export function probeMoveFastPaths(
   room: Room,
   context: RoomMoveContext
 ): { deterministicHit: boolean } {
+  if (!isFastPathStatsEnabled()) return { deterministicHit: false }
+
   const deterministic = evaluateDeterministicMove(room, context)
   if (deterministic.ok) {
     recordFastPathHit('deterministicMove')

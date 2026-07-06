@@ -183,12 +183,13 @@ export class RoomConstraints {
             group.expectedSlotsByLocation.set(locationKey, Math.max(0, currentExpected - 1))
           }
           group.cards.delete(card)
+          this.room.untrackConstraintGroupCard(group, card)
           changed = true
         }
       })
 
       if (group.cards.size === 0) {
-        this.room.constraintGroups.delete(groupID)
+        this.room.deleteConstraintGroup(groupID)
         changed = true
       }
     }
@@ -346,6 +347,7 @@ export class RoomConstraints {
         cards
       })
       this.room.constraintGroups.set(groupID, group)
+      cards.forEach((card) => this.room.trackConstraintGroupCard(group, card))
       structureChanged = true
     } else {
       affectsAmbiguousKnownIndex =
@@ -353,6 +355,7 @@ export class RoomConstraints {
         Array.from(group.cards).some((card) => this.affectsAmbiguousKnownIndex(card))
       const previousCardCount = group.cards.size
       group.addCards(cards)
+      cards.forEach((card) => this.room.trackConstraintGroupCard(group, card))
       if (group.cards.size !== previousCardCount) structureChanged = true
 
       if (targetSeats.length > 0) {

@@ -3,7 +3,7 @@
 > 本计划承接 [`cards-traversal-optimization-final.md`](cards-traversal-optimization-final.md) 的 P1-D / P1-E1 之后阶段。目标是减少“确定明牌确定移动”这类高频协议动作触发的 `Room.cards` 全量扫描，优先处理当前剩余大头：`CardLocationIndex.rebuild()`、`AmbiguousKnownIndex.rebuild()` 与 `resolveConstraints()` 入口 player 快照。
 
 > **修订记录（2026-07-03，评审对齐后）**
->
+
 > - **分档推进**：阶段 1-3（`CardLocationIndex` / `AmbiguousKnownIndex` 增量 + 手牌摘要）与新增的 **阶段 3.5「A2：增量 player 快照，收敛照跑」** 为既定落地目标；阶段 4（绕收敛快路径 4A-4D）改为**按命中率数据逐条 gate**，不作为既定目标，从最稳的 4A 起、每条强制带命中率埋点。理由：本计划以“遍历计数”为代理指标，尚未建立可测的 wall-clock/帧预算瓶颈证据；阶段 1-3+A2 便宜且安全（A2 保留收敛，正确性 by construction），阶段 4 绕收敛的边际收益需用真实命中率反证是否值得其维护税。
 > - **手牌摘要折入 `CardLocationIndex`（方案 B）**：不新建独立 `PlayerHandIndex`。`knownHandBySeat` / `candidateHandBySeat` 已由该索引维护，只新增 `plainUnknownHandCards` 与 `handConstraintGroupIDs` 两类读面，复用其同一批 dirty 消费，减少并行 dirty 结构带来的 stale 面。
 > - **补三处评审发现**：
@@ -12,7 +12,7 @@
 >   - **C4（已澄清为非问题）**：`AmbiguousKnownIndex` 的 description 依赖 `formatSeatPrefix()`→`fixedViewId`→`firstID`。经确认 `firstID` 只在牌局开始由先手协议设定一次（唯一调用点 `setTrackerFirstHand`→`setFirstHand`，`fixedViewId` 别无写入），此后不变；且模糊明牌只在对局过程中出现，届时座位前缀已固定。故 step 6 增量无需监听 `firstID`、无需为它回退全量。
 
 > **实施记录（2026-07-06，收敛非终止修复与数据 gate 复盘）**
->
+
 > - **根因修复优先于 4A**：`fastPathTiming()` 暴露 `avgRounds≈88`、`maxRounds=100`、`c2ChangedCount≈roundsTotal`，说明约束二在语义已收敛后仍虚报 `changed`。根因是 `ConstraintGroup.apply()` 把单值展示标签 `card.combinationID` 写成当前 group id，并把这个标签切换计入收敛状态；同一张牌属于多个约束组时会在 group 间来回覆盖，驱动空转到循环上限。修复后 `combinationID` 仍同步，但不再作为 `resolve()` 的 changed 来源。
 > - **幂等护栏**：`Card.setSeats()` 对多座位候选重投影增加 key 级幂等判断，同候选不再重赋数组；新增回归测试覆盖“重复候选投影不返回 changed”和“重叠约束组切换 `combinationID` 不驱动重循环”。
 > - **测试环境验证**：同一批 177 次移动中，`avgRounds` 从 `88.37` 降到 `1.14`，`maxRounds` 从 `100` 降到 `2`，`c2ChangedCount` 从 `15700` 降到 `0`，`totalMs` 从约 `2947.87ms` 降到约 `269.58ms`。
@@ -698,7 +698,7 @@ step 7 实测遍历量（`traversalBaseline.test.ts` 内联快照，40 张基线
 | `src/tracker/Room.ts` | `moveCards()` 在 `createPublicMoveConstraintGroup` 之后调 `probeMoveFastPaths`，并对随后 `resolveConstraints()` 计时、按命中/回退归桶；只读，不改变收敛 |
 | `tests/tracker/fastPathGate.test.ts`（新增，7 例） | 确定摸牌/弃牌命中 4A 且收敛结果仍与全量 rebuild 等价；纯暗牌、明暗混合回退且原因归类为 `unknownCount`；命中率与收敛耗时分桶累计正确 |
 
-**读取方式**：真实对局中执行 `XC.fastPathStats()`（返回各快路径 `{ hit, rollback, total, hitRate, reasons }`，回退原因按次数降序）；Node/测试用具名导出 `getFastPathStats()`。真实对局跨局累计更能反映命中率，一般不重置。
+**读取方式**：测试/开发构建的真实对局中执行 `window.__dxcTracker.fastPathStats()`（返回各快路径 `{ hit, rollback, total, hitRate, reasons }`，回退原因按次数降序）；Node/测试用具名导出 `getFastPathStats()`。生产构建不挂载调试入口、不执行 dry-run 统计；测试对局跨局累计更能反映命中率，一般不重置。
 
 **回退原因分类**（供 gate 分析哪些条件最常挡住 4A）：`emptyMove` / `unknownCount` / `movedUnknownCards` / `knownCountMismatch` / `hiddenMarkRecord` / `constraintGroupsDirty` / `cardNotKnown` / `cardLocationCandidates` / `cardSubZoneCandidates` / `cardPublicCandidates` / `cardAmbiguousSeat` / `cardInConstraintGroup`。
 
@@ -707,7 +707,7 @@ step 7 实测遍历量（`traversalBaseline.test.ts` 内联快照，40 张基线
 1. **确定明牌移入手牌会顺带创建平凡约束组**：`moveKnownCardsForContext()` 的 `toZone==='player'` 分支对每批 known 牌调 `createConstraintGroup()`；但 `createConstraintGroup()` 只在牌**影响模糊明牌反查**（`affectsAmbiguousKnownIndex`）时才 `markConstraintGroupsDirty()`。故一次确定单座位摸牌建出的是「单候选席位 + 无额度约束」的平凡组，`constraintGroupsDirty` 保持 false，但该牌成了组成员。若「牌在任意约束组即回退」，则计划 §八/§十一 明确列为 4A 命中的「确定弃牌回手牌」会被误判回退。故 `evaluateDeterministicCard` 用 `isTrivialDeterminedGroup`（`candidateSeats.size<=1 && expectedSlotsByLocation.size===0 && expectedSlotsBySubZone.size===0`）放行平凡组，多座位/带额度的真歧义组仍回退。
 2. **apply 阶段须补 owner 同步的告警**：摸牌进手牌后 `owner` 由收敛 `syncOwnerFromSeats()` 落定。dry-run 只统计「本可命中」，不代表纯跳过收敛即正确——4A 的 apply 版本必须自行完成 owner 同步（或验证 `bindCandidates` 已置 owner），并由 DEV 影子断言兜住。
 
-**增量 1.5（wall-clock 计时）**：只测命中率不足以做 go/no-go——A2 后一次 4A 命中跳过的只是 O(玩家区牌数) 的收敛循环，须量真实耗时。`moveCards` 用 `nowMs()` 量整段 `resolveConstraints()` 耗时，按「本次 4A 本可命中/回退」分桶累计；`XC.fastPathTiming()` 返回 `{ totalMoves, totalMs, avgMsPerMove, hitCount, saveableMsUpperBound, avgHitMs, missCount, missMs, saveableShare }`。`saveableMsUpperBound` 是 4A 可省时间的**上界**（4A apply 仍付增量索引/视图/计数尾部，实际略少）；连上界都可忽略即为明确 no-go。
+**增量 1.5（wall-clock 计时）**：只测命中率不足以做 go/no-go——A2 后一次 4A 命中跳过的只是 O(玩家区牌数) 的收敛循环，须量真实耗时。测试/开发构建中，`moveCards` 用 `nowMs()` 量整段 `resolveConstraints()` 耗时，按「本次 4A 本可命中/回退」分桶累计；`window.__dxcTracker.fastPathTiming()` 返回 `{ totalMoves, totalMs, avgMsPerMove, hitCount, saveableMsUpperBound, avgHitMs, missCount, missMs, saveableShare }`。`saveableMsUpperBound` 是 4A 可省时间的**上界**（4A apply 仍付增量索引/视图/计数尾部，实际略少）；连上界都可忽略即为明确 no-go。
 
 **修正（window.XC 覆盖）**：埋点挂载入口一度被改成 `window.XC = new EventTarget()`，会**覆盖** `utils/client.js` 创建的共享 `XC`（清掉宿主的 `XC.moveType` / `XC.Rpvp` 与事件派发）。已改回「仅在 `window.XC` 存在时增补 `fastPathStats` / `fastPathTiming` 两个只读入口」，不再新建/覆盖。
 
@@ -727,7 +727,7 @@ step 7 实测遍历量（`traversalBaseline.test.ts` 内联快照，40 张基线
 
 **反证（生产实测，推翻上面的 dev 假象结论）**：`pnpm build:prod` 重测同规模一局得 `totalMoves=177, totalMs≈7568, avgMsPerMove≈42.8, avgHitMs≈43.7, saveableMsUpperBound≈5463`。**生产比 dev 更慢（43ms vs 10ms/move），不是更快。** 说明「10ms 全是 DEV 断言、生产亚毫秒」的假设错了——生产收敛本身就重（~43ms/move、一局 ~7.5s）。且 43ms 与只有 48–80 次 `Room.cards` 访问的遍历基线完全对不上，说明**成本不在被遍历计数的 while 循环里**，而在别处（很可能是 tail 的 `syncViewGroups` / `counter.update` 触发真实视图/DOM 更新，或多轮收敛里的 `约束二 group.resolve()` / 手牌槽解析）。这也正是遍历基线用 20/40 张合成场景**严重低估**真实对局收敛成本的证据。
 
-**增量 1.6（相位拆分，回答「43ms 花在哪、4A 能不能省到」）**：4A 只跳过 `converge`（refreshPlayerSnapshot + while 循环 + suspend），仍付 `tail`（增量索引 + `syncViewGroups` + ambiguous + `counter.update`）。`resolveConstraints()` 按此二相计时，`XC.fastPathTiming()` 增出 `{ convergeMsTotal, tailMsTotal, avgConvergeMs, avgTailMs, convergeShare, ... }`。
+**增量 1.6（相位拆分，回答「43ms 花在哪、4A 能不能省到」）**：4A 只跳过 `converge`（refreshPlayerSnapshot + while 循环 + suspend），仍付 `tail`（增量索引 + `syncViewGroups` + ambiguous + `counter.update`）。`resolveConstraints()` 按此二相计时，`window.__dxcTracker.fastPathTiming()` 增出 `{ convergeMsTotal, tailMsTotal, avgConvergeMs, avgTailMs, convergeShare, ... }`。
 
 **相位实测（生产一局）**：`avgMsPerMove≈82.6, avgConvergeMs≈81.8, avgTailMs≈0.245, convergeShare≈0.997, tailMsTotal≈43.7ms（178 次调用合计）`。
 - **`convergeShare 0.997`——收敛耗时 99.7% 在 while 循环（4A 可跳过），tail 只 0.25ms/次（可忽略）。** 故 4A 的可省时间上界几乎等于真实节省。
@@ -735,8 +735,8 @@ step 7 实测遍历量（`traversalBaseline.test.ts` 内联快照，40 张基线
 
 **更关键的转向：82ms 是收敛循环本身病态慢，且它拖累的是全部移动（含 4A 覆盖不到的 52 次暗牌移动，miss 均摊 ~75ms/次），不只是 4A 能救的 71%。** 且 82ms 与「48–80 次数组访问」的遍历基线差两个数量级——**成本不在被遍历计数的循环体量里，而在某个未被计数的高开销操作**。首要嫌疑：**`约束二`（`for group of constraintGroups: group.resolve()`）没有跳过优化**——A2 优化了约束一、E1/E2 优化了约束三，唯独约束二每轮 re-resolve 全部组；真实对局里约每张已知手牌一个组（空组会被 `removeCardsFromConstraintGroups` 删除，但在手的仍在），`group.resolve()` 内含多次 `Array.from` 与 Set 分配。若属实，**优化约束二（跳过本轮未触碰的组，与 E2 同构）比 4A 更值**：修的是根因、帮全部移动、且保收敛语义（未触碰组 re-resolve 结果不变），比绕收敛的 4A 更安全。
 
-**增量 1.7（约束拆分，定位根因）**：`resolveConstraints()` 再对约束一/二/三分别计时，并记录轮数、约束组数、player 快照大小。`XC.fastPathTiming()` 增出 `{ c1MsTotal, c2MsTotal, c3MsTotal, c1Share, c2Share, c3Share, roundsTotal, avgRounds, maxRounds, maxGroupCount, maxPlayerCards }`。下一局用它拍板：`c2Share` 高 → 优化约束二；`c1/c3Share` 高或 `avgRounds` 大 → 另找。
+**增量 1.7（约束拆分，定位根因）**：`resolveConstraints()` 再对约束一/二/三分别计时，并记录轮数、约束组数、player 快照大小。`window.__dxcTracker.fastPathTiming()` 增出 `{ c1MsTotal, c2MsTotal, c3MsTotal, c1Share, c2Share, c3Share, roundsTotal, avgRounds, maxRounds, maxGroupCount, maxPlayerCards }`。下一局用它拍板：`c2Share` 高 → 优化约束二；`c1/c3Share` 高或 `avgRounds` 大 → 另找。
 
 **验证**：`pnpm test:tracker` **163 例通过**、`pnpm typecheck:tracker` / `pnpm lint` / `pnpm build:prod` 通过。埋点/计时均只读，`traversalBaseline.test.ts` 计数不变、DEV 影子断言无告警，**收敛行为零变化**。
 
-**后续增量**：① 生产重测 `XC.fastPathTiming()` 读 `c1/c2/c3Share` + `avgRounds` + `maxGroupCount`，定位 82ms 根因；② 若 `c2Share` 高（预期）→ 给约束二加「跳过未触碰组」优化（帮全部移动、保语义、比 4A 简单安全），大概率**取代 4A**；③ 4A apply 仅在「根因修完后仍有可观确定移动收益」时才做，且带 DEV 等价影子断言；④ 暗牌方向（49 次 `unknownCount`）：step 4-5 手牌摘要 + 4B/4C/4D 埋点，看根因修完后是否还值得；⑤ 教训：遍历计数与真实 wall-clock 背离两个数量级，收益判断一律以 wall-clock 相位/约束拆分为准。
+**后续增量**：① 测试/开发构建重测 `window.__dxcTracker.fastPathTiming()` 读 `c1/c2/c3Share` + `avgRounds` + `maxGroupCount`，定位 82ms 根因；② 若 `c2Share` 高（预期）→ 给约束二加「跳过未触碰组」优化（帮全部移动、保语义、比 4A 简单安全），大概率**取代 4A**；③ 4A apply 仅在「根因修完后仍有可观确定移动收益」时才做，且带 DEV 等价影子断言；④ 暗牌方向（49 次 `unknownCount`）：step 4-5 手牌摘要 + 4B/4C/4D 埋点，看根因修完后是否还值得；⑤ 教训：遍历计数与真实 wall-clock 背离两个数量级，收益判断一律以 wall-clock 相位/约束拆分为准。

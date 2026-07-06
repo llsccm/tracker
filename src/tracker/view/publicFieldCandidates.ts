@@ -102,5 +102,3 @@ function isPublicFieldCandidateCard(card: Card): boolean {
     card.location === 'player' && card.subZone === 'hand' && card.isKnown && card.seats.size > 1
   )
 }
-
-

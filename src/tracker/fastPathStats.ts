@@ -3,10 +3,11 @@
  * （plans/cards-incremental-index-and-fast-path-plan.md 阶段 4 / §九 step 8）。
  *
  * 阶段 4 的四条移动快路径都「绕过 resolveConstraints」，属高风险优化，落地前必须先用真实
- * 命中率反证是否值得其维护税。这里的计数器在生产运行时始终开启（每次移动只付 O(1) 计数），
- * 只做 dry-run 观测：记录每条快路径「本可命中 / 需回退及回退原因」，不改变任何收敛行为。
+ * 命中率反证是否值得其维护税。这里的计数器只在非 production 模式开启，只做 dry-run 观测：
+ * 记录每条快路径「本可命中 / 需回退及回退原因」，不改变任何收敛行为。
  *
- * 读取方式：浏览器对局中执行 `XC.fastPathStats()`；Node/测试用具名导出 `getFastPathStats()`。
+ * 读取方式：浏览器对局中执行 `window.__dxcTracker.fastPathStats()`；
+ * Node/测试用具名导出 `getFastPathStats()`。
  */
 
 export type FastPathName =
@@ -32,6 +33,19 @@ export interface FastPathReport {
 
 const stats = new Map<FastPathName, FastPathSiteStats>()
 
+interface FastPathDebugApi {
+  fastPathStats?: typeof getFastPathStats
+  fastPathTiming?: typeof getConvergenceTiming
+}
+
+interface FastPathDebugHost {
+  __dxcTracker?: FastPathDebugApi
+}
+
+export function isFastPathStatsEnabled(): boolean {
+  return import.meta.env.MODE !== 'production'
+}
+
 function siteStats(name: FastPathName): FastPathSiteStats {
   let entry = stats.get(name)
   if (!entry) {
@@ -43,11 +57,13 @@ function siteStats(name: FastPathName): FastPathSiteStats {
 
 /** 记录一次「本可命中该快路径」（dry-run，不代表真的绕了收敛）。 */
 export function recordFastPathHit(name: FastPathName): void {
+  if (!isFastPathStatsEnabled()) return
   siteStats(name).hit += 1
 }
 
 /** 记录一次回退，并按原因归类，供数据 gate 分析哪些条件最常挡住快路径。 */
 export function recordFastPathRollback(name: FastPathName, reason: string): void {
+  if (!isFastPathStatsEnabled()) return
   const entry = siteStats(name)
   entry.rollback += 1
   entry.reasons.set(reason, (entry.reasons.get(reason) ?? 0) + 1)
@@ -152,6 +168,7 @@ export function nowMs(): number {
 
 /** 记录一次 moveCards 收敛耗时，按 4A 本次是否本可命中分桶。 */
 export function recordConvergenceTime(deterministicHit: boolean, ms: number): void {
+  if (!isFastPathStatsEnabled()) return
   if (deterministicHit) {
     convergence.hitCount += 1
     convergence.hitMs += ms
@@ -167,6 +184,7 @@ export function recordConvergenceTime(deterministicHit: boolean, ms: number): vo
  * tailMs = 4A 仍要付的部分（增量索引 + syncViewGroups + ambiguous + counter）。
  */
 export function recordConvergencePhases(convergeMs: number, tailMs: number): void {
+  if (!isFastPathStatsEnabled()) return
   convergence.convergeMs += convergeMs
   convergence.tailMs += tailMs
   convergence.phaseCalls += 1
@@ -187,6 +205,7 @@ export function recordConvergenceBreakdown(
   c2ChangedCount: number,
   c3ChangedCount: number
 ): void {
+  if (!isFastPathStatsEnabled()) return
   convergence.c1Ms += c1Ms
   convergence.c2Ms += c2Ms
   convergence.c3Ms += c3Ms
@@ -280,13 +299,34 @@ export function getConvergenceTiming(): ConvergenceTimingReport {
   }
 }
 
-// 浏览器运行时把只读入口挂到共享命名空间 window.XC 上（client.js 已创建，切勿覆盖，否则会清掉
-// 宿主的 XC.moveType / XC.Rpvp 等依赖）。仅在其存在时增补 fastPathStats / fastPathTiming 两个只读入口。
-if (typeof window !== 'undefined') {
-  const host = window as unknown as { XC?: Record<string, unknown> }
-  window.XC = new EventTarget() as typeof window.XC
-  if (host.XC) {
-    host.XC.fastPathStats = getFastPathStats
-    host.XC.fastPathTiming = getConvergenceTiming
+function getBrowserDebugHost(): FastPathDebugHost | null {
+  return typeof window === 'undefined' ? null : (window as unknown as FastPathDebugHost)
+}
+
+export function attachFastPathDebugApi(
+  host: FastPathDebugHost | null = getBrowserDebugHost()
+): void {
+  if (!isFastPathStatsEnabled()) return
+  if (!host) return
+
+  const api = host.__dxcTracker ?? {}
+  api.fastPathStats = getFastPathStats
+  api.fastPathTiming = getConvergenceTiming
+  host.__dxcTracker = api
+}
+
+export function detachFastPathDebugApi(
+  host: FastPathDebugHost | null = getBrowserDebugHost()
+): void {
+  if (!host?.__dxcTracker) return
+
+  if (host.__dxcTracker.fastPathStats === getFastPathStats) {
+    delete host.__dxcTracker.fastPathStats
+  }
+  if (host.__dxcTracker.fastPathTiming === getConvergenceTiming) {
+    delete host.__dxcTracker.fastPathTiming
+  }
+  if (Object.keys(host.__dxcTracker).length === 0) {
+    delete host.__dxcTracker
   }
 }

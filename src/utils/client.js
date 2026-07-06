@@ -1,5 +1,3 @@
-import { addTooltip } from './notification.js'
-
 window.XC = new EventTarget()
 window.XC.moveType = {
   0: '预操作',
@@ -34,27 +32,3 @@ window.XC.Rpvp = [
   2261, 2262, 2263, 2287, 2288, 2289, 2294, 2295, 2297, 2315, 2317, 2319, 2320, 3022, 3030, 3048,
   3082, 3095, 3148, 3176, 3180, 3219, 3230, 3292
 ]
-
-export const localGet = function (key, value = null, local = true) {
-  let localString
-  if (!localString && typeof localStorage !== 'undefined') localString = localStorage.getItem(key)
-  if (!localString) return value
-
-  try {
-    // 某些情况会出现获取到undefined
-    return JSON.parse(localString)
-  } catch (e) {
-    console.error(e)
-    addTooltip(`获取"${key}"出现了问题，已恢复默认值`)
-    localSet(key, value, local)
-    return value
-  }
-}
-
-export const localSet = async function (key, value) {
-  if (typeof localStorage !== 'undefined') localStorage.setItem(key, JSON.stringify(value))
-}
-
-export const localDel = async function (key) {
-  if (typeof localStorage !== 'undefined') localStorage.removeItem(key)
-}
