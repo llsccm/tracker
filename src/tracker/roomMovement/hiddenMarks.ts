@@ -49,7 +49,7 @@ export abstract class RoomMovementHiddenMarkMethods {
   ): Card[]
 
   private deleteConstraintGroupAndMarkDirty(groupID: string, reason: string): void {
-    if (this.room.constraintGroups.delete(groupID)) {
+    if (this.room.deleteConstraintGroup(groupID)) {
       this.room.markConstraintGroupsDirty(reason)
     }
   }

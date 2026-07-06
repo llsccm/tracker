@@ -199,9 +199,10 @@ export class ConstraintGroup {
     let changed = false
 
     this.cards.forEach((card) => {
+      // combinationID 是展示/迁移用的最近分组标签；同一张牌可同时属于多个约束组，
+      // 不能让这个单值标签在组间来回覆盖时驱动收敛继续循环。
       if (card.combinationID !== this.id) {
         card.combinationID = this.id
-        changed = true
       }
 
       if (this.known && !card.isKnown) {

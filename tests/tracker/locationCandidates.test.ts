@@ -24,6 +24,35 @@ describe('完整位置候选回归', () => {
     expect(card.getSubZoneCandidates()).toHaveLength(2)
   })
 
+  it('多座位候选重复投影后约束组 resolve 保持幂等', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
+    const card = getCard(room, 1)
+
+    card.bindCandidates([1, 2], 'hand', null, { known: true })
+    // 回归：候选席位与当前投影一致时，resolve 不能为了重建同一候选而返回 true。
+    const group = new ConstraintGroup({
+      id: 'test:idempotent-candidate-seats',
+      cards: [card],
+      candidateSeats: [1, 2]
+    })
+
+    expect(group.resolve()).toBe(false)
+    expect(group.resolve()).toBe(false)
+  })
+
+  it('重叠约束组切换 combinationID 不驱动 resolve 重循环', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
+    const card = getCard(room, 1)
+    const firstGroup = new ConstraintGroup({ id: 'test:overlap-a', cards: [card] })
+    const secondGroup = new ConstraintGroup({ id: 'test:overlap-b', cards: [card] })
+
+    firstGroup.apply()
+    secondGroup.apply()
+
+    // 回归：同一张牌可同时属于多个组，combinationID 只能作为标签，不能成为收敛状态。
+    expect(firstGroup.resolve()).toBe(false)
+  })
+
   it('暗牌额度归零不会影响已落定的手牌', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1] })
     const card = getCard(room, 1)

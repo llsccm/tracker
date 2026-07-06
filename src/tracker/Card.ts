@@ -68,8 +68,10 @@ export class Card extends BaseCard {
   declare round: number
   declare phase: number
   declare owner: SeatID | null
+  /** 完整位置候选 */
   declare locationCandidates: LocationCandidate[]
   declare suspended: boolean
+  /** 嵌套组合指纹 */
   declare combinationID: string | number | null
 
   /**
@@ -263,10 +265,23 @@ export class Card extends BaseCard {
     } else if (this.location === 'player' && normalizedSeats.size > 1) {
       const subZone = this.subZone ?? 'hand'
       const spellID = subZone === 'mark' ? this.spellID : null
-      this.locationCandidates = Array.from(normalizedSeats)
+      const nextLocationCandidates = Array.from(normalizedSeats)
         .map((seatID) => fromSubZoneCandidate({ seatID, subZone, spellID }))
         .filter((candidate): candidate is PlayerLocationCandidate => Boolean(candidate))
-      subZoneCandidatesChanged = this.locationCandidates.length > 0
+      // 只有候选实际变化才算 changed；否则多座位候选牌会让约束二每轮把同一候选重投一遍、
+      // setSeats 恒返回 true，收敛永不到不动点、空转到 limit=100（收敛非终止 bug）。
+      const previousKeys = this.locationCandidates
+        .map((candidate) => createLocationCandidateKey(candidate))
+        .sort()
+      const nextKeys = nextLocationCandidates
+        .map((candidate) => createLocationCandidateKey(candidate))
+        .sort()
+      subZoneCandidatesChanged =
+        previousKeys.length !== nextKeys.length ||
+        previousKeys.some((key, index) => key !== nextKeys[index])
+      if (subZoneCandidatesChanged) {
+        this.locationCandidates = nextLocationCandidates
+      }
       nextProjectedSeats = projectSeatsFromLocationCandidates(this.locationCandidates)
     }
 
