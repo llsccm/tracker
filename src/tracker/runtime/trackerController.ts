@@ -9,7 +9,6 @@ import {
   isProtocolPlayerZone
 } from '../protocolZones'
 import { Room } from '../Room'
-import { attachFastPathDebugApi, detachFastPathDebugApi } from '../fastPathStats'
 import type {
   CardID,
   MoveOptions,
@@ -153,7 +152,6 @@ export class TrackerController {
     try {
       this.trackerRoom?.destroy()
       this.trackerRoom = this.roomFactory({ gameState: this.gameState })
-      attachFastPathDebugApi()
       this.getRuntime()?.bindRoom?.(this.trackerRoom)
       this.controllerLogger.info('Room 初始化')
       this.registerMoveEventHandlers(this.trackerRoom)
@@ -161,7 +159,6 @@ export class TrackerController {
       this.onError('[Refactor] Room 初始化失败:', e)
       this.controllerView.unmount()
       this.trackerRoom?.destroy()
-      detachFastPathDebugApi()
       this.getRuntime()?.bindRoom?.(null)
       this.trackerRoom = null
     }
@@ -599,7 +596,6 @@ export class TrackerController {
     try {
       this.controllerView.unmount()
       this.trackerRoom?.destroy()
-      detachFastPathDebugApi()
       this.getRuntime()?.bindRoom?.(null)
       this.trackerRoom = null
       this.controllerLogger.info('Room 销毁')

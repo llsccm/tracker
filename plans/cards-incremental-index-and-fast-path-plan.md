@@ -18,6 +18,13 @@
 > - **测试环境验证**：同一批 177 次移动中，`avgRounds` 从 `88.37` 降到 `1.14`，`maxRounds` 从 `100` 降到 `2`，`c2ChangedCount` 从 `15700` 降到 `0`，`totalMs` 从约 `2947.87ms` 降到约 `269.58ms`。
 > - **生产环境验证**：同一口径下 `avgRounds=1.14`、`maxRounds=2`、`c2ChangedCount=0`、`totalMs≈424.17ms`，确认生产也不再出现约束二空转。此后 4A 的可省上界变为毫秒级，阶段 4 继续保持数据 gate，不再作为当前首要优化。
 
+> **实施记录（2026-07-07，阶段 4 收口 + 埋点精简）**
+
+> - **阶段 4（4A–4D）正式搁置**：绕收敛快路径的整个立项前提是「收敛太贵（~82ms/move、avgRounds≈88）值得冒绕收敛的风险」。2026-07-06 的根因修复证实那 82ms/88 轮是**非终止 bug、非固有成本**（修复后 avgRounds≈1.14、prod ~2.4ms/move），4A 的可省上界降到亚毫秒。绕收敛需常驻 DEV 影子断言维护税、换取现已蒸发的收益，故不推进。随之 **step 4-5（手牌摘要读面）一并搁置**——它们只为阶段 4 快路径铺路，快路径不做则失去动机。
+> - **埋点精简为轻量看门狗**：`fastPathStats.ts` / `fastPathGate.ts`（4A dry-run 探针、命中率/相位/约束拆分计时）与 `Room.constraintGroupsByCard` 反查索引都是为回答「阶段 4 go/no-go」而建，结论既已给出（no-go），随本次删除；`trackerController` 的 `attach/detachFastPathDebugApi`、`resolveConstraints()` 的 `recordFastPathTiming` 参数、`moveCards` 的 dry-run 计时、`tests/tracker/fastPathGate.test.ts` 一并移除。替代物是 `resolveConstraints()` 内联的收敛轮数看门狗：`Room.lastResolveRounds` / `maxResolveRounds` 字段 + DEV 下 `rounds > 8` 告警，把「是否退回非终止」变成自报警的常驻 tripwire（真实对局能触发、而合成单测此前漏掉的正是这类）。
+> - **收敛终止性回归护栏**：新增 `tests/tracker/convergenceTermination.test.ts`，在 Room 级构造「重叠约束组 + 多座位候选」并断言 `resolveConstraints` 轮数 ≤ 个位数。它不针对某个具体 `changed` 来源，兜住**任何**未来的虚报-changed 回归，与 `traversalBaseline` 的遍历计数护栏互补。
+> - **验证**：`pnpm test:tracker` 161 通过（删除 fastPathGate 9 例、新增终止性 2 例）、`pnpm typecheck:tracker` / `pnpm lint` / `pnpm build` / `pnpm build:prod` 通过。修复后基线：prod `avgRounds=1.14`、`maxRounds=2`、`totalMs≈424ms/局`（~2.4ms/move）作为 tracker 收敛的当前地板，暂无进一步优化立项。
+
 ---
 
 ## 一、问题背景
@@ -613,13 +620,13 @@ this.resolveConstraints()
 - [x] **step 1**：测试工具 —— `expectLocationIndexMatchesRebuild()`（`tests/tracker/helpers/locationIndex.ts`）比对“增量结果 vs 全量 rebuild 结果”；`dirtyCardEvents` 游标消费封装进 `CardLocationIndex.applyDirtyCardEvents()`。
 - [x] **step 2**：`CardLocationIndex` 增量能力（`applyDirtyCardEvents` / `applyCardChange` / `refreshPublicZones`，含 C2 游标断档回退与 C1 `syncViewGroups(seatIDs)`），`resolveConstraints()` 当时仍默认全量；单独测试验证（`tests/tracker/cardLocationIndexIncremental.test.ts`）。
 - [x] **step 3**：接入 `resolveConstraints()` 尾部改走增量；`Zone` 变更记录 `Room.dirtyPublicZones` 补齐纯公共区移动；DEV 影子等价断言 `Room.assertLocationIndexConsistency()`；集成测试 `tests/tracker/resolveConstraintsIncrementalIndex.test.ts` 驱动真实 `moveCards`/`shufflePile` 逐步比对。
-- [ ] step 4：`CardLocationIndex` 折入手牌摘要读面（`plainUnknownHandBySeat` / `handConstraintGroupIDsBySeat`）。
-- [ ] step 5：手牌摘要替代 `getKnownHandCardsBySeat()` / `takeUnknownCardsFromPlayer()` 简单扫描。
+- [-] **step 4（已搁置）**：`CardLocationIndex` 折入手牌摘要读面（`plainUnknownHandBySeat` / `handConstraintGroupIDsBySeat`）。仅为阶段 4 快路径铺路，随阶段 4 搁置而不做。
+- [-] **step 5（已搁置）**：手牌摘要替代 `getKnownHandCardsBySeat()` / `takeUnknownCardsFromPlayer()` 简单扫描。同上。
 - [x] **step 6**：`AmbiguousKnownIndex` 单牌增量（沿用 C4 非问题结论；含装备容器候选反向依赖）。详见 [`ambiguous-known-index-incremental-step6-plan.md`](ambiguous-known-index-incremental-step6-plan.md)。
 - [x] **step 7（A2）**：增量维护 `resolveConstraints()` 的 player 快照，收敛照跑。详见 [`a2-player-snapshot-incremental-step7-plan.md`](a2-player-snapshot-incremental-step7-plan.md)。
-- [~] **step 8（进行中）**：阶段 4 快路径「dry-run 数据 gate」。增量 1（4A 命中率埋点，**不绕收敛**）已落地；4B–4D 埋点与 step 4-5 手牌摘要留待后续增量。详见下方「step 8 落地记录」。
+- [x] **step 8（已收口）**：dry-run 数据 gate 的结论是**阶段 4 no-go**——根因修复（2026-07-06）把收敛压到 avgRounds≈1.14 后，绕收敛的边际收益蒸发。故不实现 apply 版本，埋点精简为收敛轮数看门狗 + 终止性回归护栏。详见「实施记录（2026-07-07）」与下方「step 8 落地记录」。
 
-> **执行顺序偏差**：step 6-7 先于 step 4-5 落地。step 4-5（手牌摘要）主要为阶段 4 快路径铺路，属数据 gate 前置，缺乏收益证据时可能整体不做；step 6（`AmbiguousKnownIndex` 增量）与 step 7（A2 player 快照）是既定索引/快照增量的核心收尾，故先做。step 4-5 保持勾选空缺待定。
+> **执行顺序偏差与收口**：step 6-7 先于 step 4-5 落地。step 4-5（手牌摘要）只为阶段 4 快路径铺路，属数据 gate 前置；数据 gate 结论为 no-go 后，step 4-5 与 4A–4D 一并搁置（`[-]`）。step 6（`AmbiguousKnownIndex` 增量）与 step 7（A2 player 快照）是既定索引/快照增量的核心收尾，已交付。
 
 ### 改动文件（step 1-3）
 
@@ -740,3 +747,11 @@ step 7 实测遍历量（`traversalBaseline.test.ts` 内联快照，40 张基线
 **验证**：`pnpm test:tracker` **163 例通过**、`pnpm typecheck:tracker` / `pnpm lint` / `pnpm build:prod` 通过。埋点/计时均只读，`traversalBaseline.test.ts` 计数不变、DEV 影子断言无告警，**收敛行为零变化**。
 
 **后续增量**：① 测试/开发构建重测 `window.__dxcTracker.fastPathTiming()` 读 `c1/c2/c3Share` + `avgRounds` + `maxGroupCount`，定位 82ms 根因；② 若 `c2Share` 高（预期）→ 给约束二加「跳过未触碰组」优化（帮全部移动、保语义、比 4A 简单安全），大概率**取代 4A**；③ 4A apply 仅在「根因修完后仍有可观确定移动收益」时才做，且带 DEV 等价影子断言；④ 暗牌方向（49 次 `unknownCount`）：step 4-5 手牌摘要 + 4B/4C/4D 埋点，看根因修完后是否还值得；⑤ 教训：遍历计数与真实 wall-clock 背离两个数量级，收益判断一律以 wall-clock 相位/约束拆分为准。
+
+**上面「后续增量」①–④ 已被 2026-07-06 根因定位推翻并于 2026-07-07 收口**（见顶部「实施记录（2026-07-07）」）：
+
+- ① **已执行**：`avgRounds` 拆分定位到根因**不是** `c2Share` 高（每轮慢），而是约束二**虚报 `changed`、收敛无不动点**（`c2ChangedCount ≈ roundsTotal`）。
+- ② **作废**：约束二**不需要**「跳过未触碰组」优化——它每轮本就近乎 no-op，问题只在虚报 `changed`。已改为「`ConstraintGroup.apply()` 的 `combinationID` 标签切换不计入 `changed`」+「`Card.setSeats()` 多座位候选 key 级幂等」两处根因修复。
+- ③ **作废**：4A apply 不做（可省上界降到亚毫秒，收益蒸发）。
+- ④ **作废**：step 4-5 + 4B/4C/4D 随阶段 4 搁置。
+- ⑤ **保留为长期教训**，并补一条：高 `avgRounds` 要先判「是否虚报 `changed`（非终止）」再谈「每轮成本」——收敛轮数看门狗（`Room.maxResolveRounds` + DEV `rounds > 8` 告警）与 `tests/tracker/convergenceTermination.test.ts` 即为此长期设防。
