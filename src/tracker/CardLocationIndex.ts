@@ -300,7 +300,11 @@ export class CardLocationIndex {
         }
 
         if (candidate.subZone === 'mark' && candidate.spellID !== null) {
-          targets.push({ bucket: 'mark', seat: Number(candidate.seatID), spellID: candidate.spellID })
+          targets.push({
+            bucket: 'mark',
+            seat: Number(candidate.seatID),
+            spellID: candidate.spellID
+          })
         }
       })
 

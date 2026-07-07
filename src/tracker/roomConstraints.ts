@@ -188,7 +188,7 @@ export class RoomConstraints {
       })
 
       if (group.cards.size === 0) {
-        this.room.constraintGroups.delete(groupID)
+        this.room.deleteConstraintGroup(groupID)
         changed = true
       }
     }

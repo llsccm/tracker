@@ -5,11 +5,7 @@ import { normalizeSpellID } from './candidate/markSpellID'
 import { summarizeMoveContext } from './helper/moveSummary'
 import type { Room } from './Room'
 import { RoomMovementCandidateMethods } from './roomMovement/candidates'
-import type {
-  MoveTargetZone,
-  RoomMoveContext,
-  RoomMovementOptions
-} from './roomMovement/types'
+import type { MoveTargetZone, RoomMoveContext, RoomMovementOptions } from './roomMovement/types'
 import type { CardID, PublicZoneName, SeatID } from './types'
 
 /**
@@ -455,10 +451,8 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         const placeholder = this.swapKnownCardWithPlayerSourcePlaceholder(card, playerSourceContext)
         let fallbackPlaceholder: Card | null = null
         if (!placeholder && fromSubZone === 'hand') {
-          const suspendedSourcePlaceholder = this.createPlayerSourcePlaceholderForSuspendedKnownCard(
-            card,
-            playerSourceContext
-          )
+          const suspendedSourcePlaceholder =
+            this.createPlayerSourcePlaceholderForSuspendedKnownCard(card, playerSourceContext)
           fallbackPlaceholder = this.swapCardWithUnknown(card, fromSeat, knownCards)
           if (!fallbackPlaceholder && suspendedSourcePlaceholder) {
             trackerLogger.warn('暂停追踪正 ID 已创建来源兜底占位但仍未完成置换', {

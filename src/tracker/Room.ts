@@ -25,6 +25,9 @@ import type {
   SubZoneCandidate
 } from './types'
 
+// 收敛轮数看门狗阈值：正常收敛 ≤2 轮，超过即疑似某处虚报 changed 的非终止回归（见 #2）。
+const CONVERGENCE_ROUNDS_WARN = 8
+
 interface RoomOptions {
   gameState?: GameState
 }
@@ -97,6 +100,10 @@ export class Room {
   declare suspendedKnownCards: Set<Card>
   /** 收敛轮内被触碰过的座位集合；仅在 resolveConstraints 循环内非空，供约束三跳过未触碰玩家。 */
   declare resolveTouchedSeats: Set<SeatID> | null
+  /** 最近一次 resolveConstraints 的收敛轮数；配合 maxResolveRounds 作非终止回归看门狗。 */
+  declare lastResolveRounds: number
+  /** 本局至今 resolveConstraints 的最大收敛轮数（可查询的 tripwire，正常 ≤2）。 */
+  declare maxResolveRounds: number
   declare viewDirty: boolean
   /** 本局曾发生状态变化的卡牌集合；只在房间销毁时清理，不作为视图消费队列。 */
   declare dirtyCards: Set<Card>
@@ -148,6 +155,8 @@ export class Room {
     this.constraintGroups = new Map()
     this.constraintGroupSeq = 0
     this.constraintGroupsDirty = false
+    this.lastResolveRounds = 0
+    this.maxResolveRounds = 0
     this.ambiguousKnownIndex = new AmbiguousKnownIndex(this)
     this.locationIndex = new CardLocationIndex()
     this.suspendedKnownCards = new Set()
@@ -599,6 +608,10 @@ export class Room {
     this.constraintGroupsDirty = true
   }
 
+  deleteConstraintGroup(groupID: string | number): boolean {
+    return this.constraintGroups.delete(groupID)
+  }
+
   /**
    * 将牌堆和弃牌堆中的实体牌重置后洗回牌堆。
    * 洗牌时实际牌堆只由“剩余牌堆 + 弃牌堆”组成，不再为了协议张数补 id=0 占位。
@@ -671,10 +684,7 @@ export class Room {
     // 这是“协议牌堆空间”的解释集合，不是实际 pile.cards。
     const pileSpaceRemainingCards = [...knownPileCards, ...suspendedIdentityCards]
 
-    recordTraversal(
-      'shufflePile:classify',
-      nonPileIdentityStatusCards.length
-    )
+    recordTraversal('shufflePile:classify', nonPileIdentityStatusCards.length)
 
     recycledCards.forEach((card) => card.reset())
     this.removeCardsFromConstraintGroups([...knownPileCards, ...suspendedIdentityCards])
@@ -838,7 +848,10 @@ export class Room {
       const actualSlotCount = knownCount + candidateCount + actualUnknownCount
 
       player.refreshUnknownCardCount({ knownCount, candidateCount })
-      if (actualUnknownCount === expectedUnknownCount && actualSlotCount === player.observedHandCount) {
+      if (
+        actualUnknownCount === expectedUnknownCount &&
+        actualSlotCount === player.observedHandCount
+      ) {
         return
       }
 
@@ -945,6 +958,8 @@ export class Room {
     let playerCards = this.refreshPlayerSnapshot()
     // E2：上一轮触碰座位集；null 表示首轮，约束三无条件处理全部玩家。
     let previousTouchedSeats: Set<SeatID> | null = null
+    // 收敛轮数：喂给非终止回归看门狗（正常 ≤2 轮）。
+    let rounds = 0
 
     try {
       while (changed && limit-- > 0) {
@@ -952,6 +967,7 @@ export class Room {
         overbroadKnownCards = []
         const touchedSeats = new Set<SeatID>()
         this.resolveTouchedSeats = touchedSeats
+        rounds += 1
 
         // === 约束一：候选席位变化后同步确定拥有者 ===
         recordTraversal('resolveConstraints:constraint1', playerCards.length)
@@ -1050,6 +1066,17 @@ export class Room {
       }
     } finally {
       this.resolveTouchedSeats = null
+    }
+
+    this.lastResolveRounds = rounds
+    if (rounds > this.maxResolveRounds) this.maxResolveRounds = rounds
+    // 看门狗：正常收敛 ≤2 轮。轮数异常偏高几乎必然是某处虚报 changed（收敛无不动点），
+    // 即 #2 修复的那类非终止 bug；DEV 下告警，硬上限 limit=100 仍兜底。
+    if (import.meta.env.DEV && rounds > CONVERGENCE_ROUNDS_WARN) {
+      trackerLogger.warn('resolveConstraints 收敛轮数异常偏高，疑似虚报 changed 的非终止回归', {
+        rounds,
+        constraintGroupCount: this.constraintGroups.size
+      })
     }
 
     this.assertPlayerSnapshotConsistency(playerCards)
@@ -1308,6 +1335,8 @@ export class Room {
     this.cards.forEach((card) => card.reset())
     this.constraintGroups.clear()
     this.constraintGroupsDirty = false
+    this.maxResolveRounds = 0
+    this.lastResolveRounds = 0
     this.moveEventHandlers.clear()
     this.skillState.clear()
     this.ambiguousKnownIndex.items.clear()
