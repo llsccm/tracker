@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ConstraintGroup } from '@/tracker/ConstraintGroup'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from './helpers/room'
-import { locationKeys, playerLocation } from './helpers/locationCandidates'
+import { locationKeys, playerLocation, publicLocation } from './helpers/locationCandidates'
 
 describe('完整位置候选回归', () => {
   it('owner 收敛后仍保留同一 owner 下的手牌/标记候选', () => {
@@ -38,6 +38,26 @@ describe('完整位置候选回归', () => {
 
     expect(group.resolve()).toBe(false)
     expect(group.resolve()).toBe(false)
+  })
+
+  it('多座位 player 候选重投影时保留同牌非 player 候选', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
+    const card = getCard(room, 1)
+    const pileTop = publicLocation('pile', 'top', 1)
+    const seatOneHand = playerLocation(1, 'hand')
+    const seatTwoHand = playerLocation(2, 'hand')
+
+    card.bindCandidates([1, 2], 'hand', null, { known: true })
+    card.setLocationCandidates([pileTop, seatOneHand, seatTwoHand])
+
+    expect(card.setSeats([1, 2], 'test:repeat-player-projection')).toBe(false)
+    expect(locationKeys(card)).toEqual(
+      [
+        createLocationCandidateKey(pileTop),
+        createLocationCandidateKey(seatOneHand),
+        createLocationCandidateKey(seatTwoHand)
+      ].sort()
+    )
   })
 
   it('重叠约束组切换 combinationID 不驱动 resolve 重循环', () => {

@@ -270,7 +270,11 @@ export class Card extends BaseCard {
         .filter((candidate): candidate is PlayerLocationCandidate => Boolean(candidate))
       // 只有候选实际变化才算 changed；否则多座位候选牌会让约束二每轮把同一候选重投一遍、
       // setSeats 恒返回 true，收敛永不到不动点、空转到 limit=100（收敛非终止 bug）。
+      const preservedLocationCandidates = this.locationCandidates.filter(
+        (candidate) => candidate.type !== 'player'
+      )
       const previousKeys = this.locationCandidates
+        .filter((candidate) => candidate.type === 'player')
         .map((candidate) => createLocationCandidateKey(candidate))
         .sort()
       const nextKeys = nextLocationCandidates
@@ -280,7 +284,7 @@ export class Card extends BaseCard {
         previousKeys.length !== nextKeys.length ||
         previousKeys.some((key, index) => key !== nextKeys[index])
       if (subZoneCandidatesChanged) {
-        this.locationCandidates = nextLocationCandidates
+        this.locationCandidates = [...preservedLocationCandidates, ...nextLocationCandidates]
       }
       nextProjectedSeats = projectSeatsFromLocationCandidates(this.locationCandidates)
     }
