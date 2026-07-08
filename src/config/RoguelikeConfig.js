@@ -97,7 +97,7 @@ export class RoguelikeConfig extends ConfigBase {
 
   parse(data) {
     if (!data) return
-    this.initAbbreviation(data.root.abbreviation)
+    this.initAbbreviation(data.root?.abbreviation)
     this.decodeGenerals(data)
     this.data = data
     const root = data.Root || {}
@@ -610,13 +610,13 @@ export class RoguelikeConfig extends ConfigBase {
     return get && choice.showitem ? get.replace('随机', '特定') : get
   }
 
-  item(id, num, effect) {
+  item(id, num) {
     if (!id) return ''
     if (String(id).includes(',')) return this.formatQualityReward(id)
     if (this.getReward(id)) return (num > 1 ? num : '') + this.getRewardText(id)
     const plot = this.getPlot(id)
     if (plot) return plot.name
-    if (this.getGeneralGroup(id)) return this.formatGeneralGroupReward(id, effect)
+    if (this.getGeneralGroup(id)) return this.formatGeneralGroupReward(id)
 
     return (this.originData?.Card || []).find((card) => card.id == id)?.name
   }
