@@ -6,38 +6,27 @@ const ROGUE_LEVEL_KEYS = ['', '_ZD', '_KN', '_EM', '_LY']
 const REWARD_QUALITY_NAMES = ['随机', '普通', '稀有', '史诗', '传说']
 const CARD_SUBTYPE_NAMES = { 6: '火杀', 7: '雷杀', 11: '冰杀', 12: '闪闪' }
 const CHOICE_REWARD_TYPE_NAMES = { 2: '战法', 3: '技能', 4: '手牌', 5: '装备' }
-const GENERATED_JSON_REPLACEMENTS = [
-  ['（', '('],
-  ['）', ')'],
-  ['）', ')']
-]
 
 export class RoguelikeConfig extends ConfigBase {
-  pvpFileName = 'hd_1v1_rogue'
-  Rplot = []
-  Rcity = {}
-  Rchoose = []
-  Rfight = []
-  rogejson = {}
-  text = []
-  rewards = {}
-  chapterPlaces = {}
-  generalGroups = {}
+  originData = null
+  /** 战法 技能 卡牌 */
+  shopDict = new Map()
+  /** 城市进度 */
+  levelDict = new Map()
+  /** 奇遇选项结果 */
+  adventureResultDict = new Map()
+  /** 战斗事件 */
+  fightDict = new Map()
+  /** 奇遇数据 */
+  adventures = new Map()
+  text = new Map()
+  /** 奖励 */
+  rewardGroupDict = new Map()
+  /** 章节地点 */
+  chapterDict = new Map()
+  /** 敌人数据 */
+  generalDict = new Map()
   season = 0
-  fightEvents = new Map()
-
-  // 兼容 configW.js 中的旧命名
-  get cp() {
-    return this.chapterPlaces
-  }
-
-  get gp() {
-    return this.generalGroups
-  }
-
-  get sj() {
-    return this.fightEvents
-  }
 
   constructor() {
     super('Roguelike_json')
@@ -52,112 +41,144 @@ export class RoguelikeConfig extends ConfigBase {
     return this.instance
   }
 
+  clearRuntimeMaps() {
+    this.shopDict.clear()
+    this.levelDict.clear()
+    this.adventureResultDict.clear()
+    this.fightDict.clear()
+    this.adventures.clear()
+    this.text.clear()
+    this.rewardGroupDict.clear()
+    this.chapterDict.clear()
+    this.generalDict.clear()
+    this.season = 0
+  }
+
+  getPlot(id) {
+    const plot = this.shopDict.get(String(id))
+    return plot ? this.resolvePlot(plot) : plot
+  }
+
+  getCity(id) {
+    return this.levelDict.get(String(id))
+  }
+
+  getChoice(id) {
+    const choice = this.adventureResultDict.get(String(id))
+    return choice ? this.resolveChoice(choice) : choice
+  }
+
+  getFight(id) {
+    const fight = this.fightDict.get(String(id))
+    if (fight) return this.normalizeFight(fight)
+
+    const generals = this.getGeneralGroup(id)
+    return generals ? this.normalizeFight({ fightID: id, generals }) : undefined
+  }
+
+  getAdventure(id) {
+    return this.adventures.get(String(id))
+  }
+
+  getReward(id) {
+    return this.rewardGroupDict.get(String(id))
+  }
+
+  getRewardText(id) {
+    const reward = this.getReward(id)
+    if (!reward) return ''
+    if (reward.name) return reward.name
+    return this.formatRewardGroup(reward)
+  }
+
+  getGeneralGroup(id) {
+    return this.generalDict.get(String(id))
+  }
+
   parse(data) {
     if (!data) return
     this.initAbbreviation(data.root.abbreviation)
     this.decodeGenerals(data)
     this.data = data
-
-    this.Rplot = []
-    this.Rchoose = []
-    this.Rfight = []
-    this.fightEvents = new Map()
-
     const root = data.Root || {}
+    this.originData = root
+    this.clearRuntimeMaps()
 
-    this.season = root.Roundid?.reduce((_, { useSeason }) => useSeason, 0) || 0
-    this.text = this.initText(root.Text)
-    this.chapterPlaces = this.initChapterPlaces(root.Chapter)
-    this.Rcity = this.initCities(root.Level)
-    this.rewards = this.initRewards(root.RewardGroup, root.Other)
+    this.season = root.Roundid?.at(-1)?.useSeason || 0
+    this.initText(root.Text)
+    this.initChapterPlaces(root.Chapter)
+    this.initCities(root.Level)
+    this.initRewards(root.RewardGroup, root.Other)
     this.initTactics(root.Tactics)
+    this.initSpellPlots(root.Spell)
+    this.initCardPlots(root.Card)
 
     this.initAdventures(root.Adventure)
-    this.generalGroups = this.initGeneralGroups(root.General)
-  }
-
-  resolveDependencies() {
-    if (!this.data) return this
-
-    const root = this.data.Root || {}
-    this.resolveSpellPlots(root.Spell)
-    this.resolveCardPlots(root.Card)
-    this.resolveGenerals(root.General)
-    this.Rfight = this.initFights(root.Fight)
-    this.fillMissingFights()
-    const adventure = this.initAdventureMap(root.Adventure)
-    this.Rchoose = this.initChoices(root.Choose, adventure)
-
-    return this
+    this.initGeneralGroups(root.General)
+    this.initFights(root.Fight)
+    this.initChoices(root.Choose)
   }
 
   initText(texts) {
-    return this.arrayByKey(texts, 'ID', ({ text }) => text)
-  }
-
-  arrayByKey(list, keyField, mapValue = (item) => item) {
-    const result = []
-
-    for (const item of list || []) {
-      result[item[keyField]] = mapValue(item)
+    for (const { ID, text } of texts || []) {
+      this.text.set(String(ID), text)
     }
-
-    return result
-  }
-
-  objectByKey(list, keyField, mapValue = (item) => item) {
-    const result = {}
-
-    for (const item of list || []) {
-      result[item[keyField]] = mapValue(item)
-    }
-
-    return result
   }
 
   initChapterPlaces(chapters) {
-    const placeMap = {}
-
     for (const { seasonID, chapter, cityName, bosslocation, location } of chapters || []) {
       const placeName = `${seasonID}-${chapter}${cityName}`
 
       for (const locationId of location?.split(';') || []) {
-        placeMap[locationId] = placeName
+        this.chapterDict.set(String(locationId), placeName)
       }
 
-      placeMap[bosslocation] = `${placeName}BOSS`
+      this.chapterDict.set(String(bosslocation), `${placeName}BOSS`)
     }
-
-    return placeMap
   }
 
   initCities(levels) {
-    const cityMap = {}
-
     for (const level of levels || []) {
-      const {
-        cityID: id,
-        cityname,
-        citypic,
-        citycoordinate,
-        scenespell: spell,
-        scenesDesc: desc,
-        startshow: boss
-      } = level
-      const [x, y] = this.parseCoordinate(citycoordinate)
-
-      cityMap[id] = {
-        x,
-        y: -y,
-        boss,
-        cp: this.chapterPlaces?.[id],
-        spell,
-        desc,
-        name: cityname ?? this.getCityNameFromPic(citypic)
-      }
+      const city = this.parseCity(level)
+      this.levelDict.set(String(city.cityID), city)
     }
+  }
 
-    return cityMap
+  parseCity(level) {
+    const cityID = level.cityID || 0
+    const cityPos = this.parseCoordinate(level.citycoordinate)
+    const [x, y] = cityPos
+    const eventFightKeys = this.splitIds(level.eventfight).map((fightKey) =>
+      String(fightKey).slice(-3)
+    )
+    const eventfights = eventFightKeys.map(Number)
+    const cityName = level.cityname || ''
+
+    return {
+      cityID,
+      CityID: cityID,
+      cityName,
+      CityName: cityName,
+      cityPos,
+      CityPos: cityPos,
+      citypic: level.citypic || '',
+      eventfights,
+      Eventfights: eventfights,
+      eventFightKeys,
+      eventfight: eventfights[0] || 0,
+      Eventfight: eventfights[0] || 0,
+      universalfight: level.universalfight || '',
+      startShow: level.startshow == 1,
+      StartShow: level.startshow == 1,
+      scene: level.scene || '',
+      spell: level.scenespell,
+      desc: level.scenesDesc,
+      cp: this.chapterDict.get(String(cityID)),
+      x,
+      y: -y,
+      boss: level.startshow,
+      name: cityName || this.getCityNameFromPic(level.citypic)
+    }
   }
 
   parseCoordinate(coordinate) {
@@ -171,17 +192,43 @@ export class RoguelikeConfig extends ConfigBase {
   }
 
   initRewards(rewardGroups, others) {
-    const rewards = this.initBaseRewards(others)
-
-    for (const rewardGroup of rewardGroups || []) {
-      rewards[rewardGroup.reward] = this.formatRewardGroup(rewardGroup)
+    for (const otherReward of others || []) {
+      const reward = this.parseOtherReward(otherReward)
+      this.rewardGroupDict.set(String(reward.id), reward)
     }
 
-    return rewards
+    for (const rewardGroup of rewardGroups || []) {
+      const reward = this.parseRewardGroup(rewardGroup)
+      this.rewardGroupDict.set(String(reward.id), reward)
+    }
   }
 
-  initBaseRewards(others) {
-    return this.objectByKey(others, 'reward', ({ rewardname }) => rewardname)
+  parseOtherReward({ reward, rewardname }) {
+    return {
+      id: reward || 0,
+      rewardID: reward || 0,
+      name: rewardname || ''
+    }
+  }
+
+  parseRewardGroup(rewardGroup) {
+    return {
+      id: rewardGroup.reward || 0,
+      rewardID: rewardGroup.reward || 0,
+      allreward: rewardGroup.allreward || '',
+      rewardIcon: rewardGroup.rewardicon || '',
+      toppic: rewardGroup.toppic || '',
+      goodsId: rewardGroup.goods || 0,
+      quality: rewardGroup.quality || 0,
+      rewarddesc: rewardGroup.rewarddesc || '',
+      rewarditem: rewardGroup.rewarditem || '',
+      random: rewardGroup.random || 0,
+      showpic: rewardGroup.showpic || '',
+      pra1: rewardGroup.pra1 || 0,
+      pra2: rewardGroup.pra2 || 0,
+      type: rewardGroup.type || 0,
+      abandonmoney: rewardGroup.abandonmoney || 0
+    }
   }
 
   formatRewardGroup({ rewarddesc, allreward, abandonmoney }) {
@@ -192,19 +239,33 @@ export class RoguelikeConfig extends ConfigBase {
       .map((quality) => REWARD_QUALITY_NAMES[quality])
       .join('/')
 
-    return moneyText + qualityText + rewarddesc.replace('多选一', '自选')
+    return moneyText + qualityText + String(rewarddesc || '').replace('多选一', '自选')
   }
 
   initTactics(tactics) {
-    for (const { plot, plotname, plotdesc, school, money, level } of tactics || []) {
-      this.Rplot[plot] = {
-        name: plotname.replaceAll('·', ''),
-        desc: plotdesc.replaceAll(' ', ''),
-        school,
-        money,
-        level,
-        type: 2
-      }
+    for (const tactic of tactics || []) {
+      this.shopDict.set(String(tactic.plot), {
+        source: 'tactic',
+        ...tactic
+      })
+    }
+  }
+
+  initSpellPlots(spells) {
+    for (const spell of spells || []) {
+      this.shopDict.set(String(spell.id), {
+        source: 'spell',
+        ...spell
+      })
+    }
+  }
+
+  initCardPlots(cards) {
+    for (const card of cards || []) {
+      this.shopDict.set(String(card.id), {
+        source: 'card',
+        ...card
+      })
     }
   }
 
@@ -215,79 +276,204 @@ export class RoguelikeConfig extends ConfigBase {
 
   initAdventures(adventures) {
     for (const adventure of adventures || []) {
-      adventure.chapname = this.text[adventure.chapname] ?? adventure.chapname
+      this.adventures.set(String(adventure.ID), this.parseAdventure(adventure))
     }
+  }
+
+  parseAdventure(adventure) {
+    const id = adventure.ID || 0
+    const textIds = this.splitIds(adventure.text)
+
+    return {
+      id,
+      ID: id,
+      chapname: adventure.chapname || '',
+      duration: adventure.duration || 0,
+      text: adventure.text || '',
+      textIds,
+      helptext: String(adventure.helptext || 0),
+      showrole: adventure.showrole || '',
+      mirror: adventure.mirror || 0,
+      general: adventure.general,
+      words: adventure.words,
+      options: this.parseAdventureOptions(adventure)
+    }
+  }
+
+  parseAdventureOptions(adventure) {
+    const options = []
+
+    // 哪个B设计出这样的数据结构害人不浅
+    // 还不使用 while
+    for (let index = 1; index < 10; index++) {
+      const option = adventure['option' + index]
+      const effect = adventure['effect' + index]
+      if (!option || !effect) break
+
+      options.push({
+        option,
+        effect,
+        effecttext: adventure['effecttext' + index] || 0,
+        effectvalue: adventure['effectvalue' + index] || ''
+      })
+    }
+
+    return options
+  }
+
+  getText(textId) {
+    return this.text.get(String(textId)) ?? textId
   }
 
   initGeneralGroups(generals) {
-    const groups = {}
-
-    for (const general of generals || []) {
-      if (!groups[general.generalgroup]) groups[general.generalgroup] = []
-
-      general.generalname = general.generalname.replaceAll('&', '')
-      groups[general.generalgroup].push(general)
+    for (const generalData of generals || []) {
+      const general = this.parseGeneral(generalData)
+      const groupId = general.generalgroup
+      const groupKey = String(groupId)
+      if (!this.generalDict.has(groupKey)) this.generalDict.set(groupKey, [])
+      this.generalDict.get(groupKey).push(general)
     }
-
-    return groups
   }
 
-  resolveSpellPlots(spells) {
-    for (const { id, spellid, money, level } of spells || []) {
-      const spell = SkillsConfig.GetInstance().getSpell(spellid)
-      this.Rplot[id] = {
+  parseGeneral(general) {
+    const generalgroup = general.generalgroup || 0
+    const generalID = general.generalID || 0
+    const generalname = String(general.generalname || '').replaceAll('&', '')
+    const jumpStage = this.parseGeneralJumpStage(general.JumpStage)
+    const growdouble = this.parseGeneralRatio(general.growdouble)
+    const growshowdouble = this.parseGeneralRatio(general.growshowdouble)
+    const diffdouble = this.parseGeneralRatio(general.diffdouble)
+    const deleteSpell = this.splitIds(general.deletespell).map(Number)
+    const inStage = general.inStage || 0
+    const hasNextStage = inStage > 0 && jumpStage.id > 0
+    const isboss = general.isboss == 1
+
+    return {
+      generalgroup,
+      GeneralGroup: generalgroup,
+      generalID,
+      GeneralID: generalID,
+      generalname,
+      GeneralName: generalname,
+      generalskin: general.generalskin || 0,
+      Generalskin: general.generalskin || 0,
+      generalcounty: general.generalcounty || 0,
+      Generalcounty: general.generalcounty || 0,
+      growdouble,
+      Growdouble: growdouble,
+      growshowdouble,
+      Growshowdouble: growshowdouble,
+      diffdouble,
+      Diffdouble: diffdouble,
+      hp: general.hp || 0,
+      Hp: general.hp || 0,
+      maxhp: general.maxhp || 0,
+      MaxHp: general.maxhp || 0,
+      armor: general.armor || 0,
+      Armor: general.armor || 0,
+      maxarmor: general.maxarmor || 0,
+      Maxarmor: general.maxarmor || 0,
+      getarmor: general.getarmor || 0,
+      draw: general.draw || 0,
+      DrawCnt: general.draw || 0,
+      cardnum: general.cardnum || 0,
+      CardNum: general.cardnum || 0,
+      exshatimes: general.exshatimes || 0,
+      ExShaTimes: general.exshatimes || 0,
+      otherad: general.otherad || 0,
+      Otherad: general.otherad || 0,
+      isboss,
+      IsBoss: isboss,
+      deleteSpell,
+      DeleteSpell: deleteSpell,
+      JumpStage: general.JumpStage || '',
+      jumpStage,
+      jumpStageId: jumpStage.id,
+      JumpstageId: jumpStage.id,
+      jumpStageIndex: jumpStage.index,
+      JumpstageIndex: jumpStage.index,
+      inStage,
+      InStage: inStage,
+      hasNextStage,
+      HasNextStage: hasNextStage,
+      hide: general.hide,
+      Hide: general.hide,
+      GeneralRank: general.GeneralRank || 0,
+      ...this.copyGeneralLevelFields(general)
+    }
+  }
+
+  parseGeneralRatio(value) {
+    return value != null ? value / 100 : 1
+  }
+
+  parseGeneralJumpStage(jumpStage) {
+    const [rawNextGroupId, rawIndex] = this.splitIds(jumpStage)
+    if (!rawNextGroupId) return { raw: '', id: 0, index: 0 }
+
+    let nextGroupId = rawNextGroupId
+    if (String(nextGroupId).startsWith('2066')) nextGroupId -= 20000
+
+    return {
+      raw: jumpStage || '',
+      id: Number(nextGroupId) || 0,
+      index: Number(rawIndex) || 0
+    }
+  }
+
+  copyGeneralLevelFields(general) {
+    const fields = {}
+
+    for (const levelKey of ROGUE_LEVEL_KEYS) {
+      fields['getspell' + levelKey] = general['getspell' + levelKey] || ''
+      fields['getzhanfa' + levelKey] = general['getzhanfa' + levelKey] || ''
+      fields['carddesc' + levelKey] = general['carddesc' + levelKey] || ''
+      fields['equip' + levelKey] = general['equip' + levelKey] || ''
+    }
+
+    return fields
+  }
+
+  resolvePlot(plot) {
+    if (plot.source == 'tactic') {
+      return {
+        name: plot.plotname.replaceAll('·', ''),
+        desc: plot.plotdesc.replaceAll(' ', ''),
+        school: plot.school,
+        money: plot.money,
+        level: plot.level,
+        type: 2
+      }
+    }
+
+    if (plot.source == 'spell') {
+      const spell = SkillsConfig.GetInstance().getSpell(plot.spellid)
+      return {
         name: spell?.name,
         desc: spell?.desc,
-        spellid,
-        money,
-        level,
+        spellid: plot.spellid,
+        money: plot.money,
+        level: plot.level,
         type: 3
       }
     }
-  }
 
-  resolveCardPlots(cards) {
-    for (const { id, cardid, isequip, money, level } of cards || []) {
-      const card = CardConfig.GetInstance().getCard(cardid)
-      if (!card) continue
-
-      this.Rplot[id] = {
+    if (plot.source == 'card') {
+      const card = CardConfig.GetInstance().getCard(plot.cardid)
+      if (!card) return undefined
+      return {
         name: CARD_SUBTYPE_NAMES[card.subType] ?? card.name,
         desc: card.desc,
         color: card.color,
         number: card.number,
-        money,
-        level,
-        type: 4 + isequip,
-        rType: (card.type * 10 + card.subType) * 100 + isequip
+        money: plot.money,
+        level: plot.level,
+        type: 4 + plot.isequip,
+        rType: (card.type * 10 + card.subType) * 100 + plot.isequip
       }
     }
-  }
 
-  resolveGenerals(generals) {
-    for (const general of generals || []) {
-      general.GeneralRank ||= 0
-      general.next = this.resolveNextGeneral(general)
-      general.info = this.createGeneralInfo(general)
-      general.spells = this.collectGeneralSpells(general)
-      general.zhanfas = this.collectGeneralTactics(general)
-      general.cards = this.collectGeneralCards(general)
-      general.spell = [
-        ...general.spells.map(({ name }) => name),
-        ...general.zhanfas.map(({ name }) => name)
-      ].join(',')
-      general.card = general.cards.map(({ ncn }) => ncn).join(',')
-    }
-  }
-
-  resolveNextGeneral(general) {
-    if (!general.JumpStage) return undefined
-
-    const [rawNextGroupId, index] = general.JumpStage.split(';')
-    let nextGroupId = rawNextGroupId
-    if (nextGroupId.startsWith('2066')) nextGroupId -= 20000
-
-    return this.generalGroups[nextGroupId]?.[index - 1] ?? this.generalGroups[nextGroupId]?.[0]
+    return plot
   }
 
   createGeneralInfo(general) {
@@ -304,67 +490,49 @@ export class RoguelikeConfig extends ConfigBase {
     }
   }
 
-  collectGeneralSpells(general) {
-    return ROGUE_LEVEL_KEYS.flatMap((levelKey, level) =>
-      this.splitIds(general['getspell' + levelKey])
-        .map((spellId) => SkillsConfig.GetInstance().getSpell(spellId))
-        .filter(Boolean)
-        .map((spell) => ({ ...spell, level }))
-    )
-  }
-
-  collectGeneralTactics(general) {
-    return ROGUE_LEVEL_KEYS.flatMap((levelKey, level) =>
-      this.splitIds(general['getzhanfa' + levelKey])
-        .filter((plotId) => this.Rplot[plotId])
-        .map((plotId) => ({
-          id: plotId,
-          name: this.Rplot[plotId].name + '#',
-          desc: this.Rplot[plotId].desc,
-          level
-        }))
-    )
-  }
-
-  collectGeneralCards(general) {
-    return ROGUE_LEVEL_KEYS.flatMap((levelKey, level) =>
-      [
-        ...this.splitIds(general['carddesc' + levelKey]),
-        ...this.splitIds(general['equip' + levelKey])
-      ]
-        .map((cardId) => CardConfig.GetInstance().getCard(cardId))
-        .filter(Boolean)
-        .map(({ id }) => ({ id, ncn: CardConfig.GetInstance().getCard(id)?.ncn, level }))
-        .filter(({ ncn }) => ncn)
-    )
-  }
-
   splitIds(value, separator = ';') {
     return value ? String(value).split(separator) : []
   }
 
   initFights(fights) {
-    const fightMap = []
-
     for (const fight of fights || []) {
-      this.normalizeFight(fight)
-      fightMap[fight.fightID] = fight
+      this.fightDict.set(String(fight.fightID), fight)
     }
-
-    return fightMap
   }
 
   normalizeFight(fight) {
-    fight.generals = [...(this.generalGroups[fight.Ggroup] ?? [])]
-    fight.fight = ''
-    fight.lost = ''
+    const normalizedFight = {
+      ...fight,
+      generals: (fight.generals ?? this.getGeneralGroup(fight.Ggroup) ?? [])
+        .map((general) => this.cloneFightGeneral(general))
+        .filter(Boolean),
+      fight: '',
+      lost: ''
+    }
 
-    this.markStartGeneral(fight)
-    this.linkFightGenerals(fight)
+    this.markStartGeneral(normalizedFight)
+    this.linkFightGenerals(normalizedFight)
 
-    fight.get = this.formatFightRewards(fight)
-    fight.text = this.text[fight.text] ?? fight.text
-    fight.name = this.text[fight.name] ?? fight.name
+    normalizedFight.get = this.formatFightRewards(fight)
+    normalizedFight.text = this.getText(fight.text)
+    normalizedFight.name = this.getText(fight.name)
+
+    return normalizedFight
+  }
+
+  cloneFightGeneral(general, used = new Set()) {
+    if (!general || used.has(general)) return undefined
+
+    used.add(general)
+    const nextGroup = general.jumpStageId ? this.getGeneralGroup(general.jumpStageId) : undefined
+    const nextGeneral = nextGroup?.[general.jumpStageIndex - 1] ?? nextGroup?.[0]
+    const clonedGeneral = {
+      ...general
+    }
+    if (nextGeneral) clonedGeneral.next = this.cloneFightGeneral(nextGeneral, used)
+    clonedGeneral.info = this.createGeneralInfo(clonedGeneral)
+
+    return clonedGeneral
   }
 
   markStartGeneral(fight) {
@@ -399,43 +567,27 @@ export class RoguelikeConfig extends ConfigBase {
   }
 
   formatFightRewards(fight) {
+    if (!fight.itemgroup && !fight.rewarditem && !fight.reward) return ''
+
     return [
-      `${fight.itemgroup}铜币`,
+      ...(fight.itemgroup ? [`${fight.itemgroup}铜币`] : []),
       ...this.splitIds(fight.rewarditem),
       ...this.splitIds(fight.reward)
     ]
-      .map((rewardId, index) => (index === 0 ? rewardId : this.rewards[rewardId]))
+      .map((rewardId, index) =>
+        index === 0 && fight.itemgroup ? rewardId : this.getRewardText(rewardId)
+      )
       .join('\n')
   }
 
-  fillMissingFights() {
-    for (const groupId in this.generalGroups) {
-      if (!(groupId in this.Rfight))
-        this.Rfight[groupId] = { generals: this.generalGroups[groupId] }
-    }
-  }
-
-  initAdventureMap(adventures) {
-    return this.arrayByKey(adventures, 'ID', (adventure) => this.translateAdventureName(adventure))
-  }
-
-  translateAdventureName(adventure) {
-    adventure.chapname = this.text[adventure.chapname] ?? adventure.chapname
-    return adventure.chapname
-  }
-
-  initChoices(choices, adventure) {
-    const choiceMap = []
-
+  initChoices(choices) {
     for (const choice of choices || []) {
-      choiceMap[choice.effectID] = this.resolveChoice(choice, adventure)
+      this.adventureResultDict.set(String(choice.effectID), choice)
     }
-
-    return choiceMap
   }
 
-  resolveChoice(choice, adventure) {
-    if (choice.type == 7) return this.resolveFightChoice(choice, adventure)
+  resolveChoice(choice) {
+    if (choice.type == 7) return this.resolveFightChoice(choice)
     if (choice.type == 3 && choice.event1 == '2') return { get: '营地' }
 
     const lost = this.formatLostItem(choice)
@@ -444,14 +596,8 @@ export class RoguelikeConfig extends ConfigBase {
     return { lost, get }
   }
 
-  resolveFightChoice(choice, adventure) {
-    this.fightEvents.set(choice.event1, this.findAdventureName(choice.effectID, adventure))
-    return this.Rfight[choice.event1]
-  }
-
-  findAdventureName(effectID, adventure) {
-    const effectKey = String(effectID)
-    return adventure[effectKey.slice(0, 4)] ?? adventure[effectKey.slice(0, 8)]
+  resolveFightChoice(choice) {
+    return this.getFight(choice.event1)
   }
 
   formatLostItem(choice) {
@@ -464,419 +610,15 @@ export class RoguelikeConfig extends ConfigBase {
     return get && choice.showitem ? get.replace('随机', '特定') : get
   }
 
-  resolveRogeJson(root, pvp) {
-    if (!pvp) return
-
-    const fightGeneralPlots = this.initFightGeneralPlots()
-    this.rogejson.jsbs = JSON.stringify(this.initJsbs(root, fightGeneralPlots))
-    this.rogejson.jsft = JSON.stringify(this.initJsft(fightGeneralPlots))
-    this.rogejson.wscd = JSON.stringify(this.initWscd(pvp))
-    this.rogejson.wssp = JSON.stringify(this.initWssp(pvp))
-    this.rogejson.wszf = JSON.stringify(this.initWszf(pvp))
-    this.rogejson.jssp = JSON.stringify(this.initJssp())
-    this.rogejson.jscd = JSON.stringify(this.initJscd())
-    this.rogejson.jssd = JSON.stringify(this.initJssd(root))
-    this.rogejson.jssc = this.stringifyGeneratedJson(
-      this.initJssc(root),
-      GENERATED_JSON_REPLACEMENTS
-    )
-    this.rogejson.jszf = JSON.stringify(this.initJszf())
-    this.rogejson.jstf = JSON.stringify(this.initJstf(root))
-  }
-
-  stringifyGeneratedJson(value, replacements = []) {
-    return replacements.reduce(
-      (text, [searchValue, replaceValue]) => text.replace(searchValue, replaceValue),
-      JSON.stringify(value)
-    )
-  }
-
-  initFightGeneralPlots() {
-    const fightGeneralPlots = {}
-
-    for (const [fightGroupId, generals] of Object.entries(this.generalGroups)) {
-      this.collectFightGroup(fightGeneralPlots, fightGroupId, generals)
-    }
-
-    for (const [fightKey, fightGroup] of Object.entries(fightGeneralPlots)) {
-      this.normalizeFightGroup(fightKey, fightGroup)
-    }
-
-    return fightGeneralPlots
-  }
-
-  collectFightGroup(fightGeneralPlots, fightGroupId, generals) {
-    const fightKey = this.getFightKey(fightGroupId)
-    const fightLevel = this.getFightLevel(fightGroupId)
-    const fightGroup = this.ensureFightGroup(fightGeneralPlots, fightKey, fightGroupId)
-
-    if (this.fightEvents.has(fightGroupId)) fightGroup.event = this.fightEvents.get(fightGroupId)
-
-    for (const general of this.Rfight[fightGroupId]?.generals ?? generals) {
-      this.addFightGeneral(fightGroup.generals, fightKey, fightLevel, general)
-    }
-  }
-
-  ensureFightGroup(fightGeneralPlots, fightKey, fightGroupId) {
-    if (!fightGeneralPlots[fightKey]) {
-      fightGeneralPlots[fightKey] = {
-        fight:
-          this.Rfight[fightGroupId]?.name ?? this.Rfight[parseInt(fightKey) + 4000]?.name ?? '',
-        generals: {}
-      }
-    }
-
-    return fightGeneralPlots[fightKey]
-  }
-
-  normalizeFightGroup(fightKey, fightGroup) {
-    const allLevels = Object.values(fightGroup.generals).flatMap((general) => general.levels)
-    fightGroup.shift = fightKey.startsWith('*') && Math.min(...allLevels) == 1 ? 1 : 0
-    fightGroup.generals = Object.values(fightGroup.generals)
-      .map((general) => this.normalizeFightGeneral(general, fightGroup.shift))
-      .sort((a, b) => a.level - b.level)
-  }
-
-  getFightKey(fightGroupId) {
-    if (fightGroupId.length < 6) return fightGroupId.slice(-3)
-    if (fightGroupId.slice(0, 2) !== '99') return fightGroupId.slice(-5, -2) + '>'
-    return '*' + fightGroupId.slice(-2)
-  }
-
-  getFightLevel(fightGroupId) {
-    if (fightGroupId.length < 6) return fightGroupId.slice(0, -3) - 2
-    if (fightGroupId.slice(0, 2) !== '99') return fightGroupId.slice(0, -5) - 2
-    return fightGroupId.slice(-3, -2) - fightGroupId.slice(-4, -3) + 9
-  }
-
-  addFightGeneral(groupedGenerals, fightKey, fightLevel, general) {
-    let generalKey =
-      (fightKey.startsWith('*') ? fightLevel : '') + (general.stage || '') + '#' + general.generalID
-    while (true) {
-      if (!groupedGenerals[generalKey]) {
-        groupedGenerals[generalKey] = {
-          general:
-            (general.info.pre ? '>' : '') + general.generalname + (general.info.next ? '>' : ''),
-          info: this.infoStr(general.info),
-          levels: [],
-          start: [],
-          infos: {},
-          spell: {},
-          card: {},
-          ad: {}
-        }
-      } else if (groupedGenerals[generalKey].levels.includes(fightLevel)) {
-        generalKey += '@'
-        continue
-      }
-      break
-    }
-
-    const groupedGeneral = groupedGenerals[generalKey]
-    if (fightLevel % 10 < 6 && fightLevel < 20) {
-      groupedGeneral.levels.push(fightLevel)
-      if (general.start) groupedGeneral.start.push(fightLevel)
-    }
-    groupedGeneral.infos[fightLevel] = general.info
-    if (general.otherad) groupedGeneral.ad[fightLevel] = general.otherad
-    general.spells?.forEach((spell) => {
-      if (!groupedGeneral.spell[spell.spellid])
-        groupedGeneral.spell[spell.spellid] = { ...spell, levels: [], level: undefined }
-      if (fightLevel % 10 < 6 && fightLevel < 20)
-        groupedGeneral.spell[spell.spellid].levels.push(fightLevel + (spell.level ?? 0))
-    })
-    general.cards?.forEach((card) => {
-      if (!groupedGeneral.card[card.id])
-        groupedGeneral.card[card.id] = { name: card.ncn, levels: [], level: undefined }
-      if (fightLevel % 10 < 6 && fightLevel < 20)
-        groupedGeneral.card[card.id].levels.push(fightLevel + (card.level ?? 0))
-    })
-  }
-
-  normalizeFightGeneral(g, shift) {
-    g.level = Math.min(...g.levels.sort((a, b) => b - a)) - shift
-    g.spell = Object.values(g.spell)
-      .map((s) => this.normalizeLevelItem(s, g.levels, shift, true))
-      .sort(this.sortLevelItem)
-    g.card = Object.values(g.card)
-      .map((c) => this.normalizeLevelItem(c, g.levels, shift))
-      .sort(this.sortLevelItem)
-    if (!g.card.length) delete g.card
-    g.info = Object.values(g.infos).reduce(
-      (acc, i) => {
-        Object.keys(acc).forEach((k) => {
-          if (i[k] > acc[k]) acc[k] = i[k]
-        })
-        return acc
-      },
-      { hp: 0, card: 0, draw: 0, sha: 0 }
-    )
-    if (Object.keys(g.ad).length) {
-      Object.keys(g.ad)
-        .sort((a, b) => b - a)
-        .forEach((lv, i, a) => {
-          if ((lv >= 10 && g.ad[lv] == g.ad[lv % 10]) || g.ad[lv] == g.ad[a[i + 1]]) delete g.ad[lv]
-        })
-    } else delete g.ad
-    if (g.start.length) g.start = Math.min(...g.start)
-    else delete g.start
-    delete g.infos
-    delete g.levels
-    return g
-  }
-
-  normalizeLevelItem(item, generalLevels, shift, isSpell = false) {
-    const lv = Math.min(...item.levels.sort((a, b) => b - a))
-    if (
-      item.levels.some(
-        (l, i, a) =>
-          l < 10 &&
-          !a.includes(l + 10) &&
-          (generalLevels.includes(l + 10) ||
-            (generalLevels.length == 2 && generalLevels.includes(10)))
-      )
-    ) {
-      item.level = [lv]
-    }
-    if (item.levels.some((l) => l < 10)) {
-      const diffEliteLevels = item.levels.filter((l, i, a) => l >= 10 && !a.includes(l - 10))
-      if (diffEliteLevels.length) item.level = [lv, diffEliteLevels[diffEliteLevels.length - 1]]
-    }
-    item.level = (item.level ?? lv) - shift
-    delete item.levels
-    if (isSpell) delete item.spellid
-    return item
-  }
-
-  sortLevelItem(a, b) {
-    const f = (l) => (l[1] >= 10 ? l[1] : (l[0] ?? l))
-    return (f(a.level) % 10) - (f(b.level) % 10) || f(a.level) - f(b.level)
-  }
-
-  initJsbs(root, fightGeneralPlots) {
-    const universalFightGroups = (root.UniversalGroup || [])
-      .filter((item) => item.fightgroup !== undefined)
-      .reduce((acc, item) => {
-        if (!acc[item.fightID]) acc[item.fightID] = {}
-        const fightKey = String(item.fightgroup).slice(-3)
-        if (!acc[item.fightID][fightKey]) acc[item.fightID][fightKey] = []
-        acc[item.fightID][fightKey].push(item)
-        return acc
-      }, {})
-
-    const cityFightGroups = Array.from(
-      Array.from(
-        (root.Level || [])
-          .reduce((acc, { cityID, eventfight, universalfight }) => {
-            const addFightCity = (fightKey) => {
-              if (!fightKey || fightKey.length == 0) return
-              const cityNames = acc.get(fightKey)
-              if (!cityNames) acc.set(fightKey, [this.chapterPlaces[cityID]])
-              else if (!cityNames.includes(this.chapterPlaces[cityID]))
-                cityNames.push(this.chapterPlaces[cityID])
-            }
-
-            addFightCity(universalfight)
-
-            addFightCity(
-              eventfight
-                ?.split(';')
-                ?.map((fightKey) => fightKey.slice(-3))
-                ?.filter((fightKey, index, allKeys) => !allKeys.slice(index + 1).includes(fightKey))
-            )
-            return acc
-          }, new Map())
-          .entries()
-      )
-        .reduce((acc, [groupKey, cityNames]) => {
-          const cityKey =
-            cityNames.length > 1 &&
-            new Set(cityNames.map((cityName) => cityName.slice(0, 3))).size < 2
-              ? cityNames.map((cityName, index) => cityName.slice(index ? 3 : 0)).join('/')
-              : String(cityNames)
-          if (!acc.get(cityKey)) acc.set(cityKey, new Set())
-          const fightKeys = universalFightGroups[groupKey]
-            ? Object.keys(universalFightGroups[groupKey])
-            : groupKey
-          for (const fightKey of fightKeys) {
-            acc.get(cityKey).add(fightKey)
-          }
-          return acc
-        }, new Map())
-        .entries()
-    ).reduce((acc, [cityKey, fightKeys]) => {
-      acc[cityKey] = Array.from(fightKeys, (fightKey) => fightGeneralPlots[fightKey])
-      return acc
-    }, {})
-
-    return Object.entries(cityFightGroups)
-      .filter(([cityKey]) => cityKey.includes(this.season + '-'))
-      .reduce((acc, [cityKey, fightGroups]) => {
-        const shortCityKey = cityKey.slice(2)
-        if (!acc[shortCityKey]) acc[shortCityKey] = []
-        fightGroups.forEach((fightGroup) => {
-          if (fightGroup.fight != '新年大吉') acc[shortCityKey].push(fightGroup)
-        })
-        return acc
-      }, {})
-  }
-
-  initJsft(fgp) {
-    return Object.values(fgp)
-      .filter(
-        (p) =>
-          (['天涯故交', '招兵买马', '万众敬仰'].includes(p.event) && p.shift) ||
-          ['突来危机', '擂台比武', '战事推演', '为民除害', '赛前演习', '宵小叫嚣'].includes(p.event)
-      )
-      .reduce((acc, { event, generals, fight }) => {
-        if (!acc[event]) acc[event] = []
-        acc[event].push({ ...(fight ? { fight } : {}), generals })
-        return acc
-      }, {})
-  }
-
-  initWscd(pvp) {
-    return Object.values(
-      (pvp.Card || [])
-        .map(({ CitationID, money }) => ({ ...this.Rplot[CitationID], money }))
-        .reduce((acc, { level, money, name, color, number, desc, rType }) => {
-          const k = level + name + number
-          if (!acc[k]) acc[k] = { cl: [], level: money, name, number, type: rType, desc }
-          acc[k].cl.push(color)
-          return acc
-        }, {})
-    ).sort(msort('type', 'level'))
-  }
-
-  initWssp(pvp) {
-    return (pvp.Spell || [])
-      .map(({ CitationID, money }) => ({ ...this.Rplot[CitationID], money }))
-      .sort(msort('money', 'level', 'spellid'))
-      .map(({ money, name, desc }) => ({ level: money, name, desc }))
-  }
-
-  initWszf(pvp) {
-    return (pvp.Tactics || [])
-      .map(({ CitationID, money }) => ({ ...this.Rplot[CitationID], money }))
-      .filter(
-        (e) =>
-          (e.name = e.name?.replace('·新', '')) &&
-          !e.name.includes('废弃') &&
-          !e.desc.includes('备用') &&
-          !/(游戏|战斗)开始/.test(e.desc)
-      )
-      .sort((a, b) =>
-        !a.money ^ !b.money
-          ? !a.money
-            ? -1
-            : 1
-          : a.name.slice(0, 2).localeCompare(b.name.slice(0, 2)) != 0
-            ? a.name.slice(0, 2).localeCompare(b.name.slice(0, 2))
-            : msort('money', 'level', 'name.length')(a, b)
-      )
-      .map(({ money, name, desc }) => ({ level: money, name, desc }))
-      .filter((v, i, a) => JSON.stringify(v) != JSON.stringify(a[i + 1]))
-  }
-
-  initJssp() {
-    return this.Rplot.filter((p) => p?.type == 3)
-      .sort(msort('level', 'money', 'spellid'))
-      .map(({ level, name, desc }) => ({ name, level, desc }))
-  }
-
-  initJscd() {
-    return Object.values(
-      this.Rplot.filter((p) => p?.type >= 4).reduce(
-        (acc, { level, money, name, color, number, desc, rType }) => {
-          const k = level + name + number
-          const d = [33, 34].includes(Math.floor(rType / 100)) || (name == '诸葛连弩' && level == 4)
-          if (!acc[k])
-            acc[k] = {
-              cl: [],
-              level: d ? 0 : level,
-              money,
-              name,
-              number,
-              type: rType + (d ? 6 : 0),
-              desc
-            }
-          acc[k].cl.push(color)
-          return acc
-        },
-        {}
-      )
-    )
-      .sort(msort('type', 'level', 'money'))
-      .sort((a, b) => (a.level > 0 && b.level == 0 ? -1 : 0))
-  }
-
-  initJssd(root) {
-    return (root.seed || [])
-      .sort(msort('level', 'seed'))
-      .map(({ name, desc, level, _huchijineng }) => {
-        // const jineng = desc?.match(/.*获得【([^【】]*)】.*/)?.[1]
-
-        // if (jineng) {
-        //   const dict = SkillsConfig.GetInstance().spellDict
-        //   desc += dict[huchijineng]?.desc || dict.find((s) => s?.name == jineng)?.desc || ''
-        // }
-
-        return { name, level, desc }
-      })
-  }
-
-  initJssc(root) {
-    return (root.school || []).map(
-      ({ school, name, effect, needputong, needxiyou, needshishi, needchuanshuo }) => ({
-        school,
-        name,
-        need: [needputong, needxiyou, needshishi, needchuanshuo],
-        desc: this.Rplot[effect].desc.replaceAll(' ', '')
-      })
-    )
-  }
-
-  initJszf() {
-    return this.Rplot.filter((p) => p?.type == 2)
-      .filter((e) => {
-        e.school = parseInt(e.school || 100)
-        e.name = e.name.replace('·新', '')
-        return !e.name.includes('废弃') && !e.desc.includes('备用') && !e.name.includes('套装')
-      })
-      .sort((a, b) =>
-        a.name.slice(0, 2).localeCompare(b.name.slice(0, 2)) != 0
-          ? a.name.slice(0, 2).localeCompare(b.name.slice(0, 2))
-          : msort('level', 'money', 'name.length')(a, b)
-      )
-      .map(({ level, name, desc, school }) => ({
-        ...(school < 100 ? { school } : {}),
-        name,
-        level,
-        desc
-      }))
-      .filter((v, i, a) => JSON.stringify(v) != JSON.stringify(a[i + 1]))
-  }
-
-  initJstf(root) {
-    return (root.saijitianfu || [])
-      .filter((e) => e.seasonID == this.season)
-      .reduce(
-        (acc, { tfid: id, ceng: y, type: x, cost, plot, preposition }) => {
-          acc[id] = { id, x, y, cost, pre: preposition?.split(/,|;/) ?? [], ...this.Rplot[plot] }
-          return acc
-        },
-        [{ id: 0, x: 0, y: 0, cost: 0, pre: [], name: '', level: 0, type: 0 }]
-      )
-  }
-
   item(id, num, effect) {
     if (!id) return ''
     if (String(id).includes(',')) return this.formatQualityReward(id)
-    if (this.rewards[id]) return (num > 1 ? num : '') + this.rewards[id]
-    if (this.Rplot[id]) return this.Rplot[id]?.name
-    if (this.generalGroups[id]) return this.formatGeneralGroupReward(id, effect)
+    if (this.getReward(id)) return (num > 1 ? num : '') + this.getRewardText(id)
+    const plot = this.getPlot(id)
+    if (plot) return plot.name
+    if (this.getGeneralGroup(id)) return this.formatGeneralGroupReward(id, effect)
 
-    return this.data.Root.Card.find((card) => card.id == id)?.name
+    return (this.originData?.Card || []).find((card) => card.id == id)?.name
   }
 
   formatQualityReward(id) {
@@ -884,13 +626,10 @@ export class RoguelikeConfig extends ConfigBase {
     return REWARD_QUALITY_NAMES[quality] + CHOICE_REWARD_TYPE_NAMES[type]
   }
 
-  formatGeneralGroupReward(groupId, effect) {
-    const adventureName = this.data.Root.Adventure.find(
-      (adventure) => adventure.ID === parseInt(effect / 10)
-    )?.chapname
-
-    this.fightEvents.set(groupId, adventureName)
-    return this.generalGroups[groupId].map((general) => general.generalname).join('\n')
+  formatGeneralGroupReward(groupId) {
+    return this.getGeneralGroup(groupId)
+      .map((general) => general.generalname)
+      .join('\n')
   }
 
   infoStr({ general, hp, maxhp, card, draw, sha, next, pre }) {
@@ -919,19 +658,4 @@ export class RoguelikeConfig extends ConfigBase {
     }
     return decoded
   }
-}
-
-function msort(...fields) {
-  return (left, right) => {
-    for (const field of fields) {
-      const diff = getByPath(left, field) - getByPath(right, field)
-      if (diff) return diff
-    }
-
-    return 0
-  }
-}
-
-function getByPath(value, path) {
-  return path.split('.').reduce((acc, key) => acc?.[key], value)
 }
