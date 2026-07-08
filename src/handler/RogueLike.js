@@ -41,10 +41,11 @@ export async function handleRogueLike(ProtoObj) {
 
   if (shopData) {
     const storeItem = []
+    const roguelikeConfig = RoguelikeConfig.GetInstance()
 
-    if (shopData.itemId && RoguelikeConfig.GetInstance().Rplot) {
+    if (shopData.itemId && roguelikeConfig.shopDict.size) {
       for (const i of shopData.itemId) {
-        const plot = RoguelikeConfig.GetInstance().Rplot[i]
+        const plot = roguelikeConfig.getPlot(i)
         if (plot) storeItem.push(plot['name'])
       }
     }
@@ -80,7 +81,7 @@ export async function handleRogueLike(ProtoObj) {
       event: l.event
     }))
 
-    RoguelikeConfig.GetInstance().Rcity &&
+    RoguelikeConfig.GetInstance().levelDict.size &&
       globalConfig.rogueCitySwitch &&
       drawCitiesUI(UI.cities, '')
   }

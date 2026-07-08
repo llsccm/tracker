@@ -5,9 +5,10 @@ import { wait } from '@/utils'
 
 export function drawCitiesUI(cities, _display) {
   rogueMap.res = []
+  const roguelikeConfig = RoguelikeConfig.GetInstance()
 
   for (const city of cities) {
-    const { x, y } = RoguelikeConfig.GetInstance().Rcity[city.id]
+    const { x, y } = roguelikeConfig.getCity(city.id)
     let containerHeight = 0
 
     // 创建容器
@@ -21,7 +22,7 @@ export function drawCitiesUI(cities, _display) {
     background.alpha = 0.7
     cityContainer.addChild(background)
 
-    const fight = RoguelikeConfig.GetInstance().Rfight[city.event]
+    const fight = roguelikeConfig.getFight(city.event)
 
     if (fight) {
       // 战斗事件处理
@@ -59,6 +60,7 @@ export function drawCitiesUI(cities, _display) {
     }
   })
 }
+
 // 样式常量
 const STYLES = {
   TITLE: { color: '#f2de9c', fontSize: 20, bold: true },
@@ -141,16 +143,12 @@ function processFightEvent(eventData, cityContainer) {
 // 处理选择事件内容
 function processChooseEvent(baseEvent, cityContainer) {
   let totalHeight = 0
+  const roguelikeConfig = RoguelikeConfig.GetInstance()
+  const adventure = roguelikeConfig.getAdventure(baseEvent)
 
-  for (let j = 0; j < 3; j++) {
-    const event1 = baseEvent + (j + 1).toString() // 不补零，如 "event1"
-    const event2 = baseEvent + (j + 1).toString().padStart(2, '0') // 补零，如 "event01"
-    // console.info(event1, event2);
-    const event = RoguelikeConfig.GetInstance().Rchoose[event2] ? event2 : event1
-    // console.info(initMap.Rchoose[event1], initMap.Rchoose[event2])
-    if (!RoguelikeConfig.GetInstance().Rchoose[event]) continue
-
-    const eventData = RoguelikeConfig.GetInstance().Rchoose[event]
+  for (const option of adventure?.options || []) {
+    const eventData = roguelikeConfig.getChoice(option.effect)
+    if (!eventData) continue
 
     // 处理武将选项
     if (eventData.generals) {
@@ -211,8 +209,9 @@ function findLostItemByName(descText) {
   const targetLevel = levelMap[matchedLevel]
 
   // 查找符合条件的物品
+  const roguelikeConfig = RoguelikeConfig.GetInstance()
   for (const itemId of rogueMap.itemId) {
-    const item = RoguelikeConfig.GetInstance().Rplot[itemId]
+    const item = roguelikeConfig.getPlot(itemId)
     if (item && item.type === targetType && item.level === targetLevel) {
       return item.name
     }
