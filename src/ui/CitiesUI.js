@@ -8,7 +8,11 @@ export function drawCitiesUI(cities, _display) {
   const roguelikeConfig = RoguelikeConfig.GetInstance()
 
   for (const city of cities) {
-    const { x, y } = roguelikeConfig.getCity(city.id)
+    const cityData = roguelikeConfig.getCity(city.id)
+    if (!cityData) {
+      continue
+    }
+    const { x, y } = cityData
     let containerHeight = 0
 
     // 创建容器

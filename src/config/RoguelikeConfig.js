@@ -104,7 +104,7 @@ export class RoguelikeConfig extends ConfigBase {
     this.originData = root
     this.clearRuntimeMaps()
 
-    this.season = root.Roundid?.reduce((_, { useSeason }) => useSeason, 0) || 0
+    this.season = root.Roundid?.at(-1)?.useSeason || 0
     this.initText(root.Text)
     this.initChapterPlaces(root.Chapter)
     this.initCities(root.Level)
@@ -570,11 +570,13 @@ export class RoguelikeConfig extends ConfigBase {
     if (!fight.itemgroup && !fight.rewarditem && !fight.reward) return ''
 
     return [
-      `${fight.itemgroup}铜币`,
+      ...(fight.itemgroup ? [`${fight.itemgroup}铜币`] : []),
       ...this.splitIds(fight.rewarditem),
       ...this.splitIds(fight.reward)
     ]
-      .map((rewardId, index) => (index === 0 ? rewardId : this.getRewardText(rewardId)))
+      .map((rewardId, index) =>
+        index === 0 && fight.itemgroup ? rewardId : this.getRewardText(rewardId)
+      )
       .join('\n')
   }
 
@@ -612,7 +614,8 @@ export class RoguelikeConfig extends ConfigBase {
     if (!id) return ''
     if (String(id).includes(',')) return this.formatQualityReward(id)
     if (this.getReward(id)) return (num > 1 ? num : '') + this.getRewardText(id)
-    if (this.getPlot(id)) return this.getPlot(id)?.name
+    const plot = this.getPlot(id)
+    if (plot) return plot.name
     if (this.getGeneralGroup(id)) return this.formatGeneralGroupReward(id, effect)
 
     return (this.originData?.Card || []).find((card) => card.id == id)?.name
