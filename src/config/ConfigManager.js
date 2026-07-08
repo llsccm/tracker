@@ -39,9 +39,8 @@ export class ConfigManager {
     })
 
     await Promise.all(promises)
-    RoguelikeConfig.GetInstance().resolveDependencies()
     console.info('[ConfigManager] Config_w 解析完成')
-    // console.info(this)
+    if (import.meta.env.DEV) console.info(this)
   }
 
   async loadConfigFile(zip, fileName) {
