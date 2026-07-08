@@ -104,7 +104,7 @@ export class RoguelikeConfig extends ConfigBase {
     this.originData = root
     this.clearRuntimeMaps()
 
-    this.season = root.Roundid?.at(-1)?.useSeason || 0
+    this.season = root.Roundid?.[root.Roundid.length - 1]?.useSeason || 0
     this.initText(root.Text)
     this.initChapterPlaces(root.Chapter)
     this.initCities(root.Level)
