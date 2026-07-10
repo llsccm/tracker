@@ -271,6 +271,8 @@ export class Room {
 
   /**
    * 设定当前客户端的主视角座位 ID (对应 user.userID)
+   *
+   * 注册时设置
    */
   setMySeatID(seatID: SeatID): void {
     this.mySeatID = seatID
@@ -280,6 +282,10 @@ export class Room {
   /** 主视角在牌局中的顺位 */
   getMyDisplayID(): number | undefined {
     return this.getDisplayID(this.mySeatID)
+  }
+
+  getMyPlayer(): Player | undefined {
+    return this.getPlayer(this.mySeatID)
   }
 
   /**

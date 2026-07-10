@@ -45,6 +45,10 @@ class BrowserGameState extends GameState {
 
     player.generals[index] = generalID
 
+    if (seatID === this.myID) {
+      this.myGenerals[index] = generalID
+    }
+
     // 先手座位可能还没有定义
     this.updateSeatLabel(player)
   }
@@ -140,6 +144,7 @@ class BrowserGameState extends GameState {
     this.phase = 0
 
     this.currentID = undefined
+    this.myGenerals.length = 0
     this.spellSpace = {}
     this.resetConfigHandCards()
     laya.reset()
@@ -327,6 +332,7 @@ class BrowserGameState extends GameState {
     this.round = 0
     this.phase = 0
     this.currentID = undefined
+    this.myGenerals.length = 0
     this.isGameStart = false
     this.isPassed = true
     this.spellSpace = {}
