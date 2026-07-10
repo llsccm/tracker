@@ -1338,6 +1338,11 @@
     .expandable-switch .explanation {
       cursor: pointer;
       position: relative;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: inherit;
+      font: inherit;
     }
 
     .expandable-switch .explanation:after {
@@ -1672,7 +1677,7 @@
     <div class="setting panel-content">
       <div class="switch-container-row">
         <div class="switch-container expandable-switch" id="blockEffectContainer" data-tooltip="点击设置图标展开详细设置">
-          <span class="explanation">屏蔽设置</span>
+          <button class="explanation" type="button">屏蔽设置</button>
           <label class="switch">
             <input id="effectBlockSwitch" type="checkbox" />
             <span class="slider"></span>
