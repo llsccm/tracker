@@ -24,6 +24,8 @@ const zhanfa2 = [2079, 2080, 2081, 2082, 2083, 2084]
 const TURNZHANFA = [2033, 2034, 2035, 2036, 2037, 2038, 2048, 2049, 2050, 2196, 2197, 2300, 2301]
 
 class BrowserGameState extends GameState {
+  myGenerals: number[] = []
+
   constructor() {
     super({ orderLabels: UI.ORDER_LABELS })
   }
@@ -44,6 +46,10 @@ class BrowserGameState extends GameState {
     }
 
     player.generals[index] = generalID
+
+    if (seatID === this.myID) {
+      this.myGenerals[index] = generalID
+    }
 
     // 先手座位可能还没有定义
     this.updateSeatLabel(player)
@@ -327,6 +333,7 @@ class BrowserGameState extends GameState {
     this.round = 0
     this.phase = 0
     this.currentID = undefined
+    this.myGenerals.length = 0
     this.isGameStart = false
     this.isPassed = true
     this.spellSpace = {}

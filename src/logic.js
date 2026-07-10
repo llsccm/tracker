@@ -484,8 +484,12 @@ export function logic(msg) {
       case 'ClientGeneralSkinRep':
         // 屏蔽动态
         if (globalConfig.blockSkinStateSwitch) {
-          const GeneralSkin = msg.GeneralSkinList[0]
-          GeneralSkin.state = 0
+          const GeneralSkinList = msg.GeneralSkinList || []
+          GeneralSkinList.forEach((GeneralSkin) => {
+            // 只显示主视角动态皮肤
+            if (Game.myGenerals.includes(GeneralSkin?.GeneralID)) return
+            GeneralSkin.state = 0
+          })
         }
 
         break

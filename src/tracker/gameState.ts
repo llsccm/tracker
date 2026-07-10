@@ -105,6 +105,7 @@ export class GameState {
     this.syncRoomSeats(room)
   }
 
+  /** 获取主视角房间座位 */
   get myID(): SeatID | undefined {
     return this.room?.mySeatID ?? this.mySeats[0] ?? this.seatIDs[0]
   }
