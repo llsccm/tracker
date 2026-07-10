@@ -486,6 +486,7 @@ export function logic(msg) {
         if (globalConfig.blockSkinStateSwitch) {
           const GeneralSkinList = msg.GeneralSkinList || []
           GeneralSkinList.forEach((GeneralSkin) => {
+            if (!GeneralSkin) return
             // 只显示主视角动态皮肤
             if (Game.myGenerals.includes(GeneralSkin?.GeneralID)) return
             GeneralSkin.state = 0
