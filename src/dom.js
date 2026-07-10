@@ -413,13 +413,48 @@ export async function addFrame() {
 }
 
 function buttonClick() {
-  const retainedSwitchIds = new Set([
-    'seatUISwitch',
-    'cardLabelSwitch',
-    'rogueCitySwitch',
-    'debugLogSwitch'
-  ])
-  const isDeprecatedElement = () => false
+  const detailBlockSwitchIds = ['blockKillEffectSwitch', 'blockSkinStateSwitch']
+  const getSwitchElement = (configKey) => document.getElementById(configKey)
+  const setSwitchChecked = (configKey, value) => {
+    const element = getSwitchElement(configKey)
+    if (element) element.checked = value
+  }
+
+  const setConfigSwitch = (configKey, value) => {
+    globalConfig[configKey] = value
+    setSwitchChecked(configKey, value)
+  }
+
+  const syncEffectBlockSwitchFromDetails = () => {
+    const enabled = detailBlockSwitchIds.some((configKey) => Boolean(globalConfig[configKey]))
+    setConfigSwitch('effectBlockSwitch', enabled)
+  }
+
+  const syncDetailBlockSwitches = (switchValue) => {
+    detailBlockSwitchIds.forEach((configKey) => setConfigSwitch(configKey, switchValue))
+  }
+
+  const switchHandlers = {
+    seatUISwitch(switchValue) {
+      document.getElementById('seatUI').style.display = switchValue ? 'block' : 'none'
+    },
+    cardLabelSwitch() {},
+    rogueCitySwitch(switchValue) {
+      switchValue && UI.cities ? drawCitiesUI(UI.cities) : drawCitiesUI('')
+    },
+    debugLogSwitch() {},
+    effectBlockSwitch(switchValue) {
+      syncDetailBlockSwitches(switchValue)
+    },
+    blockKillEffectSwitch() {
+      syncEffectBlockSwitchFromDetails()
+    },
+    blockSkinStateSwitch() {
+      syncEffectBlockSwitchFromDetails()
+    }
+  }
+
+  const switchConfigKeys = Object.keys(switchHandlers)
 
   const toggle = document.getElementById('toggle-me')
   if (toggle) {
@@ -451,17 +486,15 @@ function buttonClick() {
   // 定义一个函数来处理保留开关状态更改事件
   function handleSwitchChange(event) {
     const switchElement = event.target
+    if (!switchElement?.matches?.('input[type="checkbox"]')) return
+
     const configKey = switchElement.dataset.configKey || switchElement.id
-    if (!retainedSwitchIds.has(configKey) || isDeprecatedElement(switchElement)) return
+    const handler = switchHandlers[configKey]
+    if (!handler) return
 
     const switchValue = switchElement.checked
     globalConfig[configKey] = switchValue
-
-    if (configKey == 'seatUISwitch') {
-      document.getElementById('seatUI').style.display = switchValue ? 'block' : 'none'
-    } else if (configKey == 'rogueCitySwitch') {
-      switchValue && UI.cities ? drawCitiesUI(UI.cities) : drawCitiesUI('')
-    }
+    handler(switchValue)
   }
 
   //侧边栏 初始化 记住状态
@@ -475,13 +508,17 @@ function buttonClick() {
   }
   window.dispatchEvent(new Event('resize'))
 
-  // 只为保留功能开关添加事件监听器：座位 UI、卡牌标签、山河地图
-  document.querySelectorAll('input[id$="Switch"]').forEach((element) => {
-    const configKey = element.dataset.configKey || element.id
-    if (!retainedSwitchIds.has(configKey) || isDeprecatedElement(element)) return
-    element.checked = Boolean(globalConfig[configKey])
-    element.addEventListener('change', handleSwitchChange)
-  })
+  switchConfigKeys.forEach((configKey) =>
+    setSwitchChecked(configKey, Boolean(globalConfig[configKey]))
+  )
+
+  const switchRoot = document.getElementById('createIframe')
+  if (switchRoot && !switchRoot.dataset.switchDelegationBound) {
+    switchRoot.dataset.switchDelegationBound = 'true'
+    switchRoot.addEventListener('change', handleSwitchChange)
+  }
+
+  syncEffectBlockSwitchFromDetails()
 
   // bindExternalLinks()
 
@@ -499,6 +536,31 @@ function buttonClick() {
         }
         if (i == 0) mzBTNs[i].click()
       })
+  }
+
+  // 屏蔽设置对话框控制
+  const blockEffectContainer = document.getElementById('blockEffectContainer')
+  const blockEffectDialog = document.getElementById('blockEffectDialog')
+  if (blockEffectContainer && blockEffectDialog) {
+    const explanation = blockEffectContainer.querySelector('.explanation')
+    if (explanation) {
+      explanation.onclick = function () {
+        // 点击齿轮打开弹窗
+        blockEffectDialog.showModal()
+      }
+    }
+    const closeBtn = blockEffectDialog.querySelector('.dialog-close-btn')
+    if (closeBtn) {
+      closeBtn.onclick = function () {
+        blockEffectDialog.close()
+      }
+    }
+
+    blockEffectDialog.onclick = function (event) {
+      if (event.target === blockEffectDialog) {
+        blockEffectDialog.close()
+      }
+    }
   }
 }
 

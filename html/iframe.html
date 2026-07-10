@@ -1115,7 +1115,7 @@
 
     .tooltip:popover-open,
     .tooltip.dialog-tooltip {
-      position: fixed;
+      position: absolute;
       inset: auto;
       margin: 0;
       z-index: 2147483647;
@@ -1145,8 +1145,6 @@
       /* 保持文字直立 */
       text-orientation: upright;
     }
-
-
 
     .sorderContainer {
       /* 默认字体大小，可以根据需要调整 */
@@ -1331,6 +1329,103 @@
       display: block !important;
       width: 100%;
     }
+
+    /* 屏蔽设置 Dialog 及扩展开关样式 */
+    .expandable-switch {
+      position: relative;
+    }
+
+    .expandable-switch .explanation {
+      cursor: pointer;
+      position: relative;
+    }
+
+    .expandable-switch .explanation:after {
+      content: '⚙️';
+      position: absolute;
+      right: 5px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 12px;
+      opacity: 0.7;
+      transition: opacity 0.3s ease;
+    }
+
+    .expandable-switch .explanation:hover:after {
+      opacity: 1;
+    }
+
+    /* Dialog 弹窗样式 */
+    dialog {
+      border: none;
+      border-radius: 8px;
+      padding: 0;
+      background: rgba(35, 32, 29, 0.95);
+      color: var(--text-gold);
+      width: 200px;
+      height: auto;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      margin: 0;
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      overflow: visible;
+    }
+
+    dialog::backdrop {
+      background: rgba(0, 0, 0, 0.5);
+    }
+
+    .dialog-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 15px;
+      border-bottom: 1px solid rgba(242, 222, 156, 0.3);
+      margin: 0;
+    }
+
+    .dialog-header h3 {
+      margin: 0;
+      color: var(--text-gold);
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .dialog-close-btn {
+      background: none;
+      border: none;
+      color: var(--text-gold);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 0;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+    }
+
+    .dialog-close-btn:hover {
+      background: rgba(242, 222, 156, 0.2);
+    }
+
+    .dialog-content {
+      padding: 15px;
+    }
+
+    .cardback-title {
+      font-size: 13px;
+      line-height: 1.4;
+      margin: 0 10px 10px 10px;
+      padding: 6px 10px;
+      color: #efd89f;
+      border: 1px solid rgba(242, 222, 156, 0.24);
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(45, 36, 24, 0.72), rgba(24, 20, 16, 0.6));
+    }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"
     integrity="sha512-7eHRwcbYkK4d9g/6tD/mhkf++eoTHwpNM9woBxtPUBWm67zeAfFC+HrdoE2GanKeocly/VxeLvIqwvCdk7qScg=="
@@ -1503,15 +1598,15 @@
             <span class="card-name">＾＾</span>
             <span class="card-name">•ω•</span>
           </button>
-          <br>
-          <br>
-          <br>
-          <div id='guhuo' style='display: none'>蛊惑牌</div>
-          <div class='function yanjiao' id='yanjiao'>严教小抄</div>
-          <button class='function mizhuBTN' id='mizhu'>糜竺小抄</button>
-          <button class='function mizhu mySeatID' id='mySeatID1'>座位：1</button>
-          <button class='function mizhu mySeatID' id='mySeatID2'>座位：2</button>
-          <div class='function res' id='result'>结果样式：1 1 1 1 = 4</div>
+          <br />
+          <br />
+          <br />
+          <div id="guhuo" style="display: none">蛊惑牌</div>
+          <div class="function yanjiao" id="yanjiao">严教小抄</div>
+          <button class="function mizhuBTN" id="mizhu">糜竺小抄</button>
+          <button class="function mizhu mySeatID" id="mySeatID1">座位：1</button>
+          <button class="function mizhu mySeatID" id="mySeatID2">座位：2</button>
+          <div class="function res" id="result">结果样式：1 1 1 1 = 4</div>
         </div>
       </div>
       <div class="width"></div>
@@ -1560,7 +1655,7 @@
             每局的选择都会最终指向不同结局
           </div>
         </div>
-        <div id='storeDetail'>
+        <div id="storeDetail">
           <button class="storeDetail">集市霸王·壹300</button>
           <button class="storeDetail">集市霸王·贰200</button>
           <button class="storeDetail">集市霸王·叁100</button>
@@ -1575,6 +1670,16 @@
       <b>设置</b>
     </button>
     <div class="setting panel-content">
+      <div class="switch-container-row">
+        <div class="switch-container expandable-switch" id="blockEffectContainer" data-tooltip="点击设置图标展开详细设置">
+          <span class="explanation">屏蔽设置</span>
+          <label class="switch">
+            <input id="effectBlockSwitch" type="checkbox" />
+            <span class="slider"></span>
+            <span class="status"></span>
+          </label>
+        </div>
+      </div>
       <div class="switch-container-row">
         <div class="switch-container" data-tooltip="明牌框展示在武将下面">
           <span class="explanation">明牌框框</span>
@@ -1613,4 +1718,32 @@
       <div class="width"></div>
     </div>
   </div>
+
+  <!-- 屏蔽特效详细设置弹窗 -->
+  <dialog id="blockEffectDialog">
+    <div class="dialog-header">
+      <h3>屏蔽设置</h3>
+      <button class="dialog-close-btn" type="button">×</button>
+    </div>
+    <div class="dialog-content">
+      <div class="switch-container-row">
+        <div class="switch-container" data-tooltip="屏蔽牌局击杀特效动画">
+          <span class="explanation">屏蔽击杀</span>
+          <label class="switch">
+            <input id="blockKillEffectSwitch" type="checkbox" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="switch-container-row" style="margin-top: 8px">
+        <div class="switch-container" data-tooltip="屏蔽他人动态表现">
+          <span class="explanation">屏蔽动态</span>
+          <label class="switch">
+            <input id="blockSkinStateSwitch" type="checkbox" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </dialog>
 </div>

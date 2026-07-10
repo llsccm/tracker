@@ -17,7 +17,7 @@ import {
 } from './handler'
 import { handleRecordStartGame } from './handler/StartGame'
 import { laya } from './runtime/gameAdapter'
-import { Game, UI, user } from './tracker'
+import { Game, globalConfig, UI, user } from './tracker'
 import { tracker } from './tracker/runtime/browser'
 import { POSITION_BOTTOM } from './tracker/candidate/cardPositions'
 import { idleCallback, toSuitGlyphHtml } from './utils'
@@ -214,12 +214,12 @@ export function logic(msg) {
         })
         break
 
-      //每轮开始
+      // 每轮开始
       case 'MsgGameTurnNtf':
         handleGameTurn(msg)
         break
 
-      //每回合开始阶段
+      // 每回合开始阶段
       case 'GsCGamephaseNtf':
         handleGamePhase(msg)
         break
@@ -473,6 +473,21 @@ export function logic(msg) {
 
       case 'PubGsCMoveCard':
         handleMoveCard(msg)
+        break
+
+      // 击杀特效
+      case 'CClientGameRewardPointNTF':
+        if (globalConfig.blockKillEffectSwitch) msg.Type = 0
+        break
+
+      // 皮肤信息
+      case 'ClientGeneralSkinRep':
+        // 屏蔽动态
+        if (globalConfig.blockSkinStateSwitch) {
+          const GeneralSkin = msg.GeneralSkinList[0]
+          GeneralSkin.state = 0
+        }
+
         break
 
       default:
