@@ -51,7 +51,6 @@ export class GameState {
   declare turn: number
   declare round: number
   declare phase: number
-  declare currentID: SeatID | undefined
   declare spellSpace: Record<string | number, number>
   declare configHandCards: unknown[]
   declare configHandCardsMode: string
@@ -68,6 +67,9 @@ export class GameState {
   declare isSWJG: boolean
   declare size: number | undefined
   declare isDuanXian: boolean
+
+  declare currentID: SeatID | undefined
+  myGenerals: number[] = []
 
   constructor({ orderLabels = ORDER_LABELS }: { orderLabels?: string[] } = {}) {
     this.orderLabels = orderLabels
@@ -123,6 +125,7 @@ export class GameState {
     this.seatIDs = []
     this.orderIDs = []
     this.mySeats = []
+    this.myGenerals.length = 0
 
     this.isShanHeTu = false
     this.isGuoZhan = false

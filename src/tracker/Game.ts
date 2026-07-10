@@ -24,8 +24,6 @@ const zhanfa2 = [2079, 2080, 2081, 2082, 2083, 2084]
 const TURNZHANFA = [2033, 2034, 2035, 2036, 2037, 2038, 2048, 2049, 2050, 2196, 2197, 2300, 2301]
 
 class BrowserGameState extends GameState {
-  myGenerals: number[] = []
-
   constructor() {
     super({ orderLabels: UI.ORDER_LABELS })
   }
@@ -146,6 +144,7 @@ class BrowserGameState extends GameState {
     this.phase = 0
 
     this.currentID = undefined
+    this.myGenerals.length = 0
     this.spellSpace = {}
     this.resetConfigHandCards()
     laya.reset()
