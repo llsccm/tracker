@@ -1,7 +1,5 @@
-// import { Game } from '../tracker/Game'
 // import { laya } from '../runtime/gameAdapter'
-import { extractChatRoomId, getChatRoomLinkText } from '../utils/chatRoomLink'
-// import { wait } from '../utils'
+// import { extractChatRoomId, getChatRoomLinkText } from '../utils/chatRoomLink'
 
 const POWER_SLOGAN_TEXTS = new Set([
   '中原人杰地灵，天下归心！',
@@ -68,6 +66,8 @@ const POWER_SLOGAN_TEXTS = new Set([
 
 const HALL_CHAT_REPEAT_WINDOW = 15 * 1000
 const hallChatRepeatMap = new Map()
+const BLOCKED_CHAT_CONTENT_PATTERN =
+  /((?:桃|烧)[bB8]|桃花|鲜花|菜篮子|0\.5(?:一|个)|女大(?:学生|妹妹)?|可[约玥]|福利|交友|进[群裙]|加[群裙]|群聊|裙聊|私聊|绿泡泡|[加嘉家].{0,2}[vV微薇].{0,2}[心芯新]|开放啪|代练|代打|陪玩|接单|带打|包上分|上分|(?:出|卖|收|回收).{0,3}号|成品号|收[^徒]*$|[帮代带].*[玩练打]|出.{0,3}的|[加家+＋十].{0,3}我)/
 
 function normalizeHallChatMsg(text) {
   if (typeof text != 'string' || !text) return ''
@@ -88,18 +88,18 @@ function isPurePlaceholderChatMsg(text) {
 }
 
 function shouldBlockHallChat({ ProtoObj, chatMsg, channel, hallChatRepeatBlocked }) {
-  return (
-    (ProtoObj.Channel == 2 && chatMsg && POWER_SLOGAN_TEXTS.has(chatMsg)) ||
-    ProtoObj.chatMsg?.startsWith('oldback@') ||
-    ProtoObj.MsgType == 26 ||
-    ProtoObj.MsgKind == 2 ||
-    (channel == 7 && (ProtoObj.officeLevel == null || ProtoObj.officeLevel <= 6)) ||
-    (channel == 7 && isPurePlaceholderChatMsg(chatMsg)) ||
-    hallChatRepeatBlocked ||
-    /((?:桃|烧)[bB8]|桃花|鲜花|菜篮子|0\.5(?:一|个)|女大(?:学生|妹妹)?|可[约玥]|福利|交友|进[群裙]|加[群裙]|群聊|裙聊|私聊|绿泡泡|[加嘉家].{0,2}[vV微薇].{0,2}[心芯新]|开放啪|代练|代打|陪玩|接单|带打|包上分|上分|(?:出|卖|收|回收).{0,3}号|成品号|收[^徒]*$|[帮代带].*[玩练打]|出.{0,3}的|[加家+＋十].{0,3}我)/.test(
-      ProtoObj.chatMsg || ''
-    )
-  )
+  if (ProtoObj.Channel == 2 && chatMsg && POWER_SLOGAN_TEXTS.has(chatMsg)) return true
+
+  const isBlockedProtocolMessage =
+    ProtoObj.chatMsg?.startsWith('oldback@') || ProtoObj.MsgType == 26 || ProtoObj.MsgKind == 2
+  if (isBlockedProtocolMessage) return true
+
+  const isRestrictedHallMessage =
+    channel == 7 &&
+    (ProtoObj.officeLevel == null || ProtoObj.officeLevel <= 6 || isPurePlaceholderChatMsg(chatMsg))
+  if (isRestrictedHallMessage || hallChatRepeatBlocked) return true
+
+  return BLOCKED_CHAT_CONTENT_PATTERN.test(ProtoObj.chatMsg || '')
 }
 
 function updateHallChatRepeatState(chatMsg, channel) {
@@ -159,13 +159,13 @@ export function handleChatMessage(msg, ProtoObj) {
   // 消息处理
   if (!ProtoObj) return
   if (ProtoObj.scene == 11) ProtoObj.scene = 2
-  const rawChatMsg = ProtoObj.chatMsg || ProtoObj.ChatMsg || ''
-  const roomId = extractChatRoomId(rawChatMsg)
+  // const rawChatMsg = ProtoObj.chatMsg || ProtoObj.ChatMsg || ''
+  // const roomId = extractChatRoomId(rawChatMsg)
 
-  if (roomId) {
-    ProtoObj.ChatMsg = rawChatMsg.replace(roomId, getChatRoomLinkText(roomId))
-    ProtoObj.chatMsg = ProtoObj.ChatMsg
-  }
+  // if (roomId) {
+  //   ProtoObj.ChatMsg = rawChatMsg.replace(roomId, getChatRoomLinkText(roomId))
+  //   ProtoObj.chatMsg = ProtoObj.ChatMsg
+  // }
 
   const chatMsg = ProtoObj.chatMsg || ProtoObj.ChatMsg || ''
   const channel = ProtoObj.Channel || ProtoObj.channel
@@ -180,4 +180,12 @@ export function handleChatMessage(msg, ProtoObj) {
   //   // 指令消息
   //   handleInfoChatCommand(rawChatMsg, msg)
   // }
+}
+
+// 跑马灯消息处理
+export function handleBroadMsg(ProtoObj) {
+  if (!ProtoObj) return
+  if (Array.isArray(ProtoObj.msgList)) {
+    ProtoObj.msgList.length = 0
+  }
 }

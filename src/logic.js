@@ -22,6 +22,7 @@ import { tracker } from './tracker/runtime/browser'
 import { POSITION_BOTTOM } from './tracker/candidate/cardPositions'
 import { idleCallback, toSuitGlyphHtml } from './utils'
 import { addTooltip } from './utils/notification'
+import { handleBroadMsg } from './handler/chat'
 
 const ALLOWED_CLASSES = new Set([
   'ClientLoginRep',
@@ -109,6 +110,10 @@ export function logic(msg) {
 
       case 'decodeSSCChatmsgNtf':
         handleChatMessage(msg, ProtoObj)
+        break
+
+      case 'decodeClientActSysBroadMsgListResp':
+        handleBroadMsg(ProtoObj)
         break
 
       case 'MsgHeartAliveRep': {
