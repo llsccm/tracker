@@ -17,6 +17,11 @@ export function applyTrackerVisibility(targetDoc: Document = document): void {
   })
 }
 
+export function reapplyHiddenTrackerVisibility(targetDoc: Document = document): void {
+  if (!trackerHidden) return
+  applyTrackerVisibility(targetDoc)
+}
+
 export function bindTrackerVisibilityShortcut(): void {
   if (shortcutBound) return
   window.addEventListener('keydown', handleTrackerVisibilityShortcut, true)

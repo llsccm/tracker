@@ -1,5 +1,5 @@
 import { getPanelContentInner } from '@/ui/frameContent'
-import { applyTrackerVisibility } from '@/ui/trackerVisibility'
+import { reapplyHiddenTrackerVisibility } from '@/ui/trackerVisibility'
 import { buildCardTypeButtons, renderStatistics } from './StatisticsView'
 import { renderQueryPanel } from './QueryPanelView'
 import { initPlayerHandContainers, renderPlayerHand, renderPublicZones } from './PlayerHandView'
@@ -189,7 +189,7 @@ function hasResolvedPlayerOrder(room: Room): boolean {
 }
 
 function syncTrackerVisibility(targetDoc: Document): void {
-  applyTrackerVisibility(targetDoc)
+  reapplyHiddenTrackerVisibility(targetDoc)
   const content = targetDoc.getElementById('button')
   getPanelContentInner(content)
   content?.style.removeProperty('max-height')
