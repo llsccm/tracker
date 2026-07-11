@@ -995,3 +995,17 @@ git diff --check
 5. 匿名池属于生命周期和性能优化，可在语义稳定后接入。
 6. 原子交换最后迁移，避免同时调试范围与位置守恒。
 7. 阶段 7 仅作为后续架构评估，不纳入当前实施承诺。
+
+### 15.1 复核修订（2026-07-12）
+
+结合实施后的独立复核（见 [`random-hand-transfer-and-anonymous-entity-implementation-report.md`](random-hand-transfer-and-anonymous-entity-implementation-report.md) 第 6 节），压缩实施承诺：
+
+```text
+阶段 0 → 阶段 1 → 阶段 4 → 阶段 5
+（阶段 2 仅最小版；阶段 3 暂缓/可能跳过；阶段 6 并入下述性能项；阶段 7 排除）
+```
+
+- **性能项并入阶段 0**：`Room.reconcileAnonymousHandCards()` 每次 `resolveConstraints()` 尾部对每个已观测玩家全量扫描 `Room.cards`（`Room.ts:521` / `:1156`），未被 `traversalBaseline` 覆盖；改用 `CardLocationIndex` 按 seat 投影并补基线场景，是最高性价比项，应最先落地。
+- **阶段 1 改为条件推进**：先由阶段 0 的长链路 E2E 跑出真实失败用例，再动 `unknownCardCount` 拆分；否则保留现有保守 guard。
+- **阶段 2 降为最小版**：仅 `reason` + `sourceEvent`，不做 16 条 bounded history。
+- **阶段 3 暂缓/可能跳过**：手牌规模小属过早优化，且与阶段 2 稳定溯源存在张力。

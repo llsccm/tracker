@@ -9,7 +9,7 @@
 - `src/tracker/` 是当前主动运行的记牌器与运行时状态核心；`Room` 是单局状态源，`src/tracker/view/` 直接渲染主面板节点，并通过 `CardLocationIndex` 读取公共区与玩家区域投影。
 - 旧 `src/refactor/` 已更名并归并到 `src/tracker/`；旧 `src/context/` 主动实现已不存在。
 - `src/handler/legacyMoveCard.js` 与 `src/handler/old/` 仍有指向旧 `context` / `refactor` 的历史代码，但没有经 `src/handler/index.js` 主动导出；继续开发时不要把它们视为可用运行路径。
-- `src/handler/PubGsCMoveCard.js` 仍承担协议预处理、位置归一化、`CardIDs` 修正、技能辅助结果、战法计数、卡牌标签等副作用；真正的卡牌状态移动通过 `src/tracker/bridge.ts` 同步到当前 `Room`。
+- `src/handler/PubGsCMoveCard.js` 仍承担协议预处理、位置归一化、`CardIDs` 修正、技能辅助结果、战法计数、卡牌标签等副作用；真正的卡牌状态移动通过 `src/tracker/runtime/bridge.ts` 导出的 `tracker`（实现位于 `runtime/trackerController.ts`）同步到当前 `Room`。
 - `src/tracker/index.ts` 仅导出共享运行时状态（`globalConfig`、`globalState`、`rogueMap`、`UI`）、`user` 与 `Game`；底层核心对象从各自子模块直接导入。
 
 ---
@@ -104,7 +104,7 @@
 - `CardCounter`：基于 `Room.cards` 生成 `CardInstance` 查询副本，建立名称、花色、点数、类型倒排索引，并根据 `Card.location` 同步牌堆、玩家、弃牌、销毁四类状态。状态桶已从全量 `update()` 改为增量同步：`Room.markCounterDirty()` / `CardCounter.markDirty()` 收集状态变化牌，getter 在无新变化时复用干净缓存；`createExternalCards()` 会显式注册新牌，避免依赖全量扫描补建倒排索引。
 - `MoveEventNormalizer`：将原始 `PubGsCMoveCard` 字段归一为标准事件包，依赖 `protocolZones.ts` 处理 `FromZone`、`ToZone`、玩家子区与 `CardIDs` 等字段。
 - `Game`：从旧上下文迁出的生命周期、回合阶段、战法计数兼容层；后续仍可继续纯净化。
-- `src/tracker/bridge.ts`：维护主动 `trackerRoom`，负责单局构建、移动同步、明牌输入与视图调度。
+- `src/tracker/runtime/bridge.ts`：装配并导出 `tracker` 单例（一个 `TrackerController` 实例）；单局构建、移动同步（`syncTrackerMove`）、明牌输入（`revealTrackerCards`，含界强识 `fullHand` 完整手牌同步）与视图调度的真正实现位于 `runtime/trackerController.ts`；随机手牌转移等候选构建位于 `roomMovement/candidates.ts`。
 - `src/tracker/view/`：直接操作主文档节点渲染统计、公共区、玩家手牌、查询面板和按钮。
 
 ---

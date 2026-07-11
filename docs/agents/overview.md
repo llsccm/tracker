@@ -20,7 +20,7 @@
     - `chat.js`：聊天过滤、房间号链接化、重复消息处理与 `INFO:` 兼容逻辑。
     - `doudizhu.js`：斗地主记牌器消息处理。
     - `StartGame.js` / `MsgGameOver.js` / `MsgGameTurnNtf.js` / `GsCGamephaseNtf.js` / `GsCTriggerSpellNew.js`：对局开始、结束、轮次、阶段与技能触发消息处理。
-    - `PubGsCMoveCard.js`：`PubGsCMoveCard` 消息处理、位置归一化、`CardIDs` 修正、技能辅助副作用保留，并将移动事件同步到 `src/tracker/bridge.ts` 当前 `Room`。
+    - `PubGsCMoveCard.js`：`PubGsCMoveCard` 消息处理、位置归一化、`CardIDs` 修正、技能辅助副作用保留，并将移动事件同步到 `src/tracker/runtime/bridge.ts`（实现位于 `runtime/trackerController.ts`）的当前 `Room`。
     - `GsCRoleOptTargetNtf.js`：张菖蒲严教、刘辟易城等技能/角色操作目标通知消息处理。
     - `RogueLike.js`：山河图（Roguelike）消息处理与小抄提示。
     - `legacyMoveCard.js` 与 `old/`：遗留链表记牌器辅助文件，仍保留在仓库中但不经 `src/handler/index.js` 主动导出，普通运行路径不应依赖它们。

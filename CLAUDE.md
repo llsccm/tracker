@@ -49,13 +49,13 @@ host console.log
   → src/index.js (SGSMODULE dispatch)
   → src/logic.js (featureFlags whitelist, then route by ClassName)
   → src/handler/* (per-protocol handlers)
-  → src/tracker/bridge.ts (syncTrackerMove / reveal / render scheduling)
+  → src/tracker/runtime/bridge.ts → runtime/trackerController.ts (syncTrackerMove / reveal / render scheduling)
   → src/tracker/Room.moveCards() → Room.resolveConstraints()
   → src/tracker/view/* (scheduleRender → next-frame flush)
 ```
 
 - **`src/logic.js`** whitelists retained messages via `src/featureFlags.js`, then dispatches by `ClassName`.
-- **`src/handler/PubGsCMoveCard.js`** is the hot path: protocol preprocessing, position normalization, `CardIDs` correction, and skill side-effects, then hands the real state move to the tracker through `src/tracker/bridge.ts`.
+- **`src/handler/PubGsCMoveCard.js`** is the hot path: protocol preprocessing, position normalization, `CardIDs` correction, and skill side-effects, then hands the real state move to the tracker through `src/tracker/runtime/bridge.ts` (a thin facade that delegates to `runtime/trackerController.ts`).
 - **`src/handler/legacyMoveCard.js` and `src/handler/old/` are dead** — legacy linked-list tracker code, NOT exported from `src/handler/index.js`. Do not build new runtime paths on them.
 
 ## The card tracker (`src/tracker/`) — the core
