@@ -271,10 +271,7 @@ function highlightedSkill(generalInfo, difficulty) {
   ]
 
   const difficultDict = RoguelikeConfig.GetInstance().difficultDict
-  const difficultyInfo =
-    difficultDict.get(difficulty) ||
-    difficultDict.get(String(difficulty)) ||
-    difficultDict.get(Number(difficulty))
+  const difficultyInfo = difficultDict.get(String(difficulty))
   const difficultyLevel = Number(difficultyInfo?.bdif) || 1
   const currentLevelIndex = Math.min(Math.max(difficultyLevel - 1, 0), difficultySpells.length - 1)
 
