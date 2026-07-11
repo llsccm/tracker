@@ -135,7 +135,7 @@ export class RoguelikeConfig extends ConfigBase {
       // 只配置当前 season
       if (sessionId != this.season) continue
 
-      this.difficultDict.set(info.difID, info)
+      this.difficultDict.set(String(info.difID), info)
 
       const bigKey = `${sessionId}_${info.bdif}`
       if (!this.bigDiffDic.has(bigKey)) this.bigDiffDic.set(bigKey, [])
