@@ -45,10 +45,11 @@ describe('Room.cards 遍历基线', () => {
         "cardCounter:update": "calls=1 visited=1",
         "handSlotCounts:collectBySeat": "calls=2 visited=41",
         "locationIndex:applyDirty": "calls=1 visited=1",
+        "reconcileAnonymousHandCards:group": "calls=1 visited=1",
         "resolveConstraints:constraint1": "calls=2 visited=2",
         "resolveConstraints:constraint3:exclusion": "calls=1 visited=1",
         "resolveConstraints:playerSnapshotIncremental": "calls=2 visited=1",
-        "total": "visited=48",
+        "total": "visited=49",
       }
     `)
   })
@@ -76,9 +77,10 @@ describe('Room.cards 遍历基线', () => {
         "cardCounter:update": "calls=1 visited=2",
         "handSlotCounts:collectBySeat": "calls=2 visited=42",
         "locationIndex:applyDirty": "calls=1 visited=2",
+        "reconcileAnonymousHandCards:group": "calls=1 visited=2",
         "resolveConstraints:constraint1": "calls=1 visited=2",
         "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=2",
-        "total": "visited=52",
+        "total": "visited=54",
       }
     `)
   })
@@ -106,10 +108,11 @@ describe('Room.cards 遍历基线', () => {
         "cardCounter:update": "calls=1 visited=2",
         "handSlotCounts:collectBySeat": "calls=3 visited=44",
         "locationIndex:applyDirty": "calls=1 visited=2",
+        "reconcileAnonymousHandCards:group": "calls=1 visited=2",
         "resolveConstraints:constraint1": "calls=2 visited=4",
         "resolveConstraints:constraint3:exclusion": "calls=2 visited=4",
         "resolveConstraints:playerSnapshotIncremental": "calls=2 visited=2",
-        "total": "visited=60",
+        "total": "visited=62",
       }
     `)
   })
@@ -145,11 +148,49 @@ describe('Room.cards 遍历基线', () => {
         "cardCounter:update": "calls=1 visited=40",
         "handSlotCounts:collectBySeat": "calls=1 visited=0",
         "locationIndex:applyDirty": "calls=1 visited=0",
+        "reconcileAnonymousHandCards:group": "calls=1 visited=0",
         "resolveConstraints:constraint1": "calls=1 visited=0",
         "resolveConstraints:constraint3:exclusion": "calls=1 visited=0",
         "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=0",
         "shufflePile:classify": "calls=1 visited=0",
         "total": "visited=40",
+      }
+    `)
+  })
+
+  // reconcileAnonymousHandCards 现改用 playerCardsSnapshot 一次性归组（替代过去对每个已观测玩家
+  // 各扫一遍 this.cards 全量）。新增站点 reconcileAnonymousHandCards:group 的 visited 反映真实的
+  // 玩家区扫描量——远小于旧的隐藏 40 张全量过滤。本场景用带 observedHandCount 的多玩家未知手牌
+  // 把该扫描量显式护栏化：两名已观测玩家、3 张明牌快照 → 归组 visited=3 且补齐 3 个匿名实体。
+  it('主动匿名对账：按玩家区快照归组补齐未知手牌', () => {
+    const { room } = createTestRoom({ cardIDs: DECK_IDS, seatIDs: [1, 2, 3] })
+    const seat1Known = [getCard(room, 1), getCard(room, 2)]
+    const seat2Known = [getCard(room, 3)]
+
+    room.clearCardsFromPublicZones([...seat1Known, ...seat2Known])
+    seat1Known.forEach((card) => card.bindCandidates([1], 'hand', null, { known: true }))
+    seat2Known.forEach((card) => card.bindCandidates([2], 'hand', null, { known: true }))
+    room.getPlayer(1).syncObservedHandCount(4)
+    room.getPlayer(2).syncObservedHandCount(2)
+
+    const { stats } = collectTraversalStats(() => {
+      room.resolveConstraints()
+    })
+
+    const anonymousHandCards = room.cards.filter(
+      (card) => card.id === 0 && card.location === 'player'
+    )
+    expect(anonymousHandCards).toHaveLength(3)
+    expect(summarize(stats)).toMatchInlineSnapshot(`
+      {
+        "ambiguousKnownIndex:applyDirty": "calls=1 visited=6",
+        "cardCounter:update": "calls=1 visited=6",
+        "handSlotCounts:collectBySeat": "calls=1 visited=3",
+        "locationIndex:applyDirty": "calls=1 visited=6",
+        "reconcileAnonymousHandCards:group": "calls=1 visited=3",
+        "resolveConstraints:constraint1": "calls=1 visited=3",
+        "resolveConstraints:playerSnapshotIncremental": "calls=2 visited=6",
+        "total": "visited=33",
       }
     `)
   })

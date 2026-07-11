@@ -511,6 +511,38 @@ export class Room {
     const created: Card[] = []
     const released: Card[] = []
 
+    // 没有任何已观测玩家时直接返回：与旧“逐玩家 early-return”等价，避免无谓的归组扫描。
+    let hasObservedPlayer = false
+    for (const player of this.players.values()) {
+      if (player.hasObservedHandCount) {
+        hasObservedPlayer = true
+        break
+      }
+    }
+    if (!hasObservedPlayer) return { created, released }
+
+    // 一次性按归属座位归组“单一归属的暗手牌”，取代过去对每个已观测玩家各扫一遍 Room.cards。
+    // 复用 resolveConstraints 增量维护的 player 快照（成员严格等于 card.location==='player'），
+    // 把每条移动尾部的 O(玩家数 × 全牌数) 降为 O(玩家区牌数)。
+    const playerCards = this.playerCardsSnapshot
+    recordTraversal('reconcileAnonymousHandCards:group', playerCards.length)
+    const hiddenHandCardsBySeat = new Map<SeatID, Card[]>()
+    for (const card of playerCards) {
+      if (
+        card.subZone !== 'hand' ||
+        card.seats.size !== 1 ||
+        card.isKnown === true ||
+        card.suspended === true
+      ) {
+        continue
+      }
+      const [ownerSeat] = card.seats
+      const ownerSeatID = Number(ownerSeat)
+      const existing = hiddenHandCardsBySeat.get(ownerSeatID)
+      if (existing) existing.push(card)
+      else hiddenHandCardsBySeat.set(ownerSeatID, [card])
+    }
+
     this.players.forEach((player, seatID) => {
       if (!player.hasObservedHandCount) return
       const slotCounts = slotCountsBySeat.get(seatID)
@@ -518,15 +550,7 @@ export class Room {
         return
       }
 
-      const unknownHandCards = this.cards.filter(
-        (card) =>
-          card.location === 'player' &&
-          card.subZone === 'hand' &&
-          card.seats.size === 1 &&
-          card.seats.has(seatID) &&
-          card.isKnown !== true &&
-          card.suspended !== true
-      )
+      const unknownHandCards = hiddenHandCardsBySeat.get(seatID) ?? []
       const missingCount = Math.max(0, player.unknownCardCount - unknownHandCards.length)
 
       if (missingCount > 0) {

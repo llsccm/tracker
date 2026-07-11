@@ -184,14 +184,22 @@ git diff --check
 
 ## 6. 已知边界与后续方向
 
-当前方案仍然是“物理实体 + 位置候选 + 局部数量约束”，没有拆分独立的手牌槽位对象。
+当前方案仍然是“物理实体 + 位置候选 + 局部数量约束”，没有拆分独立的手牌槽位对象。此边界是刻意的：现有局部约束已能修复本次随机转移错误，同时保持改动范围与运行成本可控。**不建议**引入全局二分匹配或通用约束求解器，也不建议推进 [`anonymous-card-entity-optimization-plan.md`](anonymous-card-entity-optimization-plan.md) 的阶段 7（独立 `HandSlot` 对象拆分）。
 
-后续可以渐进推进：
+### 6.1 独立复核结论（2026-07-12）
 
-1. 为匿名实体增加创建原因、来源事件和迁移历史。
-2. 建立正式匿名实体复用池。
-3. 将身份置换收口为单一原子操作。
-4. 将候选槽位上下界从 `unknownCardCount` 中进一步拆分。
-5. 为完整手牌展示后的混合实体身份收敛增加更长链路的端到端回归。
+对照代码逐条复核，第 2–4 节核心声明均属实；独立执行 `pnpm test:tracker`（22 文件 / 168 项全绿）与 `pnpm typecheck:tracker`（无错误）通过。复核另发现两点：
 
-当前不建议直接引入全局二分匹配或通用约束求解器。现有局部约束已经能够修复本次随机转移错误，同时保持改动范围和运行成本可控。
+- **性能（已修 2026-07-12）**：`Room.reconcileAnonymousHandCards()` 过去在每次 `resolveConstraints()` 尾部（`Room.ts:1156`）对每个 `hasObservedHandCount` 玩家各做一次全量 `this.cards.filter(...)`，即每条移动 O(玩家数 × 全牌数) 的隐藏扫描，且 `traversalBaseline` 未插桩。已改为在函数入口一次性按归属座位归组 `playerCardsSnapshot`（`resolveConstraints` 增量维护、成员严格等于 `location==='player'`），再按 seat 做 O(1) 查表，整体降为 O(玩家区牌数)，并加 `recordTraversal('reconcileAnonymousHandCards:group', …)` 显式插桩。注：原建议的”改用 `CardLocationIndex` 按 seat 投影”不可行——该索引的 `projectCard()` 刻意排除 `isKnown!==true` 的暗手牌（只投影可展示的明牌），取不到”未知手牌”；故改用 player 快照归组。无观测玩家时入口 early-return，早期对局零新增成本。`traversalBaseline.test.ts` 新增第 5 场景（两名已观测玩家、快照 3 张 → 归组 visited=3、补齐 3 个匿名实体）显式护栏化；旧 4 场景新增的该站点 visited 是被”显性化”的真实（更小）扫描量，非新增开销。
+- **文档（已修）**：`bridge.ts` 路径与职责已更正——正确路径 `src/tracker/runtime/bridge.ts`（`TrackerController` facade），移动同步/明牌输入实现位于 `runtime/trackerController.ts`，随机手牌转移候选构建位于 `roomMovement/candidates.ts`；已同步 `CLAUDE.md` 与 `docs/agents/{card_tracker,overview,lifecycle}.md`。
+
+### 6.2 后续方向（按优先级/风险重排）
+
+沿用旧编号，重排为：
+
+1. **已完成（2026-07-12）**：⑤ 长链路端到端回归落地于 `tests/tracker/randomTransferLifecycle.test.ts`（转移→局部展示→打明牌→完整展示→收敛，inline snapshot 锁定终态）；上述 reconcile 全量扫描改造 + 基线场景同批完成。全量 `pnpm test:tracker`（23 文件 / 170 项）、`typecheck:tracker`、`lint`、`build:prod` 全绿，`git diff --check` 通过。
+2. **④ 已获真实反例，升级为”应做”（中风险）**：⑤ 跑出的收敛反例——seat3 完整手牌 `[42,46,47]` 占满其 3 个观测槽后，两张暗牌 130/131 仍保留不可能的 seat3 候选（`seats=[2,3]`）；计数层正确（seat2 unknown=2 / seat3 unknown=0）但 `seats` 投影未做全局消除。这正是”候选 range 被压成点值 + 局部约束组不跨组消除”的直接后果。新测试已用 `★` 注释锁定该”当前行为”。推进 ④（候选槽上下界与 `unknownCardCount` 拆分）时应以”该反例收敛为 `seats=[2]`”为验收目标。
+3. **其后（纯行为保持重构）**：③ 将身份置换（`moveKnownCardsForContext` 多分支交换）收口为单一原子操作；靠现有测试 + 遍历基线兜底。
+4. **降级**：① provenance 只做最小版（`reason` + `sourceEvent`），砍掉 16 条 bounded history（YAGNI），仅在实际调试需要时落地；② 正式匿名复用池暂缓或跳过——手牌规模极小属过早优化，且与①稳定溯源存在张力。
+
+阶段映射见 [`anonymous-card-entity-optimization-plan.md`](anonymous-card-entity-optimization-plan.md) 第 15.1 节。
