@@ -87,6 +87,7 @@ export class Room {
   isDeckReady = false
   cards: Card[] = []
   cardIndex: Map<CardID, Card> = new Map()
+  anonymousEntitySeq = -1
   declare players: Map<SeatID, Player>
   declare zones: Map<PublicZoneName, Zone>
   declare skillHandlers: Map<SpellID, (...args: any[]) => unknown>
@@ -194,6 +195,7 @@ export class Room {
     this.isDeckReady = false
     this.cards.length = 0
     this.cardIndex.clear()
+    this.anonymousEntitySeq = -1
 
     // 初始化摸牌堆
     const pile = this.zones.get('pile')
@@ -476,6 +478,10 @@ export class Room {
   /**
    * 为游戏外新出现的牌创建实体；用于回收区、临时区缺失等兜底场景。
    */
+  allocateAnonymousEntityID(): number {
+    return this.anonymousEntitySeq--
+  }
+
   createExternalCards(cardIDs: CardID[] = [], count = cardIDs.length): Card[] {
     const ids = cardIDs.filter((id) => id > 0)
     const unknownCount = Math.max(0, Number(count) || 0, cardIDs.length) - ids.length
@@ -496,6 +502,87 @@ export class Room {
     cards.forEach((card) => card.moveToPublicZone('outside'))
     cards.forEach((card) => this.counter?.addCard(card))
     return cards
+  }
+
+  reconcileAnonymousHandCards(slotCountsBySeat: Map<SeatID, HandSlotCountSummary>): {
+    created: Card[]
+    released: Card[]
+  } {
+    const created: Card[] = []
+    const released: Card[] = []
+
+    // 没有任何已观测玩家时直接返回：与旧“逐玩家 early-return”等价，避免无谓的归组扫描。
+    let hasObservedPlayer = false
+    for (const player of this.players.values()) {
+      if (player.hasObservedHandCount) {
+        hasObservedPlayer = true
+        break
+      }
+    }
+    if (!hasObservedPlayer) return { created, released }
+
+    // 一次性按归属座位归组“单一归属的暗手牌”，取代过去对每个已观测玩家各扫一遍 Room.cards。
+    // 复用 resolveConstraints 增量维护的 player 快照（成员严格等于 card.location==='player'），
+    // 把每条移动尾部的 O(玩家数 × 全牌数) 降为 O(玩家区牌数)。
+    const playerCards = this.playerCardsSnapshot
+    recordTraversal('reconcileAnonymousHandCards:group', playerCards.length)
+    const hiddenHandCardsBySeat = new Map<SeatID, Card[]>()
+    for (const card of playerCards) {
+      if (card.subZone !== 'hand' || card.isKnown === true || card.suspended === true) {
+        continue
+      }
+      const ownerSeatID = card.resolvedSeat
+      if (ownerSeatID === null) continue
+      const existing = hiddenHandCardsBySeat.get(ownerSeatID)
+      if (existing) existing.push(card)
+      else hiddenHandCardsBySeat.set(ownerSeatID, [card])
+    }
+
+    this.players.forEach((player, seatID) => {
+      if (!player.hasObservedHandCount) return
+      const slotCounts = slotCountsBySeat.get(seatID)
+      if ((slotCounts?.candidateCards.length ?? 0) > 0 && slotCounts?.candidateCount === 0) {
+        return
+      }
+
+      const unknownHandCards = hiddenHandCardsBySeat.get(seatID) ?? []
+      const missingCount = Math.max(0, player.unknownCardCount - unknownHandCards.length)
+
+      if (missingCount > 0) {
+        const placeholders = this.createExternalCards([], missingCount)
+        placeholders.forEach((card) => {
+          card.bindCandidates([seatID], 'hand', null, { known: false })
+        })
+        created.push(...placeholders)
+      }
+
+      let excessCount = Math.max(0, unknownHandCards.length - player.unknownCardCount)
+      if (excessCount <= 0) return
+
+      for (const card of unknownHandCards) {
+        if (excessCount <= 0) break
+        if (card.id !== 0) continue
+
+        this.removeCardsFromConstraintGroups([card])
+        card.moveToPublicZone('outside')
+        released.push(card)
+        excessCount -= 1
+      }
+    })
+
+    if (created.length > 0 || released.length > 0) {
+      trackerLogger.info('匿名手牌实体对账', {
+        created: created.map((card) => ({
+          entityID: card.entityID,
+          seatID: card.resolvedSeat
+        })),
+        released: released.map((card) => ({
+          entityID: card.entityID
+        }))
+      })
+    }
+
+    return { created, released }
   }
 
   // 公共区主入口与兼容查询；低频查询辅助位于 roomPublicZones.js。
@@ -1085,6 +1172,10 @@ export class Room {
       })
     }
 
+    const anonymousHandChanges = this.reconcileAnonymousHandCards(handSlotCountsCache)
+    if (anonymousHandChanges.created.length > 0 || anonymousHandChanges.released.length > 0) {
+      playerCards = this.refreshPlayerSnapshot()
+    }
     this.assertPlayerSnapshotConsistency(playerCards)
 
     // changed=true 说明本轮可能新增过渡发散明牌，需全量扫描；稳定时只检查本轮收集的集合。
@@ -1361,6 +1452,7 @@ export class Room {
     this.viewDirty = false
     this.cards = []
     this.cardIndex.clear()
+    this.anonymousEntitySeq = -1
     this.isDeckReady = false
     this.seatIDs = []
     this.size = 0
