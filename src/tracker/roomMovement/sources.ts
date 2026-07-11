@@ -270,23 +270,25 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
    * 但旧状态或边缘路径可能没有留下占位；此时只为该 suspended 正 ID 补一个玩家区暗占位，
    * 让后续 swapCardWithUnknown() 继续走统一的来源占位置换流程。
    */
-  createPlayerSourcePlaceholderForSuspendedKnownCard(
+  createPlayerSourcePlaceholderForKnownCard(
     card: Card,
     context: RoomMoveContext
   ): Card | null {
     const { fromSeat, fromSubZone, sourceEvent } = context
     if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat)) return null
     if (fromSubZone !== 'hand') return null
-    if (card.location !== 'suspended' || card.id <= 0 || card.isKnown !== true) return null
+    if (card.id <= 0) return null
 
     const placeholder = this.room.createExternalCards([], 1)[0]
     if (!placeholder) return null
 
     placeholder.bindCandidates([fromSeat], 'hand', null, { known: false })
-    trackerLogger.info('暂停追踪正 ID 来源手牌缺少暗占位，已创建 id=0 兜底占位', {
-      reason: 'moveKnownCardsForContext:suspendedSourcePlaceholderFallback',
+    trackerLogger.info('玩家来源明牌缺少可置换实体，已创建瞬时匿名占位', {
+      reason: 'moveKnownCardsForContext:knownSourcePlaceholderFallback',
       knownCardID: card.id,
       placeholderCardID: placeholder.id,
+      placeholderEntityID: placeholder.entityID,
+      knownCardLocation: card.location,
       fromSeat,
       fromSubZone,
       sourceEvent

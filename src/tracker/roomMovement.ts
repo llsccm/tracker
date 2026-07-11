@@ -190,12 +190,18 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       })
     ) {
       // 随机获得来源手牌时，来源明牌不能直接消失，而是扩展为“来源/目标都可能持有”。
-      this.markRandomHandTransferCandidates({
+      const propagatedCards = this.markRandomHandTransferCandidates({
         fromSeat: sourceHandSeat,
         targetSeat: targetHandSeat,
         count: handMoveCount,
+        sourceTotalBefore: context.sourceHandTotalObserved
+          ? context.sourceHandTotalBefore
+          : undefined,
         sourceEvent
       })
+      // 完整候选覆盖已经表达了这次 K 张转移；此时不能再确定性挑选暗实体搬到目标。
+      // 返回空数组表示候选建模失败，仍允许默认未知移动路径执行保守回退。
+      context.skipUnknownMovement = propagatedCards.length > 0
     }
 
     if (
@@ -451,13 +457,22 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         const placeholder = this.swapKnownCardWithPlayerSourcePlaceholder(card, playerSourceContext)
         let fallbackPlaceholder: Card | null = null
         if (!placeholder && fromSubZone === 'hand') {
-          const suspendedSourcePlaceholder =
-            this.createPlayerSourcePlaceholderForSuspendedKnownCard(card, playerSourceContext)
           fallbackPlaceholder = this.swapCardWithUnknown(card, fromSeat, knownCards)
-          if (!fallbackPlaceholder && suspendedSourcePlaceholder) {
-            trackerLogger.warn('暂停追踪正 ID 已创建来源兜底占位但仍未完成置换', {
+          const canDeferToKnownSourcePlaceholder =
+            context.sourceHandTotalObserved &&
+            context.sourceHandTotalBefore <= context.handMoveCount
+          const createdSourcePlaceholder =
+            !fallbackPlaceholder && !canDeferToKnownSourcePlaceholder
+              ? this.createPlayerSourcePlaceholderForKnownCard(card, playerSourceContext)
+              : null
+          if (!fallbackPlaceholder && createdSourcePlaceholder) {
+            fallbackPlaceholder = this.swapCardWithUnknown(card, fromSeat, knownCards)
+          }
+          if (!fallbackPlaceholder && createdSourcePlaceholder) {
+            trackerLogger.warn('已创建来源瞬时匿名占位但仍未完成置换', {
               knownCardID: card.id,
-              placeholderCardID: suspendedSourcePlaceholder.id,
+              placeholderCardID: createdSourcePlaceholder.id,
+              placeholderEntityID: createdSourcePlaceholder.entityID,
               fromSeat,
               fromSubZone,
               toZone,

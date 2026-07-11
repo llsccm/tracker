@@ -61,6 +61,7 @@
 
 - 继承 `BaseCard`，通过 `CardConfig` 单例取得牌名、花色、点数、类型等展示元数据。
 - 保存物理位置与推断状态：`location`、`subZone`、`isKnown`、`spellID`、`turn`、`round`、`phase`、`owner`、`locationCandidates`、`suspended`、`combinationID`；`seats`、`subZoneCandidates`、`publicCandidates` 是从 `locationCandidates` 或确定位置派生的兼容读面。
+- 匿名暗牌协议 ID 继续保持 `id=0`，但每个匿名实体拥有递减负数的唯一 `entityID`。`Room.resolveConstraints()` 稳定后会按玩家观测手牌数、确定明牌和候选明牌主动对账匿名手牌实体；缺失时补建，过量时仅把匿名实体释放到 `outside`。存在未被精确槽位约束覆盖的候选手牌时不会提前实体化；若后续具体明牌移动协议证明该牌来自此手牌，则按该事实创建瞬时匿名实体完成身份交换并回补明牌原位置。
 - `bindCandidates()` 只绑定候选席位，默认不确认明牌；`bindTo()` 是默认确认明牌的便捷入口。
 - `locationCandidates` 是完整位置候选唯一主模型，可同时表达玩家区候选、公共区候选与装备容器候选；`subZoneCandidates`、`publicCandidates` 与 `seats` 均为只读兼容投影，外部写入必须通过 `setLocationCandidates()` 或保留的兼容方法转发。
 - `subZoneCandidates` 表达玩家区完整位置候选（三元组 `seatID/subZone/spellID`），用于同一张明牌可能处于多个玩家或多个玩家子区域的情况，例如 `A 手牌 / B 手牌 / A 标记`。

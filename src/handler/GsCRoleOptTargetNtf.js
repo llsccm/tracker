@@ -71,7 +71,7 @@ export function handleRoleOptTargetNtf(arg) {
 
     //   break
 
-    // 顺拆 魄袭 伪溃 审时 闪袭 勘破 缓释 眩惑(界) 目标角色全部手牌明牌
+    // 顺拆 魄袭 伪溃 审时 闪袭 勘破 缓释 眩惑(界) 强识(界) 目标角色全部手牌明牌
     case 4:
     case 5:
     case 921:
@@ -81,6 +81,7 @@ export function handleRoleOptTargetNtf(arg) {
     case 3119:
     case 501:
     case 3437:
+    case 3876:
       if (Params?.length > 0) {
         if (targetSeatID !== undefined && targetSeatID !== 255) {
           revealPlayerHandCards(targetSeatID, Params, { fullHand: true })

@@ -128,6 +128,8 @@ export interface RandomHandTransferOptions {
   fromSeat: SeatID | null
   targetSeat: SeatID | null
   count: number
+  /** 候选传播前保存的来源手牌总数，避免被已应用的移动 delta 覆盖。 */
+  sourceTotalBefore?: number
   sourceEvent?: MoveSourceEvent
 }
 
