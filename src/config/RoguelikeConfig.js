@@ -1,14 +1,17 @@
 import { CardConfig } from './CardConfig'
 import { SkillsConfig } from './SkillsConfig'
 import ConfigBase from './ConfigBase'
+import RoguelikeDifficultyVo from './vo/RoguelikeDifficultyVo'
 
-const ROGUE_LEVEL_KEYS = ['', '_ZD', '_KN', '_EM', '_LY']
+const ROGUE_LEVEL_KEYS = ['_PT', '_ZD', '_KN', '_EM', '_LY']
 const REWARD_QUALITY_NAMES = ['随机', '普通', '稀有', '史诗', '传说']
 const CARD_SUBTYPE_NAMES = { 6: '火杀', 7: '雷杀', 11: '冰杀', 12: '闪闪' }
 const CHOICE_REWARD_TYPE_NAMES = { 2: '战法', 3: '技能', 4: '手牌', 5: '装备' }
 
 export class RoguelikeConfig extends ConfigBase {
   originData = null
+  difficultDict = new Map()
+  bigDiffDic = new Map()
   /** 战法 技能 卡牌 */
   shopDict = new Map()
   /** 城市进度 */
@@ -42,6 +45,8 @@ export class RoguelikeConfig extends ConfigBase {
   }
 
   clearRuntimeMaps() {
+    this.difficultDict.clear()
+    this.bigDiffDic.clear()
     this.shopDict.clear()
     this.levelDict.clear()
     this.adventureResultDict.clear()
@@ -105,6 +110,7 @@ export class RoguelikeConfig extends ConfigBase {
     this.clearRuntimeMaps()
 
     this.season = root.Roundid?.[root.Roundid.length - 1]?.useSeason || 0
+    this.initDifficulties(root.DifficultySelection)
     this.initText(root.Text)
     this.initChapterPlaces(root.Chapter)
     this.initCities(root.Level)
@@ -117,6 +123,24 @@ export class RoguelikeConfig extends ConfigBase {
     this.initGeneralGroups(root.General)
     this.initFights(root.Fight)
     this.initChoices(root.Choose)
+  }
+
+  initDifficulties(difficulties) {
+    for (const data of difficulties || []) {
+      if (!data || data.isopen != 1) continue
+
+      const info = Object.assign(new RoguelikeDifficultyVo(), data)
+      const sessionId = info.seasonID
+      // seasonID 是 string season 是 number
+      // 只配置当前 season
+      if (sessionId != this.season) continue
+
+      this.difficultDict.set(info.difID, info)
+
+      const bigKey = `${sessionId}_${info.bdif}`
+      if (!this.bigDiffDic.has(bigKey)) this.bigDiffDic.set(bigKey, [])
+      this.bigDiffDic.get(bigKey).push(info)
+    }
   }
 
   initText(texts) {
@@ -350,21 +374,15 @@ export class RoguelikeConfig extends ConfigBase {
 
     return {
       generalgroup,
-      GeneralGroup: generalgroup,
       generalID,
-      GeneralID: generalID,
       generalname,
-      GeneralName: generalname,
       generalskin: general.generalskin || 0,
       Generalskin: general.generalskin || 0,
       generalcounty: general.generalcounty || 0,
       Generalcounty: general.generalcounty || 0,
       growdouble,
-      Growdouble: growdouble,
       growshowdouble,
-      Growshowdouble: growshowdouble,
       diffdouble,
-      Diffdouble: diffdouble,
       hp: general.hp || 0,
       Hp: general.hp || 0,
       maxhp: general.maxhp || 0,
@@ -383,9 +401,7 @@ export class RoguelikeConfig extends ConfigBase {
       otherad: general.otherad || 0,
       Otherad: general.otherad || 0,
       isboss,
-      IsBoss: isboss,
       deleteSpell,
-      DeleteSpell: deleteSpell,
       JumpStage: general.JumpStage || '',
       jumpStage,
       jumpStageId: jumpStage.id,
@@ -421,6 +437,7 @@ export class RoguelikeConfig extends ConfigBase {
     }
   }
 
+  /** 难度增加带来的额外技能/装备 */
   copyGeneralLevelFields(general) {
     const fields = {}
 

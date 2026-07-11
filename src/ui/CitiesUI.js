@@ -97,18 +97,6 @@ function createHrLine() {
   })
 }
 
-// 处理武将信息显示
-function createGeneralLabel(los, difficulty) {
-  const [skills, red] = highlightedSkill(los, difficulty)
-  const start = los.start ? '[先行]' : ''
-  return createLabel({
-    text: `${los.generalname}${start}${red ? ' ' + skills.join(' ') : ''}`,
-    color: red ? STYLES.GENERAL.warning : STYLES.GENERAL.normal,
-    fontSize: STYLES.GENERAL.fontSize,
-    bold: true
-  })
-}
-
 // 初始化容器布局
 function setupCityContainer(container, background, height) {
   container.layoutEnabled = true
@@ -123,8 +111,8 @@ function processFightEvent(eventData, cityContainer) {
   let height = 0
 
   // 处理武将列表
-  eventData.generals.forEach((los) => {
-    const generalLabel = createGeneralLabel(los, rogueMap.difficulty)
+  eventData.generals.forEach((general) => {
+    const generalLabel = createGeneralLabel(general, rogueMap.difficulty, eventData)
     cityContainer.addChild(generalLabel)
     height += generalLabel.height
   })
@@ -157,7 +145,7 @@ function processChooseEvent(baseEvent, cityContainer) {
     // 处理武将选项
     if (eventData.generals) {
       eventData.generals.forEach((los) => {
-        const generalLabel = createGeneralLabel(los, rogueMap.difficulty)
+        const generalLabel = createGeneralLabel(los, rogueMap.difficulty, eventData)
         cityContainer.addChild(generalLabel)
         totalHeight += generalLabel.height
       })
@@ -224,6 +212,22 @@ function findLostItemByName(descText) {
   return ''
 }
 
+// 处理武将信息显示
+function createGeneralLabel(general, difficulty, eventData) {
+  const [skills, red] = highlightedSkill(general, difficulty)
+  const canStart = String(eventData.CanStart || '')
+    .split(';')
+    .includes(String(difficulty))
+  const start = general.start && canStart ? '[先行]' : ''
+
+  return createLabel({
+    text: `${general.generalname}${start}${red ? ' ' + skills.join(' ') : ''}`,
+    color: red ? STYLES.GENERAL.warning : STYLES.GENERAL.normal,
+    fontSize: STYLES.GENERAL.fontSize,
+    bold: true
+  })
+}
+
 const spellList = [
   '巳蛇',
   '灵动',
@@ -257,55 +261,31 @@ const spellList = [
   '反击'
 ]
 
-const spellPriority = {
-  getspell: 0,
-  getspell_ZD: 1,
-  getspell_KN: 2,
-  getspell_EM: 3,
-  getspell_LY: 4
-}
-
 function highlightedSkill(generalInfo, difficulty) {
-  const skills = []
-  let red = false
-  const spellDifficulty = getSpellDifficulty(difficulty)
-  const spellPriorityLevel = spellPriority[spellDifficulty]
+  const difficultySpells = [
+    generalInfo.getspell_PT,
+    generalInfo.getspell_ZD,
+    generalInfo.getspell_KN,
+    generalInfo.getspell_EM,
+    generalInfo.getspell_LY
+  ]
 
-  // 遍历 spellPriority 对象，累加符合优先级条件的 spell 字符串
-  let diffSkill = Object.keys(spellPriority)
-    .filter((spell) => spellPriority[spell] <= spellPriorityLevel) // 筛选出符合优先级的 spells
-    .map((spell) => generalInfo[spell]) // 获取每个 spell 对应的值
-    .filter(Boolean) // 过滤掉 undefined 或 null 的值
-    .join(';') // 用分号合并所有符合条件的值
+  const difficultDict = RoguelikeConfig.GetInstance().difficultDict
+  const difficultyInfo =
+    difficultDict.get(difficulty) ||
+    difficultDict.get(String(difficulty)) ||
+    difficultDict.get(Number(difficulty))
+  const difficultyLevel = Number(difficultyInfo?.bdif) || 1
+  const currentLevelIndex = Math.min(Math.max(difficultyLevel - 1, 0), difficultySpells.length - 1)
 
-  // 可能会出现无收录技能，如1053
-  diffSkill = diffSkill?.split(';').map((skill) => SkillsConfig.GetInstance().getSpellName(skill))
+  const skills = difficultySpells
+    .slice(0, currentLevelIndex + 1)
+    .flatMap((spell) => String(spell || '').split(';'))
+    .filter(Boolean)
+    .map((spell) => SkillsConfig.GetInstance().getSpellName(spell))
+    .filter((spell) => spellList.includes(spell))
 
-  for (const ds of diffSkill) {
-    if (spellList.includes(ds)) {
-      skills.push(ds)
-      red = true
-    }
-  }
-
-  return [skills, red]
-}
-
-function getSpellDifficulty(difficulty) {
-  switch (Math.floor((difficulty - 1) / 5)) {
-    case 0:
-      return 'getspell'
-    case 1:
-      return 'getspell_ZD'
-    case 2:
-      return 'getspell_KN'
-    case 3:
-      return 'getspell_EM'
-    case 4:
-      return 'getspell_LY'
-    default:
-      return 'getspell'
-  }
+  return [skills, skills.length > 0]
 }
 
 export function drawStore(filteredPairs) {
