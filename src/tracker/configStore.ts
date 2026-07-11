@@ -19,8 +19,11 @@ export const ACTIVE_CONFIG_ENTRIES: readonly ConfigEntry[] = [
   ['padding', 'PADDING', 0],
   ['seatUISwitch', 'SEAT_UI_SWITCH', true],
   ['rogueCitySwitch', 'ROGUE_CITY_SWITCH', true],
-  ['cardLabelSwitch', 'CARD_LABEL_SWITCH', true],
-  ['debugLogSwitch', 'DEBUG_LOG_SWITCH', false]
+  ['cardLabelSwitch', 'CARD_LABEL_SWITCH', false],
+  ['debugLogSwitch', 'DEBUG_LOG_SWITCH', false],
+  ['effectBlockSwitch', 'EFFECT_BLOCK_SWITCH', false],
+  ['blockKillEffectSwitch', 'BLOCK_KILL_EFFECT_SWITCH', false],
+  ['blockSkinStateSwitch', 'BLOCK_SKIN_STATE_SWITCH', false]
 ]
 
 export function createMemoryStorageAdapter(seed: Record<string, unknown> = {}): StorageAdapter {
