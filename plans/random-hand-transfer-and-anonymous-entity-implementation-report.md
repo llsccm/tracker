@@ -173,7 +173,7 @@ git diff --check
 
 结果：
 
-- tracker 测试：22 个测试文件、168 项测试全部通过。
+- tracker 测试：23 个测试文件、170 项测试全部通过。
 - tracker TypeScript 类型检查通过。
 - ESLint 检查通过。
 - development 构建通过。
@@ -188,7 +188,7 @@ git diff --check
 
 ### 6.1 独立复核结论（2026-07-12）
 
-对照代码逐条复核，第 2–4 节核心声明均属实；独立执行 `pnpm test:tracker`（22 文件 / 168 项全绿）与 `pnpm typecheck:tracker`（无错误）通过。复核另发现两点：
+对照代码逐条复核，第 2–4 节核心声明均属实；独立执行 `pnpm test:tracker`（23 文件 / 170 项全绿）与 `pnpm typecheck:tracker`（无错误）通过。复核另发现两点：
 
 - **性能（已修 2026-07-12）**：`Room.reconcileAnonymousHandCards()` 过去在每次 `resolveConstraints()` 尾部（`Room.ts:1156`）对每个 `hasObservedHandCount` 玩家各做一次全量 `this.cards.filter(...)`，即每条移动 O(玩家数 × 全牌数) 的隐藏扫描，且 `traversalBaseline` 未插桩。已改为在函数入口一次性按归属座位归组 `playerCardsSnapshot`（`resolveConstraints` 增量维护、成员严格等于 `location==='player'`），再按 seat 做 O(1) 查表，整体降为 O(玩家区牌数)，并加 `recordTraversal('reconcileAnonymousHandCards:group', …)` 显式插桩。注：原建议的”改用 `CardLocationIndex` 按 seat 投影”不可行——该索引的 `projectCard()` 刻意排除 `isKnown!==true` 的暗手牌（只投影可展示的明牌），取不到”未知手牌”；故改用 player 快照归组。无观测玩家时入口 early-return，早期对局零新增成本。`traversalBaseline.test.ts` 新增第 5 场景（两名已观测玩家、快照 3 张 → 归组 visited=3、补齐 3 个匿名实体）显式护栏化；旧 4 场景新增的该站点 visited 是被”显性化”的真实（更小）扫描量，非新增开销。
 - **文档（已修）**：`bridge.ts` 路径与职责已更正——正确路径 `src/tracker/runtime/bridge.ts`（`TrackerController` facade），移动同步/明牌输入实现位于 `runtime/trackerController.ts`，随机手牌转移候选构建位于 `roomMovement/candidates.ts`；已同步 `CLAUDE.md` 与 `docs/agents/{card_tracker,overview,lifecycle}.md`。

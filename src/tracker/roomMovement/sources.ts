@@ -266,14 +266,11 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
   }
 
   /**
-   * 洗牌后暂停追踪的正 ID 再次从玩家手牌出现时，理论上应已有洗牌保留的 id=0 来源占位。
-   * 但旧状态或边缘路径可能没有留下占位；此时只为该 suspended 正 ID 补一个玩家区暗占位，
-   * 让后续 swapCardWithUnknown() 继续走统一的来源占位置换流程。
+   * 协议确认某张正 ID 明牌来自玩家手牌，但本地缺少可置换的来源实体时，
+   * 创建一个临时玩家手牌暗占位，让后续 swapCardWithUnknown() 继续走统一的身份置换流程。
+   * 此兜底适用于任意位置的正 ID 明牌，不要求该牌处于 suspended 状态。
    */
-  createPlayerSourcePlaceholderForKnownCard(
-    card: Card,
-    context: RoomMoveContext
-  ): Card | null {
+  createPlayerSourcePlaceholderForKnownCard(card: Card, context: RoomMoveContext): Card | null {
     const { fromSeat, fromSubZone, sourceEvent } = context
     if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat)) return null
     if (fromSubZone !== 'hand') return null

@@ -528,16 +528,11 @@ export class Room {
     recordTraversal('reconcileAnonymousHandCards:group', playerCards.length)
     const hiddenHandCardsBySeat = new Map<SeatID, Card[]>()
     for (const card of playerCards) {
-      if (
-        card.subZone !== 'hand' ||
-        card.seats.size !== 1 ||
-        card.isKnown === true ||
-        card.suspended === true
-      ) {
+      if (card.subZone !== 'hand' || card.isKnown === true || card.suspended === true) {
         continue
       }
-      const [ownerSeat] = card.seats
-      const ownerSeatID = Number(ownerSeat)
+      const ownerSeatID = card.resolvedSeat
+      if (ownerSeatID === null) continue
       const existing = hiddenHandCardsBySeat.get(ownerSeatID)
       if (existing) existing.push(card)
       else hiddenHandCardsBySeat.set(ownerSeatID, [card])
