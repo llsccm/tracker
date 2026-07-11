@@ -144,8 +144,8 @@ function processChooseEvent(baseEvent, cityContainer) {
 
     // 处理武将选项
     if (eventData.generals) {
-      eventData.generals.forEach((los) => {
-        const generalLabel = createGeneralLabel(los, rogueMap.difficulty, eventData)
+      eventData.generals.forEach((general) => {
+        const generalLabel = createGeneralLabel(general, rogueMap.difficulty, eventData)
         cityContainer.addChild(generalLabel)
         totalHeight += generalLabel.height
       })
