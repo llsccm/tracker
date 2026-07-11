@@ -1,4 +1,5 @@
 import { getPanelContentInner } from '@/ui/frameContent'
+import { reapplyHiddenTrackerVisibility } from '@/ui/trackerVisibility'
 import { buildCardTypeButtons, renderStatistics } from './StatisticsView'
 import { renderQueryPanel } from './QueryPanelView'
 import { initPlayerHandContainers, renderPlayerHand, renderPublicZones } from './PlayerHandView'
@@ -39,9 +40,9 @@ export function mount(room: Room | null): void {
     initPlayerHandContainers(doc, currentRoom)
   }
 
+  syncTrackerVisibility(doc)
   if (!currentRoom.isDeckReady) return
 
-  ensureTrackerVisible(doc)
   buildCardTypeButtons(currentRoom, doc, setQuery)
   currentRoom.markViewDirty('tracker-view-mount')
   markFullPlayerRender(currentRoom)
@@ -104,7 +105,7 @@ function flushRender(): void {
   })
 
   if (renderState.shouldRenderPanels) renderQueryPanel(currentRoom, doc)
-  ensureTrackerVisible(doc)
+  syncTrackerVisibility(doc)
   if (shouldRenderPlayerHands && !playerOrderResolved) return
   finishDirtyRender(currentRoom, renderState)
 }
@@ -187,12 +188,8 @@ function hasResolvedPlayerOrder(room: Room): boolean {
   return Array.from(room.players.values()).every((player) => Number.isFinite(player.fixedViewId))
 }
 
-function ensureTrackerVisible(targetDoc: Document): void {
-  for (const id of ['orderAndShouPai', 'cardDetail']) {
-    const el = targetDoc.getElementById(id)
-    if (el) el.style.display = ''
-  }
-
+function syncTrackerVisibility(targetDoc: Document): void {
+  reapplyHiddenTrackerVisibility(targetDoc)
   const content = targetDoc.getElementById('button')
   getPanelContentInner(content)
   content?.style.removeProperty('max-height')

@@ -1,3 +1,5 @@
+import { bindTrackerVisibilityShortcut } from './trackerVisibility'
+
 const STYLE_ID = 'dxc-shell-style'
 
 function ensureStyle() {
@@ -121,6 +123,7 @@ export function createMainShell(version) {
   header.appendChild(btn)
 
   document.body.appendChild(div)
+  bindTrackerVisibilityShortcut()
 
   const iframe = document.createElement('div')
   iframe.id = 'iframe-source'
