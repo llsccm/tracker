@@ -66,6 +66,7 @@ function positionTooltip({ tooltip, anchor, dialog }) {
   )
   let top = rect.top - tooltip.offsetHeight - offset
   if (top < offset) top = rect.bottom + offset
+  top = clamp(top, offset, Math.max(offset, window.innerHeight - tooltip.offsetHeight - offset))
   tooltip.style.left = `${left}px`
   tooltip.style.top = `${top}px`
 }
