@@ -9,6 +9,7 @@ const retainedLogicMessages = new Set([
 
   // 聊天输出/聊天消息兼容：仅保留消息文本过滤、房间号链接化与基础输出兼容。
   'decodeSSCChatmsgNtf',
+  'decodeClientActSysBroadMsgListResp',
 
   // 屏蔽特效
   'CClientGameRewardPointNTF',
