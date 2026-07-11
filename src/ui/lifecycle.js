@@ -1,3 +1,5 @@
+import { unbindTrackerVisibilityShortcut } from './trackerVisibility'
+
 export function bindInitialResize(globalConfig, resize) {
   window.WDVerSion = '1.0.0'
   window.padding = globalConfig.padding || 0
@@ -5,6 +7,7 @@ export function bindInitialResize(globalConfig, resize) {
 }
 
 export function removeInjectedDom(globalState) {
+  unbindTrackerVisibilityShortcut()
   //document.getElementById('injectCSS')?.remove()
   document.getElementById('seatUI')?.remove()
   document.getElementById('rogueUI')?.remove()
