@@ -84,7 +84,7 @@ The tracker is created per-game, not at script INIT. Two-phase view mount. See [
 - **LF line endings everywhere** (enforced by convention; do not reintroduce CRLF). 2-space indent. Match neighboring style — no unrelated reformatting.
 - Prettier: single quotes, no semicolons, no trailing commas, width 100.
 - ESM throughout (`"type": "module"`). Vite alias `@` → `src/`.
-- The host page provides globals (`Laya`, `JSZip`, `CtrUtil`, `SystemContext`, …) declared in `eslint.config.js`; `window.XC` is the shared runtime namespace.
+- The host page provides globals (`Laya`, `JSZip`, `CtrUtil`, `SystemContext`, …) declared in `eslint.config.js`.
 - `src/tracker/index.ts` only re-exports shared runtime state (`globalConfig`, `globalState`, `rogueMap`, `UI`, `user`, `Game`). Import `Room`/`Card`/`Player`/`Zone`/`ConstraintGroup` directly from their own submodules.
 - **Do not commit `dist/` or `.env`.** `pnpm-lock.yaml` is tracked but should only change for dependency/version tasks — no incidental edits. `.env` is untracked/ignored. `html/iframe.html` is loaded from a remote URL at runtime; changing it means confirming the remote deploy.
 

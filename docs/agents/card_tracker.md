@@ -29,7 +29,7 @@
   - 已知牌移入玩家区时清理公共区引用、确认明牌、绑定候选席位，并按需创建局部分组。
   - 暗牌移入玩家区时，从来源公共区、来源玩家候选手牌、显式 `sourceCards` 或游戏外兜底实体中取出占位牌，再绑定目标候选席位。
   - 手牌全暗移动到技能标记区时，如果来源手牌存在明牌，会由 `Room.skillState` 中的 `hiddenMarkCandidates` 账本接管：先记录完整位置候选，条件足够时再创建手牌/标记区的精确数量约束。
-  - 从玩家手牌暗取到另一名玩家手牌时，将来源玩家可能持有的手牌明牌传播为既有候选席位加目标席位，并用局部分组限制候选占位数。
+  - 从玩家手牌随机暗取到另一名玩家手牌时，在实体完整覆盖移动前来源手牌的前提下，让来源全部实体共同参与来源/目标手牌位置候选，包括已公开明牌、真实暗牌实体与按确定缺口补建的匿名实体，并用局部分组同时约束座位和完整手牌位置名额；只有明牌进入候选 UI。覆盖关系矛盾时保留默认未知移动路径作为保守回退。
   - 玩家暗牌回到牌堆、牌堆顶/底候选被摸走时，会通过 `locationCandidates(type: public)` 维护公共区候选位置，并经 `publicCandidates` 只读投影继续传播到玩家手牌候选。
   - 协议声明玩家来源明牌移入公共区但本地仍残留在牌堆/弃牌等公共 `Zone` 时，会优先用来源玩家暗占位回补旧公共区槽位；只有确认来源手牌已被本次移动清空时，才允许用来源确定明牌回补；同批已知牌不会互相充当回补占位。
   - 牌移入公共区时从旧约束组移除并加入目标公共 `Zone`；未知目标公共区退化为直接 `moveToPublicZone(toZone)`。
@@ -38,7 +38,7 @@
   - 调用每个 `ConstraintGroup.resolve()` 做局部分组收敛。
   - 当某玩家确定明牌已占满已知手牌总数时，从仍包含该席位的候选手牌明牌中剔除该玩家席位。
 - `resolveConstraints()` 的遍历已进行 A2/E1/E2 优化：
-  - **A2（增量 player 快照）**：在 [`plans/a2-player-snapshot-incremental-step7-plan.md`](../../plans/a2-player-snapshot-incremental-step7-plan.md) 中实现。将入口与轮末的卡牌全量 `filter` 改为按 `Room.dirtyCardEvents` 游标增量维护的 `playerCardsSnapshot` 与 `playerCardsSnapshotSet`，消除每次重建快照的 O(N) 过滤成本。`import.meta.env.DEV` 下由 `assertPlayerSnapshotConsistency()` 断言增量与全量顺序及元素的一致性。
+  - **A2（增量 player 快照）**：将入口与轮末的卡牌全量 `filter` 改为按 `Room.dirtyCardEvents` 游标增量维护的 `playerCardsSnapshot` 与 `playerCardsSnapshotSet`，消除每次重建快照的 O(N) 过滤成本。`import.meta.env.DEV` 下由 `assertPlayerSnapshotConsistency()` 断言增量与全量顺序及元素的一致性。
   - **E1（手牌槽增量重算）**：手牌槽统计按 seat 增量重算，首轮只计算有观测手牌数的座位，后续轮次只重算上一轮/本轮触碰座位并复用未变缓存。
   - **E2（跳过未触碰座位）**：收敛轮内 `Room.resolveTouchedSeats` 经 `notifyCardChanged()` 收集事件触碰过的座位；约束三首轮处理全部玩家，此后跳过上一轮与本轮至今都未触碰的座位。
 - `seats.size === 1` 只表示 owner 确定，不等于子区域确定；`seats` 是 `locationCandidates` 的座位级只读投影，若 `Card.subZoneCandidates` 仍有多个完整位置候选（例如 `A 手牌 / A 标记`），必须继续等待子区域约束收敛。
@@ -78,7 +78,7 @@
 - `knownHandCards` 与 `candidateHandCards` 不直接由外部写入，主要由 `Room.syncViewGroups()` 根据全局卡牌池差量同步。
 - `refreshUnknownCardCount()` 使用 `observedHandCount - 确定手牌明牌数 - 模糊明牌期望槽位数` 计算暗牌额度。
 - `getCandidateHandSlotCount()` 优先读取相关 `ConstraintGroup.expectedSlotsBySeat`，没有显式期望时按候选明牌数量退化计算。
-- `getCandidateHandSlotCount()` 同时读取 `ConstraintGroup.expectedSlotsBySubZone` 中的 `hand` 名额，避免 `A 手牌 / A 标记` 候选被算成确定手牌或漏算手牌槽位。
+- `getCandidateHandSlotCount()` 同时读取主模型 `ConstraintGroup.expectedSlotsByLocation` 与兼容模型 `expectedSlotsBySubZone` 中的 `hand` 名额，避免 `A 手牌 / A 标记` 候选被算成确定手牌或漏算手牌槽位。
 - `markCards` 以 `spellID -> Card[]` 形式保存标记区卡牌，供多个技能标记区并存的后续视图渲染使用。
 
 ### `Zone`
@@ -191,11 +191,12 @@
 - 部分基于差量同步的逻辑仍缺少覆盖率，重构时容易引发微小不一致。
 - `locationCandidates(type: public)` 负责牌堆顶/底候选传播，和 `ConstraintGroup`、`AmbiguousKnownIndex` 的边界要保持清楚，避免把公共候选误收敛成确定 owner。
 - `subZoneCandidates` 与 `seats` 都是 `locationCandidates` 的只读投影，边界要保持清楚：`seats` 只代表座位级投影，不能直接代表具体子区域。
-- 装备容器候选不应写入 `seats` 或 `owner`；新增同类容器时，需要同步补充 `src/tracker/equipmentMarkContainer.ts` 的注册表、`resolveEquipmentContainerLocationCandidates()`、`CardLocationIndex` 投影和回归测试。
+- 装备容器候选不应写入 `seats` 或 `owner`；新增同类容器时，需要同步补充 `src/tracker/candidate/equipmentMarkContainer.ts` 的注册表、`resolveEquipmentContainerLocationCandidates()`、`CardLocationIndex` 投影和回归测试。
 - `expectedSlotsBySubZone` 只应在候选全集已经收窄到相关完整位置时创建，避免把仍包含其他角色候选的牌过度收敛。
-- `CardLocationIndex` 是全量重建投影；新增卡牌区域或玩家子区时必须同步更新索引与视图组同步逻辑。
+- `CardLocationIndex` 默认按脏牌事件和脏公共区增量维护，事件游标断档时回退全量重建；新增卡牌区域、玩家子区或变更事件时必须同步更新索引投影、脏事件捕获与视图组同步逻辑。
 - 收敛轮内新增的席位或候选变更路径，必须经 `setSeats()` / `setLocationCandidates()` / `resolveLocationCandidate()` 三个捕获点之一发出携带 `previousSeats` 的事件，否则约束三的 E2 跳过会漏处理受影响座位；轮内新增改变 `card.location` 的路径必须让收敛循环的 `changed` 置真，否则 A1 快照不会重建（开发构建由 `assertPlayerSnapshotConsistency()` 兜底告警）。
 - 若新增会影响手牌槽 known/candidate 计数的收敛路径，必须确保相关座位进入 `Room.resolveTouchedSeats`；E1 会复用未触碰座位的手牌槽统计缓存。
+- 新增或修改 `this.cards.filter(...)` 等全牌池扫描前，必须先判断能否改用现有增量快照、索引、脏事件集合，或在入口一次性归组后复用结果；尤其避免把全牌池扫描放进玩家、约束组或收敛轮循环中，意外放大为 O(玩家数 × 全牌数) 或更高复杂度。若确认全量扫描确有必要，必须使用 `recordTraversal(...)` 对该扫描站点显式插桩，并在 `tests/tracker/traversalBaseline.test.ts` 中新增或更新对应场景与内联快照，使后续遍历量增长可见且可解释；不得以未插桩的隐藏扫描绕过基线护栏。
 - [`tests/tracker/traversalBaseline.test.ts`](../../tests/tracker/traversalBaseline.test.ts) 的内联快照是遍历量回归护栏：结构性优化使数字下降属预期（`vitest run -u` 刷新），无关改动使数字上升需要先解释原因再更新快照。
 - 初始牌堆初始化后，`pile.cards` 顺序应独立于 `room.cards`。
 - 摸暗牌、摸明牌时手牌额度及状态维护应保持准确。
@@ -223,7 +224,7 @@
 - 2026-06-26：`11d988a` 之后已引入 `trackerController` 可测试化拆分、位置候选迁移、公共候选与暗置标记候选回归测试；后续 tracker 变更应优先跑 `pnpm test:tracker` 与 `pnpm typecheck:tracker`。
 - 2026-06-30：`dd2696c` 强化洗牌堆与暗置标记同步：洗牌支持协议牌堆张数、id=0 暗占位补齐、正 ID 差集暂停追踪、暗标记占位账本迁移，并补充玩家来源明牌残留公共区的占位回补测试。
 - 本次 P1-1/P1-2 完成候选系统收敛：`locationCandidates` 成为唯一候选主模型，`subZoneCandidates`、`seats`、`publicCandidates` 均为只读兼容投影；补齐洗牌、暗置标记与 `resolveConstraints()` 边界回归测试。
-- 2026-07-02：`resolveConstraints()` 落地遍历优化 P0（A1 入口 player 快照 + E2 跳过未触碰座位），配套 `traversalStats.ts` 插桩与四场景遍历基线测试；基线场景遍历量下降 11%–32%，方案、落地校正与实测数据见 [`plans/cards-traversal-optimization-final.md`](../../plans/cards-traversal-optimization-final.md)。
+- 2026-07-02：`resolveConstraints()` 落地遍历优化 P0（A1 入口 player 快照 + E2 跳过未触碰座位），配套 `traversalStats.ts` 插桩与四场景遍历基线测试；基线场景遍历量下降 11%–32%。
 - 2026-07-02：落地 P1-D：`CardCounter` 改为增量同步与 getter 干净缓存，四个遍历基线场景相对优化前累计下降 36%–49%；`CardLocationIndex` 与 `AmbiguousKnownIndex` 仍保持全量重建。
 - 2026-07-03：落地 P1-E1：手牌槽统计按 seat 增量重算，四个遍历基线场景相对优化前累计下降 38%–57%；洗牌场景不涉及玩家手牌槽，收益主要来自前三类手牌变更/排他场景。
 - 2026-07-03：落地 Step 1-3：`CardLocationIndex` 增量维护（`applyDirtyCardEvents` / `applyCardChange` / `refreshPublicZones`）。常规摸牌、暗牌分配、排他触发、洗牌等高频场景全量重建降为增量更新。四个场景 visited 遍历数进一步下降。

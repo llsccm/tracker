@@ -6,7 +6,7 @@
 
 ## 一、 应用整体运行周期 (Application Lifecycle)
 
-应用整体运行周期指用户脚本加载、挂载、消息分发以及卸载的完整生命周期。整个生命周期由入口文件 [`src/index.js`](src/index.js) 进行编排，核心流转如下图所示：
+应用整体运行周期指用户脚本加载、挂载、消息分发以及卸载的完整生命周期。整个生命周期由入口文件 [`src/index.js`](../../src/index.js) 进行编排，核心流转如下图所示：
 
 ```mermaid
 graph TD
@@ -24,38 +24,38 @@ graph TD
 
 ### 1. 初始化阶段 (INIT Lifecycle)
 
-- **触发条件**：脚本在页面加载的 `document-start` 阶段被注入并执行，首先进行全局检查，然后由 [`src/index.js:main()`](src/index.js:43) 调用 `main('INIT')` 触发。
+- **触发条件**：脚本在页面加载的 `document-start` 阶段被注入并执行，首先进行全局检查，然后由 [`src/index.js:main()`](../../src/index.js#L43) 调用 `main('INIT')` 触发。
 - **执行时序与关键代码入口**：
-  1. 调用 [`src/dom.js:Init()`](src/dom.js:38) 作为 UI 和 DOM 的入口引导器。
-  2. 调用 [`src/ui/lifecycle.js:bindInitialResize()`](src/ui/lifecycle.js:1) 绑定窗口缩放事件。
-  3. 执行 [`src/ui/lifecycle.js:waitForLegacyFrameReady()`](src/ui/lifecycle.js:25)。该函数在 Promise 链中通过定时器高频轮询检查宿主环境的关键类库（`JSZipUtils`、`CtrUtil`等）和核心 DOM 节点（`#bgDiv`）是否就绪。
-  4. 宿主环境就绪后，回调触发 [`src/dom.js:initFrame()`](src/dom.js:71)。
-  5. [`src/dom.js:initFrame()`](src/dom.js:71) 顺序执行：
+  1. 调用 [`src/dom.js:Init()`](../../src/dom.js#L35) 作为 UI 和 DOM 的入口引导器。
+  2. 调用 [`src/ui/lifecycle.js:bindInitialResize()`](../../src/ui/lifecycle.js#L3) 绑定窗口缩放事件。
+  3. 执行 [`src/ui/lifecycle.js:waitForLegacyFrameReady()`](../../src/ui/lifecycle.js#L28)。该函数在 Promise 链中通过定时器高频轮询检查宿主环境的关键类库（`JSZipUtils`、`CtrUtil`等）和核心 DOM 节点（`#bgDiv`）是否就绪。
+  4. 宿主环境就绪后，回调触发 [`src/dom.js:initFrame()`](../../src/dom.js#L68)。
+  5. [`src/dom.js:initFrame()`](../../src/dom.js#L68) 顺序执行：
      - 清除先前残留的注入 DOM 节点。
      - 监听 resize 窗口缩放事件与自定义的 `SGSresize` 屏幕比例变更事件。
-     - 调用 [`src/ui/lifecycle.js:installSystemContextResizeDispatchers()`](src/ui/lifecycle.js:57)，劫持并代理宿主 `SystemContext` 对象的 `gameScreenType` 和 `gameScale` 属性，发生变化时派发 `SGSresize` 自定义事件。
-     - 调用 `addSeatUI` 和 [`src/dom.js:addFrame()`](src/dom.js:407)，创建主骨架并异步通过 [`src/utils/htmlResource.js:loadInterfaceHtml()`](src/utils/htmlResource.js) 加载远端 `iframe.html` 界面。
-     - 调用 [`src/config/ConfigManager.js:loadAndParseConfigs()`](src/config/ConfigManager.js:25) 异步加载和解析远端卡牌、技能及山河图配置压缩包并完成初始化。
-  6. 当 [`src/index.js:main()`](src/index.js:43) 中 `main('INIT')` 的 Promise 链（[`src/index.js:57`](src/index.js:57)）解析成功后，将主入口 `main` 推入宿主全局注册数组 `window.SGSMODULE` 中，完成初始化。
+     - 调用 [`src/ui/lifecycle.js:installSystemContextResizeDispatchers()`](../../src/ui/lifecycle.js#L60)，劫持并代理宿主 `SystemContext` 对象的 `gameScreenType` 和 `gameScale` 属性，发生变化时派发 `SGSresize` 自定义事件。
+     - 调用 `addSeatUI` 和 [`src/dom.js:addFrame()`](../../src/dom.js#L386)，创建主骨架并异步通过 [`src/utils/htmlResource.js:loadInterfaceHtml()`](../../src/utils/htmlResource.js) 加载远端 `iframe.html` 界面。
+     - 调用 [`src/config/ConfigManager.js:loadAndParseConfigs()`](../../src/config/ConfigManager.js#L26) 异步加载和解析远端卡牌、技能及山河图配置压缩包并完成初始化。
+  6. 当 [`src/index.js:main()`](../../src/index.js#L43) 中 `main('INIT')` 的 Promise 链（[`src/index.js:57`](../../src/index.js#L57)）解析成功后，将主入口 `main` 推入宿主全局注册数组 `window.SGSMODULE` 中，完成初始化。
 
 ### 2. 消息分发阶段 (Message Dispersal Lifecycle)
 
 - **触发条件**：宿主游戏底层输出日志，触发被重写后的 `console.log`，重定向至 `sgsConsoleLog`。
 - **执行时序与关键代码入口**：
-  1. 被劫持的 `window.console.log` 对应为 [`src/index.js:sgsConsoleLog()`](src/index.js:29)。
+  1. 被劫持的 `window.console.log` 对应为 [`src/index.js:sgsConsoleLog()`](../../src/index.js#L29)。
   2. 遍历 `window.SGSMODULE` 列表，将底层消息分发给所有的订阅函数（包括小抄的 `main` 函数）。
-  3. 经过 [`src/index.js:main()`](src/index.js:43)，提取消息对象 `msg`，进入消息分发路由 [`src/logic.js:logic()`](src/logic.js:55)。
-  4. 路由逻辑首先通过 [`src/featureFlags.js:isRetainedLogicMessage()`](src/featureFlags.js:46) 检查当前事件名称是否在消息白名单（`retainedLogicMessages`）中。
+  3. 经过 [`src/index.js:main()`](../../src/index.js#L43)，提取消息对象 `msg`，进入消息分发路由 [`src/logic.js:logic()`](../../src/logic.js#L74)。
+  4. 路由逻辑首先通过 [`src/featureFlags.js:isRetainedLogicMessage()`](../../src/featureFlags.js#L52) 检查当前事件名称是否在消息白名单（`retainedLogicMessages`）中。
   5. 经过白名单过滤后，根据事件的 `ClassName` / `className` 分发至对应的处理器（位于 `src/handler/` 目录下）。
 
 ### 3. 卸载阶段 (EXIT Lifecycle)
 
 - **触发条件**：当页面重新加载、脚本热重载，或者显式卸载小抄时触发。
 - **执行时序与关键代码入口**：
-  1. [`src/index.js`](src/index.js:8) 判断若已存在全局 `SGSMODULE` 对象，则先对其元素广播 `'EXIT'` 消息，并清空还原 `window.console.log` 描述符。
-  2. 进入 [`src/dom.js:Exit()`](src/dom.js:44)，接着调用 [`src/ui/lifecycle.js:cleanupLifecycle()`](src/ui/lifecycle.js:16)。
+  1. [`src/index.js`](../../src/index.js#L8) 判断若已存在全局 `SGSMODULE` 对象，则先对其元素广播 `'EXIT'` 消息，并清空还原 `window.console.log` 描述符。
+  2. 进入 [`src/dom.js:Exit()`](../../src/dom.js#L41)，接着调用 [`src/ui/lifecycle.js:cleanupLifecycle()`](../../src/ui/lifecycle.js#L19)。
   3. `cleanupLifecycle` 依次移除之前绑定的 `resize`、`SGSresize` 事件监听器，清空 `SGSMODULE` 数组。
-  4. 执行 [`src/ui/lifecycle.js:removeInjectedDom()`](src/ui/lifecycle.js:7)，彻底清理注入的座位 UI、山河图 UI、背景层及 iframe 元素，恢复页面原始 DOM 状态。
+  4. 执行 [`src/ui/lifecycle.js:removeInjectedDom()`](../../src/ui/lifecycle.js#L9)，彻底清理注入的座位 UI、山河图 UI、背景层及 iframe 元素，恢复页面原始 DOM 状态。
 
 ---
 
@@ -70,7 +70,7 @@ sequenceDiagram
     participant Dom as dom.js
     participant Handler as handler modules
     participant Bridge as tracker bridge/controller
-    participant Room as tracker/Room.js
+    participant Room as tracker/Room.ts
     participant View as tracker/view
 
     Note over Engine,View: 脚本 INIT 阶段
@@ -80,11 +80,11 @@ sequenceDiagram
     Note over Engine,View: 单局开始阶段
     Engine ->> Logic: GsCModifyUserseatNtf
     Logic ->> Handler: handleStartGame(msg)
-    Handler ->> Handler: Game.init()
     Handler ->> Bridge: tracker.initTrackerRoom()
     Bridge ->> Room: new Room()
     Bridge ->> Room: registerDefaultMoveEventHandlers(room)
-    Handler ->> Bridge: tracker.registerTrackerPlayers(msg.Infos, user.userID)
+    Handler ->> Handler: Game.init()
+    Handler ->> Bridge: tracker.registerTrackerPlayers(msg.Infos, uuid)
     Bridge ->> View: mount(room)
     View ->> View: clearRenderedContent() / initPlayerHandContainers()
 
@@ -126,14 +126,14 @@ sequenceDiagram
 
 ### 2. 单局开始期：创建 Room 与缓存玩家
 
-- **触发协议**：`GsCModifyUserseatNtf`，在 [`src/logic.js`](src/logic.js:55) 中分发。
-- **入口函数**：[`src/handler/StartGame.js:handleStartGame()`](src/handler/StartGame.js:5)。
+- **触发协议**：`GsCModifyUserseatNtf`，在 [`src/logic.js`](../../src/logic.js#L74) 中分发。
+- **入口函数**：[`src/handler/StartGame.js:handleStartGame()`](../../src/handler/StartGame.js#L5)。
 - **执行顺序**：
-  1. 通过 [`src/tracker/runtime/bridge.ts`](src/tracker/runtime/bridge.ts) 导出的 `tracker` 调用 `tracker.initTrackerRoom()`；实际实现位于 [`src/tracker/runtime/trackerController.ts`](src/tracker/runtime/trackerController.ts)，会销毁可能残留的当前 `trackerRoom`，创建新的 [`src/tracker/Room.ts:Room`](src/tracker/Room.ts)，注册默认移动事件处理器。
-  2. 调用 [`src/tracker/Game.ts:GameState.init()`](src/tracker/Game.ts) 清空上一局座位、模式识别、先手、武将等房间级状态，并将重构版 `Game` 的 `isGameStart`、`turn`、`round`、`phase`、`currentID`、`spellSpace`、手牌配置状态重置，同时清空运行时适配器状态。
+  1. 通过 [`src/tracker/runtime/bridge.ts`](../../src/tracker/runtime/bridge.ts) 导出的 `tracker` 调用 `tracker.initTrackerRoom()`；实际实现位于 [`src/tracker/runtime/trackerController.ts`](../../src/tracker/runtime/trackerController.ts)，会销毁可能残留的当前 `trackerRoom`，创建新的 [`src/tracker/Room.ts:Room`](../../src/tracker/Room.ts)，注册默认移动事件处理器。
+  2. 调用 [`src/tracker/Game.ts:GameState.init()`](../../src/tracker/Game.ts) 清空上一局座位、模式识别、先手、武将等房间级状态，并将重构版 `Game` 的 `isGameStart`、`turn`、`round`、`phase`、`currentID`、`spellSpace`、手牌配置状态重置，同时清空运行时适配器状态。
   3. `Room` 构造期只初始化容器：`players`、公共 `zones`、`seatIDs`、`skillHandlers`、`moveEventHandlers`、`skillState`、`constraintGroups`、`ambiguousKnownIndex`、`locationIndex`、`suspendedKnownCards`、视图脏变更缓存，并把 `Game` 绑定到当前 Room。
-  4. `handleStartGame()` 遍历 `msg.Infos`，找到当前用户对应的 `SeatID`，写入 `Game.mySeats`。
-  5. 调用 `tracker.registerTrackerPlayers()` 直接把座位信息注册到当前 `Room`，同步 `Game` 兼容层座位状态，并执行一次早期 `view.mount(trackerRoom)`。
+  4. `handleStartGame()` 以 `Infos[0].SeatID` 作为录像或非主视角场景的回退视角写入 `Game.mySeats`，并选择 `Infos[0].ClientID ?? user.userID` 作为本次玩家匹配用的 `uuid`。
+  5. 调用 `tracker.registerTrackerPlayers(Infos, uuid)`；`Room.registerPlayers()` 遍历座位信息创建玩家并按 `uuid` 匹配 `mySeatID`，随后同步 `Game` 兼容层座位状态并执行一次早期 `view.mount(trackerRoom)`。
 
 这个阶段创建了“单局状态容器”，并已让视图清理上局动态内容、按当前人数初始化 `playerHand<N>` / `.order-body No<N>` 固定手牌容器；但还没有物理牌池、还没有计数器，也不会进行统计按钮、公共区或查询面板渲染。
 
@@ -148,20 +148,20 @@ sequenceDiagram
 
 ### 4. 牌堆就绪期：初始化物理牌池
 
-- **触发协议**：`MsgGamePlayCardNtf`，在 [`src/logic.js`](src/logic.js:55) 中分发。
-- **入口函数**：[`src/logic.js:readyTrackerGame()`](src/logic.js:54)。
+- **触发协议**：`MsgGamePlayCardNtf`，在 [`src/logic.js`](../../src/logic.js#L74) 中分发。
+- **入口函数**：[`src/logic.js:readyTrackerGame()`](../../src/logic.js#L55)。
 - **执行顺序**：
   1. 结合 `CardConfig.GetInstance().cardIDsOrder` 对牌堆做展示顺序归并，生成 `paidui`。
   2. 根据牌堆中特征牌 ID 与 Laya 场景名设置 `Game.isGuoZhan`、`isDouDiZhu`、`isShanHeTu`、`isRoguelike1v1`、`isSWJG`。
   3. 调用 `domInit()` 刷新主 DOM 状态，清理 `Game.spellSpace[3338]`，关闭宿主 `CardConfigWindow`。
   4. 调用 `Game.resetConfigHandCards()` 重置手牌配置会话态。
-  5. 调用 `tracker.initTrackerDeck()`，继续进入 [`src/tracker/Room.ts:Room.initDeck()`](src/tracker/Room.ts)。
+  5. 调用 `tracker.initTrackerDeck()`，继续进入 [`src/tracker/Room.ts:Room.initDeck()`](../../src/tracker/Room.ts)。
 
-`Room.initDeck()` 是物理牌生命周期的起点：它为每个物理 ID 创建 [`src/tracker/Card.ts:Card`](src/tracker/Card.ts) 实例，建立 `cardIndex`，把全部牌加入公共 `pile` Zone，并创建本局 [`src/tracker/CardCounter.ts:CardCounter`](src/tracker/CardCounter.ts)。从这一步开始，`Room.cards` 才有完整物理牌池。
+`Room.initDeck()` 是物理牌生命周期的起点：它为每个物理 ID 创建 [`src/tracker/Card.ts:Card`](../../src/tracker/Card.ts) 实例，建立 `cardIndex`，把全部牌加入公共 `pile` Zone，并创建本局 [`src/tracker/CardCounter.ts:CardCounter`](../../src/tracker/CardCounter.ts)。从这一步开始，`Room.cards` 才有完整物理牌池。
 
 ### 5. 视图挂载期：玩家注册后早期 mount，牌堆初始化后完整 mount
 
-- **挂载入口**：[`src/tracker/view/index.ts:mount()`](src/tracker/view/index.ts)。
+- **挂载入口**：[`src/tracker/view/index.ts:mount()`](../../src/tracker/view/index.ts)。
 - **触发位置**：
   1. `registerTrackerPlayers(infos, currentUserID)` 注册玩家后立即调用 `view.mount(trackerRoom)`，执行早期挂载。
   2. `initTrackerDeck(cardIDs)` 在 `trackerRoom.initDeck(cardIDs)` 之后再次调用 `view.mount(trackerRoom)`，完成牌堆就绪后的完整挂载。
@@ -183,9 +183,9 @@ sequenceDiagram
 
 对局中，`Room` 不主动轮询状态，而是由协议消息推动。
 
-- `PubGsCMoveCard`：[`src/handler/PubGsCMoveCard.js:handleMoveCard()`](src/handler/PubGsCMoveCard.js) 先做协议预处理、`CardIDs` 修正和旧副作用保留，再调用 `syncTrackerMove()`。桥接层通过 `normalizeMoveEvent()` 与 `Room.decorateMoveEvent()` 补齐移动语义，然后执行 `Room.moveCards()` 或 `Room.shufflePile()`。
-- `MsgGameTurnNtf`：[`src/handler/MsgGameTurnNtf.js:handleGameTurn()`](src/handler/MsgGameTurnNtf.js) 调用 `Game.setTurn()` 更新轮次，再通过 `scheduleTrackerRender()` 调度新版视图刷新。
-- `GsCGamephaseNtf`：[`src/handler/GsCGamephaseNtf.js:handleGamePhase()`](src/handler/GsCGamephaseNtf.js) 调用 `Game.enter()` 推进回合或阶段，再通过 `scheduleTrackerRender()` 调度新版视图刷新。
+- `PubGsCMoveCard`：[`src/handler/PubGsCMoveCard.js:handleMoveCard()`](../../src/handler/PubGsCMoveCard.js) 先做协议预处理、`CardIDs` 修正和旧副作用保留，再调用 `syncTrackerMove()`。桥接层通过 `normalizeMoveEvent()` 与 `Room.decorateMoveEvent()` 补齐移动语义，然后执行 `Room.moveCards()` 或 `Room.shufflePile()`。
+- `MsgGameTurnNtf`：[`src/handler/MsgGameTurnNtf.js:handleGameTurn()`](../../src/handler/MsgGameTurnNtf.js) 调用 `Game.setTurn()` 更新轮次，再通过 `scheduleTrackerRender()` 调度新版视图刷新。
+- `GsCGamephaseNtf`：[`src/handler/GsCGamephaseNtf.js:handleGamePhase()`](../../src/handler/GsCGamephaseNtf.js) 调用 `Game.enter()` 推进回合或阶段，再通过 `scheduleTrackerRender()` 调度新版视图刷新。
 - 看牌/展示类入口：`revealTrackerCardsInZone()` 将协议区域目标转换成新版 Room 的明牌输入。
 
 每次移动或状态同步后，桥接层调用 `view.scheduleRender()`。视图层不会立刻同步重排 DOM，而是在下一帧统一 `flushRender()`，减少同一协议批次内的重复刷新。`scheduleRender()`、`flushRender()` 与 `setQuery()` 都会检查 `Room.isDeckReady`，早期挂载阶段不会访问尚未创建的 `CardCounter`。
@@ -193,7 +193,7 @@ sequenceDiagram
 ### 7. 单局结束期：先卸载视图，再销毁 Room
 
 - **触发协议**：`MsgGameOver` 或 `ClientLeavetableRep`。
-- **入口函数**：[`src/handler/MsgGameOver.js:handleGameOver()`](src/handler/MsgGameOver.js)。
+- **入口函数**：[`src/handler/MsgGameOver.js:handleGameOver()`](../../src/handler/MsgGameOver.js)。
 - **执行顺序**：
   1. 隐藏 `.mizhu` 相关展示节点。
   2. 将 `Game.isPassed` 置空后调用 `Game.end(false)`，结束重构版 `Game` 的局内状态。
@@ -211,16 +211,16 @@ sequenceDiagram
 ### 1. 轮次生命周期 (Turn Cycle)
 
 - **状态流转**：
-  - 每当新的一轮开始，宿主下发 `MsgGameTurnNtf`，分发至 [`src/handler/MsgGameTurnNtf.js:handleGameTurn()`](src/handler/MsgGameTurnNtf.js)。
-  - 调用 [`src/tracker/Game.ts:GameState.setTurn()`](src/tracker/Game.ts) 更新当前轮次。
+  - 每当新的一轮开始，宿主下发 `MsgGameTurnNtf`，分发至 [`src/handler/MsgGameTurnNtf.js:handleGameTurn()`](../../src/handler/MsgGameTurnNtf.js)。
+  - 调用 [`src/tracker/Game.ts:GameState.setTurn()`](../../src/tracker/Game.ts) 更新当前轮次。
   - 清理本轮的临时标志和战法数据（例如 `spellSpace[3090]` 博图、`spellSpace[3821]` 椒遇等计数器）。
   - 执行 `scheduleTrackerRender()` 调度新版视图刷新。
 
 ### 2. 回合与阶段生命周期 (Round & Phase Lifecycle)
 
 - **状态流转**：
-  - 每一个角色行动回合或阶段变更时，宿主下发 `GsCGamephaseNtf`，分发至 [`src/handler/GsCGamephaseNtf.js:handleGamePhase()`](src/handler/GsCGamephaseNtf.js)。
-  - 调用 [`src/tracker/Game.ts:GameState.enter()`](src/tracker/Game.ts)。
+  - 每一个角色行动回合或阶段变更时，宿主下发 `GsCGamephaseNtf`，分发至 [`src/handler/GsCGamephaseNtf.js:handleGamePhase()`](../../src/handler/GsCGamephaseNtf.js)。
+  - 调用 [`src/tracker/Game.ts:GameState.enter()`](../../src/tracker/Game.ts)。
   - **Round === 0 (行动回合开始)**：
     - 更新当前活动角色 SeatID (`currentID`)。
     - 递增 `Game.round`。
@@ -243,16 +243,16 @@ graph LR
     C --> D{判断去向区域}
     D -- 到弃牌堆/公开区域 --> E[从对应玩家手牌扣减名额]
     D -- 到未知区域/手牌 --> F[建立约束 ConstraintGroup]
-    D -- 手牌重新展示 --> G[收敛解密 AmbiguousKnownIndex 反查]
+    D -- 手牌重新展示 --> G[输入明牌事实并执行 resolveConstraints]
     E & F & G --> H[更新物理卡牌归属的 Zone]
-    H --> I[调度重构版视图重新渲染]
+    H --> I[增量更新索引并调度视图渲染]
 ```
 
 - **核心函数与代码入口**：
-  1. 日志分发至 [`src/handler/PubGsCMoveCard.js:handleMoveCard()`](src/handler/PubGsCMoveCard.js)。
+  1. 日志分发至 [`src/handler/PubGsCMoveCard.js:handleMoveCard()`](../../src/handler/PubGsCMoveCard.js)。
   2. 调用 `normalizeMovePosition` 及 `prepareMoveCardIDs` 补齐并归一化移动的位置和卡牌物理 ID。
   3. 调用 `tracker.syncTrackerMove()` 将协议移动同步到当前 Room，并在内部调用新版记牌器的卡牌移动处理逻辑。
-  4. 新版记牌器的状态收敛与物理转移完成，触发 [`src/tracker/view/index.ts:scheduleRender()`](src/tracker/view/index.ts) 将变动合并到下一帧渲染。
+  4. 新版记牌器的状态收敛与物理转移完成，触发 [`src/tracker/view/index.ts:scheduleRender()`](../../src/tracker/view/index.ts) 将变动合并到下一帧渲染。
 
 ---
 
@@ -262,16 +262,16 @@ graph LR
 
 | 生命周期阶段       | 核心控制函数/方法                                  | 对应源码文件路径与锚点                                                                                            | 触发条件 / 职责描述                                                                           |
 | :----------------- | :------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------- |
-| **应用装载初始化** | `main('INIT')`                                     | [`src/index.js:43`](src/index.js:43)                                                                              | 用户脚本加载后执行，是整个小抄程序运行的起点。                                                |
-| **库加载与轮询**   | `waitForLegacyFrameReady`                          | [`src/ui/lifecycle.js:25`](src/ui/lifecycle.js:25)                                                                | 轮询检测 `SystemContext`、`JSZipUtils` 和核心 DOM 等依赖项是否就绪。                          |
-| **DOM 与框架注入** | `initFrame`                                        | [`src/dom.js:71`](src/dom.js:71)                                                                                  | 移除旧 DOM 节点，注入座位 UI，下载加载 iframe 外链 HTML，并在成功后开始解析配置。             |
-| **配置解析初始化** | `loadAndParseConfigs`                              | [`src/config/ConfigManager.js:25`](src/config/ConfigManager.js:25)                                                | 异步下载并解压远端的 `Config_w.sgs` 静态资源文件，初始化各解析器映射。                        |
-| **单局 Room 创建** | `tracker.initTrackerRoom`                          | [`src/tracker/runtime/trackerController.ts`](src/tracker/runtime/trackerController.ts)                                            | `GsCModifyUserseatNtf` 开局后创建全新的 `Room` 实例，注册默认移动事件处理器；此时尚未注册玩家，也尚未挂载视图。 |
-| **玩家座位注册**   | `tracker.registerTrackerPlayers`                  | [`src/tracker/runtime/trackerController.ts`](src/tracker/runtime/trackerController.ts)                                            | 应用 `msg.Infos`，创建 `Player` 实例，写入 `seatIDs`、`size` 与主视角座位，并早期挂载固定手牌容器。 |
-| **先手补齐**       | `tracker.setTrackerFirstHand` / `Room.setFirstHand` | [`src/tracker/runtime/trackerController.ts`](src/tracker/runtime/trackerController.ts) / [`src/tracker/Room.ts`](src/tracker/Room.ts) | `GsCFirstPhaseRole` 到达后写入 `firstID`，更新每个玩家的 `fixedViewId` 并刷新座位覆盖层。     |
-| **牌堆就绪**       | `readyTrackerGame`                                 | [`src/logic.js:54`](src/logic.js:54)                                                                              | `MsgGamePlayCardNtf` 到达后识别玩法模式、重置手牌配置态，并进入牌堆初始化。                   |
-| **物理牌堆初始化** | `initDeck`                                         | [`src/tracker/Room.ts`](src/tracker/Room.ts)                                                                      | 初始化全部物理 `Card` 实例、`cardIndex`、`pile` 公共区与本局 `CardCounter`。                  |
-| **视图树挂载**     | `mount`                                            | [`src/tracker/view/index.ts`](src/tracker/view/index.ts)                                                          | 两段式挂载：玩家注册后清空动态内容并初始化手牌容器；`initDeck` 完成后重建查询按钮并调度首次完整渲染。 |
-| **回合轮次转换**   | `setTurn` / `enter`                                | [`src/tracker/Game.ts`](src/tracker/Game.ts)                                                                      | 游戏局内根据轮次与阶段通知更新 `turn`、`round`、`phase`、`currentID`，并同步到视图。          |
-| **事件销毁卸载**   | `cleanupLifecycle`                                 | [`src/ui/lifecycle.js:16`](src/ui/lifecycle.js:16)                                                                | 脚本重载或卸载时触发，清空注册模块，移除添加的全部 DOM 节点。                                 |
-| **记牌器容器销毁** | `tracker.destroyTrackerRoom`                       | [`src/tracker/runtime/trackerController.ts`](src/tracker/runtime/trackerController.ts)                                            | 销毁 `Room` 对象并调用 `unmount` 卸载所有面板 DOM 元素，清理所有内存缓存。                    |
+| **应用装载初始化** | `main('INIT')`                                     | [`src/index.js:43`](../../src/index.js#L43)                                                                              | 用户脚本加载后执行，是整个小抄程序运行的起点。                                                |
+| **库加载与轮询**   | `waitForLegacyFrameReady`                          | [`src/ui/lifecycle.js:28`](../../src/ui/lifecycle.js#L28)                                                                | 轮询检测 `SystemContext`、`JSZipUtils` 和核心 DOM 等依赖项是否就绪。                          |
+| **DOM 与框架注入** | `initFrame`                                        | [`src/dom.js:68`](../../src/dom.js#L68)                                                                                  | 移除旧 DOM 节点，注入座位 UI，下载加载 iframe 外链 HTML，并在成功后开始解析配置。             |
+| **配置解析初始化** | `loadAndParseConfigs`                              | [`src/config/ConfigManager.js:26`](../../src/config/ConfigManager.js#L26)                                                | 异步下载并解压远端的 `Config_w.sgs` 静态资源文件，初始化各解析器映射。                        |
+| **单局 Room 创建** | `tracker.initTrackerRoom`                          | [`src/tracker/runtime/trackerController.ts`](../../src/tracker/runtime/trackerController.ts)                                            | `GsCModifyUserseatNtf` 开局后创建全新的 `Room` 实例，注册默认移动事件处理器；此时尚未注册玩家，也尚未挂载视图。 |
+| **玩家座位注册**   | `tracker.registerTrackerPlayers`                  | [`src/tracker/runtime/trackerController.ts`](../../src/tracker/runtime/trackerController.ts)                                            | 应用 `msg.Infos`，创建 `Player` 实例，写入 `seatIDs`、`size` 与主视角座位，并早期挂载固定手牌容器。 |
+| **先手补齐**       | `tracker.setTrackerFirstHand` / `Room.setFirstHand` | [`src/tracker/runtime/trackerController.ts`](../../src/tracker/runtime/trackerController.ts) / [`src/tracker/Room.ts`](../../src/tracker/Room.ts) | `GsCFirstPhaseRole` 到达后写入 `firstID`，更新每个玩家的 `fixedViewId` 并刷新座位覆盖层。     |
+| **牌堆就绪**       | `readyTrackerGame`                                 | [`src/logic.js:55`](../../src/logic.js#L55)                                                                              | `MsgGamePlayCardNtf` 到达后识别玩法模式、重置手牌配置态，并进入牌堆初始化。                   |
+| **物理牌堆初始化** | `initDeck`                                         | [`src/tracker/Room.ts`](../../src/tracker/Room.ts)                                                                      | 初始化全部物理 `Card` 实例、`cardIndex`、`pile` 公共区与本局 `CardCounter`。                  |
+| **视图树挂载**     | `mount`                                            | [`src/tracker/view/index.ts`](../../src/tracker/view/index.ts)                                                          | 两段式挂载：玩家注册后清空动态内容并初始化手牌容器；`initDeck` 完成后重建查询按钮并调度首次完整渲染。 |
+| **回合轮次转换**   | `setTurn` / `enter`                                | [`src/tracker/Game.ts`](../../src/tracker/Game.ts)                                                                      | 游戏局内根据轮次与阶段通知更新 `turn`、`round`、`phase`、`currentID`，并同步到视图。          |
+| **事件销毁卸载**   | `cleanupLifecycle`                                 | [`src/ui/lifecycle.js:19`](../../src/ui/lifecycle.js#L19)                                                                | 脚本重载或卸载时触发，清空注册模块，移除添加的全部 DOM 节点。                                 |
+| **记牌器容器销毁** | `tracker.destroyTrackerRoom`                       | [`src/tracker/runtime/trackerController.ts`](../../src/tracker/runtime/trackerController.ts)                                            | 销毁 `Room` 对象并调用 `unmount` 卸载所有面板 DOM 元素，清理所有内存缓存。                    |
