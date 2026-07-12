@@ -198,7 +198,7 @@ git diff --check
 沿用旧编号，重排为：
 
 1. **已完成（2026-07-12）**：⑤ 长链路端到端回归落地于 `tests/tracker/randomTransferLifecycle.test.ts`（转移→局部展示→打明牌→完整展示→收敛，inline snapshot 锁定终态）；上述 reconcile 全量扫描改造 + 基线场景同批完成。全量 `pnpm test:tracker`（23 文件 / 170 项）、`typecheck:tracker`、`lint`、`build:prod` 全绿，`git diff --check` 通过。
-2. **④ 已获真实反例，升级为”应做”（中风险）**：⑤ 跑出的收敛反例——seat3 完整手牌 `[42,46,47]` 占满其 3 个观测槽后，两张暗牌 130/131 仍保留不可能的 seat3 候选（`seats=[2,3]`）；计数层正确（seat2 unknown=2 / seat3 unknown=0）但 `seats` 投影未做全局消除。这正是”候选 range 被压成点值 + 局部约束组不跨组消除”的直接后果。新测试已用 `★` 注释锁定该”当前行为”。推进 ④（候选槽上下界与 `unknownCardCount` 拆分）时应以”该反例收敛为 `seats=[2]`”为验收目标。
+2. **④ 已完成（定向修复，2026-07-12）**：⑤ 跑出的收敛反例经诊断，根因并非“候选 range 压成点值”，而是随机转移约束组只声明了 `expectedSlotsBySeat`、缺 `expectedSlotsByLocation`：暗牌被提升为 hand 完整位置候选（带 `subZoneCandidates`）后，座位层消除（`ConstraintGroup.resolve` 的 `expectedSlotsBySeat` 分支）刻意跳过它们、交由位置层处理，而该组位置层约束为空，故 seat3 名额清零后 130/131 仍留 `{2,3}`。修复：`markRandomHandTransferCandidates`（`roomMovement/candidates.ts`）同步镜像一份 hand 位置约束 `{fromSeat/hand: N-K, targetSeat/hand: K}`。`removeCardsFromConstraintGroups` 本就随成员解析离组同步扣减 `expectedSlotsByLocation`，故 seat3/hand 名额降到 0 后位置层消除即剔除暗牌 seat3 候选，收敛为 `seats=[2]`（计数层一直正确）。E2E `★` 断言与终态 snapshot 已改锁 `seats=[2]`；全量 170 项、`typecheck:tracker`、`lint`、`build:prod` 全绿。原设想的完整候选范围模型（`handSlotRange.ts`）与本目标正交，未纳入本次改动，如需匿名计数精度可作单独后续。
 3. **其后（纯行为保持重构）**：③ 将身份置换（`moveKnownCardsForContext` 多分支交换）收口为单一原子操作；靠现有测试 + 遍历基线兜底。
 4. **降级**：① provenance 只做最小版（`reason` + `sourceEvent`），砍掉 16 条 bounded history（YAGNI），仅在实际调试需要时落地；② 正式匿名复用池暂缓或跳过——手牌规模极小属过早优化，且与①稳定溯源存在张力。
 

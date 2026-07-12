@@ -123,12 +123,11 @@ describe('随机手牌转移完整生命周期', () => {
       ;[59, 94, 118].forEach((id) => expect(Array.from(getCard(room, id).seats)).toEqual([2]))
       hiddenIDs.forEach((id) => expect(getCard(room, id).isKnown).toBe(false))
 
-      // ★ 已知反例（④ 待办，见 report §6.2）：seat3 观测手牌已被 42/46/47 三张明牌占满，
-      //   两张暗牌 130/131 物理上只可能位于 seat2；但局部约束组不做全局消除，
-      //   它们仍保留不可能的 seat3 候选。这里锁定的是“当前行为”而非理想收敛——
-      //   拆分 unknownCardCount / 收口身份置换后，此处应收敛为 seats=[2]。
-      hiddenIDs.forEach((id) => expect(Array.from(getCard(room, id).seats)).toEqual([2, 3]))
-      // 但计数层面已正确：seat2 持有全部 2 张暗牌，seat3 无未知槽。
+      // ★ 已修复（④ 定向修复，见 report §6.2）：转移约束组补上 expectedSlotsByLocation 后，
+      //   seat3 手牌槽被 42/46/47 占满使 seat3/hand 名额清零，位置层消除会剔除两张暗牌
+      //   130/131 不可能的 seat3 候选，收敛为 seats=[2]（此前它们错误地保留 {2,3}）。
+      hiddenIDs.forEach((id) => expect(Array.from(getCard(room, id).seats)).toEqual([2]))
+      // 计数层面同样正确：seat2 持有全部 2 张暗牌，seat3 无未知槽。
       expect(room.getPlayer(2).unknownCardCount).toBe(2)
       expect(room.getPlayer(3).unknownCardCount).toBe(0)
 
@@ -158,7 +157,6 @@ describe('随机手牌转移完整生命周期', () => {
               "location": "player",
               "seats": [
                 2,
-                3,
               ],
             },
             "131": {
@@ -166,7 +164,6 @@ describe('随机手牌转移完整生命周期', () => {
               "location": "player",
               "seats": [
                 2,
-                3,
               ],
             },
             "137": {
