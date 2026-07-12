@@ -159,10 +159,12 @@ export function logic(msg) {
 
       /** 身份更新 */
       case 'MsgGameShowFigure':
-        // 1 : 分配 2 : 标记/广播
+        // Type 1是分配 2是标记/广播
+        // Figure: 主公/地主是1 农民是3
+        // 统率的主公可能不是先手 但是这里先不管
         if (msg.Type == 1) {
-          // console.info('我的身份: ' + msg.Figure, msg.SeatID)
-          if (Game.myID === undefined) Game.setMyID(msg.SeatID)
+          // console.info('座位: ' + SeatID + '的身份: ' + msg.Figure)
+          if (msg.Figure === 1) tracker.setTrackerFirstHand(SeatID)
         }
 
         break
@@ -409,6 +411,19 @@ export function logic(msg) {
         break
 
       case 'CGsRoleSpellOptRep': {
+        switch (Type) {
+          // 斗地主叫分结果 Datas: [300] data_count: 1
+          case 44:
+            if (SeatID !== undefined) {
+              tracker.setTrackerFirstHand(SeatID)
+            }
+            break
+
+          default:
+            break
+        }
+
+        // 技能操作
         switch (SpellID) {
           // 知己知彼
           case 2022:
@@ -478,6 +493,11 @@ export function logic(msg) {
 
       case 'PubGsCMoveCard':
         handleMoveCard(msg)
+        break
+
+      // 录像牌堆明牌功能
+      case 'decodeGameDealPileTopCardList':
+        // console.info(msg)
         break
 
       // 击杀特效

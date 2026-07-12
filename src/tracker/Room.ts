@@ -298,7 +298,7 @@ export class Room {
   setFirstHand(firstID: SeatID): void {
     this.firstID = firstID
     this.updateFixedViewIds()
-    trackerLogger.info('Room 设置先手', { firstID: this.firstID })
+    trackerLogger.info('Room 设置先手', { firstID })
   }
 
   /**
