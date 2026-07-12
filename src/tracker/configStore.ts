@@ -21,6 +21,7 @@ export const ACTIVE_CONFIG_ENTRIES: readonly ConfigEntry[] = [
   ['rogueCitySwitch', 'ROGUE_CITY_SWITCH', true],
   ['cardLabelSwitch', 'CARD_LABEL_SWITCH', false],
   ['debugLogSwitch', 'DEBUG_LOG_SWITCH', false],
+  ['peiXiuMapSwitch', 'PEIXIU_MAP_SWITCH', true],
   ['effectBlockSwitch', 'EFFECT_BLOCK_SWITCH', false],
   ['blockKillEffectSwitch', 'BLOCK_KILL_EFFECT_SWITCH', false],
   ['blockSkinStateSwitch', 'BLOCK_SKIN_STATE_SWITCH', false]
