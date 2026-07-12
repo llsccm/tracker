@@ -55,6 +55,44 @@ describe('TrackerController', () => {
     expect(seatReads).toEqual(['read'])
   })
 
+  it('先手已设置时忽略重复同步并警告冲突座位', () => {
+    const warnCalls = []
+    const seatReads = []
+    const { controller, view } = createTrackerControllerHarness({
+      getSeatUIs: () => seatReads.push('read'),
+      logger: {
+        warn(...args) {
+          warnCalls.push(args)
+        }
+      }
+    })
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers(
+      [
+        { SeatID: 1, ClientID: 100 },
+        { SeatID: 2, ClientID: 200 }
+      ],
+      100
+    )
+    controller.setTrackerFirstHand(1)
+    controller.setTrackerFirstHand(1)
+    controller.setTrackerFirstHand(2)
+
+    expect(controller.getTrackerRoom().firstID).toBe(1)
+    expect(view.calls.scheduleRender).toBe(2)
+    expect(seatReads).toEqual(['read'])
+    expect(warnCalls).toEqual([
+      [
+        '先手座位重复设置且不一致，已忽略',
+        {
+          currentSeatID: 1,
+          receivedSeatID: 2
+        }
+      ]
+    ])
+  })
+
   it('可直接同步协议移动，不加载浏览器 bridge', () => {
     const { controller, view } = createTrackerControllerHarness()
 

@@ -204,6 +204,18 @@ export class TrackerController {
     if (!this.trackerRoom) return
 
     try {
+      const firstID = this.trackerRoom.firstID
+      if (firstID !== undefined) {
+        if (firstID !== seatID) {
+          this.controllerLogger.warn('先手座位重复设置且不一致，已忽略', {
+            currentSeatID: firstID,
+            receivedSeatID: seatID
+          })
+        }
+
+        return
+      }
+
       this.trackerRoom.setFirstHand(seatID)
       this.getRuntime()?.syncRoomSeats?.(this.trackerRoom)
       this.getSeatUIs()

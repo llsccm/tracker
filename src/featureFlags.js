@@ -46,7 +46,8 @@ const retainedLogicMessages = new Set([
   'PubGsCUseSpell',
   'GsCRoleOptTargetNtf',
   'CGsRoleSpellOptRep',
-  'PubGsCMoveCard'
+  'PubGsCMoveCard',
+  'decodeGameDealPileTopCardList'
 ])
 
 export function isRetainedLogicMessage(className) {
