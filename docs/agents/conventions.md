@@ -9,7 +9,6 @@
 - 项目使用 JavaScript/TypeScript ESM；`package.json` 中设置了 `type: module`。
 - Vite 配置了 `@` 路径别名指向 `src/` 目录；`jsconfig.json` 同步配置了 IDE 路径映射。
 - 代码会依赖目标页面提供的全局对象，例如 `Laya`、`JSZip`、`CtrUtil`、`SystemContext` 等。
-- `window.XC` 是共享运行时命名空间；新增共享能力时应优先确认是否应挂载到该对象。
 - `globalConfig` 由 `src/tracker/state.ts` 中的配置列表和 Proxy 驱动，当前活跃配置项以 `ACTIVE_CONFIG_ENTRIES` 为准；修改配置项时需要同步考虑 localStorage 与 `xc:config-change` 事件分发。
 - `src/tracker/index.ts` 仅作为共享运行时状态聚合入口；`Room`、`Card`、`Player`、`Zone`、`ConstraintGroup` 等底层对象请从 `src/tracker/` 对应子模块直接导入。
 - 远端配置通过 `src/config/ConfigManager.js` 从 `Config_w.sgs` 加载并分发到各配置解析器，解析结果通过单例模式全局共享。

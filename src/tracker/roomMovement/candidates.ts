@@ -104,6 +104,23 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
 
     this.expandConstraintGroupsForCards(sourceCandidateCards, targetSeat)
 
+    // 暗牌候选会被提升为 hand 完整位置候选（locationCandidates + subZoneCandidates）。
+    // 此时 expectedSlotsBySeat 的座位层消除会刻意跳过带 subZoneCandidates 的牌、交由位置层处理，
+    // 但本组过去只声明了座位层约束，位置层为空——于是目标槽位清零后，暗实体仍留着不可能的
+    // 座位候选（如 seat3 满员后 130/131 仍是 {2,3}）。这里镜像一份 hand 位置约束补上该缺口。
+    const fromHandKey = createLocationCandidateKey({
+      type: 'player',
+      seatID: fromSeat,
+      subZone: 'hand',
+      spellID: null
+    })
+    const targetHandKey = createLocationCandidateKey({
+      type: 'player',
+      seatID: targetSeat,
+      subZone: 'hand',
+      spellID: null
+    })
+
     // 全部 N 个实体共同竞争两个手牌位置：来源剩余 N-K 个，目标获得 K 个。
     // 暗实体也参与槽位守恒，但不会因此公开其物理身份。
     this.room.createConstraintGroup({
@@ -112,6 +129,10 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
       expectedSlotsBySeat: new Map([
         [fromSeat, sourceTotal - count],
         [targetSeat, count]
+      ]),
+      expectedSlotsByLocation: new Map([
+        [fromHandKey, sourceTotal - count],
+        [targetHandKey, count]
       ]),
       // 混合组只约束位置；身份公开状态由每张牌自己的 isKnown 保持。
       known: false,

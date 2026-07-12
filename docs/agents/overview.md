@@ -21,7 +21,7 @@
     - `doudizhu.js`：斗地主记牌器消息处理。
     - `StartGame.js` / `MsgGameOver.js` / `MsgGameTurnNtf.js` / `GsCGamephaseNtf.js` / `GsCTriggerSpellNew.js`：对局开始、结束、轮次、阶段与技能触发消息处理。
     - `PubGsCMoveCard.js`：`PubGsCMoveCard` 消息处理、位置归一化、`CardIDs` 修正、技能辅助副作用保留，并将移动事件同步到 `src/tracker/runtime/bridge.ts`（实现位于 `runtime/trackerController.ts`）的当前 `Room`。
-    - `GsCRoleOptTargetNtf.js`：张菖蒲严教、刘辟易城等技能/角色操作目标通知消息处理。
+    - `GsCRoleOptTargetNtf.js`：张菖蒲严教、刘辟易城、界强识完整手牌展示等技能/角色操作目标通知消息处理。
     - `RogueLike.js`：山河图（Roguelike）消息处理与小抄提示。
     - `legacyMoveCard.js` 与 `old/`：遗留链表记牌器辅助文件，仍保留在仓库中但不经 `src/handler/index.js` 主动导出，普通运行路径不应依赖它们。
     - `index.js`：统一导出入口。
@@ -39,7 +39,7 @@
     - `skill/`（`ChengLie.ts` / `JieLi.ts`）：技能特化处理器。
     - `helper/`（`moveSummary.ts` / `pileOrder.ts`）：移动摘要与牌堆顺序辅助。
     - `view/`：包含 `index.ts`、`dirtyRenderState.ts` 与各个组件视图（`PlayerHandView.ts`、`QueryPanelView.ts`、`StatisticsView.ts`、`cardButton.ts` 、`publicFieldCandidates.ts`），负责主面板与覆盖层的 DOM 渲染与脏变更控制。
-  - `tests/tracker/`：Vitest 记牌器回归测试，覆盖导入边界、Controller、位置候选、公共候选、位置索引与暗置标记候选。
+  - `tests/tracker/`：Vitest 记牌器回归测试，覆盖导入边界、Controller、位置候选、公共候选、位置索引、暗置标记候选、匿名实体对账、随机手牌转移及其长链路收敛。
   - `src/config/`：远端配置解析系统：
     - `ConfigBase.js`：配置解析基类，提供缩写映射与解析框架。
     - `ConfigManager.js`：配置管理器，从远端加载 Config_w.sgs 并分发到各配置解析器。
