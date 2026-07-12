@@ -52,7 +52,7 @@ graph TD
 
 - **触发条件**：当页面重新加载、脚本热重载，或者显式卸载小抄时触发。
 - **执行时序与关键代码入口**：
-  1. [`src/index.js`](../../src/index.js#L8) 判断若已存在全局 `SGSMODULE` 对象，则先对其元素广播 `'EXIT'` 消息，并清空还原 `window.console.log` 描述符。
+  1. [`src/index.js`](../../src/index.js#L8) 判断若已存在全局 `SGSMODULE` 对象，则先将 `window.console.log` 覆盖为 `console.info`（防止旧拦截器递归处理），再对其元素广播 `'EXIT'` 消息，并删除 `SGSMODULE`。
   2. 进入 [`src/dom.js:Exit()`](../../src/dom.js#L41)，接着调用 [`src/ui/lifecycle.js:cleanupLifecycle()`](../../src/ui/lifecycle.js#L19)。
   3. `cleanupLifecycle` 依次移除之前绑定的 `resize`、`SGSresize` 事件监听器，清空 `SGSMODULE` 数组。
   4. 执行 [`src/ui/lifecycle.js:removeInjectedDom()`](../../src/ui/lifecycle.js#L9)，彻底清理注入的座位 UI、山河图 UI、背景层及 iframe 元素，恢复页面原始 DOM 状态。
