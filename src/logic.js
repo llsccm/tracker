@@ -414,7 +414,9 @@ export function logic(msg) {
         switch (Type) {
           // 斗地主叫分结果 Datas: [300] data_count: 1
           case 44:
-            tracker.setTrackerFirstHand(SeatID)
+            if (SeatID !== undefined) {
+              tracker.setTrackerFirstHand(SeatID)
+            }
             break
 
           default:
