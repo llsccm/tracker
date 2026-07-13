@@ -1,3 +1,4 @@
+import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
 import { CardConfig } from '../config'
 import { drawYanJiao, drawYiCheng } from '../draw'
 import { Game, globalConfig } from '../tracker'
@@ -193,6 +194,17 @@ export function handleRoleOptTargetNtf(arg) {
       if (Type == 28) {
         Game.setGeneral(targetSeatID, Params[2], Params[1], true)
       }
+      break
+
+    case 4021:
+      // 此时裴秀开始选技能 应该销毁地图
+      if (Type == 78 && SrcSeatID == Game.myID) {
+        destroyPeiXiuMapWindow()
+        Game.deleteSpellState(4022)
+      }
+      break
+
+    default:
       break
   }
 }

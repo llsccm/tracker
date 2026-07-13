@@ -1,4 +1,4 @@
-import { CardConfig } from './config'
+import { CardConfig, SpellExtendConfig } from './config'
 import { initFrame, resetGameUiState } from './dom'
 import { drawCard } from './draw'
 import { isRetainedLogicMessage } from './featureFlags'
@@ -23,6 +23,12 @@ import { POSITION_BOTTOM } from './tracker/candidate/cardPositions'
 import { idleCallback, toSuitGlyphHtml } from './utils'
 import { addTooltip } from './utils/notification'
 import { handleBroadMsg } from './handler/chat'
+import {
+  findPeiXiuOptimalRoutes,
+  parsePeiXiuRoleData,
+  solvePeiXiuRoleData
+} from './utils/peixiuRouteFeature'
+import { renderPeiXiuMapWindow, setPeiXiuMapWindowVisible } from './ui/PeiXiuMapWindow'
 
 const ALLOWED_CLASSES = new Set([
   'ClientLoginRep',
@@ -234,23 +240,68 @@ export function logic(msg) {
       // TODO
       //出杀次数
       case 'GsCUpdateRoleDataExNtf':
-        if (Game.currentID == SeatID && msg.DataID == 1 && Array.isArray(Datas)) {
-          document.getElementById('sha').innerText = '剩余：' + Math.max(0, Datas[2] - Datas[1])
-        } else if (msg.DataID == 3571 && Array.isArray(Datas)) {
-          // 郭照 椒遇 Datas:[x] 1红2黑
-          const colors = Datas[0] == 1 ? [1, 2] : [3, 4]
+        {
+          switch (msg.DataID) {
+            case 1:
+              if (Game.currentID == SeatID && Array.isArray(Datas)) {
+                document.getElementById('sha').innerText =
+                  '剩余：' + Math.max(0, Datas[2] - Datas[1])
+              }
+              break
 
-          const jiaoYuCards = Game.getSpellState(3571)
-          Game.setSpellState(
-            3571,
-            new Set(
-              Array.from(jiaoYuCards || []).filter((id) =>
-                colors.includes(CardConfig.GetInstance().getCard(id)?.color)
-              )
-            )
-          )
+            case 3571:
+              if (Array.isArray(Datas)) {
+                // 郭照 椒遇 Datas:[x] 1红2黑
+                const colors = Datas[0] == 1 ? [1, 2] : [3, 4]
+
+                const jiaoYuCards = Game.getSpellState(3571)
+                Game.setSpellState(
+                  3571,
+                  new Set(
+                    Array.from(jiaoYuCards || []).filter((id) =>
+                      colors.includes(CardConfig.GetInstance().getCard(id)?.color)
+                    )
+                  )
+                )
+              }
+              break
+
+            // 尽览
+            case 4022:
+              if (Game.myID == SeatID && Array.isArray(Datas)) {
+                const roleData = parsePeiXiuRoleData(Datas)
+                if (!roleData) break
+
+                const spellExtendConfig = SpellExtendConfig.GetInstance()
+                const mapConfig = spellExtendConfig.PeiXiuCellDic.get(roleData.mapId)
+                const previousState = Game.getSpellState(4022)
+                const solvedState = mapConfig ? solvePeiXiuRoleData(mapConfig, Datas) : null
+
+                const presetRoutes =
+                  previousState?.mapId === roleData.mapId && previousState.presetRoutes?.length
+                    ? previousState.presetRoutes
+                    : mapConfig
+                      ? findPeiXiuOptimalRoutes(mapConfig)
+                      : []
+
+                const state = solvedState
+                  ? { ...solvedState, presetRoutes }
+                  : { ...roleData, result: null, presetRoutes }
+
+                Game.setSpellState(4022, state)
+
+                if (state.result) {
+                  renderPeiXiuMapWindow(state, spellExtendConfig.PeiXiuBonus)
+                  setPeiXiuMapWindowVisible(Boolean(globalConfig.peiXiuMapSwitch))
+                }
+              }
+
+              break
+
+            default:
+              break
+          }
         }
-
         break
 
       // TODO
@@ -406,6 +457,7 @@ export function logic(msg) {
         break
       }
 
+      // 询问操作 严教 界强识等
       case 'GsCRoleOptTargetNtf':
         handleRoleOptTargetNtf(msg)
         break
@@ -485,6 +537,22 @@ export function logic(msg) {
           // 郭照 椒遇
           case 3571:
             if (Type === 10) Game.getSpellState(SpellID)?.add?.(Datas[0])
+            break
+
+          // 裴秀
+          case 4021:
+            // console.info(msg)
+            // 绘制裴秀地图 Datas: [12,18] data_count: 2 第一位为地图id 第二位为起始格子
+            break
+
+          case 4022:
+            // Datas: [2, 0] data_count: 2 第一位为方向
+            // 用于触发提示 向东绘制所有地图
+            // console.info(msg)
+            // 似乎没那么重要
+            break
+
+          default:
             break
         }
 

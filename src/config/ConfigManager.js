@@ -2,10 +2,11 @@ import { CardConfig } from './CardConfig'
 import { SkillsConfig } from './SkillsConfig'
 import { CharacterConfig } from './CharacterConfig'
 import { RoguelikeConfig } from './RoguelikeConfig'
+import { SpellExtendConfig } from './SpellExtendConfig'
 
 export class ConfigManager {
   configUrl = 'https://web.sanguosha.com/220/h5_2/res/config/Config_w.sgs'
-  fileNames = ['sys_playcard', 'cha_spell', 'character', 'hd_roguelike']
+  fileNames = ['sys_playcard', 'cha_spell', 'character', 'hd_roguelike', 'cha_spellextend']
 
   static GetInstance() {
     if (null == this.instance) {
@@ -19,7 +20,8 @@ export class ConfigManager {
       CardConfig.GetInstance(),
       SkillsConfig.GetInstance(),
       CharacterConfig.GetInstance(),
-      RoguelikeConfig.GetInstance()
+      RoguelikeConfig.GetInstance(),
+      SpellExtendConfig.GetInstance()
     ]
   }
 

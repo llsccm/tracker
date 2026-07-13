@@ -9,7 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['tests/tracker/**/*.test.{js,ts}'],
+    include: ['tests/**/*.test.{js,ts}'],
     coverage: {
       include: ['src/tracker/**/*.{js,ts}'],
       exclude: ['src/tracker/view/**']

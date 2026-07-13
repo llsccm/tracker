@@ -18,6 +18,7 @@ import { addSeatUI } from './ui/seatOverlay'
 import { createMainShell } from './ui/shell'
 import { loadInterfaceHtml } from './utils/htmlResource'
 import { addTooltip } from './utils/notification'
+import { setPeiXiuMapWindowVisible } from './ui/PeiXiuMapWindow'
 
 // import {buildActivityPlannerInput} from './utils/activityPlanner.js';
 let iframe = null
@@ -443,6 +444,9 @@ function buttonClick() {
       switchValue && UI.cities ? drawCitiesUI(UI.cities) : drawCitiesUI('')
     },
     debugLogSwitch() {},
+    peiXiuMapSwitch(switchValue) {
+      setPeiXiuMapWindowVisible(switchValue)
+    },
     effectBlockSwitch(switchValue) {
       syncDetailBlockSwitches(switchValue)
     },
