@@ -627,6 +627,10 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
 
     this.resolveSourcePlayerCandidate(unknownCard, context)
     this.room.removeCardsFromConstraintGroups([unknownCard])
+    // 暗占位继承明牌原玩家位置时，不应继续携带来源手牌的位置候选。
+    if (oldLocation === 'player') {
+      unknownCard.setLocationCandidates([], 'swapCardWithUnknown:unknownCard:candidates')
+    }
 
     // 将 card 绑定到 fromSeat 的手牌区，并设为明牌
     card.location = 'player'
