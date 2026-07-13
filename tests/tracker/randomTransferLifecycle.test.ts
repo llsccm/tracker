@@ -12,8 +12,8 @@ describe('随机手牌转移完整生命周期', () => {
   const hiddenIDs = [130, 131]
   const allIDs = [...knownIDs, ...hiddenIDs]
 
-  function setupSourceHand(): Room {
-    const { room } = createTestRoom({ cardIDs: allIDs, seatIDs: [2, 3] })
+  function setupSourceHand(extraCardIDs: number[] = []): Room {
+    const { room } = createTestRoom({ cardIDs: [...allIDs, ...extraCardIDs], seatIDs: [2, 3] })
     const sourceCards = allIDs.map((id) => getCard(room, id))
 
     room.clearCardsFromPublicZones(sourceCards)
@@ -220,5 +220,131 @@ describe('随机手牌转移完整生命周期', () => {
     } finally {
       warnSpy.mockRestore()
     }
+  })
+
+  it('来源使用一张暗牌后只扣除一个来源槽位，不提前锁定剩余候选', () => {
+    const sourceKnownIDs = [59, 42, 46, 47, 137, 118, 94]
+    const sourceHiddenIDs = [131, 132]
+    const playedHiddenID = 160
+    const targetDrawIDs = [107, 14, 135, 48, 39, 114]
+    const sourceIDs = [...sourceKnownIDs, ...sourceHiddenIDs]
+    const { room } = createTestRoom({
+      cardIDs: [...sourceIDs, playedHiddenID, 130, ...targetDrawIDs],
+      seatIDs: [2, 3]
+    })
+
+    const sourceCards = sourceIDs.map((id) => getCard(room, id))
+    room.clearCardsFromPublicZones(sourceCards)
+    sourceCards.forEach((card) => {
+      card.bindCandidates([2], 'hand', null, { known: sourceKnownIDs.includes(card.id) })
+      if (sourceHiddenIDs.includes(card.id)) {
+        card.isKnown = false
+        room.notifyCardChanged(card, { type: 'test:hidden-card' })
+      }
+    })
+    room.getPlayer(2).syncObservedHandCount(9)
+    room.getPlayer(3).syncObservedHandCount(0)
+
+    room.moveCards([], 'player', {
+      fromZone: null,
+      fromSeatID: 2,
+      fromSubZone: 'hand',
+      seatID: 3,
+      subZone: 'hand',
+      cardCount: 3,
+      sourceEvent: { type: 'regression:random-transfer' }
+    })
+
+    const transferGroup = Array.from(room.constraintGroups.values()).find(
+      (group) =>
+        (group.sourceEvent as { type?: string } | null)?.type === 'regression:random-transfer'
+    )
+    expect(transferGroup).toBeDefined()
+
+    // 2 号位使用一张此前未公开、此时协议才给出具体 ID 的手牌。身份置换只能确认一个
+    // 暗实体来自 2 号位，不能把另一张暗实体也锁给 2 号位。
+    room.moveCards([playedHiddenID], 'process', {
+      fromZone: null,
+      fromSeatID: 2,
+      fromSubZone: 'hand',
+      cardCount: 1,
+      sourceEvent: { type: 'regression:source-uses-hidden' }
+    })
+
+    expect(transferGroup?.cards.size).toBe(8)
+    expect(transferGroup?.expectedSlotsBySeat.get(2)).toBe(5)
+    expect(transferGroup?.expectedSlotsBySeat.get(3)).toBe(3)
+
+    const remainingHiddenCard = sourceHiddenIDs
+      .map((id) => getCard(room, id))
+      .find((card) => card.location === 'player')
+    expect(remainingHiddenCard).toBeDefined()
+    expect(Array.from(remainingHiddenCard?.seats ?? []).sort()).toEqual([2, 3])
+
+    // 后续 2 号位再打出三张明牌，原组只剩 2 号位 2 张、3 号位 3 张。
+    room.moveCards([59, 47, 94], 'discard', {
+      fromZone: null,
+      fromSeatID: 2,
+      fromSubZone: 'hand',
+      cardCount: 3,
+      sourceEvent: { type: 'regression:source-plays-known' }
+    })
+    expect(transferGroup?.expectedSlotsBySeat.get(2)).toBe(2)
+    expect(transferGroup?.expectedSlotsBySeat.get(3)).toBe(3)
+
+    // 130 酒是组外新摸到的确定明牌，此时 2 号位总手牌数为 3。
+    room.moveCards([130], 'player', {
+      fromZone: 'pile',
+      seatID: 2,
+      subZone: 'hand',
+      cardCount: 1,
+      sourceEvent: { type: 'regression:source-draws-130' }
+    })
+    expect(room.getPlayer(2).observedHandCount).toBe(3)
+    expect(room.getPlayer(2).knownHandCards.map((card) => card.id)).toEqual([130])
+
+    // 3 号位补到 9 张后弃 6 张，其中 137、42 来自最初的随机转移。
+    room.moveCards(targetDrawIDs, 'player', {
+      fromZone: 'pile',
+      seatID: 3,
+      subZone: 'hand',
+      cardCount: targetDrawIDs.length,
+      sourceEvent: { type: 'regression:target-draws' }
+    })
+    room.moveCards([107, 14, 137, 42, 135, 48], 'discard', {
+      fromZone: null,
+      fromSeatID: 3,
+      fromSubZone: 'hand',
+      cardCount: 6,
+      sourceEvent: { type: 'regression:target-discards' }
+    })
+
+    expect(transferGroup?.cards.size).toBe(3)
+    expect(transferGroup?.expectedSlotsBySeat.get(2)).toBe(2)
+    expect(transferGroup?.expectedSlotsBySeat.get(3)).toBe(1)
+    expect(Array.from(getCard(room, 46).seats).sort()).toEqual([2, 3])
+    expect(Array.from(getCard(room, 118).seats).sort()).toEqual([2, 3])
+    expect(Array.from(remainingHiddenCard?.seats ?? []).sort()).toEqual([2, 3])
+
+    // 完整展示才足以确认 46 桃属于 3 号位，并反推出 2 号位为 130、118、暗牌。
+    room.moveCards([39, 46, 114], 'player', {
+      fromZone: null,
+      fromSeatID: 3,
+      fromSubZone: 'hand',
+      seatID: 3,
+      subZone: 'hand',
+      cardCount: 3,
+      sourceEvent: { type: 'regression:target-full-hand' }
+    })
+    expect(Array.from(getCard(room, 46).seats)).toEqual([3])
+    expect(Array.from(getCard(room, 118).seats)).toEqual([2])
+    expect(Array.from(remainingHiddenCard?.seats ?? [])).toEqual([2])
+    expect(
+      room
+        .getPlayer(2)
+        .knownHandCards.map((card) => card.id)
+        .sort()
+    ).toEqual([118, 130])
+    expect(room.getPlayer(2).unknownCardCount).toBe(1)
   })
 })
