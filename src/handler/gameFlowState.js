@@ -69,7 +69,7 @@ function updateQuanDaoDisplay(context) {
 export function handleGameFlowState(context) {
   const { game } = context
 
-  // 初始牌分配
+  // 初始发牌阶段：明牌发牌不应按牌堆固定位置处理。
   if (
     context.FromZone == 1 &&
     context.MoveType == 19 &&
@@ -85,29 +85,39 @@ export function handleGameFlowState(context) {
       context.FromPosition = POSITION_RANDOM
     }
   }
-  // 摸牌逻辑
+  // 牌堆摸牌阶段：处理录像主视角识别、开局状态兼容和正常对局战法计数。
   else if (context.FromZone == 1 && context.ToZone == 5 && context.MoveType == 1) {
+    const isFaceUpDraw = context.CardIDs.filter((id) => id > 0).length == context.CardCount
+
+    // 录像无法依赖用户 UUID 确定主视角；首次摸到明牌的座位即为录像主视角。
+    // 22 4号位可能是第一个摸牌的人 得限制摸牌数
+    if (
+      game.isRecord &&
+      game.room?.mySeatID === undefined &&
+      isFaceUpDraw &&
+      context.CardCount == 4
+    ) {
+      tracker.setTrackerMySeatID(context.ToID)
+    }
+
+    // 兼容开局状态尚未稳定时收到的摸牌协议。
     if (!game.isGameStart && !game.isPassed) {
       if (game.isGameStart === null) {
         game.isGameStart = false
       }
 
-      if (
-        context.CardIDs.filter((id) => id > 0).length == context.CardCount &&
-        context.FromZone == 1
-      ) {
+      if (isFaceUpDraw) {
         context.FromPosition = POSITION_RANDOM
       }
+    }
 
-      // 记录拿起始牌的顺序 不需要了
-      // game.dealCard(context.ToID, context.CardIDs[0])
-    } else if (context.ToID == game.myID) {
-      // 战法计数
+    // 正常摸牌时，仅累计主视角的战法摸牌计数。
+    if (context.ToID == game.myID) {
       game.record({ mo: context.CardCount })
     }
   }
 
-  // 卡牌标记 (小抄标签)
+  // 卡牌标记（小抄标签，当前停用）。
   // if (
   //   globalConfig.cardLabelSwitch &&
   //   context.ToZone == 5 &&

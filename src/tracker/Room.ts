@@ -260,6 +260,11 @@ export class Room {
     this.size = this.seatIDs.length
     this.game?.syncRoomSeats?.(this)
 
+    // 观看别人录像时
+    if (this.mySeatID === undefined) {
+      this.game.isRecord = true
+    }
+
     trackerLogger.info('Room 注册玩家', {
       seatIDs: this.seatIDs,
       currentUserID,

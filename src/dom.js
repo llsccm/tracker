@@ -528,18 +528,9 @@ function buttonClick() {
 
   document.getElementById('mizhu').onmousedown = function () {
     const mzBTNs = document.querySelectorAll('.mizhu')
-    if (Game.mySeats.length <= 1) {
-      mzBTNs.forEach((e) => (e.style.display = 'none'))
-      drawMiZhu(getTrackedHandNumbers(Game.myID))
-    } else
-      Game.mySeats.forEach((seatID, i) => {
-        mzBTNs[i].style.display = 'block'
-        mzBTNs[i].innerText = Game.name(seatID)
-        mzBTNs[i].onclick = () => {
-          drawMiZhu(getTrackedHandNumbers(seatID))
-        }
-        if (i == 0) mzBTNs[i].click()
-      })
+    mzBTNs.forEach((e) => (e.style.display = 'none'))
+    drawMiZhu(getTrackedHandNumbers(Game.myID))
+    // 统率可能要算糜竺 暂不兼容
   }
 
   // 屏蔽设置对话框控制

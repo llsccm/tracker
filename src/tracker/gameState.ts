@@ -44,6 +44,7 @@ export const ORDER_LABELS: string[] = ['一', '二', '三', '四', '五', '六',
  * 浏览器 DOM/Laya/UI 副作用由 Game.js 中的运行时适配层补充。
  */
 export class GameState {
+  isRecord = false
   isGameStart = false
   isPassed = true
   seatUIs: SeatUIRuntime[] = []
@@ -59,6 +60,7 @@ export class GameState {
   declare domContainer: DomContainerMap
   declare seatIDs: SeatID[]
   declare orderIDs: SeatID[]
+  /** 己方座位 比如22 队友明牌 */
   declare mySeats: SeatID[]
   declare isShanHeTu: boolean
   declare isGuoZhan: boolean
@@ -70,6 +72,8 @@ export class GameState {
 
   declare currentID: SeatID | undefined
   myGenerals: number[] = []
+  /** 阵营 统率占位 替代mySeats */
+  camps: number[] = []
 
   constructor({ orderLabels = ORDER_LABELS }: { orderLabels?: string[] } = {}) {
     this.orderLabels = orderLabels
@@ -109,7 +113,7 @@ export class GameState {
 
   /** 获取主视角房间座位 */
   get myID(): SeatID | undefined {
-    return this.room?.mySeatID ?? this.mySeats[0] ?? this.seatIDs[0]
+    return this.room?.mySeatID ?? undefined
   }
 
   getCurrentTimestamp(): { turn: number; round: number; phase: number } {
@@ -124,7 +128,7 @@ export class GameState {
     this.seatUIs = []
     this.seatIDs = []
     this.orderIDs = []
-    this.mySeats = []
+    // this.mySeats = []
     this.myGenerals.length = 0
 
     this.isShanHeTu = false
@@ -137,27 +141,8 @@ export class GameState {
     this.isDuanXian = false
   }
 
-  seatPos(size = 8): number[] {
-    return SEAT_UI_POSITIONS[size] ?? []
-  }
-
   getSeatUI(seatID: SeatID): SeatUIRuntime {
     return this.seatUIs.find((ui) => ui.seatID == seatID) || {}
-  }
-
-  // TODO 需要废弃
-  setMyID(seatID: SeatID | undefined): void {
-    if (seatID === undefined) {
-      this.mySeats = []
-      return
-    }
-
-    const normalized = Number(seatID)
-    if (!Number.isFinite(normalized) || this.mySeats[0] === normalized) return
-
-    const index = this.mySeats.indexOf(normalized)
-    if (index > -1) this.mySeats.splice(index, 1)
-    this.mySeats.unshift(normalized)
   }
 
   setGeneral(seatID: SeatID, generalID: number | undefined, _index = 0): void {}
@@ -177,7 +162,6 @@ export class GameState {
     if (!room) return
     this.seatIDs = room.seatIDs.slice()
     this.size = room.size
-    this.setMyID(room.mySeatID)
   }
 
   resetConfigHandCards(): void {

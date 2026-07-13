@@ -52,7 +52,6 @@ describe('GsCRoleOptTargetNtf', () => {
   })
 
   it('裴秀开始选择技能时销毁地图并清除地图状态', () => {
-    Game.setMyID(2)
     Game.setSpellState(4022, { mapId: 12 })
 
     handleRoleOptTargetNtf({
