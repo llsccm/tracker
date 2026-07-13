@@ -1,4 +1,5 @@
 import { unbindTrackerVisibilityShortcut } from './trackerVisibility'
+import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
 
 export function bindInitialResize(globalConfig, resize) {
   window.WDVerSion = '1.0.0'
@@ -13,7 +14,7 @@ export function removeInjectedDom(globalState) {
   document.getElementById('rogueUI')?.remove()
   document.getElementById('cusBGDiv')?.remove()
   document.getElementById('createIframe')?.remove()
-  document.getElementById('peixiu-map-window')?.remove()
+  destroyPeiXiuMapWindow()
   document.getElementById('peixiu-map-style')?.remove()
   globalState.isFrameAdd = false
 }

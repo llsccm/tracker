@@ -241,24 +241,31 @@ export function logic(msg) {
       //出杀次数
       case 'GsCUpdateRoleDataExNtf':
         {
-          if (Game.currentID == SeatID && msg.DataID == 1 && Array.isArray(Datas)) {
-            document.getElementById('sha').innerText = '剩余：' + Math.max(0, Datas[2] - Datas[1])
-          } else if (msg.DataID == 3571 && Array.isArray(Datas)) {
-            // 郭照 椒遇 Datas:[x] 1红2黑
-            const colors = Datas[0] == 1 ? [1, 2] : [3, 4]
-
-            const jiaoYuCards = Game.getSpellState(3571)
-            Game.setSpellState(
-              3571,
-              new Set(
-                Array.from(jiaoYuCards || []).filter((id) =>
-                  colors.includes(CardConfig.GetInstance().getCard(id)?.color)
-                )
-              )
-            )
-          }
-
           switch (msg.DataID) {
+            case 1:
+              if (Game.currentID == SeatID && Array.isArray(Datas)) {
+                document.getElementById('sha').innerText =
+                  '剩余：' + Math.max(0, Datas[2] - Datas[1])
+              }
+              break
+
+            case 3571:
+              if (Array.isArray(Datas)) {
+                // 郭照 椒遇 Datas:[x] 1红2黑
+                const colors = Datas[0] == 1 ? [1, 2] : [3, 4]
+
+                const jiaoYuCards = Game.getSpellState(3571)
+                Game.setSpellState(
+                  3571,
+                  new Set(
+                    Array.from(jiaoYuCards || []).filter((id) =>
+                      colors.includes(CardConfig.GetInstance().getCard(id)?.color)
+                    )
+                  )
+                )
+              }
+              break
+
             // 尽览
             case 4022:
               if (Game.myID == SeatID && Array.isArray(Datas)) {

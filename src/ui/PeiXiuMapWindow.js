@@ -3,6 +3,7 @@ import { PEIXIU_DIRECTIONS } from '../utils/peixiuRouteFeature'
 const WINDOW_ID = 'peixiu-map-window'
 const STYLE_ID = 'peixiu-map-style'
 const CELL_SIZE = 50
+const SUIT_ORDER = [3, 1, 4, 2]
 
 let cleanupDrag = null
 let lastPosition = null
@@ -36,6 +37,16 @@ function formatRoute(solution, emptyText = '已完成') {
     .join(' → ')
 }
 
+function formatRequiredSuits(solution) {
+  const counts = new Map(SUIT_ORDER.map((direction) => [direction, 0]))
+  for (const step of solution?.path || []) {
+    if (counts.has(step.dir)) counts.set(step.dir, counts.get(step.dir) + 1)
+  }
+  return SUIT_ORDER.map(
+    (direction) => `${PEIXIU_DIRECTIONS[direction].mark}${counts.get(direction)}`
+  ).join('')
+}
+
 export function buildPeiXiuMapViewModel(state, bonuses) {
   const map = state?.result?.map
   if (!map) return null
@@ -55,6 +66,7 @@ export function buildPeiXiuMapViewModel(state, bonuses) {
     mapReward: getRewardInfo(map.mapReward, bonuses),
     currentCell: state.currentCell,
     presetRoutes: (state.presetRoutes || []).slice(0, 2).map(formatRoute),
+    requiredSuits: formatRequiredSuits(state.result.solution),
     dynamicRoute: state.result.complete
       ? formatRoute(state.result.solution)
       : `无法拿全奖励，当前最优：${formatRoute(state.result.solution, '无可行路线')}`,
@@ -146,6 +158,13 @@ function ensureStyle() {
       min-height: 36px;
       padding: 2px 0;
       color: #9ed4b4;
+      font-size: 16px;
+      line-height: 16px;
+    }
+    #${WINDOW_ID} .peixiu-required-suits {
+      min-height: 22px;
+      padding: 3px 0;
+      color: #f2d06b;
       font-size: 16px;
       line-height: 16px;
     }
@@ -281,6 +300,7 @@ function createWindow() {
       <div class="peixiu-route" data-route="preset-2"></div>
     </div>
     <div class="peixiu-board"></div>
+    <div class="peixiu-required-suits"></div>
     <div class="peixiu-route peixiu-dynamic-route" data-route="dynamic"></div>
   `
   document.body.appendChild(element)
@@ -317,6 +337,7 @@ export function renderPeiXiuMapWindow(state, bonuses) {
   element.querySelector('.peixiu-title').textContent = model.mapName
   element.querySelector('[data-route="preset-1"]').textContent = model.presetRoutes[0] || ''
   element.querySelector('[data-route="preset-2"]').textContent = model.presetRoutes[1] || ''
+  element.querySelector('.peixiu-required-suits').textContent = model.requiredSuits
   element.querySelector('[data-route="dynamic"]').textContent = `动态：${model.dynamicRoute}`
 
   const fixedSkill = element.querySelector('.peixiu-fixed-skill')

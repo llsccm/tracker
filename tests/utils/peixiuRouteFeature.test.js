@@ -161,6 +161,7 @@ describe('裴秀地图数据层', () => {
     expect(model.cells).toHaveLength(12)
     expect(model.cells.map((cell) => cell.id)).not.toContain(2)
     expect(model.presetRoutes).toHaveLength(2)
+    expect(model.requiredSuits).toBe('♠2♥1♣1♦2')
     expect(model.dynamicRoute).toContain('♠19')
     expect(model.mapReward).toMatchObject({ id: 73, name: '雍州' })
   })
