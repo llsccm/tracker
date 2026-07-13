@@ -30,6 +30,7 @@ export const PEIXIU_DIRECTIONS = {
 }
 const DIR = PEIXIU_DIRECTIONS
 const DIRECTIONS = [1, 2, 3, 4]
+const MAX_ROUTE_ITERATIONS = 2000
 
 function nums(text) {
   if (Array.isArray(text)) {
@@ -473,8 +474,13 @@ export function findPeiXiuOptimalRoutes(raw, options = {}, limit = 2) {
 
   const transitions = buildTransitionTable(map, index)
   const routes = []
+  const requestedIterations = Number(options.maxIterations)
+  const maxIterations =
+    Number.isInteger(requestedIterations) && requestedIterations > 0
+      ? Math.min(requestedIterations, MAX_ROUTE_ITERATIONS)
+      : MAX_ROUTE_ITERATIONS
 
-  for (let head = 0; head < queue.length; head += 1) {
+  for (let head = 0; head < queue.length && head < maxIterations; head += 1) {
     const state = queue[head]
 
     if (state.mask === target) {

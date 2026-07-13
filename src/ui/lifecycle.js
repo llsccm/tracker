@@ -13,8 +13,8 @@ export function removeInjectedDom(globalState) {
   document.getElementById('rogueUI')?.remove()
   document.getElementById('cusBGDiv')?.remove()
   document.getElementById('createIframe')?.remove()
-  document.getElementById('dxc-peixiu-map-window')?.remove()
-  document.getElementById('dxc-peixiu-map-style')?.remove()
+  document.getElementById('peixiu-map-window')?.remove()
+  document.getElementById('peixiu-map-style')?.remove()
   globalState.isFrameAdd = false
 }
 

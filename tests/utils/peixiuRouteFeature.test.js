@@ -141,6 +141,12 @@ describe('裴秀地图数据层', () => {
     expect(routes[1].path.length).toBeGreaterThanOrEqual(routes[0].path.length)
   })
 
+  it('达到迭代安全上限时停止搜索', () => {
+    const routes = findPeiXiuOptimalRoutes(YONG_ZHOU, { maxIterations: 1 })
+
+    expect(routes).toEqual([])
+  })
+
   it('地图视图模型只包含可走格，并区分两条预设路线和动态路线', () => {
     const state = solvePeiXiuRoleData(YONG_ZHOU, [12, 18, 0, 0])
     state.presetRoutes = findPeiXiuOptimalRoutes(YONG_ZHOU)

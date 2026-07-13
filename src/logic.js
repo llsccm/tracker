@@ -450,6 +450,7 @@ export function logic(msg) {
         break
       }
 
+      // 询问操作 严教 界强识等
       case 'GsCRoleOptTargetNtf':
         handleRoleOptTargetNtf(msg)
         break
@@ -539,6 +540,7 @@ export function logic(msg) {
 
           case 4022:
             // Datas: [2, 0] data_count: 2 第一位为方向
+            // 用于触发提示 向东绘制所有地图
             // console.info(msg)
             // 似乎没那么重要
             break
