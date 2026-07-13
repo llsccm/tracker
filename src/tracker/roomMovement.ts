@@ -286,6 +286,9 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       })
 
       context.movedUnknownCards = movedUnknownCards
+      movedUnknownCards.forEach((card) => {
+        this.resolveSourcePlayerCandidate(card, context)
+      })
       this.room.removeCardsFromConstraintGroups(movedUnknownCards)
 
       movedUnknownCards.forEach((card) => {
@@ -365,6 +368,9 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     }
 
     context.movedUnknownCards = movedUnknownCards
+    movedUnknownCards.forEach((card) => {
+      this.resolveSourcePlayerCandidate(card, context)
+    })
     this.room.removeCardsFromConstraintGroups(movedUnknownCards)
 
     const targetZone = this.room.zones.get(toZone)
@@ -457,7 +463,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         const placeholder = this.swapKnownCardWithPlayerSourcePlaceholder(card, playerSourceContext)
         let fallbackPlaceholder: Card | null = null
         if (!placeholder && fromSubZone === 'hand') {
-          fallbackPlaceholder = this.swapCardWithUnknown(card, fromSeat, knownCards)
+          fallbackPlaceholder = this.swapCardWithUnknown(card, playerSourceContext, knownCards)
           const canDeferToKnownSourcePlaceholder =
             context.sourceHandTotalObserved &&
             context.sourceHandTotalBefore <= context.handMoveCount
@@ -466,7 +472,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
               ? this.createPlayerSourcePlaceholderForKnownCard(card, playerSourceContext)
               : null
           if (!fallbackPlaceholder && createdSourcePlaceholder) {
-            fallbackPlaceholder = this.swapCardWithUnknown(card, fromSeat, knownCards)
+            fallbackPlaceholder = this.swapCardWithUnknown(card, playerSourceContext, knownCards)
           }
           if (!fallbackPlaceholder && createdSourcePlaceholder) {
             trackerLogger.warn('已创建来源瞬时匿名占位但仍未完成置换', {
@@ -537,7 +543,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       }
 
       this.resolveHiddenMarkCandidateFromMove(card, context)
-      if (this.resolveKnownSourcePlayerCandidate(card, context)) {
+      if (this.resolveSourcePlayerCandidate(card, context)) {
         resolvedSourceCardIDs.push(card.id)
       }
 

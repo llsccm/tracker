@@ -173,7 +173,7 @@ describe('隐藏标记区候选', () => {
     candidateCard.confirmKnown()
     candidateCard.setLocationCandidates([sourceMark, otherHand])
 
-    expect(room.movement.resolveKnownSourcePlayerCandidate(candidateCard, context)).toBe(true)
+    expect(room.movement.resolveSourcePlayerCandidate(candidateCard, context)).toBe(true)
     expect(candidateCard.subZone).toBe('mark')
     expect(candidateCard.spellID).toBe(414)
 
