@@ -145,6 +145,10 @@ export function logic(msg) {
         })
         break
 
+      // case 'decodeGameRecordInitInfo':
+      //   console.info(msg)
+      //   break
+
       case 'GsCModifyUserseatNtf': // 游戏开始标志 / 游戏结束标志
         // handleStartGame(msg)
         break
@@ -168,6 +172,7 @@ export function logic(msg) {
         // Type 1是分配 2是标记/广播
         // Figure: 主公/地主是1 农民是3
         // 统率的主公可能不是先手 但是这里先不管
+        // 斗地主全部都是 type1 不能用作主视角判断
         if (msg.Type == 1) {
           // console.info('座位: ' + SeatID + '的身份: ' + msg.Figure)
           if (msg.Figure === 1) tracker.setTrackerFirstHand(SeatID)
@@ -268,7 +273,7 @@ export function logic(msg) {
 
             // 尽览
             case 4022:
-              if (Game.myID == SeatID && Array.isArray(Datas)) {
+              if (Array.isArray(Datas)) {
                 const roleData = parsePeiXiuRoleData(Datas)
                 if (!roleData) break
 

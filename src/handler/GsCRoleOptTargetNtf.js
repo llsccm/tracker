@@ -198,7 +198,7 @@ export function handleRoleOptTargetNtf(arg) {
 
     case 4021:
       // 此时裴秀开始选技能 应该销毁地图
-      if (Type == 78 && SrcSeatID == Game.myID) {
+      if (Type == 78) {
         destroyPeiXiuMapWindow()
         Game.deleteSpellState(4022)
       }
