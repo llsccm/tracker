@@ -85,18 +85,14 @@ export function handleGameFlowState(context) {
       context.FromPosition = POSITION_RANDOM
     }
   }
+
   // 牌堆摸牌阶段：处理录像主视角识别、开局状态兼容和正常对局战法计数。
-  else if (context.FromZone == 1 && context.ToZone == 5 && context.MoveType == 1) {
+  if (context.FromZone == 1 && context.ToZone == 5 && context.MoveType == 1) {
     const isFaceUpDraw = context.CardIDs.filter((id) => id > 0).length == context.CardCount
 
     // 录像无法依赖用户 UUID 确定主视角；首次摸到明牌的座位即为录像主视角。
-    // 22 4号位可能是第一个摸牌的人 得限制摸牌数
-    if (
-      game.isRecord &&
-      game.room?.mySeatID === undefined &&
-      isFaceUpDraw &&
-      context.CardCount == 4
-    ) {
+    // 22 使用其他方式确认主视角
+    if (game.isRecord && game.room?.mySeatID === undefined && isFaceUpDraw) {
       tracker.setTrackerMySeatID(context.ToID)
     }
 

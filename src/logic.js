@@ -200,8 +200,14 @@ export function logic(msg) {
         }
 
         // 22排位有58消息 DATA_CAMP_ID 阵营语音 SeatID: 0 Value: 402476507
-        if (msg.StateID === 58) {
-          // 可以用来确认22主视角
+        // 可以用来确认22主视角
+        if (
+          msg.StateID === 58 &&
+          Game.isRecord &&
+          Game.myID === undefined &&
+          SeatID !== undefined
+        ) {
+          tracker.setTrackerMySeatID(SeatID)
         }
 
         if (msg.StateID === 66) {
@@ -325,7 +331,8 @@ export function logic(msg) {
                 const mapConfig = spellExtendConfig.PeiXiuCellDic.get(roleData.mapId)
                 const solvedState = mapConfig ? solvePeiXiuRoleData(mapConfig, Datas) : null
                 const presetRoutes = spellExtendConfig.PeiXiuPresetRoutes.get(roleData.mapId) || []
-                const usesMainHandMirror = Game.myID != null && SeatID != null && Number(Game.myID) === Number(SeatID)
+                const usesMainHandMirror =
+                  Game.myID != null && SeatID != null && Number(Game.myID) === Number(SeatID)
                 const handSuitColors = usesMainHandMirror ? getRenderedHandSuitColors() : null
 
                 const state = solvedState
