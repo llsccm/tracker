@@ -9,6 +9,7 @@ import {
   solvePeiXiuRoleData
 } from '@/utils/peixiuRouteFeature'
 import { buildPeiXiuMapViewModel } from '@/ui/PeiXiuMapWindow'
+import { SpellExtendConfig } from '@/config/SpellExtendConfig'
 
 const YONG_ZHOU = {
   cellID: '12',
@@ -20,6 +21,26 @@ const YONG_ZHOU = {
 }
 
 describe('裴秀地图数据层', () => {
+  it('在 SpellExtendConfig 中保存全部州的花色编号预设', () => {
+    const routes = new SpellExtendConfig().PeiXiuPresetRoutes
+
+    expect([...routes.keys()]).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+    expect([...routes.values()].map((items) => items.length)).toEqual([
+      1, 3, 2, 2, 1, 1, 3, 2, 3, 2, 1, 1, 1, 1, 2, 1
+    ])
+    expect(routes.get(1)).toEqual([[4, 2, 3, 2, 3]])
+    expect(routes.get(2)).toEqual([
+      [3, 2, 1, 2],
+      [2, 1, 3, 2, 1],
+      [4, 1, 2, 3, 2]
+    ])
+    expect(routes.get(9)?.[2]).toEqual([4, 1, 3, 2, 1, 4, 3, 4])
+    expect(routes.get(16)).toEqual([[4, 3, 2, 4, 1]])
+    expect(
+      [...routes.values()].flat(2).every((direction) => [1, 2, 3, 4].includes(direction))
+    ).toBe(true)
+  })
+
   it('解析 5x5 有效格、起始格和地图自身奖励', () => {
     const map = parsePeiXiuMap(YONG_ZHOU)
 
@@ -149,7 +170,8 @@ describe('裴秀地图数据层', () => {
 
   it('地图视图模型只包含可走格，并区分两条预设路线和动态路线', () => {
     const state = solvePeiXiuRoleData(YONG_ZHOU, [12, 18, 0, 0])
-    state.presetRoutes = findPeiXiuOptimalRoutes(YONG_ZHOU)
+    state.presetRoutes = [[3, 2, 3, 1, 4, 2], [1, 2], [4]]
+    state.handSuitColors = [3, 3, 4, 1, 2, 2]
     const bonuses = new Map([
       [73, { ID: 73, name: '雍州', desc: '固定技能' }],
       [53, { ID: 53, name: '奖励格', desc: '经过后获得' }]
@@ -161,7 +183,9 @@ describe('裴秀地图数据层', () => {
     expect(model.cells).toHaveLength(12)
     expect(model.cells.map((cell) => cell.id)).not.toContain(2)
     expect(model.presetRoutes).toHaveLength(2)
-    expect(model.requiredSuits).toBe('♠2♥1♣1♦2')
+    expect(model.presetRoutes).toEqual(['♠ → ♦ → ♠ → ♥ → ♣ → ♦', '♥ → ♦'])
+    expect(model.requiredSuits).toBe('♠2♣1♥1♦2')
+    expect(model.handSuits).toBe('♠2♣1♥1♦2')
     expect(model.dynamicRoute).toContain('♠19')
     expect(model.mapReward).toMatchObject({ id: 73, name: '雍州' })
   })
@@ -179,6 +203,7 @@ describe('裴秀地图数据层', () => {
     const model = buildPeiXiuMapViewModel(state, new Map())
 
     expect(state.result.complete).toBe(false)
+    expect(model.handSuits).toBe('')
     expect(model.dynamicRoute).toBe('无法拿全奖励，当前最优：无可行路线')
   })
 

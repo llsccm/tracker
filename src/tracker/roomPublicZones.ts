@@ -18,7 +18,7 @@ interface PublicZoneIssue {
   location?: string
 }
 
-interface PlayerHandCardIDOptions {
+export interface PlayerHandCardIDOptions {
   includeCandidates?: boolean
   knownOnly?: boolean
 }

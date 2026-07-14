@@ -3,7 +3,7 @@ import { PEIXIU_DIRECTIONS } from '../utils/peixiuRouteFeature'
 const WINDOW_ID = 'peixiu-map-window'
 const STYLE_ID = 'peixiu-map-style'
 const CELL_SIZE = 50
-const SUIT_ORDER = [3, 1, 4, 2]
+const SUIT_ORDER = [3, 4, 1, 2]
 
 let cleanupDrag = null
 let lastPosition = null
@@ -30,21 +30,46 @@ function getRouteCells(solution) {
 }
 
 function formatRoute(solution, emptyText = '已完成') {
-  const path = solution?.path || []
+  const path = Array.isArray(solution) ? solution : solution?.path || []
   if (!path.length) return emptyText
   return path
-    .map((step) => `${PEIXIU_DIRECTIONS[step.dir]?.mark || step.dir}${step.to}`)
+    .map((step) => {
+      const direction = typeof step === 'number' ? step : step.dir
+      const mark = PEIXIU_DIRECTIONS[direction]?.mark || direction
+      return typeof step === 'number' ? mark : `${mark}${step.to}`
+    })
     .join(' → ')
 }
 
-function formatRequiredSuits(solution) {
+function setSuitText(element, text, prefix = '') {
+  element.replaceChildren()
+  const parts = `${prefix}${text}`.split(/([♥♦])/)
+
+  for (const part of parts) {
+    if (!part) continue
+    if (part === '♥' || part === '♦') {
+      const suit = document.createElement('span')
+      suit.className = 'peixiu-red-suit'
+      suit.textContent = part
+      element.appendChild(suit)
+    } else {
+      element.appendChild(document.createTextNode(part))
+    }
+  }
+}
+
+function formatSuitCounts(suits) {
   const counts = new Map(SUIT_ORDER.map((direction) => [direction, 0]))
-  for (const step of solution?.path || []) {
-    if (counts.has(step.dir)) counts.set(step.dir, counts.get(step.dir) + 1)
+  for (const suit of suits || []) {
+    if (counts.has(suit)) counts.set(suit, counts.get(suit) + 1)
   }
   return SUIT_ORDER.map(
     (direction) => `${PEIXIU_DIRECTIONS[direction].mark}${counts.get(direction)}`
   ).join('')
+}
+
+function formatRequiredSuits(solution) {
+  return formatSuitCounts((solution?.path || []).map((step) => step.dir))
 }
 
 export function buildPeiXiuMapViewModel(state, bonuses) {
@@ -67,6 +92,7 @@ export function buildPeiXiuMapViewModel(state, bonuses) {
     currentCell: state.currentCell,
     presetRoutes: (state.presetRoutes || []).slice(0, 2).map(formatRoute),
     requiredSuits: formatRequiredSuits(state.result.solution),
+    handSuits: Array.isArray(state.handSuitColors) ? formatSuitCounts(state.handSuitColors) : '',
     dynamicRoute: state.result.complete
       ? formatRoute(state.result.solution)
       : `无法拿全奖励，当前最优：${formatRoute(state.result.solution, '无可行路线')}`,
@@ -149,6 +175,12 @@ function ensureStyle() {
       font-size: 16px;
       line-height: 16px;
     }
+    #${WINDOW_ID} .peixiu-presets .peixiu-route {
+      min-height: 16px;
+    }
+    #${WINDOW_ID} .peixiu-presets .peixiu-route.is-empty {
+      visibility: hidden;
+    }
     #${WINDOW_ID} .peixiu-presets .peixiu-route + .peixiu-route {
       margin-top: 2px;
       padding-top: 2px;
@@ -168,12 +200,25 @@ function ensureStyle() {
       font-size: 16px;
       line-height: 16px;
     }
+    #${WINDOW_ID} .peixiu-hand-suits {
+      min-height: 22px;
+      padding: 3px 0;
+      color: #dce9ef;
+      font-size: 16px;
+      line-height: 16px;
+    }
+    #${WINDOW_ID} .peixiu-hand-suits.is-empty {
+      visibility: hidden;
+    }
     #${WINDOW_ID} .peixiu-route {
       overflow: hidden;
       display: -webkit-box;
       white-space: normal;
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 2;
+    }
+    #${WINDOW_ID} .peixiu-red-suit {
+      color: #ff5f5f;
     }
     #${WINDOW_ID} .peixiu-board {
       width: 250px;
@@ -302,6 +347,7 @@ function createWindow() {
     <div class="peixiu-board"></div>
     <div class="peixiu-required-suits"></div>
     <div class="peixiu-route peixiu-dynamic-route" data-route="dynamic"></div>
+    <div class="peixiu-hand-suits"></div>
   `
   document.body.appendChild(element)
   if (lastPosition) {
@@ -335,10 +381,20 @@ export function renderPeiXiuMapWindow(state, bonuses) {
 
   const element = document.getElementById(WINDOW_ID) || createWindow()
   element.querySelector('.peixiu-title').textContent = model.mapName
-  element.querySelector('[data-route="preset-1"]').textContent = model.presetRoutes[0] || ''
-  element.querySelector('[data-route="preset-2"]').textContent = model.presetRoutes[1] || ''
-  element.querySelector('.peixiu-required-suits').textContent = model.requiredSuits
-  element.querySelector('[data-route="dynamic"]').textContent = `动态：${model.dynamicRoute}`
+  const presetRouteElements = [
+    element.querySelector('[data-route="preset-1"]'),
+    element.querySelector('[data-route="preset-2"]')
+  ]
+  presetRouteElements.forEach((routeElement, index) => {
+    const route = model.presetRoutes[index] || ''
+    setSuitText(routeElement, route)
+    routeElement.classList.toggle('is-empty', !route)
+  })
+  setSuitText(element.querySelector('.peixiu-required-suits'), model.requiredSuits, '需求：')
+  setSuitText(element.querySelector('[data-route="dynamic"]'), model.dynamicRoute, '动态：')
+  const handSuits = element.querySelector('.peixiu-hand-suits')
+  setSuitText(handSuits, model.handSuits, model.handSuits ? '手牌：' : '')
+  handSuits.classList.toggle('is-empty', !model.handSuits)
 
   const fixedSkill = element.querySelector('.peixiu-fixed-skill')
   const fixedSkillDesc = model.mapReward?.desc || ''

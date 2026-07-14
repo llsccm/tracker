@@ -8,7 +8,7 @@ import { CardLocationIndex } from './CardLocationIndex'
 import { summarizeMoveContext, summarizeMoveEvent } from './helper/moveSummary'
 import { RoomConstraints } from './roomConstraints'
 import { RoomMovement } from './roomMovement'
-import { RoomPublicZones } from './roomPublicZones'
+import { type PlayerHandCardIDOptions, RoomPublicZones } from './roomPublicZones'
 import { normalizeLocationCandidate } from './candidate/locationCandidate'
 import type { LocationCandidateInput } from './candidate/locationCandidate'
 import { collectHandSlotCardsBySeat, getHandSlotKindForSeat } from './candidate/handSlotCounts'
@@ -628,8 +628,12 @@ export class Room {
       }))
   }
 
-  getPlayerHandCardIDs(...args) {
-    return (this.publicZones.getPlayerHandCardIDs as any)(...args)
+  /** 获取指定玩家手牌中的物理牌 ID
+   *
+   * 缓存更新慢 不太适用渲染
+   */
+  getPlayerHandCardIDs(seatID: SeatID, options: PlayerHandCardIDOptions = {}) {
+    return this.publicZones.getPlayerHandCardIDs(seatID, options)
   }
 
   // 约束收敛主入口与辅助方法；低频约束辅助位于 roomConstraints.js。
