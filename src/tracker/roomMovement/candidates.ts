@@ -180,21 +180,21 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
     fromSeat,
     toZone,
     position,
-    count
+    unknownCount
   }: RandomHandToPublicOptions): Card[] {
     if (fromSeat === null) return []
 
     const sourceCandidateCards = this.getKnownHandCardsBySeat(fromSeat)
     if (sourceCandidateCards.length === 0) return []
 
-    const candidate = this.createPublicCandidate(toZone, position, count)
+    const candidate = this.createPublicCandidate(toZone, position, unknownCount)
     sourceCandidateCards.forEach((card) => card.addPublicCandidate(candidate))
 
     trackerLogger.info('手牌候选进入公共区', {
       fromSeat,
       toZone,
       position,
-      count,
+      unknownCount,
       cards: sourceCandidateCards.map((card) => ({
         id: card.id,
         name: card.name,

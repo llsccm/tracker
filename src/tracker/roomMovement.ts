@@ -217,7 +217,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         fromSeat: sourceHandSeat,
         toZone,
         position,
-        count: unknownCount
+        unknownCount
       })
     }
 

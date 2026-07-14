@@ -333,11 +333,11 @@ describe('TrackerController', () => {
     controller.initTrackerDeck([1, 2, 3, 4, 34, 68, 161])
     controller.syncTrackerMove(protocolMove({ CardIDs: [161], ToID: 5 }))
 
-    const skillMove = (cardID, fromZone, toZone) =>
+    const skillMove = (cardID, fromZone, toZone, fromID = 255) =>
       protocolMove({
         CardIDs: [cardID],
         CardCount: 1,
-        FromID: 255,
+        FromID: fromID,
         FromZone: fromZone,
         FromZoneParam: 0,
         MoveType: 6,
@@ -355,7 +355,7 @@ describe('TrackerController', () => {
     const room = controller.getTrackerRoom()
     const pileCountBeforeLastReveal = room.zones.get('pile').cards.length
 
-    controller.syncTrackerMove(skillMove(161, 1, 3))
+    controller.syncTrackerMove(skillMove(161, 1, 3, 5))
 
     const seatFiveHandCards = room.cards.filter(
       (card) =>

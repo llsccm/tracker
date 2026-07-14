@@ -395,11 +395,14 @@ export class TrackerController {
 
     const sourceZoneName = getProtocolPublicZone(raw.FromZone)
     if (sourceZoneName && sourceZoneName !== zoneName) {
-      // 判定获得既会展示牌面，也会把实体移出来源公共区；复用标准移动链路完成来源置换。
+      // 判定获得既会展示牌面，也会把实体移出来源公共区；复用标准移动链路完成来源置换，
+      // 并清空协议残留的玩家槽位，避免公共区来源被误判为手牌。
       knownCards.forEach((card) => card.confirmKnown())
       readyRoom.moveCards(ids, zoneName, {
         ...event.options,
         fromZone: sourceZoneName,
+        fromSeatID: null,
+        fromSubZone: null,
         cardCount: ids.length
       })
       return

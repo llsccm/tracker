@@ -137,7 +137,7 @@ export interface RandomHandToPublicOptions {
   fromSeat: SeatID | null
   toZone: PublicZoneName
   position: PublicPosition
-  count: number
+  unknownCount: number
 }
 
 export interface UnknownPileReturnOptions {
