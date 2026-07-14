@@ -8,6 +8,35 @@ import type { Card } from '../Card'
 import type { Player } from '../Player'
 import type { Room } from '../Room'
 
+let renderedMainHandCardIDs: number[] | null = null
+const renderedMainHandListeners = new Set<() => void>()
+
+export function getRenderedMainHandCardIDs(): number[] | null {
+  return renderedMainHandCardIDs?.slice() ?? null
+}
+
+export function subscribeRenderedMainHandCardIDs(listener: () => void): () => void {
+  renderedMainHandListeners.add(listener)
+  return () => renderedMainHandListeners.delete(listener)
+}
+
+export function clearRenderedMainHandCardIDs(): void {
+  renderedMainHandCardIDs = null
+}
+
+function updateRenderedMainHandCardIDs(cardIDs: number[]): void {
+  if (
+    renderedMainHandCardIDs !== null &&
+    renderedMainHandCardIDs.length === cardIDs.length &&
+    renderedMainHandCardIDs.every((id, index) => id === cardIDs[index])
+  ) {
+    return
+  }
+
+  renderedMainHandCardIDs = cardIDs
+  renderedMainHandListeners.forEach((listener) => listener())
+}
+
 interface CardListOptions {
   ambiguous?: boolean
 }
@@ -89,6 +118,12 @@ export function renderPlayerHand(doc: Document, player: Player): void {
 
   body.appendChild(fragment)
   syncSeatOverlayHand(doc, displayID, body)
+
+  if (Number(player.seatID) === Number(player.room.mySeatID)) {
+    updateRenderedMainHandCardIDs(
+      player.knownHandCards.map((card) => Number(card.id)).filter((id) => id > 0)
+    )
+  }
 }
 
 function getPlayerHandPanel(doc: Document): HTMLElement | null {

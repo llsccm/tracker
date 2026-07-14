@@ -20,14 +20,14 @@ import { laya } from './runtime/gameAdapter'
 import { Game, globalConfig, UI, user } from './tracker'
 import { tracker } from './tracker/runtime/browser'
 import { POSITION_BOTTOM } from './tracker/candidate/cardPositions'
+import {
+  getRenderedMainHandCardIDs,
+  subscribeRenderedMainHandCardIDs
+} from './tracker/view/PlayerHandView'
 import { idleCallback, toSuitGlyphHtml } from './utils'
 import { addTooltip } from './utils/notification'
 import { handleBroadMsg } from './handler/chat'
-import {
-  findPeiXiuOptimalRoutes,
-  parsePeiXiuRoleData,
-  solvePeiXiuRoleData
-} from './utils/peixiuRouteFeature'
+import { parsePeiXiuRoleData, solvePeiXiuRoleData } from './utils/peixiuRouteFeature'
 import { renderPeiXiuMapWindow, setPeiXiuMapWindowVisible } from './ui/PeiXiuMapWindow'
 
 const ALLOWED_CLASSES = new Set([
@@ -56,6 +56,40 @@ const PROTOCOL_HAND_ZONE = 5
 function revealCardsInProtocolZone(id, cardIDs, zone = PROTOCOL_HAND_ZONE, pos = undefined) {
   tracker.revealTrackerCardsInZone({ id, zone, pos }, cardIDs)
 }
+
+/**
+ * @returns {number[]|null}
+ */
+function getRenderedHandSuitColors() {
+  const cardIDs = getRenderedMainHandCardIDs()
+  if (cardIDs === null) return null
+
+  const cardConfig = CardConfig.GetInstance()
+  return cardIDs
+    .map((id) => Number(cardConfig.getCardColor(id)))
+    .filter((color) => color >= 1 && color <= 4)
+}
+
+function refreshPeiXiuHandSuitColors() {
+  const state = Game.getSpellState(4022)
+  if (!state?.usesMainHandMirror || !state.result) return
+
+  const handSuitColors = getRenderedHandSuitColors()
+  if (handSuitColors === null) return
+  if (
+    Array.isArray(state.handSuitColors) &&
+    state.handSuitColors.length === handSuitColors.length &&
+    state.handSuitColors.every((color, index) => color === handSuitColors[index])
+  ) {
+    return
+  }
+
+  const nextState = { ...state, handSuitColors }
+  Game.setSpellState(4022, nextState)
+  renderPeiXiuMapWindow(nextState, SpellExtendConfig.GetInstance().PeiXiuBonus)
+}
+
+subscribeRenderedMainHandCardIDs(refreshPeiXiuHandSuitColors)
 
 /** 牌堆准备好了 */
 function readyTrackerGame(cardList = []) {
@@ -289,19 +323,20 @@ export function logic(msg) {
 
                 const spellExtendConfig = SpellExtendConfig.GetInstance()
                 const mapConfig = spellExtendConfig.PeiXiuCellDic.get(roleData.mapId)
-                const previousState = Game.getSpellState(4022)
                 const solvedState = mapConfig ? solvePeiXiuRoleData(mapConfig, Datas) : null
-
-                const presetRoutes =
-                  previousState?.mapId === roleData.mapId && previousState.presetRoutes?.length
-                    ? previousState.presetRoutes
-                    : mapConfig
-                      ? findPeiXiuOptimalRoutes(mapConfig)
-                      : []
+                const presetRoutes = spellExtendConfig.PeiXiuPresetRoutes.get(roleData.mapId) || []
+                const usesMainHandMirror = Game.myID != null && SeatID != null && Number(Game.myID) === Number(SeatID)
+                const handSuitColors = usesMainHandMirror ? getRenderedHandSuitColors() : null
 
                 const state = solvedState
-                  ? { ...solvedState, presetRoutes }
-                  : { ...roleData, result: null, presetRoutes }
+                  ? { ...solvedState, presetRoutes, handSuitColors, usesMainHandMirror }
+                  : {
+                      ...roleData,
+                      result: null,
+                      presetRoutes,
+                      handSuitColors,
+                      usesMainHandMirror
+                    }
 
                 Game.setSpellState(4022, state)
 
