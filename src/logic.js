@@ -325,7 +325,7 @@ export function logic(msg) {
                 const mapConfig = spellExtendConfig.PeiXiuCellDic.get(roleData.mapId)
                 const solvedState = mapConfig ? solvePeiXiuRoleData(mapConfig, Datas) : null
                 const presetRoutes = spellExtendConfig.PeiXiuPresetRoutes.get(roleData.mapId) || []
-                const usesMainHandMirror = Number(Game.myID) === Number(SeatID)
+                const usesMainHandMirror = Game.myID != null && SeatID != null && Number(Game.myID) === Number(SeatID)
                 const handSuitColors = usesMainHandMirror ? getRenderedHandSuitColors() : null
 
                 const state = solvedState
