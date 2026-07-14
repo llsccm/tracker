@@ -36,6 +36,8 @@ export class Player {
 
   /** 玩家角色 国战为2个武将id */
   generals: number[] = []
+  /** 玩家阵营类型 */
+  figure = 0
 
   /**
    * @param seatID - 座位号 (玩家物理座位号，取值在 0-7 之间)

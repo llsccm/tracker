@@ -34,6 +34,35 @@ describe('TrackerController', () => {
     expect(seatReads).toEqual([])
   })
 
+  it('录像主视角确定后同步座位并重排 SeatUI', () => {
+    const seatReads = []
+    const { controller, gameState, view } = createTrackerControllerHarness({
+      getSeatUIs: () => seatReads.push('read')
+    })
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers(
+      [
+        { SeatID: 1, ClientID: 100 },
+        { SeatID: 2, ClientID: 200 }
+      ],
+      999
+    )
+    controller.setTrackerFirstHand(1)
+
+    seatReads.length = 0
+    const renderCount = view.calls.scheduleRender
+
+    controller.setTrackerMySeatID(2)
+    controller.setTrackerMySeatID(1)
+
+    const room = controller.getTrackerRoom()
+    expect(room.mySeatID).toBe(2)
+    expect(gameState.myID).toBe(2)
+    expect(seatReads).toEqual(['read'])
+    expect(view.calls.scheduleRender).toBe(renderCount + 1)
+  })
+
   it('通过注入依赖管理房间生命周期', () => {
     const seatReads = []
     const { controller, gameState, view } = createTrackerControllerHarness({

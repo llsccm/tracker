@@ -145,9 +145,10 @@ export function logic(msg) {
         })
         break
 
-      // case 'decodeGameRecordInitInfo':
-      //   console.info(msg)
-      //   break
+      case 'decodeGameRecordInitInfo':
+        // 用于判断模式
+        // console.info(msg)
+        break
 
       case 'GsCModifyUserseatNtf': // 游戏开始标志 / 游戏结束标志
         // handleStartGame(msg)
@@ -160,11 +161,19 @@ export function logic(msg) {
         break
 
       case 'GsCUpdateRoleDataNtf':
-        //座位信息 Game.myID === undefined &&
-        // 22排位有58消息
-        if (msg.StateID === 58) {
-          console.info('# 座位：', Game.seatIDs)
+        if (msg.StateID === 47) {
+          // console.info(msg)
         }
+
+        // 22排位有58消息 DATA_CAMP_ID 阵营语音 SeatID: 0 Value: 402476507
+        if (msg.StateID === 58) {
+          // 可以用来确认22主视角
+        }
+
+        if (msg.StateID === 66) {
+          // 单骑玩家虎符数量
+        }
+
         break
 
       /** 身份更新 */
@@ -215,8 +224,9 @@ export function logic(msg) {
 
       // 选择武将
       case 'SmsgGameSetCharacter':
-        if (Game.myID === undefined && Game.isDouDiZhu && msg.Infos.length == 1) {
-          Game.setMyID(msg.Infos[0].SeatID)
+        // 斗地主是同步选择武将 播放录像时可以用这个方式来判断主视角
+        if (Game.isRecord && Game.myID === undefined && Game.isDouDiZhu && msg.Infos.length == 1) {
+          tracker.setTrackerMySeatID(msg.Infos[0].SeatID)
         }
 
         msg.Infos.forEach(({ SeatID, CharacterID }) => {

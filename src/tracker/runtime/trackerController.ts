@@ -200,6 +200,19 @@ export class TrackerController {
    * 先手协议到达后补齐固定视角座位顺序。
    * Seat UI 依赖固定视角，必须在这里主动刷新宿主座位覆盖层。
    */
+  setTrackerMySeatID(seatID: SeatID): void {
+    if (!this.trackerRoom || this.trackerRoom.mySeatID !== undefined) return
+
+    const normalizedSeatID = Number(seatID)
+    if (!this.trackerRoom.players.has(normalizedSeatID)) return
+
+    this.trackerRoom.setMySeatID(normalizedSeatID)
+    this.trackerRoom.updateFixedViewIds()
+    this.getRuntime()?.syncRoomSeats?.(this.trackerRoom)
+    this.getSeatUIs()
+    this.controllerView.scheduleRender()
+  }
+
   setTrackerFirstHand(seatID: SeatID): void {
     if (!this.trackerRoom) return
 

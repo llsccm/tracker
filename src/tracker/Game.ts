@@ -28,11 +28,6 @@ class BrowserGameState extends GameState {
     super({ orderLabels: UI.ORDER_LABELS })
   }
 
-  /** 需要废弃 */
-  setMyID(seatID: SeatID | undefined): void {
-    super.setMyID(seatID)
-  }
-
   setGeneral(seatID: SeatID, generalID: number | undefined, index = 0, _an = false): void {
     if (generalID === undefined) return
 
@@ -93,7 +88,6 @@ class BrowserGameState extends GameState {
     if (!room) return
     this.seatIDs = room.seatIDs.slice()
     this.size = room.size
-    this.setMyID(room.mySeatID)
   }
 
   /**
@@ -133,6 +127,7 @@ class BrowserGameState extends GameState {
     trackerLogger.info('GameState 游戏已重置并开始')
 
     this.resetRoomState()
+    this.isRecord = false
     this.isGameStart = true
     this.isPassed = false
 
@@ -156,6 +151,7 @@ class BrowserGameState extends GameState {
    */
   end(): void {
     if (this.isGameStart && !this.isPassed) {
+      this.isRecord = false
       this.isGameStart = false
       this.isPassed = true
       this.resetRoomState()
