@@ -209,15 +209,15 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         sourceHandSeat,
         targetHandSeat,
         toZone,
-        handMoveCount
+        unknownCount
       )
     ) {
-      // 随机手牌回到公共区时，保留牌堆顶/底候选，后续被摸走时还能继续传播。
+      // 身份未知的手牌回到公共区时，保留牌堆顶/底候选，后续被摸走时还能继续传播。
       this.markRandomHandToPublicCandidates({
         fromSeat: sourceHandSeat,
         toZone,
         position,
-        count: handMoveCount
+        count: unknownCount
       })
     }
 

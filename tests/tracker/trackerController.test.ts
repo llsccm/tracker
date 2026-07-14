@@ -285,6 +285,151 @@ describe('TrackerController', () => {
     })
   })
 
+  it('问卦将已知手牌置于牌堆底时不扩散公共候选', () => {
+    const { controller } = createTrackerControllerHarness()
+    const handCardIDs = [2, 43, 130, 125, 146]
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
+    controller.initTrackerDeck([...handCardIDs, 1])
+    controller.syncTrackerMove(protocolMove({ CardIDs: handCardIDs, ToID: 1 }))
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [146],
+        CardCount: 1,
+        FromID: 1,
+        FromZone: 5,
+        FromZoneParam: 0,
+        FromPosition: 0,
+        MoveType: 15,
+        SpellID: 780,
+        ToID: 255,
+        ToZone: 1,
+        ToZoneParam: 0,
+        ToPosition: 0
+      })
+    )
+
+    const room = controller.getTrackerRoom()
+    const returnedCard = room.cardIndex.get(146)
+    expect(returnedCard.location).toBe('pile')
+    expect(returnedCard.publicCandidates).toEqual([])
+
+    handCardIDs.slice(0, -1).forEach((id) => {
+      const card = room.cardIndex.get(id)
+      expect(card.location).toBe('player')
+      expect(card.subZone).toBe('hand')
+      expect(card.publicCandidates).toEqual([])
+    })
+    expect(room.getPlayer(1).candidateHandCards).toEqual([])
+  })
+
+  it('技能3571从牌堆揭示陈旧已知手牌时置换实体并保持牌堆数量', () => {
+    const { controller } = createTrackerControllerHarness()
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 5, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2, 3, 4, 34, 68, 161])
+    controller.syncTrackerMove(protocolMove({ CardIDs: [161], ToID: 5 }))
+
+    const skillMove = (cardID, fromZone, toZone) =>
+      protocolMove({
+        CardIDs: [cardID],
+        CardCount: 1,
+        FromID: 255,
+        FromZone: fromZone,
+        FromZoneParam: 0,
+        MoveType: 6,
+        SpellID: 3571,
+        ToID: 255,
+        ToZone: toZone,
+        ToZoneParam: 0
+      })
+
+    controller.syncTrackerMove(skillMove(34, 1, 3))
+    controller.syncTrackerMove(skillMove(34, 3, 8))
+    controller.syncTrackerMove(skillMove(68, 1, 3))
+    controller.syncTrackerMove(skillMove(68, 3, 8))
+
+    const room = controller.getTrackerRoom()
+    const pileCountBeforeLastReveal = room.zones.get('pile').cards.length
+
+    controller.syncTrackerMove(skillMove(161, 1, 3))
+
+    const seatFiveHandCards = room.cards.filter(
+      (card) =>
+        card.location === 'player' &&
+        card.subZone === 'hand' &&
+        card.seats.has(5) &&
+        card.isKnown !== true
+    )
+    expect(room.cardIndex.get(161).location).toBe('process')
+    expect(room.zones.get('pile').cards).toHaveLength(pileCountBeforeLastReveal - 1)
+    expect(seatFiveHandCards).toHaveLength(1)
+    expect(seatFiveHandCards[0].id).not.toBe(0)
+  })
+
+  it('技能304展示游戏外生成的匿名手牌时补建并揭示真实实体', () => {
+    const { controller } = createTrackerControllerHarness()
+    const knownHandIDs = [26, 149, 62]
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
+    controller.initTrackerDeck([...knownHandIDs, 1])
+    controller.syncTrackerMove(protocolMove({ CardIDs: knownHandIDs, ToID: 1 }))
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 1,
+        FromID: 255,
+        FromZone: 12,
+        MoveType: 19,
+        ToID: 1,
+        ToZone: 5
+      })
+    )
+
+    const room = controller.getTrackerRoom()
+    expect(
+      room.cards.filter(
+        (card) =>
+          card.id === 0 &&
+          card.location === 'player' &&
+          card.subZone === 'hand' &&
+          card.seats.has(1)
+      )
+    ).toHaveLength(1)
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [...knownHandIDs, 60992],
+        CardCount: 4,
+        FromID: 1,
+        FromZone: 5,
+        MoveType: 21,
+        SpellID: 304,
+        ToID: 1,
+        ToZone: 5
+      })
+    )
+
+    const revealedCard = room.cardIndex.get(60992)
+    expect(revealedCard.location).toBe('player')
+    expect(revealedCard.subZone).toBe('hand')
+    expect(revealedCard.seats.has(1)).toBe(true)
+    expect(revealedCard.isKnown).toBe(true)
+    expect(
+      room.cards.filter(
+        (card) =>
+          card.id === 0 &&
+          card.location === 'player' &&
+          card.subZone === 'hand' &&
+          card.seats.has(1)
+      )
+    ).toEqual([])
+  })
+
   it('手气卡重摸明牌命中其他座位暗占位时保持牌堆与手牌数量', () => {
     const { controller } = createTrackerControllerHarness()
     const hiddenSeat = 2

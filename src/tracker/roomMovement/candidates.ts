@@ -168,9 +168,9 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
     sourceSeat: SeatID | null,
     targetSeat: SeatID | null,
     toZone: MoveTargetZone,
-    count: number
+    unknownCount: number
   ): boolean {
-    return sourceSeat !== null && targetSeat === null && toZone === 'pile' && count > 0
+    return sourceSeat !== null && targetSeat === null && toZone === 'pile' && unknownCount > 0
   }
 
   /**
