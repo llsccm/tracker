@@ -225,8 +225,8 @@ export function logic(msg) {
       // 选择武将
       case 'SmsgGameSetCharacter':
         // 斗地主是同步选择武将 播放录像时可以用这个方式来判断主视角
-        if (Game.myID === undefined && Game.isDouDiZhu && msg.Infos.length == 1) {
-          Game.room.setMySeatID(msg.Infos[0].SeatID)
+        if (Game.isRecord && Game.myID === undefined && Game.isDouDiZhu && msg.Infos.length == 1) {
+          tracker.setTrackerMySeatID(msg.Infos[0].SeatID)
         }
 
         msg.Infos.forEach(({ SeatID, CharacterID }) => {
