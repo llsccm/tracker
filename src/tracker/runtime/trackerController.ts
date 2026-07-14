@@ -353,21 +353,27 @@ export class TrackerController {
     )
 
     if (subZone && !Number.isNaN(seatID) && seatID !== 255) {
+      // 同区展示可能首次公开由 id=0 承载的游戏外卡牌；先注册真实 ID，
+      // 标准移动链路才能用新实体置换来源手牌中的匿名占位。
+      const knownCards = this.resolveKnownCards(ids)
+      const resolvedIDs = knownCards.map((card) => card.id)
+      if (resolvedIDs.length === 0) return
+
       this.controllerLogger.info('展示明牌进入玩家区', {
-        ids,
+        ids: resolvedIDs,
         seatID,
         subZone,
         spellID
       })
 
-      readyRoom.moveCards(ids, 'player', {
+      readyRoom.moveCards(resolvedIDs, 'player', {
         seatID,
         fromSeatID: seatID,
         fromZone: null,
         fromSubZone: subZone,
         subZone,
         spellID,
-        cardCount: ids.length,
+        cardCount: resolvedIDs.length,
         sourceEvent: event.options?.sourceEvent ?? {
           type: 'showCards',
           raw
@@ -386,6 +392,21 @@ export class TrackerController {
       position: event.options?.position ?? POSITION_TOP,
       resolvedCount: knownCards.length
     })
+
+    const sourceZoneName = getProtocolPublicZone(raw.FromZone)
+    if (sourceZoneName && sourceZoneName !== zoneName) {
+      // 判定获得既会展示牌面，也会把实体移出来源公共区；复用标准移动链路完成来源置换，
+      // 并清空协议残留的玩家槽位，避免公共区来源被误判为手牌。
+      knownCards.forEach((card) => card.confirmKnown())
+      readyRoom.moveCards(ids, zoneName, {
+        ...event.options,
+        fromZone: sourceZoneName,
+        fromSeatID: null,
+        fromSubZone: null,
+        cardCount: ids.length
+      })
+      return
+    }
 
     knownCards.forEach((card) => {
       readyRoom.removeCardsFromConstraintGroups([card])

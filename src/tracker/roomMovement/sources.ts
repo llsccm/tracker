@@ -447,7 +447,9 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     const { fromZone, fromPosition } = context
     const sourceZone = typeof fromZone === 'string' ? this.room.zones.get(fromZone) : undefined
     if (!sourceZone || sourceZone.cards.includes(card) || card.location !== 'player') return null
-    if (card.isKnown === true || card.suspended === true) return null
+    // 协议已明确牌来自公共区；即使本地把该实体标成明牌，玩家位置也只是陈旧状态。
+    // 必须取一个公共区实体回补原玩家槽位，保持手牌实体与公共区数量守恒。
+    if (card.suspended === true) return null
 
     const replacement = this.takeCardsFromPublicZone(1, fromZone, fromPosition)[0]
     if (!replacement) return null
@@ -466,7 +468,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
 
     this.replaceHiddenMarkPlaceholder(card, replacement)
 
-    trackerLogger.debug('公共区已知牌命中玩家暗占位，使用公共来源实体替回', {
+    trackerLogger.debug('公共区已知牌命中本地玩家实体，使用公共来源实体替回', {
       cardID: card.id,
       replacementCardID: replacement.id,
       fromZone,
