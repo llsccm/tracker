@@ -149,10 +149,10 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
   }
 
   /**
-   * 已知牌从玩家区移出时，如果它本来只是“可能在来源区”，先收敛来源候选。
+   * 牌从玩家区移出时，如果它本来只是“可能在来源区”，先收敛来源候选。
    * 这样标记/手牌的数量约束能看到明确移出的那一张。
    */
-  resolveKnownSourcePlayerCandidate(card: Card, context: RoomMoveContext): boolean {
+  resolveSourcePlayerCandidate(card: Card, context: RoomMoveContext): boolean {
     const { fromSeat, fromSubZone } = context
     const sourceSpellID = this.getSourceSpellID(context)
     if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone) {
@@ -167,11 +167,11 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     }
 
     if (card.hasLocationCandidate?.(candidate)) {
-      return card.resolveLocationCandidate(candidate, 'moveKnown:sourcePlayerCandidate')
+      return card.resolveLocationCandidate(candidate, 'move:sourcePlayerCandidate')
     }
 
     if (card.hasSubZoneCandidate?.(candidate)) {
-      return card.resolveSubZoneCandidate(candidate, 'moveKnown:sourcePlayerCandidate')
+      return card.resolveSubZoneCandidate(candidate, 'move:sourcePlayerCandidate')
     }
 
     return false
@@ -266,27 +266,26 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
   }
 
   /**
-   * 洗牌后暂停追踪的正 ID 再次从玩家手牌出现时，理论上应已有洗牌保留的 id=0 来源占位。
-   * 但旧状态或边缘路径可能没有留下占位；此时只为该 suspended 正 ID 补一个玩家区暗占位，
-   * 让后续 swapCardWithUnknown() 继续走统一的来源占位置换流程。
+   * 协议确认某张正 ID 明牌来自玩家手牌，但本地缺少可置换的来源实体时，
+   * 创建一个临时玩家手牌暗占位，让后续 swapCardWithUnknown() 继续走统一的身份置换流程。
+   * 此兜底适用于任意位置的正 ID 明牌，不要求该牌处于 suspended 状态。
    */
-  createPlayerSourcePlaceholderForSuspendedKnownCard(
-    card: Card,
-    context: RoomMoveContext
-  ): Card | null {
+  createPlayerSourcePlaceholderForKnownCard(card: Card, context: RoomMoveContext): Card | null {
     const { fromSeat, fromSubZone, sourceEvent } = context
     if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat)) return null
     if (fromSubZone !== 'hand') return null
-    if (card.location !== 'suspended' || card.id <= 0 || card.isKnown !== true) return null
+    if (card.id <= 0) return null
 
     const placeholder = this.room.createExternalCards([], 1)[0]
     if (!placeholder) return null
 
     placeholder.bindCandidates([fromSeat], 'hand', null, { known: false })
-    trackerLogger.info('暂停追踪正 ID 来源手牌缺少暗占位，已创建 id=0 兜底占位', {
-      reason: 'moveKnownCardsForContext:suspendedSourcePlaceholderFallback',
+    trackerLogger.info('玩家来源明牌缺少可置换实体，已创建瞬时匿名占位', {
+      reason: 'moveKnownCardsForContext:knownSourcePlaceholderFallback',
       knownCardID: card.id,
       placeholderCardID: placeholder.id,
+      placeholderEntityID: placeholder.entityID,
+      knownCardLocation: card.location,
       fromSeat,
       fromSubZone,
       sourceEvent
@@ -313,6 +312,9 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     const oldSpellID = card.spellID
     const keepPlaceholderAtPreviousPublicPosition = this.hasPublicCandidateAt(card, oldLocation)
 
+    // 协议已经证明被替换的暗实体来自该玩家区。必须先确认来源位置，再移出约束组，
+    // 否则多席位暗实体仍是未解析状态，组内对应位置名额不会随实体离开而扣减。
+    this.resolveSourcePlayerCandidate(placeholder, context)
     this.room.removeCardsFromConstraintGroups([placeholder])
 
     card.location = 'player'
@@ -445,7 +447,9 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     const { fromZone, fromPosition } = context
     const sourceZone = typeof fromZone === 'string' ? this.room.zones.get(fromZone) : undefined
     if (!sourceZone || sourceZone.cards.includes(card) || card.location !== 'player') return null
-    if (card.isKnown === true || card.suspended === true) return null
+    // 协议已明确牌来自公共区；即使本地把该实体标成明牌，玩家位置也只是陈旧状态。
+    // 必须取一个公共区实体回补原玩家槽位，保持手牌实体与公共区数量守恒。
+    if (card.suspended === true) return null
 
     const replacement = this.takeCardsFromPublicZone(1, fromZone, fromPosition)[0]
     if (!replacement) return null
@@ -464,7 +468,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
 
     this.replaceHiddenMarkPlaceholder(card, replacement)
 
-    trackerLogger.debug('公共区已知牌命中玩家暗占位，使用公共来源实体替回', {
+    trackerLogger.debug('公共区已知牌命中本地玩家实体，使用公共来源实体替回', {
       cardID: card.id,
       replacementCardID: replacement.id,
       fromZone,
@@ -587,12 +591,20 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
   }
 
   /**
-   * 当检测到某张已知物理牌 card 实际上正从 fromSeat 的手牌区移出，
+   * 当检测到某张已知物理牌 card 实际上正从移动上下文指定的手牌区移出，
    * 但客户端当前记录其处于其他区域（如牌堆）时，执行位置与状态交换。
    * @param card - 已知卡牌
-   * @param fromSeat - 来源玩家座位号
+   * @param context - 包含来源玩家位置的移动上下文
+   * @param excludeCards - 本次移动中不能作为暗占位的卡牌
    */
-  swapCardWithUnknown(card: Card, fromSeat: SeatID, excludeCards: Card[] = []): Card | null {
+  swapCardWithUnknown(
+    card: Card,
+    context: RoomMoveContext,
+    excludeCards: Card[] = []
+  ): Card | null {
+    const { fromSeat } = context
+    if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat)) return null
+
     const excludedCards = new Set(excludeCards)
     // 1. 查找该玩家手牌中当前未知的卡牌
     const unknownCard = this.room.cards.find(
@@ -615,7 +627,12 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     const oldSpellID = card.spellID
     const keepPlaceholderAtPreviousPublicPosition = this.hasPublicCandidateAt(card, oldLocation)
 
+    this.resolveSourcePlayerCandidate(unknownCard, context)
     this.room.removeCardsFromConstraintGroups([unknownCard])
+    // 暗占位继承明牌原玩家位置时，不应继续携带来源手牌的位置候选。
+    if (oldLocation === 'player') {
+      unknownCard.setLocationCandidates([], 'swapCardWithUnknown:unknownCard:candidates')
+    }
 
     // 将 card 绑定到 fromSeat 的手牌区，并设为明牌
     card.location = 'player'

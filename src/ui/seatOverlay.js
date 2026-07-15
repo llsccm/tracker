@@ -74,15 +74,3 @@ export function hideSelfOrderContainer(displayID) {
   const orderContainer = document.querySelector('#seatUI #or' + displayID)
   if (orderContainer) orderContainer.style.display = 'none'
 }
-
-// export function hideOrderContainerForSeatUI(globalConfig, UI) {
-//   if (globalConfig.seatUISwitch) {
-//     for (const seat of UI.seatUIs) {
-//       if (seat.posY && seat.posX && typeof seat.actualSeatID != 'undefined') {
-//         const displayID = typeof seat.order === 'number' ? seat.order + 1 : seat.actualSeatID
-//         const orderContainer = document.querySelector('#seatUI #or' + displayID)
-//         if (orderContainer) orderContainer.style.display = 'none'
-//       }
-//     }
-//   }
-// }

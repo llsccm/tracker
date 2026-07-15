@@ -243,7 +243,14 @@ export class ConstraintGroup {
     }
 
     this.expectedSlotsBySeat.forEach((expectedCount, seatID) => {
-      // seat 约束只看普通手牌候选；带 subZoneCandidates 的牌还需要位置层约束继续判断。
+      // seat 约束只处理没有完整子区域候选的普通手牌。subZoneCandidates 表示牌仍可能位于
+      // “A 手牌 / A 标记 / B 手牌”等不同完整位置，seats 只是这些位置的座位投影：
+      // 1. seats.size === 1 只代表 owner 已确定，不能据此把“A 手牌 / A 标记”计为锁定手牌；
+      // 2. 若 A 的手牌名额已满，按 seat 删除 A 会同时误删“A 标记”，造成过度收敛。
+      // 因此带 subZoneCandidates 的牌必须跳过本层，由 expectedSlotsByLocation（或兼容的
+      // expectedSlotsBySubZone）按 seatID + subZone + spellID 的完整位置名额收敛。创建这类
+      // 候选的调用方也必须提供对应的位置层约束，不能只设置 expectedSlotsBySeat，否则该牌
+      // 会被本层有意跳过，又没有位置层负责消元。
       const groupCards = Array.from(this.cards).filter(
         (card) =>
           card.location === 'player' &&

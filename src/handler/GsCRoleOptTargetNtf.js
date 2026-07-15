@@ -1,3 +1,4 @@
+import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
 import { CardConfig } from '../config'
 import { drawYanJiao, drawYiCheng } from '../draw'
 import { Game, globalConfig } from '../tracker'
@@ -38,7 +39,8 @@ export function handleRoleOptTargetNtf(arg) {
 
     // 刘辟 易城
     case 3440:
-      if (Game.mySeats.includes(SeatID) && Param == 0 && Params?.length > 0) {
+      // 更改为 不再计算队友刘辟的易城 Game.mySeats.includes(SeatID)
+      if (Game.myID !== undefined && Game.myID === SeatID && Param == 0 && Params?.length > 0) {
         if (Type == 28) {
           const paiduiNumbers = Params.map((id) => CardConfig.GetInstance().getCardNumber(id))
           const shoupaiNumbers = getTrackedPlayerHandCardIDs(SeatID).map((id) =>
@@ -71,7 +73,7 @@ export function handleRoleOptTargetNtf(arg) {
 
     //   break
 
-    // 顺拆 魄袭 伪溃 审时 闪袭 勘破 缓释 眩惑(界) 目标角色全部手牌明牌
+    // 顺拆 魄袭 伪溃 审时 闪袭 勘破 缓释 眩惑(界) 强识(界) 目标角色全部手牌明牌
     case 4:
     case 5:
     case 921:
@@ -81,6 +83,7 @@ export function handleRoleOptTargetNtf(arg) {
     case 3119:
     case 501:
     case 3437:
+    case 3876:
       if (Params?.length > 0) {
         if (targetSeatID !== undefined && targetSeatID !== 255) {
           revealPlayerHandCards(targetSeatID, Params, { fullHand: true })
@@ -192,6 +195,17 @@ export function handleRoleOptTargetNtf(arg) {
       if (Type == 28) {
         Game.setGeneral(targetSeatID, Params[2], Params[1], true)
       }
+      break
+
+    case 4021:
+      // 此时裴秀开始选技能 应该销毁地图
+      if (Type == 78) {
+        destroyPeiXiuMapWindow()
+        Game.deleteSpellState(4022)
+      }
+      break
+
+    default:
       break
   }
 }

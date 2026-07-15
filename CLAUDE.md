@@ -49,13 +49,13 @@ host console.log
   → src/index.js (SGSMODULE dispatch)
   → src/logic.js (featureFlags whitelist, then route by ClassName)
   → src/handler/* (per-protocol handlers)
-  → src/tracker/bridge.ts (syncTrackerMove / reveal / render scheduling)
+  → src/tracker/runtime/bridge.ts → runtime/trackerController.ts (syncTrackerMove / reveal / render scheduling)
   → src/tracker/Room.moveCards() → Room.resolveConstraints()
   → src/tracker/view/* (scheduleRender → next-frame flush)
 ```
 
 - **`src/logic.js`** whitelists retained messages via `src/featureFlags.js`, then dispatches by `ClassName`.
-- **`src/handler/PubGsCMoveCard.js`** is the hot path: protocol preprocessing, position normalization, `CardIDs` correction, and skill side-effects, then hands the real state move to the tracker through `src/tracker/bridge.ts`.
+- **`src/handler/PubGsCMoveCard.js`** is the hot path: protocol preprocessing, position normalization, `CardIDs` correction, and skill side-effects, then hands the real state move to the tracker through `src/tracker/runtime/bridge.ts` (a thin facade that delegates to `runtime/trackerController.ts`).
 - **`src/handler/legacyMoveCard.js` and `src/handler/old/` are dead** — legacy linked-list tracker code, NOT exported from `src/handler/index.js`. Do not build new runtime paths on them.
 
 ## The card tracker (`src/tracker/`) — the core
@@ -84,7 +84,7 @@ The tracker is created per-game, not at script INIT. Two-phase view mount. See [
 - **LF line endings everywhere** (enforced by convention; do not reintroduce CRLF). 2-space indent. Match neighboring style — no unrelated reformatting.
 - Prettier: single quotes, no semicolons, no trailing commas, width 100.
 - ESM throughout (`"type": "module"`). Vite alias `@` → `src/`.
-- The host page provides globals (`Laya`, `JSZip`, `CtrUtil`, `SystemContext`, …) declared in `eslint.config.js`; `window.XC` is the shared runtime namespace.
+- The host page provides globals (`Laya`, `JSZip`, `CtrUtil`, `SystemContext`, …) declared in `eslint.config.js`.
 - `src/tracker/index.ts` only re-exports shared runtime state (`globalConfig`, `globalState`, `rogueMap`, `UI`, `user`, `Game`). Import `Room`/`Card`/`Player`/`Zone`/`ConstraintGroup` directly from their own submodules.
 - **Do not commit `dist/` or `.env`.** `pnpm-lock.yaml` is tracked but should only change for dependency/version tasks — no incidental edits. `.env` is untracked/ignored. `html/iframe.html` is loaded from a remote URL at runtime; changing it means confirming the remote deploy.
 

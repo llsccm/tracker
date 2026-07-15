@@ -2,7 +2,12 @@ import { getPanelContentInner } from '@/ui/frameContent'
 import { reapplyHiddenTrackerVisibility } from '@/ui/trackerVisibility'
 import { buildCardTypeButtons, renderStatistics } from './StatisticsView'
 import { renderQueryPanel } from './QueryPanelView'
-import { initPlayerHandContainers, renderPlayerHand, renderPublicZones } from './PlayerHandView'
+import {
+  clearRenderedMainHandCardIDs,
+  initPlayerHandContainers,
+  renderPlayerHand,
+  renderPublicZones
+} from './PlayerHandView'
 import {
   collectDirtyRenderState,
   finishDirtyRender,
@@ -59,6 +64,7 @@ function doUnmount(): void {
   if (doc) {
     clearRenderedContent(doc)
   }
+  clearRenderedMainHandCardIDs()
   doc = null
   currentRoom = null
   rafScheduled = false

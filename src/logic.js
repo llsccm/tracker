@@ -1,5 +1,5 @@
-import { CardConfig } from './config'
-import { initFrame, resetGameUiState } from './dom'
+import { CardConfig, SpellExtendConfig } from './config'
+import { initFrame } from './dom'
 import { drawCard } from './draw'
 import { isRetainedLogicMessage } from './featureFlags'
 import {
@@ -20,9 +20,15 @@ import { laya } from './runtime/gameAdapter'
 import { Game, globalConfig, UI, user } from './tracker'
 import { tracker } from './tracker/runtime/browser'
 import { POSITION_BOTTOM } from './tracker/candidate/cardPositions'
+import {
+  getRenderedMainHandCardIDs,
+  subscribeRenderedMainHandCardIDs
+} from './tracker/view/PlayerHandView'
 import { idleCallback, toSuitGlyphHtml } from './utils'
 import { addTooltip } from './utils/notification'
 import { handleBroadMsg } from './handler/chat'
+import { parsePeiXiuRoleData, solvePeiXiuRoleData } from './utils/peixiuRouteFeature'
+import { renderPeiXiuMapWindow, setPeiXiuMapWindowVisible } from './ui/PeiXiuMapWindow'
 
 const ALLOWED_CLASSES = new Set([
   'ClientLoginRep',
@@ -38,6 +44,8 @@ const DOUDIZHU_MSGS = new Set([
   'MsgGameOver'
 ])
 
+const ShanHeTu_regex = /\[\d+\]$/
+
 const PROTOCOL_PILE_ZONE = 1
 const PROTOCOL_HAND_ZONE = 5
 
@@ -51,6 +59,40 @@ function revealCardsInProtocolZone(id, cardIDs, zone = PROTOCOL_HAND_ZONE, pos =
   tracker.revealTrackerCardsInZone({ id, zone, pos }, cardIDs)
 }
 
+/**
+ * @returns {number[]|null}
+ */
+function getRenderedHandSuitColors() {
+  const cardIDs = getRenderedMainHandCardIDs()
+  if (cardIDs === null) return null
+
+  const cardConfig = CardConfig.GetInstance()
+  return cardIDs
+    .map((id) => Number(cardConfig.getCardColor(id)))
+    .filter((color) => color >= 1 && color <= 4)
+}
+
+function refreshPeiXiuHandSuitColors() {
+  const state = Game.getSpellState(4022)
+  if (!state?.usesMainHandMirror || !state.result) return
+
+  const handSuitColors = getRenderedHandSuitColors()
+  if (handSuitColors === null) return
+  if (
+    Array.isArray(state.handSuitColors) &&
+    state.handSuitColors.length === handSuitColors.length &&
+    state.handSuitColors.every((color, index) => color === handSuitColors[index])
+  ) {
+    return
+  }
+
+  const nextState = { ...state, handSuitColors }
+  Game.setSpellState(4022, nextState)
+  renderPeiXiuMapWindow(nextState, SpellExtendConfig.GetInstance().PeiXiuBonus)
+}
+
+subscribeRenderedMainHandCardIDs(refreshPeiXiuHandSuitColors)
+
 /** 牌堆准备好了 */
 function readyTrackerGame(cardList = []) {
   const dictCard = CardConfig.GetInstance().cardIDsOrder.filter((id) => cardList.includes(id))
@@ -59,13 +101,12 @@ function readyTrackerGame(cardList = []) {
   Game.isGuoZhan = cardList.includes(1150)
   Game.isDouDiZhu = cardList.includes(13005)
   Game.isShanHeTu = cardList.includes(20100)
-  Game.isRoguelike1v1 = laya?.scene?.SceneName === 'RogueLike1v1Scene'
-  Game.isSWJG = laya?.scene?.SceneName === 'SWJGScene'
+  // Game.isRoguelike1v1 = laya?.scene?.SceneName === 'RogueLike1v1Scene'
+  // Game.isSWJG = laya?.scene?.SceneName === 'SWJGScene'
 
-  resetGameUiState()
   delete Game.spellSpace[3338] // 百出 每局游戏归零
 
-  laya.ged?.CloseWindow?.('CardConfigWindow')
+  // laya.ged?.CloseWindow?.('CardConfigWindow')
 
   Game.resetConfigHandCards()
   tracker.initTrackerDeck(paidui)
@@ -139,6 +180,27 @@ export function logic(msg) {
         })
         break
 
+      case 'decodeGameRecordInitInfo':
+        // 用于判断模式
+        // console.info(msg)
+
+        if (ProtoObj?.matchName === '斗地主') {
+          Game.isDouDiZhu = true
+        }
+
+        if (ProtoObj?.matchName === '单骑无双') {
+          Game.isRoguelike1v1 = true
+        }
+
+        // 长安行[20610702]
+        if (ProtoObj?.matchName && ShanHeTu_regex.test(ProtoObj.matchName)) {
+          Game.isShanHeTu = true
+        }
+
+        // 新欢乐排位 身份演武军争
+
+        break
+
       case 'GsCModifyUserseatNtf': // 游戏开始标志 / 游戏结束标志
         // handleStartGame(msg)
         break
@@ -150,19 +212,36 @@ export function logic(msg) {
         break
 
       case 'GsCUpdateRoleDataNtf':
-        //座位信息 Game.myID === undefined &&
-        // 22排位有58消息
-        if (msg.StateID === 58) {
-          console.info('# 座位：', Game.seatIDs)
+        if (msg.StateID === 47) {
+          // console.info(msg)
         }
+
+        // 22排位有58消息 DATA_CAMP_ID 阵营语音 SeatID: 0 Value: 402476507
+        // 可以用来确认22主视角
+        if (
+          msg.StateID === 58 &&
+          Game.isRecord &&
+          Game.myID === undefined &&
+          SeatID !== undefined
+        ) {
+          tracker.setTrackerMySeatID(SeatID)
+        }
+
+        if (msg.StateID === 66) {
+          // 单骑玩家虎符数量
+        }
+
         break
 
       /** 身份更新 */
       case 'MsgGameShowFigure':
-        // 1 : 分配 2 : 标记/广播
+        // Type 1是分配 2是标记/广播
+        // Figure: 主公/地主是1 农民是3
+        // 统率的主公可能不是先手 但是这里先不管
+        // 斗地主全部都是 type1 不能用作主视角判断
         if (msg.Type == 1) {
-          // console.info('我的身份: ' + msg.Figure, msg.SeatID)
-          if (Game.myID === undefined) Game.setMyID(msg.SeatID)
+          // console.info('座位: ' + SeatID + '的身份: ' + msg.Figure)
+          if (msg.Figure === 1) tracker.setTrackerFirstHand(SeatID)
         }
 
         break
@@ -202,8 +281,9 @@ export function logic(msg) {
 
       // 选择武将
       case 'SmsgGameSetCharacter':
-        if (Game.myID === undefined && Game.isDouDiZhu && msg.Infos.length == 1) {
-          Game.setMyID(msg.Infos[0].SeatID)
+        // 斗地主是同步选择武将 播放录像时可以用这个方式来判断主视角
+        if (Game.isRecord && Game.myID === undefined && Game.isDouDiZhu && msg.Infos.length == 1) {
+          tracker.setTrackerMySeatID(msg.Infos[0].SeatID)
         }
 
         msg.Infos.forEach(({ SeatID, CharacterID }) => {
@@ -232,23 +312,70 @@ export function logic(msg) {
       // TODO
       //出杀次数
       case 'GsCUpdateRoleDataExNtf':
-        if (Game.currentID == SeatID && msg.DataID == 1 && Array.isArray(Datas)) {
-          document.getElementById('sha').innerText = '剩余：' + Math.max(0, Datas[2] - Datas[1])
-        } else if (msg.DataID == 3571 && Array.isArray(Datas)) {
-          // 郭照 椒遇 Datas:[x] 1红2黑
-          const colors = Datas[0] == 1 ? [1, 2] : [3, 4]
+        {
+          switch (msg.DataID) {
+            case 1:
+              if (Game.currentID == SeatID && Array.isArray(Datas)) {
+                document.getElementById('sha').innerText =
+                  '剩余：' + Math.max(0, Datas[2] - Datas[1])
+              }
+              break
 
-          const jiaoYuCards = Game.getSpellState(3571)
-          Game.setSpellState(
-            3571,
-            new Set(
-              Array.from(jiaoYuCards || []).filter((id) =>
-                colors.includes(CardConfig.GetInstance().getCard(id)?.color)
-              )
-            )
-          )
+            case 3571:
+              if (Array.isArray(Datas)) {
+                // 郭照 椒遇 Datas:[x] 1红2黑
+                const colors = Datas[0] == 1 ? [1, 2] : [3, 4]
+
+                const jiaoYuCards = Game.getSpellState(3571)
+                Game.setSpellState(
+                  3571,
+                  new Set(
+                    Array.from(jiaoYuCards || []).filter((id) =>
+                      colors.includes(CardConfig.GetInstance().getCard(id)?.color)
+                    )
+                  )
+                )
+              }
+              break
+
+            // 尽览
+            case 4022:
+              if (Array.isArray(Datas)) {
+                const roleData = parsePeiXiuRoleData(Datas)
+                if (!roleData) break
+
+                const spellExtendConfig = SpellExtendConfig.GetInstance()
+                const mapConfig = spellExtendConfig.PeiXiuCellDic.get(roleData.mapId)
+                const solvedState = mapConfig ? solvePeiXiuRoleData(mapConfig, Datas) : null
+                const presetRoutes = spellExtendConfig.PeiXiuPresetRoutes.get(roleData.mapId) || []
+                const usesMainHandMirror =
+                  Game.myID != null && SeatID != null && Number(Game.myID) === Number(SeatID)
+                const handSuitColors = usesMainHandMirror ? getRenderedHandSuitColors() : null
+
+                const state = solvedState
+                  ? { ...solvedState, presetRoutes, handSuitColors, usesMainHandMirror }
+                  : {
+                      ...roleData,
+                      result: null,
+                      presetRoutes,
+                      handSuitColors,
+                      usesMainHandMirror
+                    }
+
+                Game.setSpellState(4022, state)
+
+                if (state.result) {
+                  renderPeiXiuMapWindow(state, spellExtendConfig.PeiXiuBonus)
+                  setPeiXiuMapWindowVisible(Boolean(globalConfig.peiXiuMapSwitch))
+                }
+              }
+
+              break
+
+            default:
+              break
+          }
         }
-
         break
 
       // TODO
@@ -404,11 +531,25 @@ export function logic(msg) {
         break
       }
 
+      // 询问操作 严教 界强识等
       case 'GsCRoleOptTargetNtf':
         handleRoleOptTargetNtf(msg)
         break
 
       case 'CGsRoleSpellOptRep': {
+        switch (Type) {
+          // 斗地主叫分结果 Datas: [300] data_count: 1
+          case 44:
+            if (SeatID !== undefined) {
+              tracker.setTrackerFirstHand(SeatID)
+            }
+            break
+
+          default:
+            break
+        }
+
+        // 技能操作
         switch (SpellID) {
           // 知己知彼
           case 2022:
@@ -471,6 +612,22 @@ export function logic(msg) {
           case 3571:
             if (Type === 10) Game.getSpellState(SpellID)?.add?.(Datas[0])
             break
+
+          // 裴秀
+          case 4021:
+            // console.info(msg)
+            // 绘制裴秀地图 Datas: [12,18] data_count: 2 第一位为地图id 第二位为起始格子
+            break
+
+          case 4022:
+            // Datas: [2, 0] data_count: 2 第一位为方向
+            // 用于触发提示 向东绘制所有地图
+            // console.info(msg)
+            // 似乎没那么重要
+            break
+
+          default:
+            break
         }
 
         break
@@ -478,6 +635,11 @@ export function logic(msg) {
 
       case 'PubGsCMoveCard':
         handleMoveCard(msg)
+        break
+
+      // 录像牌堆明牌功能
+      case 'decodeGameDealPileTopCardList':
+        // console.info(msg)
         break
 
       // 击杀特效

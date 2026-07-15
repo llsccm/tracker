@@ -43,22 +43,57 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
   }
 
   /**
-   * 玩家间随机获得手牌时，把来源玩家可能持有的明牌传播给目标玩家。
+   * 玩家间随机获得手牌时，让来源手牌的全部实体共同参与来源/目标位置约束。
    */
   markRandomHandTransferCandidates({
     fromSeat,
     targetSeat,
     count,
+    sourceTotalBefore,
     sourceEvent
   }: RandomHandTransferOptions): Card[] {
     if (!(count > 0) || fromSeat === null || targetSeat === null || fromSeat === targetSeat) {
       return []
     }
 
-    const sourceCandidateCards = this.getKnownHandCardsBySeat(fromSeat)
+    const sourcePlayer = this.room.getPlayer(fromSeat)
+    const existingSourceCards = this.getPlayerHandCardsBySeat(fromSeat)
+    // 手牌数 delta 在候选传播前已经应用，因此优先使用 createMoveContext 保存的移动前快照。
+    // 直接读取 sourcePlayer.observedHandCount 会把“转移后的 6 张”误当成候选全集大小。
+    const sourceTotal =
+      sourceTotalBefore ??
+      (sourcePlayer?.hasObservedHandCount
+        ? sourcePlayer.observedHandCount
+        : existingSourceCards.length)
 
-    if (sourceCandidateCards.length === 0) return []
+    // 只有实体可以完整覆盖转移前手牌时，才能建立 N 选 K 约束。
+    // 覆盖关系自相矛盾时返回空数组，让调用方继续走保守的默认未知移动。
+    if (sourceTotal < count || sourceTotal <= 0 || existingSourceCards.length > sourceTotal) {
+      trackerLogger.warn('随机手牌转移无法建立完整实体候选覆盖', {
+        fromSeat,
+        targetSeat,
+        count,
+        sourceTotal,
+        existingEntityCount: existingSourceCards.length,
+        reason: existingSourceCards.length > sourceTotal ? 'entityOverflow' : 'insufficientSource'
+      })
+      return []
+    }
 
+    // 协议确认了手牌总数，却没有足够的真实实体时，用匿名实体补齐“确定存在”的槽位。
+    // 这里不从牌堆猜测物理 ID，避免错误身份进一步污染牌堆顺序和后续明牌收敛。
+    const missingEntityCount = sourceTotal - existingSourceCards.length
+    const fallbackCards =
+      missingEntityCount > 0 ? this.room.createExternalCards([], missingEntityCount) : []
+    fallbackCards.forEach((card) => {
+      card.bindCandidates([fromSeat], 'hand', null, { known: false })
+    })
+
+    const sourceCandidateCards = existingSourceCards.concat(fallbackCards)
+    // createExternalCards 理论上应精确返回请求数量；保留此门槛，避免部分覆盖也接管默认移动。
+    if (sourceCandidateCards.length !== sourceTotal) return []
+
+    // 保留实体原有的其他席位候选，再加入本次目标席位，避免覆盖前序不确定性。
     const candidateSeats = Array.from(
       new Set(sourceCandidateCards.flatMap((card) => Array.from(card.seats)).concat(targetSeat))
     )
@@ -69,18 +104,38 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
 
     this.expandConstraintGroupsForCards(sourceCandidateCards, targetSeat)
 
-    const sourcePlayer = this.room.getPlayer(fromSeat)
-    const sourceTotal = sourcePlayer?.hasObservedHandCount
-      ? sourcePlayer.observedHandCount
-      : sourceCandidateCards.length
+    // 暗牌候选会被提升为 hand 完整位置候选（locationCandidates + subZoneCandidates）。
+    // 此时 expectedSlotsBySeat 的座位层消除会刻意跳过带 subZoneCandidates 的牌、交由位置层处理，
+    // 但本组过去只声明了座位层约束，位置层为空——于是目标槽位清零后，暗实体仍留着不可能的
+    // 座位候选（如 seat3 满员后 130/131 仍是 {2,3}）。这里镜像一份 hand 位置约束补上该缺口。
+    const fromHandKey = createLocationCandidateKey({
+      type: 'player',
+      seatID: fromSeat,
+      subZone: 'hand',
+      spellID: null
+    })
+    const targetHandKey = createLocationCandidateKey({
+      type: 'player',
+      seatID: targetSeat,
+      subZone: 'hand',
+      spellID: null
+    })
+
+    // 全部 N 个实体共同竞争两个手牌位置：来源剩余 N-K 个，目标获得 K 个。
+    // 暗实体也参与槽位守恒，但不会因此公开其物理身份。
     this.room.createConstraintGroup({
       cards: sourceCandidateCards,
       candidateSeats,
       expectedSlotsBySeat: new Map([
-        [fromSeat, Math.min(sourceCandidateCards.length, sourceTotal)],
-        [targetSeat, Math.min(count, sourceCandidateCards.length)]
+        [fromSeat, sourceTotal - count],
+        [targetSeat, count]
       ]),
-      known: true,
+      expectedSlotsByLocation: new Map([
+        [fromHandKey, sourceTotal - count],
+        [targetHandKey, count]
+      ]),
+      // 混合组只约束位置；身份公开状态由每张牌自己的 isKnown 保持。
+      known: false,
       sourceEvent: sourceEvent ?? { type: 'randomHandTransferCandidates' }
     })
 
@@ -88,11 +143,19 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
       fromSeat,
       targetSeat,
       count,
-      cards: sourceCandidateCards.map((card) => ({
-        id: card.id,
-        name: card.name,
-        seats: Array.from(card.seats)
-      }))
+      sourceTotal,
+      expectedSourceSlots: sourceTotal - count,
+      expectedTargetSlots: count,
+      createdAnonymousCount: fallbackCards.length,
+      // 日志只展开已公开身份；暗实体仅输出数量，避免调试信息泄露其真实 ID。
+      cards: sourceCandidateCards
+        .filter((card) => card.isKnown === true)
+        .map((card) => ({
+          id: card.id,
+          name: card.name,
+          seats: Array.from(card.seats)
+        })),
+      hiddenEntityCount: sourceCandidateCards.filter((card) => card.isKnown !== true).length
     })
 
     return sourceCandidateCards
@@ -105,9 +168,9 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
     sourceSeat: SeatID | null,
     targetSeat: SeatID | null,
     toZone: MoveTargetZone,
-    count: number
+    unknownCount: number
   ): boolean {
-    return sourceSeat !== null && targetSeat === null && toZone === 'pile' && count > 0
+    return sourceSeat !== null && targetSeat === null && toZone === 'pile' && unknownCount > 0
   }
 
   /**
@@ -117,21 +180,21 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
     fromSeat,
     toZone,
     position,
-    count
+    unknownCount
   }: RandomHandToPublicOptions): Card[] {
     if (fromSeat === null) return []
 
     const sourceCandidateCards = this.getKnownHandCardsBySeat(fromSeat)
     if (sourceCandidateCards.length === 0) return []
 
-    const candidate = this.createPublicCandidate(toZone, position, count)
+    const candidate = this.createPublicCandidate(toZone, position, unknownCount)
     sourceCandidateCards.forEach((card) => card.addPublicCandidate(candidate))
 
     trackerLogger.info('手牌候选进入公共区', {
       fromSeat,
       toZone,
       position,
-      count,
+      unknownCount,
       cards: sourceCandidateCards.map((card) => ({
         id: card.id,
         name: card.name,

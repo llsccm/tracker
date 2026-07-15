@@ -11,9 +11,7 @@ export function handleStartGame(msg) {
     const { Infos } = msg
     Game.size = Infos.length
     // 录像中不一定有使用者的uuid 或者使用者并非主视角 贸然使用uuid匹配会导致视角错误
-    const mySeatID = Infos[0].SeatID ?? 0
     const uuid = Infos[0].ClientID ?? user.userID
-    Game.setMyID(mySeatID)
 
     tracker.registerTrackerPlayers(Infos, uuid)
   }
@@ -25,9 +23,16 @@ export function handleRecordStartGame(msg) {
   Game.init()
   const { seatinfo } = msg.data.protoObj
   Game.size = seatinfo.length
-  const mySeatID = seatinfo[0].seat_id ?? 0
-  const uuid = seatinfo[0].user_temp_id ?? undefined
-  Game.setMyID(mySeatID)
 
-  tracker.registerTrackerPlayers(seatinfo, uuid)
+  // 看录像时并一定有当前用户
+  // 当前用户不一定是主视角
+  // for (const info of seatinfo) {
+  //   if (info.user_id == user.userID) {
+  //     Game.isRecord = false
+  //     const mySeatID = info.seat_id ?? 0
+  //     break
+  //   }
+  // }
+
+  tracker.registerTrackerPlayers(seatinfo, user.userID)
 }

@@ -7,6 +7,8 @@ const packageJson = JSON.parse(readFileSync(new URL('./package.json', import.met
 
 const SCRIPT_ENTRY = 'src/index.js'
 const SCRIPT_FILE_NAME = 'daxiaochao.user.js'
+const SCRIPT_META_FILE_NAME = 'daxiaochao.meta.js'
+const RELEASE_DOWNLOAD_BASE_URL = 'https://github.com/llsccm/tracker/releases/latest/download'
 const SCRIPT_MATCH = [
   '*://game.4399iw2.com/yxsgs/*',
   '*://my.4399.com/yxsgs/*',
@@ -54,13 +56,19 @@ export default defineConfig(({ mode }) => {
           namespace: 'https://greasyfork.org/scripts/448004',
           match: SCRIPT_MATCH,
           exclude: SCRIPT_EXCLUDE,
+          ...(mode === 'production'
+            ? {
+                downloadURL: `${RELEASE_DOWNLOAD_BASE_URL}/${SCRIPT_FILE_NAME}`,
+                updateURL: `${RELEASE_DOWNLOAD_BASE_URL}/${SCRIPT_META_FILE_NAME}`
+              }
+            : {}),
           grant: 'none'
         },
         server: {
           mountGmApi: false
         },
         build: {
-          metaFileName: true,
+          metaFileName: SCRIPT_META_FILE_NAME,
           autoGrant: false
         }
       })
