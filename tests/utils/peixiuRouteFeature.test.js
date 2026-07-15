@@ -6,6 +6,7 @@ import {
   getPeiXiuMove,
   parsePeiXiuMap,
   parsePeiXiuRoleData,
+  solvePeiXiuMap,
   solvePeiXiuRoleData
 } from '@/utils/peixiuRouteFeature'
 import { buildPeiXiuMapViewModel } from '@/ui/PeiXiuMapWindow'
@@ -214,5 +215,9 @@ describe('裴秀地图数据层', () => {
 
   it('拒绝不属于当前地图的起始格', () => {
     expect(() => new PeiXiuMapState(YONG_ZHOU, { startCell: 13 })).toThrow('裴秀地图起始格无效: 13')
+    expect(() => solvePeiXiuMap(YONG_ZHOU, { startCell: 13 })).toThrow('裴秀地图起始格无效: 13')
+    expect(() => findPeiXiuOptimalRoutes(YONG_ZHOU, { startCell: 13 })).toThrow(
+      '裴秀地图起始格无效: 13'
+    )
   })
 })

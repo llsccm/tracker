@@ -391,7 +391,10 @@ export function solvePeiXiuMap(raw, options = {}) {
   const map = parsePeiXiuMap(raw)
   const startCell = normalizeCell(options.startCell ?? map.start)
 
-  if (validCell(startCell)) map.start = startCell
+  if (!validCell(startCell) || !map.cells.has(startCell)) {
+    throw new RangeError(`裴秀地图起始格无效: ${startCell}`)
+  }
+  map.start = startCell
 
   const index = rewardIndexMap(map)
   const target = map.rewardCells.length ? (1 << map.rewardCells.length) - 1 : 0
@@ -452,7 +455,10 @@ export function solvePeiXiuMap(raw, options = {}) {
 export function findPeiXiuOptimalRoutes(raw, options = {}, limit = 2) {
   const map = parsePeiXiuMap(raw)
   const startCell = normalizeCell(options.startCell ?? map.start)
-  if (validCell(startCell)) map.start = startCell
+  if (!validCell(startCell) || !map.cells.has(startCell)) {
+    throw new RangeError(`裴秀地图起始格无效: ${startCell}`)
+  }
+  map.start = startCell
 
   const index = rewardIndexMap(map)
   const target = map.rewardCells.length ? (1 << map.rewardCells.length) - 1 : 0

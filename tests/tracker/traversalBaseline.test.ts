@@ -45,11 +45,11 @@ describe('Room.cards 遍历基线', () => {
         "cardCounter:update": "calls=1 visited=1",
         "handSlotCounts:collectBySeat": "calls=2 visited=41",
         "locationIndex:applyDirty": "calls=1 visited=1",
-        "reconcileAnonymousHandCards:group": "calls=1 visited=1",
+        "reconcileAnonymousHandCards:group": "calls=2 visited=2",
         "resolveConstraints:constraint1": "calls=2 visited=2",
         "resolveConstraints:constraint3:exclusion": "calls=1 visited=1",
         "resolveConstraints:playerSnapshotIncremental": "calls=2 visited=1",
-        "total": "visited=49",
+        "total": "visited=50",
       }
     `)
   })
@@ -108,11 +108,11 @@ describe('Room.cards 遍历基线', () => {
         "cardCounter:update": "calls=1 visited=2",
         "handSlotCounts:collectBySeat": "calls=3 visited=44",
         "locationIndex:applyDirty": "calls=1 visited=2",
-        "reconcileAnonymousHandCards:group": "calls=1 visited=2",
+        "reconcileAnonymousHandCards:group": "calls=2 visited=4",
         "resolveConstraints:constraint1": "calls=2 visited=4",
         "resolveConstraints:constraint3:exclusion": "calls=2 visited=4",
         "resolveConstraints:playerSnapshotIncremental": "calls=2 visited=2",
-        "total": "visited=62",
+        "total": "visited=64",
       }
     `)
   })
@@ -185,12 +185,12 @@ describe('Room.cards 遍历基线', () => {
       {
         "ambiguousKnownIndex:applyDirty": "calls=1 visited=6",
         "cardCounter:update": "calls=1 visited=6",
-        "handSlotCounts:collectBySeat": "calls=1 visited=3",
+        "handSlotCounts:collectBySeat": "calls=3 visited=15",
         "locationIndex:applyDirty": "calls=1 visited=6",
-        "reconcileAnonymousHandCards:group": "calls=1 visited=3",
-        "resolveConstraints:constraint1": "calls=1 visited=3",
+        "reconcileAnonymousHandCards:group": "calls=2 visited=9",
+        "resolveConstraints:constraint1": "calls=2 visited=9",
         "resolveConstraints:playerSnapshotIncremental": "calls=2 visited=6",
-        "total": "visited=33",
+        "total": "visited=57",
       }
     `)
   })

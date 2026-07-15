@@ -1157,6 +1157,12 @@ export class Room {
           }
         }
 
+        // 匿名实体增减会改变玩家区快照，必须纳入本轮 changed 并重新执行全部约束。
+        const anonymousHandChanges = this.reconcileAnonymousHandCards(handSlotCountsCache)
+        if (anonymousHandChanges.created.length > 0 || anonymousHandChanges.released.length > 0) {
+          changed = true
+        }
+
         previousTouchedSeats = touchedSeats
 
         // A2：轮内发生变化时增量刷新快照，兜住全部 location 漂移（含轮内新进入 player 的牌）。
@@ -1179,10 +1185,6 @@ export class Room {
       })
     }
 
-    const anonymousHandChanges = this.reconcileAnonymousHandCards(handSlotCountsCache)
-    if (anonymousHandChanges.created.length > 0 || anonymousHandChanges.released.length > 0) {
-      playerCards = this.refreshPlayerSnapshot()
-    }
     this.assertPlayerSnapshotConsistency(playerCards)
 
     // changed=true 说明本轮可能新增过渡发散明牌，需全量扫描；稳定时只检查本轮收集的集合。

@@ -157,6 +157,15 @@ describe('玩家手牌数观测', () => {
     expect(anonymousCards).toHaveLength(2)
     expect(new Set(anonymousCards.map((card) => card.entityID)).size).toBe(2)
     expect(anonymousCards.every((card) => card.entityID < 0)).toBe(true)
+
+    const originalEntityIDs = anonymousCards.map((card) => card.entityID).sort()
+    room.resolveConstraints()
+
+    const resolvedEntityIDs = room.cards
+      .filter((card) => card.id === 0 && card.location === 'player' && card.seats.has(2))
+      .map((card) => card.entityID)
+      .sort()
+    expect(resolvedEntityIDs).toEqual(originalEntityIDs)
   })
 
   it('未知手牌槽减少时仅释放多余匿名实体', () => {
