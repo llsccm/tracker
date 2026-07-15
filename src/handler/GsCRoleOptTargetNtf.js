@@ -40,7 +40,7 @@ export function handleRoleOptTargetNtf(arg) {
     // 刘辟 易城
     case 3440:
       // 更改为 不再计算队友刘辟的易城 Game.mySeats.includes(SeatID)
-      if (Game.myID == SeatID && Param == 0 && Params?.length > 0) {
+      if (Game.myID !== undefined && Game.myID === SeatID && Param == 0 && Params?.length > 0) {
         if (Type == 28) {
           const paiduiNumbers = Params.map((id) => CardConfig.GetInstance().getCardNumber(id))
           const shoupaiNumbers = getTrackedPlayerHandCardIDs(SeatID).map((id) =>
