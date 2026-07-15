@@ -219,15 +219,18 @@ function getSeatLayoutCount(list) {
     if (myFixedViewId === 2) {
       top = 1
       right = 1
+      left = 0
     } else if (myFixedViewId === 3) {
       top = 1
       left = 1
+      right = 0
     }
   }
 
   if (Game.isShanHeTu && list.length === 3 && UI.friendGeneral === 1) {
     top = 1
     left = 1
+    right = 0
   }
 
   return { top, right, left }

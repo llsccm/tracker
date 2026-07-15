@@ -44,7 +44,7 @@ const DOUDIZHU_MSGS = new Set([
   'MsgGameOver'
 ])
 
-const ShanHeTu_regex = /\[\d+\]/
+const ShanHeTu_regex = /\[\d+\]$/
 
 const PROTOCOL_PILE_ZONE = 1
 const PROTOCOL_HAND_ZONE = 5
@@ -184,16 +184,16 @@ export function logic(msg) {
         // 用于判断模式
         // console.info(msg)
 
-        if (ProtoObj.matchName === '斗地主') {
+        if (ProtoObj?.matchName === '斗地主') {
           Game.isDouDiZhu = true
         }
 
-        if (ProtoObj.matchName === '单骑无双') {
+        if (ProtoObj?.matchName === '单骑无双') {
           Game.isRoguelike1v1 = true
         }
 
         // 长安行[20610702]
-        if (ShanHeTu_regex.test(ProtoObj.matchName)) {
+        if (ProtoObj?.matchName && ShanHeTu_regex.test(ProtoObj.matchName)) {
           Game.isShanHeTu = true
         }
 
