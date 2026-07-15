@@ -56,8 +56,12 @@ export default defineConfig(({ mode }) => {
           namespace: 'https://greasyfork.org/scripts/448004',
           match: SCRIPT_MATCH,
           exclude: SCRIPT_EXCLUDE,
-          downloadURL: `${RELEASE_DOWNLOAD_BASE_URL}/${SCRIPT_FILE_NAME}`,
-          updateURL: `${RELEASE_DOWNLOAD_BASE_URL}/${SCRIPT_META_FILE_NAME}`,
+          ...(mode === 'production'
+            ? {
+                downloadURL: `${RELEASE_DOWNLOAD_BASE_URL}/${SCRIPT_FILE_NAME}`,
+                updateURL: `${RELEASE_DOWNLOAD_BASE_URL}/${SCRIPT_META_FILE_NAME}`
+              }
+            : {}),
           grant: 'none'
         },
         server: {
