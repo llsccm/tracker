@@ -42,8 +42,10 @@ interface UIState {
   rightBarWidth: number
   nativeSeatRects: unknown[]
   gameRoundRect: unknown
+  /** 从主视角开始的座位列表 */
   seatUIs: unknown[]
   cities: unknown[]
+  /** 山河图队友数量 */
   friendGeneral: number
   ORDER_LABELS: string[]
 }

@@ -61,7 +61,7 @@ graph TD
 
 ## 二、 重构版记牌器生命周期
 
-重构版记牌器当前已经是主动运行实现。它的生命周期不是“脚本 INIT 时立即创建并挂载”，而是被拆成了两层：应用启动时只注入承载 UI 的页面骨架；真正的单局 `Room` 要等游戏开始协议到达后创建。视图挂载是两段式的：玩家注册后先早期挂载，清理主面板并按人数初始化固定手牌容器；牌堆协议到达后再补齐统计按钮、公共区、玩家手牌和查询面板的完整渲染。
+重构版记牌器当前已经是主动运行实现。它的生命周期不是“脚本 INIT 时立即创建并挂载”，而是被拆成了两层：应用启动时只注入承载 UI 的页面骨架；真正的单局 `Room` 要等游戏开始协议到达后创建。录像初始化元数据会在牌堆和先手协议之前预识别玩法模式；视图挂载则是两段式的：玩家注册后先早期挂载，清理主面板并按人数初始化固定手牌容器；牌堆协议到达后再补齐统计按钮、公共区、玩家手牌和查询面板的完整渲染。
 
 ```mermaid
 sequenceDiagram
@@ -88,11 +88,9 @@ sequenceDiagram
     Bridge ->> View: mount(room)
     View ->> View: clearRenderedContent() / initPlayerHandContainers()
 
-    Note over Engine,View: 先手与座位补全阶段
-    Engine ->> Logic: GsCFirstPhaseRole
-    Logic ->> Bridge: tracker.setTrackerFirstHand(SeatID)
-    Bridge ->> Room: setFirstHand()
-    Bridge ->> Handler: getSeatUIs()
+    Note over Engine,View: 录像模式预识别阶段
+    Engine ->> Logic: decodeGameRecordInitInfo
+    Logic ->> Logic: matchName -> isDouDiZhu / isRoguelike1v1
 
     Note over Engine,View: 牌堆就绪与完整渲染阶段
     Engine ->> Logic: MsgGamePlayCardNtf
@@ -101,6 +99,12 @@ sequenceDiagram
     Bridge ->> Room: initDeck(cardIDs)
     Bridge ->> View: mount(room)
     View ->> View: ensureTrackerVisible() / buildCardTypeButtons() / scheduleRender()
+
+    Note over Engine,View: 先手与座位补全阶段
+    Engine ->> Logic: GsCFirstPhaseRole
+    Logic ->> Bridge: tracker.setTrackerFirstHand(SeatID)
+    Bridge ->> Room: setFirstHand() / updateFixedViewIds()
+    Bridge ->> Handler: getSeatUIs()
 
     Note over Engine,View: 对局运行阶段
     Engine ->> Logic: PubGsCMoveCard / Turn / Phase / Reveal
@@ -124,7 +128,7 @@ sequenceDiagram
 
 也就是说，INIT 期完成的是“可挂载的页面地基”，不是“某一局牌的记牌器实例”。
 
-### 2. 单局开始期：创建 Room 与缓存玩家
+### 2. 单局开始与模式预识别期：创建 Room、缓存玩家并前置模式状态
 
 - **触发协议**：`GsCModifyUserseatNtf`，在 [`src/logic.js`](../../src/logic.js#L74) 中分发。
 - **入口函数**：[`src/handler/StartGame.js:handleStartGame()`](../../src/handler/StartGame.js#L5)。
@@ -134,17 +138,19 @@ sequenceDiagram
   3. `Room` 构造期只初始化容器：`players`、公共 `zones`、`seatIDs`、`skillHandlers`、`moveEventHandlers`、`skillState`、`constraintGroups`、`ambiguousKnownIndex`、`locationIndex`、`suspendedKnownCards`、视图脏变更缓存，并把 `Game` 绑定到当前 Room。
   4. `handleStartGame()` 以 `Infos[0].SeatID` 作为录像或非主视角场景的回退视角写入 `Game.mySeats`，并选择 `Infos[0].ClientID ?? user.userID` 作为本次玩家匹配用的 `uuid`。
   5. 调用 `tracker.registerTrackerPlayers(Infos, uuid)`；`Room.registerPlayers()` 遍历座位信息创建玩家并按 `uuid` 匹配 `mySeatID`，随后同步 `Game` 兼容层座位状态并执行一次早期 `view.mount(trackerRoom)`。
+  6. 录像初始化消息 `decodeGameRecordInitInfo` 到达后，`logic()` 根据 `ProtoObj.matchName` 提前设置 `Game.isDouDiZhu` 或 `Game.isRoguelike1v1`。这里只记录模式，不生成座位覆盖层。
 
 这个阶段创建了“单局状态容器”，并已让视图清理上局动态内容、按当前人数初始化 `playerHand<N>` / `.order-body No<N>` 固定手牌容器；但还没有物理牌池、还没有计数器，也不会进行统计按钮、公共区或查询面板渲染。
 
 ### 3. 生命周期补齐期：玩家先注册，先手后补齐
 
-玩家数据注册一定早于先手协议。桥接层先通过 `registerTrackerPlayers()` 把座位集合应用到当前 `Room`，随后 `GsCFirstPhaseRole -> tracker.setTrackerFirstHand()` 再补齐先手与固定视角顺序。
+玩家数据注册一定早于先手协议。桥接层先通过 `registerTrackerPlayers()` 把座位集合应用到当前 `Room`；模式初始化与牌堆准备完成后，`GsCFirstPhaseRole -> tracker.setTrackerFirstHand()` 再补齐先手与固定视角顺序。
 
 - `tracker.registerTrackerPlayers(infos, currentUserID)`：注册座位信息，创建 `Player` 实例，同步 `Game.seatIDs`、`Game.size` 与 `Game.mySeats`，随后调用 `view.mount(trackerRoom)` 早期挂载手牌容器。此时 `Room.isDeckReady` 仍为 `false`，视图只执行清理与 `initPlayerHandContainers()`，`scheduleRender()` / `setQuery()` 会被牌堆就绪保护挡住。
-- `tracker.setTrackerFirstHand(seatID)`：调用 `Room.setFirstHand()`、同步 `Game` 兼容层座位状态、刷新座位覆盖层，并请求视图刷新。
+- `tracker.setTrackerFirstHand(seatID)`：调用 `Room.setFirstHand()` 生成所有玩家的 `fixedViewId`，同步 `Game` 兼容层座位状态，然后调用 `getSeatUIs()` 生成座位覆盖层并请求视图刷新。斗地主布局此时直接读取主视角玩家的 `fixedViewId`，不再依赖 Laya SeatUI 或 `actualSeatID`。
+- `tracker.setTrackerMySeatID(seatID)`：录像主视角晚于先手确定时，补写 `mySeatID`、重新计算 `fixedViewId` 并刷新座位覆盖层。
 
-确定协议顺序中，`GsCModifyUserseatNtf` 会先创建 Room 并注册玩家，玩家会立即进入 Room。随后 `GsCFirstPhaseRole -> tracker.setTrackerFirstHand()` 写入 `Room.firstID` 并更新每个玩家的 `fixedViewId`。
+确定协议顺序中，玩家注册后会先完成模式预识别和牌堆初始化；随后 `GsCFirstPhaseRole -> tracker.setTrackerFirstHand()` 写入 `Room.firstID` 并更新每个玩家的 `fixedViewId`。因此 `initTrackerDeck()` 不刷新座位覆盖层，避免在固定顺位尚未生成时提前布局。
 
 ### 4. 牌堆就绪期：初始化物理牌池
 
@@ -152,8 +158,8 @@ sequenceDiagram
 - **入口函数**：[`src/logic.js:readyTrackerGame()`](../../src/logic.js#L55)。
 - **执行顺序**：
   1. 结合 `CardConfig.GetInstance().cardIDsOrder` 对牌堆做展示顺序归并，生成 `paidui`。
-  2. 根据牌堆中特征牌 ID 与 Laya 场景名设置 `Game.isGuoZhan`、`isDouDiZhu`、`isShanHeTu`、`isRoguelike1v1`、`isSWJG`。
-  3. 调用 `domInit()` 刷新主 DOM 状态，清理 `Game.spellSpace[3338]`，关闭宿主 `CardConfigWindow`。
+  2. 根据牌堆中特征牌 ID 设置 `Game.isGuoZhan`、`isDouDiZhu`、`isShanHeTu`，并根据场景名设置 `isSWJG`；其中录像的 `isDouDiZhu` 已由初始化元数据提前识别，牌堆特征继续作为确认与兼容回退。
+  3. 清理 `Game.spellSpace[3338]`，关闭宿主 `CardConfigWindow`。
   4. 调用 `Game.resetConfigHandCards()` 重置手牌配置会话态。
   5. 调用 `tracker.initTrackerDeck()`，继续进入 [`src/tracker/Room.ts:Room.initDeck()`](../../src/tracker/Room.ts)。
 
@@ -164,7 +170,7 @@ sequenceDiagram
 - **挂载入口**：[`src/tracker/view/index.ts:mount()`](../../src/tracker/view/index.ts)。
 - **触发位置**：
   1. `registerTrackerPlayers(infos, currentUserID)` 注册玩家后立即调用 `view.mount(trackerRoom)`，执行早期挂载。
-  2. `initTrackerDeck(cardIDs)` 在 `trackerRoom.initDeck(cardIDs)` 之后再次调用 `view.mount(trackerRoom)`，完成牌堆就绪后的完整挂载。
+  2. `initTrackerDeck(cardIDs)` 在 `trackerRoom.initDeck(cardIDs)` 之后再次调用 `view.mount(trackerRoom)`，完成牌堆就绪后的完整挂载；这里不调用 `getSeatUIs()`，座位覆盖层等待 `fixedViewId` 就绪后单独生成。
 - **早期挂载动作**：
   1. 如果传入 `null`，执行 `doUnmount()`。
   2. 如果是新 `Room` 或尚无 `doc`，先 `doUnmount()` 清理上一棵渲染树引用，再将 `currentRoom` 指向当前 Room，`doc` 指向主 `document`。
@@ -177,7 +183,7 @@ sequenceDiagram
   3. `bindSeatOverlayLayout()` 监听 `dxc-seat-overlay-layout`，座位覆盖层重排时触发重绘。
   4. `scheduleRender()` 通过 `requestAnimationFrame` 合并渲染请求，下一帧执行统计、公共区、玩家手牌和查询面板渲染。
 
-因此，重构版记牌器的视图树会在 `GsCModifyUserseatNtf -> registerTrackerPlayers() -> view.mount()` 后先稳定手牌容器结构，再在 `MsgGamePlayCardNtf -> logic.readyTrackerGame() -> initTrackerDeck() -> view.mount()` 后进入完整可渲染状态。脚本 INIT 阶段仍只负责注入 HTML 骨架，不创建单局 Room，也不执行 `view.mount()`。
+因此，重构版记牌器的视图树会在 `GsCModifyUserseatNtf -> registerTrackerPlayers() -> view.mount()` 后先稳定手牌容器结构，再在 `MsgGamePlayCardNtf -> logic.readyTrackerGame() -> initTrackerDeck() -> view.mount()` 后进入完整可渲染状态。座位覆盖层独立等待 `setTrackerFirstHand()` 生成 `fixedViewId` 后布局；脚本 INIT 阶段仍只负责注入 HTML 骨架，不创建单局 Room，也不执行 `view.mount()`。
 
 ### 6. 对局运行期：消息驱动状态收敛与延迟渲染
 
@@ -197,7 +203,7 @@ sequenceDiagram
 - **执行顺序**：
   1. 隐藏 `.mizhu` 相关展示节点。
   2. 将 `Game.isPassed` 置空后调用 `Game.end(false)`，结束重构版 `Game` 的局内状态。
-  3. 调用 `getSeatUIs({ reset: true })` 重置座位覆盖层 UI。
+  3. 调用独立的 `resetSeatUIs()` 清空座位覆盖层与山河图友方武将状态；`getSeatUIs()` 只负责根据当前 Room 重建布局。
   4. 调用 `tracker.destroyTrackerRoom()`。
 
 `destroyTrackerRoom()` 先执行 `view.unmount()`，清空动态渲染内容并释放 `currentRoom` / `doc` 引用；再执行 `trackerRoom?.destroy()`。`Room.destroy()` 会重置玩家、清空公共区、重置所有卡、清空约束组、移动事件处理器、技能状态、模糊明牌索引、挂起明牌集合、脏变更缓存、`cards`、`cardIndex`、`seatIDs`、`size`、`firstID`、`mySeatID`。最后桥接层把 `trackerRoom` 清空。
@@ -260,18 +266,19 @@ graph LR
 
 以下整理了整个“小抄”应用及记牌器生命周期的核心控制节点及文件位置：
 
-| 生命周期阶段       | 核心控制函数/方法                                  | 对应源码文件路径与锚点                                                                                            | 触发条件 / 职责描述                                                                           |
-| :----------------- | :------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------- |
-| **应用装载初始化** | `main('INIT')`                                     | [`src/index.js:43`](../../src/index.js#L43)                                                                              | 用户脚本加载后执行，是整个小抄程序运行的起点。                                                |
-| **库加载与轮询**   | `waitForLegacyFrameReady`                          | [`src/ui/lifecycle.js:28`](../../src/ui/lifecycle.js#L28)                                                                | 轮询检测 `SystemContext`、`JSZipUtils` 和核心 DOM 等依赖项是否就绪。                          |
-| **DOM 与框架注入** | `initFrame`                                        | [`src/dom.js:68`](../../src/dom.js#L68)                                                                                  | 移除旧 DOM 节点，注入座位 UI，下载加载 iframe 外链 HTML，并在成功后开始解析配置。             |
-| **配置解析初始化** | `loadAndParseConfigs`                              | [`src/config/ConfigManager.js:26`](../../src/config/ConfigManager.js#L26)                                                | 异步下载并解压远端的 `Config_w.sgs` 静态资源文件，初始化各解析器映射。                        |
-| **单局 Room 创建** | `tracker.initTrackerRoom`                          | [`src/tracker/runtime/trackerController.ts`](../../src/tracker/runtime/trackerController.ts)                                            | `GsCModifyUserseatNtf` 开局后创建全新的 `Room` 实例，注册默认移动事件处理器；此时尚未注册玩家，也尚未挂载视图。 |
-| **玩家座位注册**   | `tracker.registerTrackerPlayers`                  | [`src/tracker/runtime/trackerController.ts`](../../src/tracker/runtime/trackerController.ts)                                            | 应用 `msg.Infos`，创建 `Player` 实例，写入 `seatIDs`、`size` 与主视角座位，并早期挂载固定手牌容器。 |
-| **先手补齐**       | `tracker.setTrackerFirstHand` / `Room.setFirstHand` | [`src/tracker/runtime/trackerController.ts`](../../src/tracker/runtime/trackerController.ts) / [`src/tracker/Room.ts`](../../src/tracker/Room.ts) | `GsCFirstPhaseRole` 到达后写入 `firstID`，更新每个玩家的 `fixedViewId` 并刷新座位覆盖层。     |
-| **牌堆就绪**       | `readyTrackerGame`                                 | [`src/logic.js:55`](../../src/logic.js#L55)                                                                              | `MsgGamePlayCardNtf` 到达后识别玩法模式、重置手牌配置态，并进入牌堆初始化。                   |
-| **物理牌堆初始化** | `initDeck`                                         | [`src/tracker/Room.ts`](../../src/tracker/Room.ts)                                                                      | 初始化全部物理 `Card` 实例、`cardIndex`、`pile` 公共区与本局 `CardCounter`。                  |
-| **视图树挂载**     | `mount`                                            | [`src/tracker/view/index.ts`](../../src/tracker/view/index.ts)                                                          | 两段式挂载：玩家注册后清空动态内容并初始化手牌容器；`initDeck` 完成后重建查询按钮并调度首次完整渲染。 |
-| **回合轮次转换**   | `setTurn` / `enter`                                | [`src/tracker/Game.ts`](../../src/tracker/Game.ts)                                                                      | 游戏局内根据轮次与阶段通知更新 `turn`、`round`、`phase`、`currentID`，并同步到视图。          |
-| **事件销毁卸载**   | `cleanupLifecycle`                                 | [`src/ui/lifecycle.js:19`](../../src/ui/lifecycle.js#L19)                                                                | 脚本重载或卸载时触发，清空注册模块，移除添加的全部 DOM 节点。                                 |
-| **记牌器容器销毁** | `tracker.destroyTrackerRoom`                       | [`src/tracker/runtime/trackerController.ts`](../../src/tracker/runtime/trackerController.ts)                                            | 销毁 `Room` 对象并调用 `unmount` 卸载所有面板 DOM 元素，清理所有内存缓存。                    |
+| 生命周期阶段       | 核心控制函数/方法                                   | 对应源码文件路径与锚点                                                                                                                            | 触发条件 / 职责描述                                                                                             |
+| :----------------- | :-------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------------------------- |
+| **应用装载初始化** | `main('INIT')`                                      | [`src/index.js:43`](../../src/index.js#L43)                                                                                                       | 用户脚本加载后执行，是整个小抄程序运行的起点。                                                                  |
+| **库加载与轮询**   | `waitForLegacyFrameReady`                           | [`src/ui/lifecycle.js:28`](../../src/ui/lifecycle.js#L28)                                                                                         | 轮询检测 `SystemContext`、`JSZipUtils` 和核心 DOM 等依赖项是否就绪。                                            |
+| **DOM 与框架注入** | `initFrame`                                         | [`src/dom.js:68`](../../src/dom.js#L68)                                                                                                           | 移除旧 DOM 节点，注入座位 UI，下载加载 iframe 外链 HTML，并在成功后开始解析配置。                               |
+| **配置解析初始化** | `loadAndParseConfigs`                               | [`src/config/ConfigManager.js:26`](../../src/config/ConfigManager.js#L26)                                                                         | 异步下载并解压远端的 `Config_w.sgs` 静态资源文件，初始化各解析器映射。                                          |
+| **单局 Room 创建** | `tracker.initTrackerRoom`                           | [`src/tracker/runtime/trackerController.ts`](../../src/tracker/runtime/trackerController.ts)                                                      | `GsCModifyUserseatNtf` 开局后创建全新的 `Room` 实例，注册默认移动事件处理器；此时尚未注册玩家，也尚未挂载视图。 |
+| **玩家座位注册**   | `tracker.registerTrackerPlayers`                    | [`src/tracker/runtime/trackerController.ts`](../../src/tracker/runtime/trackerController.ts)                                                      | 应用 `msg.Infos`，创建 `Player` 实例，写入 `seatIDs`、`size` 与主视角座位，并早期挂载固定手牌容器。             |
+| **模式预识别**     | `logic`                                             | [`src/logic.js`](../../src/logic.js)                                                                                                              | `decodeGameRecordInitInfo` 到达后根据 `matchName` 提前设置斗地主或单骑无双模式，不触发座位布局。                |
+| **先手补齐**       | `tracker.setTrackerFirstHand` / `Room.setFirstHand` | [`src/tracker/runtime/trackerController.ts`](../../src/tracker/runtime/trackerController.ts) / [`src/tracker/Room.ts`](../../src/tracker/Room.ts) | `GsCFirstPhaseRole` 到达后写入 `firstID`，更新每个玩家的 `fixedViewId` 并刷新座位覆盖层。                       |
+| **牌堆就绪**       | `readyTrackerGame`                                  | [`src/logic.js`](../../src/logic.js)                                                                                                              | `MsgGamePlayCardNtf` 到达后通过牌堆特征确认模式、重置手牌配置态，并进入牌堆初始化。                             |
+| **物理牌堆初始化** | `initDeck`                                          | [`src/tracker/Room.ts`](../../src/tracker/Room.ts)                                                                                                | 初始化全部物理 `Card` 实例、`cardIndex`、`pile` 公共区与本局 `CardCounter`。                                    |
+| **视图树挂载**     | `mount`                                             | [`src/tracker/view/index.ts`](../../src/tracker/view/index.ts)                                                                                    | 两段式挂载：玩家注册后清空动态内容并初始化手牌容器；`initDeck` 完成后重建查询按钮并调度首次完整渲染。           |
+| **回合轮次转换**   | `setTurn` / `enter`                                 | [`src/tracker/Game.ts`](../../src/tracker/Game.ts)                                                                                                | 游戏局内根据轮次与阶段通知更新 `turn`、`round`、`phase`、`currentID`，并同步到视图。                            |
+| **事件销毁卸载**   | `cleanupLifecycle`                                  | [`src/ui/lifecycle.js:19`](../../src/ui/lifecycle.js#L19)                                                                                         | 脚本重载或卸载时触发，清空注册模块，移除添加的全部 DOM 节点。                                                   |
+| **记牌器容器销毁** | `tracker.destroyTrackerRoom`                        | [`src/tracker/runtime/trackerController.ts`](../../src/tracker/runtime/trackerController.ts)                                                      | 销毁 `Room` 对象并调用 `unmount` 卸载所有面板 DOM 元素，清理所有内存缓存。                                      |

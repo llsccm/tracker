@@ -1,4 +1,4 @@
-import { getSeatUIs } from '@/dom'
+import { resetSeatUIs } from '@/dom'
 import { Game } from '@/tracker'
 import { tracker } from '@/tracker/runtime/browser'
 import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
@@ -9,6 +9,6 @@ export function handleGameOver() {
   Game.end()
   destroyPeiXiuMapWindow()
   // 重置 UI
-  getSeatUIs({ reset: true })
+  resetSeatUIs()
   tracker.destroyTrackerRoom()
 }

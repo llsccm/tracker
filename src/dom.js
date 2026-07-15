@@ -1,6 +1,6 @@
 import { CardConfig } from './config'
 import { ConfigManager } from './config/ConfigManager'
-import { clearZoneMirrors, drawMiZhu, drawSeatUIs } from './draw'
+import { drawMiZhu, drawSeatUIs } from './draw'
 import { Game, globalConfig, globalState, UI } from './tracker'
 import { setTrackerSeatUIReader, tracker } from './tracker/runtime/browser'
 import { drawCitiesUI } from './ui/CitiesUI'
@@ -212,20 +212,25 @@ function getSeatLayoutCount(list) {
   let right = (otherSeatCount - top) >> 1
   let left = otherSeatCount - right - top
 
-  // 斗地主和山河图的三人布局会按主视角调整左右侧落点。
-  if (Game.isDouDiZhu) {
-    if (list[0]?.actualSeatID === 2) {
+  // 斗地主按主视角相对先手的固定顺位调整左右侧落点。
+  if (Game.isDouDiZhu && list.length === 3) {
+    const myFixedViewId = list[0]?.fixedViewId
+
+    if (myFixedViewId === 2) {
       top = 1
       right = 1
-    } else if (list[0]?.actualSeatID === 3) {
+      left = 0
+    } else if (myFixedViewId === 3) {
       top = 1
       left = 1
+      right = 0
     }
   }
 
   if (Game.isShanHeTu && list.length === 3 && UI.friendGeneral === 1) {
     top = 1
     left = 1
+    right = 0
   }
 
   return { top, right, left }
@@ -332,57 +337,36 @@ function setSeatPosition(seatUI, displayLocation, x, y, dpr) {
 
 /**
  * 重绘座位覆盖层明牌框。
- * @param {{ reset?: boolean }} [options]
  */
-export function getSeatUIs({ reset = false } = {}) {
-  // 如果有 则先清除前面的 再画seatUI
+export function resetSeatUIs() {
   UI.seatUIs = []
   UI.friendGeneral = 0
   drawSeatUIs()
-  if (reset) return
+}
 
+export function getSeatUIs() {
   const trackerRoom = tracker.getTrackerRoom()
-  // 从我开始逆时针排列 例如房间 2301 我的id是 3 则 变成 3012 用这个顺序去排列seatUI
-  const UIOrder = getTrackerSeatSequence(trackerRoom)
-  if (!UIOrder.length) return
+  if (!trackerRoom?.seatIDs?.length || trackerRoom.mySeatID === undefined) return
 
-  // 从游戏开始的seatid去排列，例如房间 2301 firstid是 1 则 变成 1230 id为值 序号为座位号+1，则id为1 是1号位 id为0是4号位
-  // let seatOrder = room.sequence(room.firstID);
-  // UI.seatUIs actualSeatID 为座位号，排列数组为UIOrder 如 3012 中 3 对应 actualSeatID 为 3； 0 actualSeatID 为 4； 1 actualSeat 1； 2 actualSeat 2
-  UI.seatUIs = UIOrder.map((seatID, index) => {
-    // actualSeatID 对应屏幕 UI 位置：1 是自己，2+ 是其他玩家。
-    // 出牌座位序号使用新版 Player.fixedViewId，避免手牌框位置与座位号混用。
+  const { seatIDs, players, mySeatID } = trackerRoom
+  const startIndex = seatIDs.indexOf(Number(mySeatID))
+  if (startIndex < 0) return
+
+  // 从主视角开始循环排列物理座位，同时保留相对先手的固定顺位。
+  UI.seatUIs = seatIDs.map((_, index) => {
+    const seatID = seatIDs[(startIndex + index) % seatIDs.length]
     return {
-      actualSeatID: index + 1,
       seatID,
-      order: getTrackerPlayerOrder(trackerRoom, seatID)
+      fixedViewId: players.get(Number(seatID))?.fixedViewId
     }
   })
 
-  // UI.seatUIs = order.map(seatID => ({ actualSeatID: order.indexOf(seatID) + 1 }));
-
-  // UI.seatUIs = room.sequence(room.firstID).map((seatID) => ({ actualSeatID: seatID + 1 }));
-  //console.info(UI.seatUIs)
   getSeatUiPos()
   drawSeatUIs()
   window.dispatchEvent(new CustomEvent('dxc-seat-overlay-layout'))
 }
 
 setTrackerSeatUIReader(getSeatUIs)
-
-function getTrackerSeatSequence(room) {
-  if (!room?.seatIDs?.length || room.mySeatID === undefined) return []
-
-  const startIndex = room.seatIDs.indexOf(Number(room.mySeatID))
-  if (startIndex < 0) return []
-
-  return room.seatIDs.slice(startIndex).concat(room.seatIDs.slice(0, startIndex))
-}
-
-function getTrackerPlayerOrder(room, seatID) {
-  const fixedViewId = room?.players?.get(Number(seatID))?.fixedViewId
-  return Number.isFinite(fixedViewId) ? fixedViewId - 1 : undefined
-}
 
 export async function addFrame() {
   if (!document.getElementById('createIframe')) {
@@ -579,26 +563,4 @@ function expandJiePanel(options = {}) {
   } else {
     apply()
   }
-}
-
-/**
- * 重置新一局开始时的界面状态。
- *
- * 清空上局残留的卡牌分类、出牌顺序与座位覆盖层内容，并按当前玩法刷新扩展 UI。
- */
-export function resetGameUiState() {
-  // 清空上一局遗留的卡牌分类区域。
-  // for (let i = 1; i <= 4; i++) document.getElementById('type' + i).innerHTML = ''
-
-  // 清空出牌顺序区域，同时恢复每列对应的序号提示。
-  // for (const e of document.getElementsByClassName('order-body')) {
-  //   e.innerHTML = ''
-  //   e.title = '零一二三四五六七八'[e.id.slice(-1)] ?? e.title
-  // }
-
-  // 重绘座位覆盖层，并根据当前模式刷新山河图相关 UI。
-  UI.seatUIs = []
-  // drawSeatUIs()
-  clearZoneMirrors()
-  // handleRogueLike()
 }

@@ -325,6 +325,47 @@ describe('TrackerController', () => {
     expect(room.getPlayer(1).candidateHandCards).toEqual([])
   })
 
+  it('从12区获得未登记的实体牌时补建真实手牌且不残留匿名实体', () => {
+    const { controller } = createTrackerControllerHarness()
+    const gainedCardIDs = [20410, 20420, 20411]
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1])
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: gainedCardIDs,
+        CardCount: 3,
+        FromID: 255,
+        FromZone: 12,
+        FromZoneParam: 0,
+        MoveType: 19,
+        SpellID: 0,
+        ToID: 0,
+        ToZone: 5,
+        ToZoneParam: 0
+      })
+    )
+
+    const room = controller.getTrackerRoom()
+    gainedCardIDs.forEach((cardID) => {
+      const card = room.cardIndex.get(cardID)
+      expect(card.location).toBe('player')
+      expect(card.subZone).toBe('hand')
+      expect(card.seats.has(0)).toBe(true)
+      expect(card.isKnown).toBe(true)
+    })
+    expect(
+      room.cards.filter(
+        (card) =>
+          card.id === 0 &&
+          card.location === 'player' &&
+          card.subZone === 'hand' &&
+          card.seats.has(0)
+      )
+    ).toEqual([])
+  })
+
   it('技能3571从牌堆揭示陈旧已知手牌时置换实体并保持牌堆数量', () => {
     const { controller } = createTrackerControllerHarness()
 

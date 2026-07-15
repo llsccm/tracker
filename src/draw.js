@@ -281,7 +281,7 @@ export function drawSeatUIs() {
   for (const seat of UI.seatUIs) {
     if (!hasSeatPosition(seat)) continue
 
-    const displayID = getSeatDisplayID(seat)
+    const displayID = seat.fixedViewId
     const orderContainer = document.getElementById('or' + displayID)
     if (!orderContainer) continue
 
@@ -294,14 +294,8 @@ export function drawSeatUIs() {
 
 function hasSeatPosition(seat) {
   return (
-    Number.isFinite(seat?.posX) &&
-    Number.isFinite(seat?.posY) &&
-    typeof seat.actualSeatID !== 'undefined'
+    Number.isFinite(seat?.posX) && Number.isFinite(seat?.posY) && Number.isFinite(seat?.fixedViewId)
   )
-}
-
-function getSeatDisplayID(seat) {
-  return typeof seat.order === 'number' ? seat.order + 1 : seat.actualSeatID
 }
 
 function applySeatContainerLayout(orderContainer, seat, defaultWidth) {

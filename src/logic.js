@@ -1,5 +1,5 @@
 import { CardConfig, SpellExtendConfig } from './config'
-import { initFrame, resetGameUiState } from './dom'
+import { initFrame } from './dom'
 import { drawCard } from './draw'
 import { isRetainedLogicMessage } from './featureFlags'
 import {
@@ -43,6 +43,8 @@ const DOUDIZHU_MSGS = new Set([
   'decodeSNoticeOp',
   'MsgGameOver'
 ])
+
+const ShanHeTu_regex = /\[\d+\]$/
 
 const PROTOCOL_PILE_ZONE = 1
 const PROTOCOL_HAND_ZONE = 5
@@ -99,13 +101,12 @@ function readyTrackerGame(cardList = []) {
   Game.isGuoZhan = cardList.includes(1150)
   Game.isDouDiZhu = cardList.includes(13005)
   Game.isShanHeTu = cardList.includes(20100)
-  Game.isRoguelike1v1 = laya?.scene?.SceneName === 'RogueLike1v1Scene'
-  Game.isSWJG = laya?.scene?.SceneName === 'SWJGScene'
+  // Game.isRoguelike1v1 = laya?.scene?.SceneName === 'RogueLike1v1Scene'
+  // Game.isSWJG = laya?.scene?.SceneName === 'SWJGScene'
 
-  resetGameUiState()
   delete Game.spellSpace[3338] // 百出 每局游戏归零
 
-  laya.ged?.CloseWindow?.('CardConfigWindow')
+  // laya.ged?.CloseWindow?.('CardConfigWindow')
 
   Game.resetConfigHandCards()
   tracker.initTrackerDeck(paidui)
@@ -182,6 +183,22 @@ export function logic(msg) {
       case 'decodeGameRecordInitInfo':
         // 用于判断模式
         // console.info(msg)
+
+        if (ProtoObj?.matchName === '斗地主') {
+          Game.isDouDiZhu = true
+        }
+
+        if (ProtoObj?.matchName === '单骑无双') {
+          Game.isRoguelike1v1 = true
+        }
+
+        // 长安行[20610702]
+        if (ProtoObj?.matchName && ShanHeTu_regex.test(ProtoObj.matchName)) {
+          Game.isShanHeTu = true
+        }
+
+        // 新欢乐排位 身份演武军争
+
         break
 
       case 'GsCModifyUserseatNtf': // 游戏开始标志 / 游戏结束标志

@@ -128,8 +128,10 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     const { knownIDs, sourceIsOutside } = context
     let missingIDs: CardID[] = []
     let createdCards: Card[] = []
+    // 12 区会暂存未进入初始牌池的技能生成牌，获得时需要按协议正 ID 补建实体。
+    const canCreateMissingCards = sourceIsOutside || context.fromZone === 'exile'
 
-    if (sourceIsOutside) {
+    if (canCreateMissingCards) {
       const existingCards = this.room.findCardsByIDs(knownIDs)
       const existingIDs = new Set(existingCards.map((card) => card.id))
       missingIDs = knownIDs.filter((id) => !existingIDs.has(id))
@@ -155,6 +157,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       missingIDs,
       createdCardIDs: createdCards.map((card) => card.id),
       resumedCardIDs,
+      canCreateMissingCards,
       sourceIsOutside
     })
   }
