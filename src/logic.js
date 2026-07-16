@@ -24,7 +24,7 @@ import {
   getRenderedMainHandCardIDs,
   subscribeRenderedMainHandCardIDs
 } from './tracker/view/PlayerHandView'
-import { idleCallback, toSuitGlyphHtml } from './utils'
+import { setSuitRecord } from './utils'
 import { addTooltip } from './utils/notification'
 import { handleBroadMsg } from './handler/chat'
 import { parsePeiXiuRoleData, solvePeiXiuRoleData } from './utils/peixiuRouteFeature'
@@ -175,9 +175,9 @@ export function logic(msg) {
 
       case 'ClientActivitysetDataRep':
         // 山河图展示：活动状态变化时仅刷新/隐藏展示内容。
-        idleCallback(() => {
-          handleRogueLike()
-        })
+        // idleCallback(() => {
+        //   handleRogueLike()
+        // })
         break
 
       case 'decodeGameRecordInitInfo':
@@ -270,7 +270,7 @@ export function logic(msg) {
         break
 
       case 'decodeRougeBaseInfoRep':
-        //该class 在 MsgGamePlayCardNtf（游戏初始化） 之前
+        //该class 在 MsgGamePlayCardNtf（牌堆初始化） 之前
         UI.friendGeneral = ProtoObj?.friendGeneral?.length ?? UI.friendGeneral
         break
 
@@ -753,9 +753,3 @@ export function logic(msg) {
 //     }
 //   })
 // }
-
-function setSuitRecord(text = '', prefix = '') {
-  const target = document.getElementById('suit')
-  if (!target) return
-  target.innerHTML = prefix + toSuitGlyphHtml(text)
-}

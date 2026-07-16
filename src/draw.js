@@ -452,7 +452,7 @@ function getYanJiaoRemain(counts, ...subsets) {
   return remain
 }
 
-function createYanJiaoButton(left, right, remain, allot) {
+function createYanJiaoButton(left, right, _remain, _allot) {
   const button = document.createElement('button')
   const spanA = document.createElement('span')
   const spanB = document.createElement('span')
@@ -469,19 +469,19 @@ function createYanJiaoButton(left, right, remain, allot) {
     toClipboard(button.innerText, true)
   }
 
-  if (allot) {
-    button.title = '点击"="左侧或右侧的数字，将被点击一侧的数字分配给自己，另一侧的分配给张昌蒲'
-    spanA.className = 'yanjiaospan'
-    spanB.className = 'yanjiaospan'
-    spanA.onclick = function (event) {
-      event.stopPropagation()
-      laya.yanJiao([left, right, remain], 2)
-    }
-    spanB.onclick = function (event) {
-      event.stopPropagation()
-      laya.yanJiao([left, right, remain], 0)
-    }
-  }
+  // if (allot) {
+  //   button.title = '点击"="左侧或右侧的数字，将被点击一侧的数字分配给自己，另一侧的分配给张昌蒲'
+  //   spanA.className = 'yanjiaospan'
+  //   spanB.className = 'yanjiaospan'
+  //   spanA.onclick = function (event) {
+  //     event.stopPropagation()
+  //     laya.yanJiao([left, right, remain], 2)
+  //   }
+  //   spanB.onclick = function (event) {
+  //     event.stopPropagation()
+  //     laya.yanJiao([left, right, remain], 0)
+  //   }
+  // }
 
   return button
 }
