@@ -8,6 +8,9 @@
 
 - **不指定本机环境**：仓库文档不强制声明开发者操作系统、默认 Shell 或终端实现；这些信息属于本机环境记忆。
 - **MCP 优先**：如果可用 MCP 工具能满足需求，优先使用 MCP 工具；确需终端时，再按本机 Shell 语法执行。
+- **识别 Shell**：先识别当前终端类型；识别为 PowerShell 时直接执行 PowerShell 命令，不要额外嵌套 `pwsh -NoLogo -NoProfile -Command`。当前终端不是 PowerShell 时，如需执行 PowerShell 命令，再使用 `pwsh -NoLogo -NoProfile -Command`。
+- **错误处理**：PowerShell 命令开头包含 `$ErrorActionPreference = 'Stop';`。
+- **文件编码**：读写文件时显式指定 `-Encoding UTF8`。
 - **编码设定**：优先确保控制台输出为 UTF-8；若某个本机 Shell 需要额外设置，把具体写法维护在 Serena 记忆中。
 - **换行符约束**：创建或修改本工作区的所有文件（包括此文档）时，必须严格使用 **LF (\n)** 作为换行符，避免重新引入 CRLF。
 - **命令拆分**：执行检索、构建、校验等任务时，优先使用单一、可读、可复现的命令；避免为了省事拼接复杂命令。
