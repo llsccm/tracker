@@ -4,7 +4,32 @@ import { CardLocationIndex } from '@/tracker/CardLocationIndex'
 import { ConstraintGroup } from '@/tracker/ConstraintGroup'
 import { Room } from '@/tracker/Room'
 import { GameState } from '@/tracker/gameState'
+import type { RecordOptions } from '@/tracker/gameState'
 import { createNoopGameState } from './helpers/noopRuntime'
+
+class HookedGameState extends GameState {
+  events: string[] = []
+
+  protected onInit(): void {
+    this.events.push('init')
+  }
+
+  protected onEnd(): void {
+    this.events.push('end')
+  }
+
+  protected onStart(): void {
+    this.events.push('start')
+  }
+
+  protected onEnter(round: number, seat: number): void {
+    this.events.push(`enter:${round}:${seat}`)
+  }
+
+  protected onRecord({ use = 0, mo = 0 }: RecordOptions): void {
+    this.events.push(`record:${use}:${mo}`)
+  }
+}
 
 describe('Room Node 导入边界', () => {
   it('不依赖浏览器全局对象也能导入并创建房间', () => {
@@ -73,5 +98,27 @@ describe('Room Node 导入边界', () => {
     expect(gameState.domContainer.temp).toBe(tempContainer)
     expect(gameState.domContainer[0]).toBe(tempContainer)
     expect(gameState.domContainer.temp).toEqual([])
+  })
+
+  it('GameState 统一状态流并通过钩子扩展运行时行为', () => {
+    const gameState = new HookedGameState()
+
+    gameState.init()
+    gameState.end()
+    gameState.start()
+    gameState.setTurn(2)
+    gameState.enter(0, 3)
+    gameState.record({ use: 1 })
+
+    expect(gameState.turn).toBe(2)
+    expect(gameState.round).toBe(1)
+    expect(gameState.phase).toBe(0)
+    expect(gameState.currentID).toBe(3)
+
+    gameState.end()
+
+    expect(gameState.events).toEqual(['init', 'end', 'start', 'enter:0:3', 'record:1:0', 'end'])
+    expect(gameState.isGameStart).toBe(false)
+    expect(gameState.isPassed).toBe(true)
   })
 })

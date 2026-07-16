@@ -1,19 +1,3 @@
-export const idleCallback = (() => {
-  const useIdleCallback =
-    typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function'
-
-  return function (fn, timeout = 500) {
-    if (useIdleCallback) {
-      // 利用原生 timeout 参数，浏览器会自动处理超时强制执行，无需手动构造 setTimeout
-      const id = window.requestIdleCallback(fn, { timeout })
-      return () => window.cancelIdleCallback(id)
-    } else {
-      const id = setTimeout(fn, 0)
-      return () => clearTimeout(id)
-    }
-  }
-})()
-
 export function hpColor(maxHp, hp) {
   maxHp = Number(maxHp)
   hp = Number(hp)
@@ -62,11 +46,6 @@ export function wait(callback, times = 20, interval = 500) {
   return new Promise((resolve) => {
     retry(callback, times, interval, resolve)
   })
-}
-
-export function openLink(url) {
-  if (!url) return
-  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 /**
@@ -193,7 +172,7 @@ export const shortName = {
   青龙偃月刀: '青龙刀',
   丈八蛇矛: '丈八矛',
   朱雀羽扇: '朱雀扇',
-  白银狮子: '白银狮',
+  白银狮子: '白银',
   三尖两刃刀: '三尖刀',
   乌铁锁链: '乌铁链',
   五行鹤翎扇: '五行扇',
@@ -269,5 +248,19 @@ export const shortName = {
   兄弟齐心: '齐心',
   无天无界: '无界',
   你死我活: '死活',
-  浑天仪: '浑仪'
+  浑天仪: '浑天仪'
+}
+
+export function updateResult(html) {
+  if (typeof document === 'undefined') return
+  const result = document.getElementById('result')
+  if (!result) return
+  result.innerHTML = html
+}
+
+export function setSuitRecord(text = '', prefix = '') {
+  if (typeof document === 'undefined') return
+  const target = document.getElementById('suit')
+  if (!target) return
+  target.innerHTML = prefix + toSuitGlyphHtml(text)
 }

@@ -258,7 +258,7 @@ export class Room {
     // 排序物理座位
     this.seatIDs.sort((a, b) => a - b)
     this.size = this.seatIDs.length
-    this.game?.syncRoomSeats?.(this)
+    this.game?.syncRoomSeats(this)
 
     // 观看别人录像时
     this.game.isRecord = this.mySeatID === undefined

@@ -8,8 +8,8 @@
 
 - `src/tracker/` 是当前主动运行的记牌器与运行时状态核心；`Room` 是单局状态源，`src/tracker/view/` 直接渲染主面板节点，并通过 `CardLocationIndex` 读取公共区与玩家区域投影。
 - 旧 `src/refactor/` 已更名并归并到 `src/tracker/`；旧 `src/context/` 主动实现已不存在。
-- `src/handler/legacyMoveCard.js` 与 `src/handler/old/` 仍有指向旧 `context` / `refactor` 的历史代码，但没有经 `src/handler/index.js` 主动导出；继续开发时不要把它们视为可用运行路径。
-- `src/handler/PubGsCMoveCard.js` 仍承担协议预处理、位置归一化、`CardIDs` 修正、技能辅助结果、战法计数、卡牌标签等副作用；真正的卡牌状态移动通过 `src/tracker/runtime/bridge.ts` 导出的 `tracker`（实现位于 `runtime/trackerController.ts`）同步到当前 `Room`。
+- `src/handler/legacyMoveCard.js` 仍保留指向旧链表模型的历史代码，但**没有**经 `src/handler/index.js` 主动导出；不要把它视为可用运行路径。`src/handler/old/` 目录已不存在。
+- `src/handler/PubGsCMoveCard.js` 仍承担协议预处理、位置归一化、`CardIDs` 修正、技能辅助结果、战法计数、卡牌标签等副作用；真正的卡牌状态移动通过 `src/tracker/runtime/browser.ts`（再导出 `bridge.ts`）提供的 `tracker`（实现位于 `runtime/trackerController.ts`）同步到当前 `Room`。
 - `src/tracker/index.ts` 仅导出共享运行时状态（`globalConfig`、`globalState`、`rogueMap`、`UI`）、`user` 与 `Game`；底层核心对象从各自子模块直接导入。
 
 ---
@@ -103,20 +103,23 @@
 - `CardLocationIndex`：提供确定手牌、候选手牌、装备、判定、标记与公共区分组；`RoomConstraints.syncViewGroups()` 和公共区视图读取该索引，避免渲染阶段现场高频分类。已改为增量维护：消费 `dirtyCardEvents` 事件流游标进行投影增量更新，公共区变化通过 `Room.dirtyPublicZones` 变更集局部重算。在游标断档时自动回退全量 `rebuild()`。装备容器候选会先投影成当前承载座位的标记区，再进入玩家视图。
 - `CardCounter`：基于 `Room.cards` 生成 `CardInstance` 查询副本，建立名称、花色、点数、类型倒排索引，并根据 `Card.location` 同步牌堆、玩家、弃牌、销毁四类状态。状态桶已从全量 `update()` 改为增量同步：`Room.markCounterDirty()` / `CardCounter.markDirty()` 收集状态变化牌，getter 在无新变化时复用干净缓存；`createExternalCards()` 会显式注册新牌，避免依赖全量扫描补建倒排索引。
 - `MoveEventNormalizer`：将原始 `PubGsCMoveCard` 字段归一为标准事件包，依赖 `protocolZones.ts` 处理 `FromZone`、`ToZone`、玩家子区与 `CardIDs` 等字段。
-- `Game`：从旧上下文迁出的生命周期、回合阶段、战法计数兼容层；后续仍可继续纯净化。
-- `src/tracker/runtime/bridge.ts`：装配并导出 `tracker` 单例（一个 `TrackerController` 实例）；单局构建、移动同步（`syncTrackerMove`）、明牌输入（`revealTrackerCards`，含界强识 `fullHand` 完整手牌同步）与视图调度的真正实现位于 `runtime/trackerController.ts`；随机手牌转移等候选构建位于 `roomMovement/candidates.ts`。
-- `src/tracker/view/`：直接操作主文档节点渲染统计、公共区、玩家手牌、查询面板和按钮。
+- `gameState.ts` / `Game.ts`：`GameState` 承载纯对局状态与生命周期；`BrowserGameState`（`Game.ts`）承接 DOM/Laya 钩子。仍可继续收紧兼容层。
+- `src/tracker/runtime/bridge.ts` + `browser.ts`：装配并导出 `tracker` 单例（`TrackerController`）；浏览器代码通常从 `runtime/browser` 导入。单局构建、移动同步（`syncTrackerMove`）、明牌输入（`revealTrackerCards`，含界强识 `fullHand`）与视图调度的实现位于 `runtime/trackerController.ts`；随机手牌转移等候选构建位于 `roomMovement/candidates.ts`。
+- `src/tracker/view/`：直接操作主文档节点渲染统计、公共区、玩家手牌、查询面板和按钮；`dirtyRenderState.ts` 按脏集合局部重绘，`trackerVisibility` 控制显隐。
 
 ---
 
 ## 生命周期接入点
 
-- `GsCModifyUserseatNtf -> handleStartGame()`：调用 `initTrackerRoom()`、`Game.init()`、`registerTrackerPlayers()`，创建单局 `Room`、缓存玩家，并执行早期 `view.mount(trackerRoom)` 清理主面板与初始化固定手牌容器。
-- `GsCFirstPhaseRole -> tracker.setTrackerFirstHand()`：直接写入 `Room.firstID`，更新固定视角位序并刷新座位覆盖层。
-- `MsgGamePlayCardNtf -> readyTrackerGame() -> initTrackerDeck()`：初始化物理牌池并再次执行 `view.mount(trackerRoom)`，补齐统计按钮、公共区、玩家手牌与查询面板的完整渲染。
-- `PubGsCMoveCard -> handleMoveCard() -> syncTrackerMove()`：协议预处理后同步到 `Room.moveCards()` / `Room.shufflePile()`。
-- `MsgGameTurnNtf` / `GsCGamephaseNtf`：推进 `Game` 轮次和阶段，再调度新版视图刷新。
-- `MsgGameOver` / `ClientLeavetableRep -> destroyTrackerRoom()`：先 `view.unmount()`，再销毁 `Room` 并清空桥接层的当前房间引用。
+> 应用级 INIT/EXIT 与时序图见 [`lifecycle.md`](lifecycle.md)。此处只列记牌器关键协议。
+
+- `decodeGsClientUserSeatFlagNtf -> handleRecordStartGame()`：**当前主动开局路径**。`initTrackerRoom()` → `Game.init()` → `registerTrackerPlayers(seatinfo, user.userID)`，早期 `view.mount`。
+- `GsCModifyUserseatNtf -> handleStartGame()`：函数仍导出，但 `logic.js` 中分发**当前注释未调用**；恢复时同样走 Room 创建与玩家注册。
+- `GsCFirstPhaseRole` / `MsgGameShowFigure(Figure===1)` → `tracker.setTrackerFirstHand()`：写入 `firstID`，更新固定视角并刷新座位覆盖层。
+- `MsgGamePlayCardNtf -> readyTrackerGame() -> initTrackerDeck()`：初始化物理牌池并完整 `view.mount`。
+- `PubGsCMoveCard -> handleMoveCard() -> syncTrackerMove()`：预处理后同步到 `Room.moveCards()` / `shufflePile()`。
+- `MsgGameTurnNtf` / `GsCGamephaseNtf`：推进 `Game` 轮次和阶段，再 `scheduleTrackerRender`。
+- `MsgGameOver` / `ClientLeavetableRep -> destroyTrackerRoom()`：先 `view.unmount()`，再销毁 `Room`。
 
 ---
 
@@ -178,8 +181,8 @@
 - 尚未完整恢复旧版 `cardManager.pack()` 链表推理承载的所有不确定性语义；宴戏、权变、诫厉等技能仍需要用新版 `ConstraintGroup` 做进一步精细化。
 - 主动运行路径不再依赖 `cardManager.findKZ()`；遗留文件中残留的旧 `cardManager` / `Zone` 引用需要后续清理或删除。
 - 技能处理器目前仍是偏单牌回调，可能需要向批量拦截器演进。
-- 已有 `pnpm test:tracker` 的 Node/Vitest 回归覆盖导入边界、Controller、位置候选、公共候选、位置索引与暗置标记候选；仍需补齐更多 `Room.moveCards()` 组合路线与浏览器运行时验证。
-- `CardLocationIndex` 与 `Room.notifyCardChanged()` 已接入，但当前视图仍以整区重绘为主，后续若做增量渲染需要补足脏变更消费逻辑。
+- 已有 `pnpm test:tracker` 的 Node/Vitest 回归覆盖导入边界、Controller、位置候选、公共候选、位置索引、暗置标记、脏渲染与遍历基线等；仍需补齐更多 `Room.moveCards()` 组合路线与浏览器运行时验证。
+- `CardLocationIndex`、`Room.notifyCardChanged()` 与 `view/dirtyRenderState.ts` 已接入：面板与玩家手牌可按脏集合局部重绘；仍可继续收紧边界场景与高频刷新策略。
 
 ---
 
@@ -231,3 +234,5 @@
 - 2026-07-04：落地 Step 6：`AmbiguousKnownIndex` 增量维护。消费 `dirtyCardEvents` 进行单牌增量更新，仅在约束组结构变化时全量 rebuild。
 - 2026-07-05：落地 Step 7 / A2：`resolveConstraints()` 的 player 快照增量维护，彻底消除入口与轮末 `filter((card) => card.location === 'player')` 的 O(N) 全量扫描，在高频移动中归零。遍历基线 visited 数分别下降至：常规摸牌 48（降76%）、暗牌分配 52（降68%）、排他触发 60（降72%）、洗牌 80（降60%）。
 - 2026-07-05：完成测试重构与合并，抽取 `locationCandidates` 与 `trackerController` 公共测试辅助，精简测试冗余，提升测试维护性。
+
+- 2026-07-15：文档对齐代码结构——去除文档行号锚点；开局路径以 `handleRecordStartGame` 为主、`GsCModifyUserseatNtf` 分发暂注释；`GameState` 纯状态与 `BrowserGameState` 钩子拆分；视图脏渲染与 `trackerVisibility` 已落地。

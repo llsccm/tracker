@@ -3,14 +3,9 @@ import { CharacterConfig } from '@/config/CharacterConfig'
 import { UI } from './state'
 import { GameState } from './gameState'
 import { trackerLogger } from '@/utils/logger'
-import type { Room } from './Room'
+import type { RecordOptions } from './gameState'
 import type { SeatID } from './types'
 import type { Player } from './Player'
-
-interface RecordOptions {
-  use?: number
-  mo?: number
-}
 
 interface ZhanFaItem {
   PlotID: number
@@ -84,21 +79,6 @@ class BrowserGameState extends GameState {
     return orderLabel
   }
 
-  syncRoomSeats(room: Room | null = this.room): void {
-    if (!room) return
-    this.seatIDs = room.seatIDs.slice()
-    this.size = room.size
-  }
-
-  /**
-   * 重置记牌器手牌配置会话状态。
-   */
-  resetConfigHandCards(): void {
-    this.configHandCards = []
-    this.configHandCardsMode = 'all'
-    this.configHandCardsRejected = false
-  }
-
   getSpellState<T = unknown>(spellID: PropertyKey): T | undefined {
     return (this.spellSpace as Record<PropertyKey, unknown>)[spellID] as T | undefined
   }
@@ -120,103 +100,28 @@ class BrowserGameState extends GameState {
     delete (this.spellSpace as Record<PropertyKey, unknown>)[spellID]
   }
 
-  /*
-   * 游戏初始化 此时加载房间信息
-   */
-  init(): void {
+  protected onInit(): void {
     trackerLogger.info('GameState 游戏已重置并开始')
-
-    this.resetRoomState()
-    this.isRecord = false
-    this.isGameStart = true
-    this.isPassed = false
 
     UI.seatUIs = []
     UI.friendGeneral = 0
 
-    this.turn = 0
-    this.round = 0
-    this.phase = 0
-
-    this.currentID = undefined
-    this.myGenerals.length = 0
-    this.spellSpace = {}
-    this.resetConfigHandCards()
     laya.reset()
     // retry(() => laya.init())
-  }
-
-  /**
-   * 游戏/局结束或离开房间的清理
-   */
-  end(): void {
-    if (this.isGameStart && !this.isPassed) {
-      this.isRecord = false
-      this.isGameStart = false
-      this.isPassed = true
-      this.resetRoomState()
-
-      // 重置 Laya 运行时
-
-      trackerLogger.info('GameState 游戏已结束')
-    }
-  }
-
-  /**
-   * 启动游戏状态
-   */
-  start(): void {
-    // 检测一次对局是否开始
-    if (this.isGameStart) return
-
-    this.isGameStart = true
-    this.isPassed = false
-
-    const seatIDs = this.room ? this.room.seatIDs : []
-    const mySeatID = this.room ? this.room.mySeatID : undefined
-    trackerLogger.info('GameState 游戏开始', { seatIDs, mySeatID })
-
     laya.init()
   }
 
-  /**
-   * 推进回合
-   */
-  enter(round: number, seat: SeatID): void {
-    const mySeatID = this.room ? this.room.mySeatID : undefined
+  protected onEnd(): void {
+    trackerLogger.info('GameState 游戏已结束')
+  }
 
-    if (round === 0) {
-      // 回合开始
-      if (!this.turn) {
-        this.start()
-      } else if (this.currentID === mySeatID) {
-        this.spellSpace['手到擒来'] = this.spellSpace['多多益善'] = 0
-      }
+  protected onStart(): void {
+    const seatIDs = this.room?.seatIDs ?? []
+    const mySeatID = this.room?.mySeatID ?? undefined
+    trackerLogger.info('GameState 游戏开始', { seatIDs, mySeatID })
+  }
 
-      // 下一个人的回合开始 重置上一个人的战法
-      this.resetZhanFa(this.currentID)
-
-      this.currentID = seat
-      this.round++
-      this.phase = 0
-
-      // 如果主视角武将拥有【素俭】(ID 3031)，且当前行动玩家是自己，标记提示
-      const selfSeat = this.seatUIs[0]?.seat as
-        | { HasSkill?: (skillID: number) => boolean }
-        | undefined
-      if (selfSeat?.HasSkill?.(3031) && this.currentID === mySeatID) {
-        laya.mark(true, '[素俭]待分配')
-      }
-
-      ;[7011, 2143, 3271, 3659].forEach((id) => delete this.spellSpace[id]) // 权变 博图 乱击 畜鸣
-
-      this.clear('round')
-    } else {
-      this.phase++
-    }
-
-    this.clear('phase')
-
+  protected onEnter(round: number, _seat: SeatID): void {
     const nav = document.getElementById('phrase')
     if (nav) {
       const lastMatch = nav.innerText.match(/\(([0-9])\)$/)
@@ -233,23 +138,7 @@ class BrowserGameState extends GameState {
     }
   }
 
-  setTurn(turn: number): void {
-    if (turn > 0) {
-      // 每轮开始
-      this.turn = turn
-      this.round = 0
-      this.clear('turn')
-      this.resetTurnZhanFa()
-      if (turn === 1) this.start()
-      delete this.spellSpace[3090]
-      delete this.spellSpace[3821]
-    }
-  }
-
-  /**
-   * 记录战法数据
-   */
-  record({ use = 0, mo = 0 }: RecordOptions = {}): void {
+  protected onRecord({ use = 0, mo = 0 }: RecordOptions): void {
     const items = laya.gamescene?.SelfSeatUi?.zhanFaItems as ZhanFaItem[] | undefined
     if (!items?.length) return
 
@@ -271,26 +160,6 @@ class BrowserGameState extends GameState {
         ui.Value = this.spellSpace['多多益善']
       }
     })
-  }
-
-  /**
-   * 清理弹窗或提示 DOM 元素
-   */
-  clear(type: string, SpellID?: unknown, SeatID?: unknown): void {
-    const arr = this.domContainer[type]
-    if (!arr) return
-
-    for (let i = arr.length - 1; i >= 0; i--) {
-      if (SeatID === undefined && SpellID !== arr[i].SpellID) {
-        arr[i].count--
-      }
-      if (!(arr[i].count > 0) || (SpellID === arr[i].SpellID && SeatID === arr[i].SeatID)) {
-        if (arr[i].element && typeof arr[i].element.remove === 'function') {
-          arr[i].element.remove()
-        }
-        arr.splice(i, 1)
-      }
-    }
   }
 
   /**
@@ -317,26 +186,6 @@ class BrowserGameState extends GameState {
       if (ui?.n !== undefined && TURNZHANFA.includes(ui.PlotID)) {
         ui.Value = ui.n = 0
       }
-    })
-  }
-
-  /**
-   * 重置 GameState 自身状态
-   */
-  reset(): void {
-    this.turn = 0
-    this.round = 0
-    this.phase = 0
-    this.currentID = undefined
-    this.myGenerals.length = 0
-    this.isGameStart = false
-    this.isPassed = true
-    this.spellSpace = {}
-    this.resetConfigHandCards()
-    this.resetRoomState()
-    // 清空 domContainer
-    Object.keys(this.domContainer).forEach((key) => {
-      this.domContainer[key] = []
     })
   }
 }

@@ -1,8 +1,9 @@
+import { updateResult } from '@/utils'
 import { CardConfig } from '../config'
 import { drawChengXiang } from '../draw'
 import { tracker } from '../tracker/runtime/browser'
 
-function getTrackedPileCardIDs() {
+export function getTrackedPileCardIDs() {
   return tracker.getReadyTrackerRoom()?.publicZones.getPileCardIDs() ?? []
 }
 
@@ -10,52 +11,10 @@ function getTrackedDiscardCardIDs() {
   return tracker.getReadyTrackerRoom()?.publicZones.getPublicZoneCardIDs('discard') ?? []
 }
 
-function updateResult(html) {
-  if (typeof document === 'undefined') return
-  const result = document.getElementById('result')
-  if (!result) return
-  result.innerHTML = html
-}
-
 function handleChengXiang(context) {
   if (context.ToZone == 8 && context.MoveType == 6) {
     const arr = context.CardIDs.map((id) => CardConfig.GetInstance().getCardNumber(id))
     drawChengXiang(arr, context.SpellID == 3492)
-  }
-}
-
-function handleJiZhan(context) {
-  if (
-    context.FromZone == 1 &&
-    context.ToZone == 8 &&
-    context.CardIDs.filter((id) => id > 0).length == 1
-  ) {
-    const cardNum = CardConfig.GetInstance().getCardNumber(context.CardIDs.find((id) => id > 0))
-    let g = 0
-    let l = 0
-    let e = 0
-
-    getTrackedPileCardIDs().forEach((id) => {
-      const num = CardConfig.GetInstance().getCardNumber(id)
-      if (num === cardNum) e++
-      else if (num > cardNum) g++
-      else l++
-    })
-
-    updateResult(
-      '<span class="textRes">【吉占】猜' +
-        (g > l ? '大' : '小') +
-        '</span>' +
-        '<br><span class="textRes">跟' +
-        cardNum +
-        '比，' +
-        g +
-        '张大\t\t' +
-        l +
-        '张小\t\t' +
-        e +
-        '平</span>'
-    )
   }
 }
 
@@ -239,28 +198,10 @@ function handleQianFu(context) {
   }
 }
 
-function handleYanXi(context) {
-  const { game } = context
-
-  if (
-    context.ToZone == 5 &&
-    context.CardCount == 1 &&
-    (context.SrcSeatID == game.myID || import.meta.env.DEV)
-  ) {
-    const spellCards = game.getSpellState(context.SpellID)
-    if (!spellCards?.length) return
-    if (context.CardIDs[0] && spellCards.includes(context.CardIDs[0])) {
-      spellCards.splice(spellCards.indexOf(context.CardIDs[0]), 1)
-    } else if (context.FromZone == 5 || spellCards.length == 2 || spellCards.length == 1) {
-      context.CardIDs[0] = spellCards.shift()
-    }
-  }
-}
-
 export const spellEffectHandlers = new Map([
   [441, handleChengXiang],
   [3492, handleChengXiang],
-  [3033, handleJiZhan],
+  // [3033, handleJiZhan],
   [3329, handleHeZhong],
   [3659, handleJieWu],
   [3821, handleZhuoHun],
@@ -269,9 +210,9 @@ export const spellEffectHandlers = new Map([
   [3511, handleQingYiLianJu],
   [3543, handleSiQi],
   [3571, handleJiaoYu],
-  [3750, handleQianFu],
-  [7016, handleYanXi],
-  [7017, handleYanXi]
+  [3750, handleQianFu]
+  // [7016, handleYanXi],
+  // [7017, handleYanXi]
 ])
 
 export function applySpellEffect(context) {
