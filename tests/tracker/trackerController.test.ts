@@ -543,6 +543,105 @@ describe('TrackerController', () => {
     expect(view.calls.scheduleRender).toBe(1)
   })
 
+  it('随机获得后使用自身暗牌不应按实体顺序排除候选明牌', () => {
+    const { controller } = createTrackerControllerHarness()
+    const knownIDs = [77, 116, 89, 159, 61, 134]
+    const lowerFillerIDs = Array.from({ length: 13 }, (_, index) => 201 + index)
+    // 牌堆顶部先发 217-220 给 1 号位，再把 134/214/215 作为 2 号位的三张暗实体。
+    // 后续 1 号位使用 134 时，不能因为内部暗实体 ID 碰巧命中就确认它来自随机转移。
+    const deckIDs = [
+      ...knownIDs.filter((id) => id !== 134),
+      ...lowerFillerIDs,
+      134,
+      214,
+      215,
+      217,
+      218,
+      219,
+      220
+    ]
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers(
+      [
+        { SeatID: 1, ClientID: 100 },
+        { SeatID: 2, ClientID: 200 }
+      ],
+      100
+    )
+    controller.initTrackerDeck(deckIDs)
+
+    const syncMove = (overrides: Parameters<typeof protocolMove>[0]) =>
+      controller.syncTrackerMove(protocolMove(overrides))
+
+    // 初始暗手牌：先发 1 号位 4 张，再发 2 号位 3 张。
+    syncMove({ CardIDs: [], CardCount: 4, ToID: 1 })
+    syncMove({ CardIDs: [], CardCount: 3, ToID: 2 })
+
+    syncMove({
+      CardIDs: [77],
+      CardCount: 1,
+      FromID: 0,
+      FromZone: 5,
+      MoveType: 27,
+      SpellID: 31,
+      ToID: 1,
+      ToZone: 5
+    })
+    syncMove({
+      CardIDs: [116],
+      CardCount: 1,
+      FromID: 0,
+      FromZone: 5,
+      MoveType: 27,
+      SpellID: 31,
+      ToID: 2,
+      ToZone: 5
+    })
+    syncMove({ CardIDs: [], CardCount: 2, ToID: 1 })
+    syncMove({ CardIDs: [89], CardCount: 1, FromID: 1, FromZone: 5, ToZone: 3, MoveType: 2 })
+    syncMove({
+      CardIDs: [],
+      CardCount: 1,
+      FromID: 2,
+      FromZone: 5,
+      MoveType: 18,
+      SpellID: 4,
+      ToID: 1,
+      ToZone: 5
+    })
+    syncMove({
+      CardIDs: [159],
+      CardCount: 1,
+      FromID: 1,
+      FromZone: 5,
+      ToZone: 2,
+      MoveType: 12
+    })
+    syncMove({ CardIDs: [], CardCount: 1, ToID: 1 })
+    syncMove({ CardIDs: [61], CardCount: 1, FromID: 1, FromZone: 5, ToZone: 3, MoveType: 2 })
+    syncMove({
+      CardIDs: [134],
+      CardCount: 1,
+      FromID: 1,
+      FromZone: 5,
+      ToZone: 3,
+      MoveType: 2
+    })
+
+    const room = controller.getTrackerRoom()
+    const card116 = room.cardIndex.get(116)
+    const transferGroup = Array.from(room.constraintGroups.values()).find(
+      (group) =>
+        group.cards.has(card116) &&
+        group.expectedSlotsBySeat.has(1) &&
+        group.expectedSlotsBySeat.has(2)
+    )
+    expect(transferGroup?.expectedSlotsBySeat.get(1)).toBe(1)
+    expect(transferGroup?.expectedSlotsBySeat.get(2)).toBe(3)
+    expect(Array.from(card116.seats).sort()).toEqual([1, 2])
+  })
+
   it('断线重连状态下跳过牌堆初始化并冻结牌堆相关同步', () => {
     const { controller, gameState, view } = createTrackerControllerHarness()
 

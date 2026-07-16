@@ -5,6 +5,7 @@ import {
   createLocationCandidateKey,
   fromSubZoneCandidate,
   getPlayerLocationCandidates,
+  parseLocationCandidateKey,
   toSubZoneCandidate
 } from './candidate/locationCandidate'
 import { trackerLogger } from '@/utils/logger'
@@ -74,6 +75,12 @@ interface ConstraintGroupCreateOptions extends ConstraintCardOptions {
   sourceEvent?: MoveSourceEvent | string | null
 }
 
+interface AmbiguousHiddenHandCoveragePackage {
+  coverageBySeat: Map<SeatID, number>
+  hiddenCards: Set<Card>
+  totalCoverage: number
+}
+
 /**
  * Room 的局部约束与视图同步辅助模块。
  * 收敛主循环保留在 Room；这里负责约束组维护、稳定列表同步和暂停追踪等细节。
@@ -135,6 +142,110 @@ export class RoomConstraints {
       subZone: card.subZone,
       spellID: card.spellID
     }
+  }
+
+  /**
+   * 收集精确手牌位置约束中必然由跨位置暗实体占用的槽位。
+   *
+   * 这些实体没有唯一 resolvedSeat，不能当作某个玩家的确定暗手牌；但约束已经保证其中
+   * 至少若干张会落到对应手牌位置，因此匿名对账不能为同一批槽位再次补建实体。
+   */
+  collectAmbiguousHiddenHandCoverage(): Map<SeatID, number> {
+    const packages: AmbiguousHiddenHandCoveragePackage[] = []
+
+    this.room.constraintGroups.forEach((group) => {
+      const coverageBySeat = new Map<SeatID, number>()
+      const hiddenCards = new Set<Card>()
+      const groupCards = Array.from(group.cards)
+
+      group.expectedSlotsByLocation.forEach((expectedCount, key) => {
+        const locationCandidate = parseLocationCandidateKey(key)
+        const handCandidate = toSubZoneCandidate(locationCandidate)
+        if (!handCandidate || handCandidate.subZone !== 'hand' || expectedCount <= 0) return
+
+        const subZoneKey = createSubZoneCandidateKey(handCandidate)
+        const exactCards = groupCards.filter(
+          (card) =>
+            card.location === 'player' &&
+            !card.hasLocationCandidates?.() &&
+            !card.hasSubZoneCandidates?.() &&
+            card.seats.size === 1 &&
+            card.seats.has(handCandidate.seatID) &&
+            card.subZone === 'hand'
+        )
+        const candidateCards = groupCards.filter(
+          (card) =>
+            card.hasLocationCandidate?.(key) ||
+            (subZoneKey && card.hasSubZoneCandidate?.(subZoneKey))
+        )
+        const knownCandidateCount = candidateCards.filter(
+          (card) => card.isKnown === true && card.suspended !== true
+        ).length
+        const ambiguousHiddenCards = candidateCards.filter(
+          (card) =>
+            card.isKnown !== true && card.suspended !== true && card.resolvedSeat === null
+        )
+        const remainingExpected = Math.max(0, expectedCount - exactCards.length)
+        const hiddenCoverage = Math.min(
+          ambiguousHiddenCards.length,
+          Math.max(0, remainingExpected - knownCandidateCount)
+        )
+
+        if (hiddenCoverage <= 0) return
+        coverageBySeat.set(
+          handCandidate.seatID,
+          (coverageBySeat.get(handCandidate.seatID) ?? 0) + hiddenCoverage
+        )
+        ambiguousHiddenCards.forEach((card) => hiddenCards.add(card))
+      })
+
+      const totalCoverage = Array.from(coverageBySeat.values()).reduce(
+        (total, count) => total + count,
+        0
+      )
+      if (totalCoverage > 0) {
+        packages.push({ coverageBySeat, hiddenCards, totalCoverage })
+      }
+    })
+
+    // 同一批暗实体可能同时属于历史组与后续扩展组。重叠组只采用覆盖量更大的一个，
+    // 避免同一实体被多次用于抵扣匿名缺口；互不相交的约束组可以安全累加。
+    packages.sort((left, right) => right.totalCoverage - left.totalCoverage)
+    const usedHiddenCards = new Set<Card>()
+    const coverageBySeat = new Map<SeatID, number>()
+    packages.forEach((coveragePackage) => {
+      if (Array.from(coveragePackage.hiddenCards).some((card) => usedHiddenCards.has(card))) return
+
+      coveragePackage.hiddenCards.forEach((card) => usedHiddenCards.add(card))
+      coveragePackage.coverageBySeat.forEach((count, seatID) => {
+        coverageBySeat.set(seatID, (coverageBySeat.get(seatID) ?? 0) + count)
+      })
+    })
+
+    return coverageBySeat
+  }
+
+  /**
+   * 用另一个暗实体接管原实体参与的全部约束组，不改变任何期望槽位。
+   * 用于未公开正 ID 仅作为身份占位、后续明牌协议需要交换身份但不能确认候选位置的场景。
+   */
+  replaceCardInConstraintGroups(previousCard: Card, nextCard: Card): boolean {
+    if (previousCard === nextCard) return false
+
+    let changed = false
+    this.room.constraintGroups.forEach((group) => {
+      if (!group.cards.has(previousCard)) return
+
+      group.cards.delete(previousCard)
+      group.cards.add(nextCard)
+      nextCard.combinationID = group.id ?? previousCard.combinationID
+      changed = true
+    })
+
+    if (changed) {
+      this.room.markConstraintGroupsDirty('replaceCardInConstraintGroups')
+    }
+    return changed
   }
 
   /**

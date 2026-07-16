@@ -102,6 +102,42 @@ describe('玩家手牌数观测', () => {
     expect(targetPlayer.candidateHandCards).toEqual(knownIDs.map((id) => getCard(room, id)))
   })
 
+  it('随机转移已有暗实体完整覆盖手牌槽时不重复补建匿名实体', () => {
+    const knownIDs = [116]
+    const hiddenIDs = [130, 131, 132]
+    const allIDs = [...knownIDs, ...hiddenIDs]
+    const { room } = createTestRoom({ cardIDs: allIDs, seatIDs: [1, 2] })
+    const sourceCards = allIDs.map((id) => getCard(room, id))
+
+    room.clearCardsFromPublicZones(sourceCards)
+    sourceCards.forEach((card) => {
+      card.bindCandidates([2], 'hand', null, { known: knownIDs.includes(card.id) })
+      if (hiddenIDs.includes(card.id)) {
+        card.isKnown = false
+        room.notifyCardChanged(card, { type: 'test:hidden-card' })
+      }
+    })
+    room.getPlayer(1).syncObservedHandCount(0)
+    room.getPlayer(2).syncObservedHandCount(4)
+
+    room.moveCards([], 'player', {
+      fromZone: null,
+      fromSeatID: 2,
+      fromSubZone: 'hand',
+      seatID: 1,
+      subZone: 'hand',
+      cardCount: 1,
+      sourceEvent: { type: 'test:random-transfer-with-hidden-coverage' }
+    })
+
+    const playerCards = room.cards.filter((card) => card.location === 'player')
+    expect(playerCards).toHaveLength(4)
+    expect(playerCards).toEqual(expect.arrayContaining(sourceCards))
+    expect(room.cards.some((card) => card.id === 0)).toBe(false)
+    expect(room.getPlayer(1).unknownCardCount).toBe(0)
+    expect(room.getPlayer(2).unknownCardCount).toBe(2)
+  })
+
   it('主动实体化未知手牌槽并在明牌打出时回补原公共位置', () => {
     const { room } = createTestRoom({ cardIDs: [2, 118, 130], seatIDs: [2] })
     const knownCards = [getCard(room, 118), getCard(room, 130)]
