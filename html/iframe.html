@@ -51,7 +51,7 @@
       user-select: none;
       /* 限制页面宽度不超过屏幕宽度 */
       max-width: 100vw;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-family: -apple-system, Helvetica, Arial, PingFang SC, Hiragino Sans GB, Microsoft YaHei, 'Segoe UI Symbol', sans-serif;
     }
 
     .nav {
@@ -631,8 +631,6 @@
     }
 
     .suitRec {
-      font-family:
-        -apple-system, BlinkMacSystemFont, 'Segoe UI Symbol', 'Segoe UI', Tahoma, Arial, sans-serif;
       text-shadow:
         1px 0 0 rgba(255, 255, 255, 0.7),
         0 1px 0 rgba(255, 255, 255, 0.7),
@@ -642,7 +640,7 @@
 
     .suit {
       font-family:
-        -apple-system, BlinkMacSystemFont, 'Segoe UI Symbol', 'Segoe UI', Tahoma, Arial, sans-serif;
+        -apple-system, Helvetica, Arial, PingFang SC, Hiragino Sans GB, Microsoft YaHei, 'Segoe UI Symbol', sans-serif;
     }
 
     .suit-glyph {
@@ -650,9 +648,9 @@
       line-height: 1;
       min-width: 0.72em;
       text-align: center;
-      font-size: 1.45em;
+      /* 花色大小 */
+      font-size: 1.1em;
       font-weight: 700;
-      font-family: 'SimSun', 'Songti SC', 'Segoe UI Symbol', 'Segoe UI', Tahoma, Arial, sans-serif;
       vertical-align: -0.08em;
     }
 
@@ -962,19 +960,14 @@
       justify-content: center;
       width: var(--shoupai-width);
       min-width: var(--shoupai-width);
-      height: 36px;
+      height: 38px;
       border: 1px solid black;
       text-align: center;
-      background: rgba(210, 200, 160, 0.5);
+      background: rgba(210, 200, 160, 0.75);
       border-radius: 5px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-family: -apple-system, PingFang SC, Hiragino Sans GB, "Segoe UI Emoji", "Microsoft YaHei", "Segoe UI Symbol", sans-serif;
       /* 防止文本换行 */
       white-space: nowrap;
-      text-shadow:
-        1px 0 0 rgba(255, 255, 255, 0.7),
-        0 1px 0 rgba(255, 255, 255, 0.7),
-        -1px 0 0 rgba(255, 255, 255, 0.7),
-        0 -1px 0 rgba(255, 255, 255, 0.7);
       font-size: 13px;
     }
 
@@ -985,8 +978,7 @@
 
     .shoupai .card-cn {
       display: inline-block;
-      line-height: 1;
-      font-family: 'Segoe UI Symbol', 'Segoe UI', Tahoma, Arial, sans-serif;
+      /* line-height: 1; */
     }
 
     .shoupai .card-name {
@@ -994,33 +986,54 @@
       max-width: 100%;
       overflow: hidden;
       text-overflow: ellipsis;
-      line-height: 1.05;
-      font-size: 13px;
+      /* line-height: 1.05; */
+      font-size: 14px;
+      text-shadow:
+        1px 1px 1px rgba(255, 255, 255, 0.6),
+        -1px -1px 1px rgba(255, 255, 255, 0.6),
+        1px -1px 1px rgba(255, 255, 255, 0.6),
+        -1px 1px 1px rgba(255, 255, 255, 0.6);
     }
 
     .shoupai .card-cn .suit-glyph {
       min-width: 0.56em;
-      font-size: 1.45em;
+      /* font-size: 1.45em; */
       margin-right: 0;
       transform: none;
     }
 
     .shoupai .card-cn .rank-glyph {
       display: inline-block;
-      margin-left: 1px;
+      /* margin-left: 1px; */
     }
 
-    .suit-heart,
+    .shoupai .suit-heart,
+    .shoupai .suit-diamond {
+      text-shadow:
+        1px 1px 1px rgba(255, 255, 255, 0.6),
+        -1px -1px 1px rgba(255, 255, 255, 0.6),
+        1px -1px 1px rgba(255, 255, 255, 0.6),
+        -1px 1px 1px rgba(255, 255, 255, 0.6);
+    }
+
+    .suit-heart {
+      color: rgb(240, 65, 85);
+      filter: none;
+    }
+
     .suit-diamond {
       color: rgb(240, 65, 85);
+      filter: hue-rotate(110deg) brightness(1.1);
     }
 
     .suit-spade {
       color: #4a90e2;
+      filter: brightness(0) invert(30%) sepia(1) saturate(8000%) hue-rotate(203deg) brightness(1.2);
     }
 
     .suit-club {
-      color: #4caf50;
+      color: #790071;
+      filter: brightness(0) invert(25%) sepia(1) saturate(6000%) hue-rotate(265deg) brightness(1.2);
     }
 
     .shoupai .card-cn-long {
@@ -1037,6 +1050,7 @@
     }
 
     .shoupai.unknown-card {
+      color: #999;
       background: 0;
     }
 
@@ -1475,18 +1489,18 @@
           <div class="orderContainer" id="or1">
             <div class="order-body No1" id="1" style="--No-content: '神诸葛亮丨一'">
               <button class="shoupai">
-                <span class="card-cn suit-club"><span class="suit-glyph">♣︎</span><span
+                <span class="card-cn suit-spade"><span class="suit-glyph">♠︎</span><span
                     class="rank-glyph">Q</span></span>
                 <span class="card-name">测试</span>
               </button>
               <button class="shoupai">
                 <span class="card-cn suit-club"><span class="suit-glyph">♣︎</span><span
-                    class="rank-glyph">Q</span></span>
+                    class="rank-glyph">J</span></span>
                 <span class="card-name">测试</span>
               </button>
               <button class="shoupai">
-                <span class="card-cn suit-club"><span class="suit-glyph">♣︎</span><span
-                    class="rank-glyph">Q</span></span>
+                <span class="card-cn suit-heart"><span class="suit-glyph">♥︎</span><span
+                    class="rank-glyph">K</span></span>
                 <span class="card-name">测试</span>
               </button>
               <button class="shoupai">
@@ -1514,12 +1528,12 @@
               </button>
               <button class="shoupai">
                 <span class="card-cn suit-club"><span class="suit-glyph">♣︎</span><span
-                    class="rank-glyph">Q</span></span>
+                    class="rank-glyph">J</span></span>
                 <span class="card-name">测试</span>
               </button>
               <button class="shoupai">
                 <span class="card-cn suit-club"><span class="suit-glyph">♣︎</span><span
-                    class="rank-glyph">Q</span></span>
+                    class="rank-glyph">K</span></span>
                 <span class="card-name">测试</span>
               </button>
               <button class="shoupai">
