@@ -112,7 +112,7 @@ function getSuitClass(color) {
 function getSuitGlyphHtml(suit, suitClass = '') {
   if (!suit) return ''
   const glyphClass = suitClass ? `suit-glyph ${suitClass}` : 'suit-glyph'
-  return `<span class="${glyphClass}">${suit}\uFE0E</span>`
+  return `<span class="${glyphClass}">${suit}</span>`
 }
 
 /** 将文本中的花色符号（♥♦♠♣）替换为带样式的 HTML span */
