@@ -108,6 +108,7 @@ class BrowserGameState extends GameState {
 
     laya.reset()
     // retry(() => laya.init())
+    laya.init()
   }
 
   protected onEnd(): void {
@@ -115,11 +116,9 @@ class BrowserGameState extends GameState {
   }
 
   protected onStart(): void {
-    const seatIDs = this.room ? this.room.seatIDs : []
-    const mySeatID = this.room ? this.room.mySeatID : undefined
+    const seatIDs = this.room?.seatIDs ?? []
+    const mySeatID = this.room?.mySeatID ?? undefined
     trackerLogger.info('GameState 游戏开始', { seatIDs, mySeatID })
-
-    laya.init()
   }
 
   protected onEnter(round: number, _seat: SeatID): void {

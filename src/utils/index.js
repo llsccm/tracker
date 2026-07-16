@@ -259,6 +259,7 @@ export function updateResult(html) {
 }
 
 export function setSuitRecord(text = '', prefix = '') {
+  if (typeof document === 'undefined') return
   const target = document.getElementById('suit')
   if (!target) return
   target.innerHTML = prefix + toSuitGlyphHtml(text)

@@ -21,18 +21,7 @@ export function handleJiZhan(context) {
     })
 
     updateResult(
-      '<span class="textRes">【吉占】猜' +
-        (g > l ? '大' : '小') +
-        '</span>' +
-        '<br><span class="textRes">跟' +
-        cardNum +
-        '比，' +
-        g +
-        '张大\t\t' +
-        l +
-        '张小\t\t' +
-        e +
-        '平</span>'
+      `<span class="textRes">【吉占】猜${g > l ? '大' : '小'}</span><br><span class="textRes">跟${cardNum}比，${g}张大\t\t${l}张小\t\t${e}平</span>`
     )
   }
 }

@@ -558,12 +558,13 @@ export function drawYanJiao(array, allot = false) {
     return
   }
 
-  if (allot) {
-    resDiv.insertAdjacentHTML(
-      'afterbegin',
-      '界小抄：点下方数字可以自动分配牌<br>点击想要分配给自己的一组数字即可'
-    )
-  }
+  // if (allot) {
+  //   resDiv.insertAdjacentHTML(
+  //     'afterbegin',
+  //     '界小抄：点下方数字可以自动分配牌<br>点击想要分配给自己的一组数字即可'
+  //   )
+  // }
+
   resDiv.appendChild(fragment)
 }
 

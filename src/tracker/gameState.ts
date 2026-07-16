@@ -211,18 +211,22 @@ export class GameState {
   }
 
   start(): void {
+    this.onStart()
     if (this.isGameStart) return
 
     this.isGameStart = true
     this.isPassed = false
-    this.onStart()
   }
 
+  /** 个人阶段 */
   enter(round: number, seat: SeatID): void {
+    // round 是当前角色的阶段 4是出牌阶段
+    // 0是回合开始时
     if (round === 0) {
-      if (!this.turn) {
-        this.start()
-      } else if (this.currentID === this.myID) {
+      // 主公一号位开始阶段 此时turn还是0
+      if (!this.turn) this.start()
+
+      if (this.currentID === this.myID) {
         this.spellSpace['手到擒来'] = this.spellSpace['多多益善'] = 0
       }
 
@@ -243,13 +247,18 @@ export class GameState {
     this.onEnter(round, seat)
   }
 
+  /** 每轮 */
   setTurn(turn: number): void {
+    // 第一轮开始时 似乎比角色开始阶段还要晚一点
     if (turn > 0) {
       this.turn = turn
       this.round = 0
       this.clear('turn')
       this.resetTurnZhanFa()
-      if (turn === 1) this.start()
+
+      // 第一轮开始时 检测开始状态
+      // if (turn === 1) this.start()
+
       delete this.spellSpace[3090]
       delete this.spellSpace[3821]
     }
