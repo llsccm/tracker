@@ -29,6 +29,8 @@ export interface RoomMovementOptions {
   fromSubZone?: SubZone
   fromSpellID?: SpellIDInput
   cardCount?: number
+  /** 协议手牌总数变化量；省略时沿用实际移动实体数 cardCount。 */
+  handMoveCount?: number
   position?: PublicPosition
   fromPosition?: PublicPosition
   expectedSlotsBySeat?: ExpectedSlotsBySeatInput

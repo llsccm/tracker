@@ -182,7 +182,10 @@
 - 协议文档：`docs/protocols/PubGsCMoveCard-spell-121-hand-exchange.md`（以技能 121 为完整示例）。
 - 装饰器：`src/tracker/skill/HandExchange.ts`，经 `decorateGenericMove`（`*`）统一接入，不绑定单一 SpellID。
 - 识别门槛：`MoveType=11` + `5<->10` + 整手张数；允许己方整手正 `CardIDs`，避免误伤佐练/诫厉等非整手路径。
-- 手牌进 `exchange` 时按 `SpellID + FromID` 登记整批实体；回手时 `FromID` 是原持有者批次键，目标座位看 `ToID`。
+- 手牌进 `exchange` 时按 `SpellID + FromID` 登记整批实体；同座位嵌套交换使用后进先出的批次栈，明确空手时也登记零张屏障批次；回手时 `FromID` 是原持有者批次键，目标座位看 `ToID`。
+- 多位置手牌候选使用唯一批次令牌逐分支置换，不归入先处理座位；候选模式通过 `handMoveCount` 同步协议整手数，通过 `cardCount` 只搬运确定实体，避免候选实锤和匿名实体重复占槽。
+- 候选批次回到己方且 `CardIDs` 完整覆盖整手时，正 ID 直接确认对应候选，未出现的候选排除该批次分支。
+- 暗实体占位仍随物理批次移动；回到己方并由正 ID 揭示时，真实身份若尚在其它公共区，使用 exchange 暗实体回填原槽位后再把真实身份移入手牌，避免占位残留或重复计数。
 - 明牌回填 `cardIDs`，暗实体回填 `sourceCards`；明暗混合批次不共用 `combinationID`。
 
 ## 已知未完成项
