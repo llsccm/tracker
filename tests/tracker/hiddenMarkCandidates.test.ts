@@ -195,7 +195,41 @@ describe('隐藏标记区候选', () => {
     expect(placeholder.seats.has(7)).toBe(true)
   })
 
-  it('全明手牌暗置标记区时创建完整位置强约束', () => {
+  it('玩家暗标记来源保留 spell ID 数组中的全部兼容值', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [6] })
+    const first = getCard(room, 1)
+    const second = getCard(room, 2)
+
+    room.clearCardsFromPublicZones([first, second])
+    first.bindCandidates([6], 'mark', 100, { known: false })
+    second.bindCandidates([6], 'mark', 200, { known: false })
+
+    expect(room.movement.getUnknownPlayerSourceCards(6, 'mark', [100, 200])).toEqual([
+      first,
+      second
+    ])
+  })
+
+  it('混合完整位置候选即使投影为空也可作为玩家标记来源', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [6, 7] })
+    const mixedCandidate = getCard(room, 1)
+    const exactSource = getCard(room, 2)
+    const incompatibleCandidate = getCard(room, 3)
+    const otherHand = playerLocation(7, 'hand')
+
+    mixedCandidate.setLocationCandidates([playerLocation(6, 'mark', 414), otherHand])
+    exactSource.bindCandidates([6], 'mark', 414, { known: false })
+    incompatibleCandidate.setLocationCandidates([playerLocation(6, 'mark', 999), otherHand])
+
+    expect(mixedCandidate.subZone).toBe(null)
+    expect(mixedCandidate.spellID).toBe(null)
+    expect(room.movement.getUnknownPlayerSourceCards(6, 'mark', 3389)).toEqual([
+      exactSource,
+      mixedCandidate
+    ])
+  })
+
+  it.each([1, 3])('全明手牌暗置 %s 张标记区时创建完整位置强约束', (markCount) => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4], seatIDs: [1] })
     const cards = [1, 2, 3, 4].map((id) => getCard(room, id))
     const hand = playerLocation(1, 'hand')
@@ -205,7 +239,7 @@ describe('隐藏标记区候选', () => {
     room.players.get(1).syncObservedHandCount(4)
     moveHiddenHandToMark(room, {
       seatID: 1,
-      count: 1,
+      count: markCount,
       spellID: 1234
     })
 
@@ -213,41 +247,10 @@ describe('隐藏标记区候选', () => {
     const record = state.records.get('1:1:1234')
     const group = room.constraintGroups.get('hidden_mark_1:1:1234')
 
-    expect(record.knownMarkMin).toBe(1)
-    expect(record.knownMarkMax).toBe(1)
-    expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(hand))).toBe(3)
-    expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(mark))).toBe(1)
-    cards.forEach((card) => {
-      expect(
-        card
-          .getLocationCandidates()
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
-      ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
-    })
-  })
-
-  it('全明手牌暗置 3 张标记区时创建 4 选 3 完整位置约束', () => {
-    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4], seatIDs: [1] })
-    const cards = [1, 2, 3, 4].map((id) => getCard(room, id))
-    const hand = playerLocation(1, 'hand')
-    const mark = playerLocation(1, 'mark', 1234)
-
-    moveKnownCardsToHand(room, [1, 2, 3, 4], 1)
-    room.players.get(1).syncObservedHandCount(4)
-    moveHiddenHandToMark(room, {
-      seatID: 1,
-      count: 3,
-      spellID: 1234
-    })
-
-    const record = room.getSkillState('hiddenMarkCandidates').records.get('1:1:1234')
-    const group = room.constraintGroups.get('hidden_mark_1:1:1234')
-
-    expect(record.knownMarkMin).toBe(3)
-    expect(record.knownMarkMax).toBe(3)
-    expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(hand))).toBe(1)
-    expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(mark))).toBe(3)
+    expect(record.knownMarkMin).toBe(markCount)
+    expect(record.knownMarkMax).toBe(markCount)
+    expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(hand))).toBe(4 - markCount)
+    expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(mark))).toBe(markCount)
     cards.forEach((card) => {
       expect(
         card

@@ -56,6 +56,14 @@ pnpm build
 - Vite 别名 `@` 指向 `src/`。
 - 目标页面会提供若干全局对象，例如 `Laya`、`JSZip`、`CtrUtil`、`SystemContext` 等；新增代码前请确认现有适配层是否已覆盖。
 
+编码风格细节见 `docs/agents/conventions.md` 中的「Style Guide」，核心包括：
+
+- 不要别名导入：禁止 `import { foo as bar }`。
+- 优先 `const`，用三元或 early return 代替先声明再赋值。
+- 避免 `else`，优先 early return。
+- 复杂逻辑让主函数走 happy path，细节下沉到邻近 helper。
+- 注释只写非显而易见的约束与意外行为。
+
 ## 变更边界
 
 - 不提交构建产物，例如 `dist/`。
@@ -80,11 +88,14 @@ pnpm test:tracker
 
 ## 验证要求
 
+完整测试策略、补测约定与手工验收清单见 `docs/agents/testing.md`。
+
 - 仅修改文档：无需运行构建或测试。
 - 普通代码修改：运行 `pnpm lint` 与 `pnpm build`。
 - 修改 `src/tracker/` 或 `tests/tracker/`：额外运行 `pnpm test:tracker`。
 - 修改 TypeScript 类型契约、`tsconfig*`、ESLint TypeScript 覆盖范围或 tracker 类型迁移：运行 `pnpm typecheck:tracker`，必要时运行 `pnpm typecheck`。
 - 修改发布配置、打包参数、用户脚本元信息、构建产物命名或记牌器核心高风险路径：额外运行 `pnpm build:prod`。
+- 新增或修改推理逻辑时，优先补充 `tests/tracker/` 回归；外围工具逻辑可放 `tests/utils/`。
 
 ## 记牌器贡献提示
 
@@ -96,11 +107,36 @@ pnpm test:tracker
 - `subZoneCandidates` 表达完整位置候选，不能被 `seats` 或 `owner` 简化替代。
 - `src/handler/legacyMoveCard.js` 与 `src/handler/old/` 是历史代码，不应作为新增运行路径依赖。
 
-新增或修改推理逻辑时，请优先补充 `tests/tracker/` 中的回归测试。
-
 ## 提交与 PR
 
-提交或发起 PR 前请确认：
+提交与 PR 标题请遵循 Conventional Commits，完整约定见 `docs/agents/conventions.md` 中的「PR 与提交」。
+
+### 标题速查
+
+```text
+<type>(optional-scope): <subject>
+```
+
+常用 type：`feat`、`fix`、`refactor`、`perf`、`test`、`docs`、`ci`、`build`、`chore`。
+
+常用 scope：`tracker`、`ui`、`handler`、`config`、`ci`、`deps`。
+
+示例：
+
+- `feat: 新增裴秀地图路线助手`
+- `fix(tracker): 修复特殊移动后手牌候选漂移`
+- `ci: publish GitHub Releases from tags`
+- `build(deps): bump actions/checkout from 4 to 7`
+
+注意：
+
+- 一个提交 / 一个 PR 一个主题；标题说结果，不说文件路径或 review 过程。
+- 冒号后保留空格；标题不加句号，不手写 `#编号`。
+- 中英文均可，同一 PR 内保持一致；用户可见与游戏语义优先中文。
+- 默认 PR 目标分支为 `dev`；仅发布向 `dev -> main` 可指向 `main`。
+- 若使用 squash merge，PR 标题即最终提交标题，开 PR 时写对。
+
+### 提交前确认
 
 - 改动范围聚焦，没有夹带无关格式化或生成文件。
 - 已运行适用的验证命令，或在 PR 中说明未运行原因。
@@ -123,7 +159,8 @@ pnpm test:tracker
 贡献前如需更细的规则，请按任务类型阅读：
 
 - `docs/agents/environment.md`：环境、脚本和构建说明。
-- `docs/agents/conventions.md`：代码风格、验证和 PR 要求。
+- `docs/agents/conventions.md`：代码约定、Style Guide、验证门槛和 PR 要求。
+- `docs/agents/testing.md`：测试策略、补测约定与手工验收清单。
 - `docs/agents/overview.md`：项目结构与保留范围。
 - `docs/agents/card_tracker.md`：记牌器当前实现、设计背景和风险清单。
 - `docs/agents/lifecycle.md`：应用生命周期、页面注入和 Room/View 挂载时序。

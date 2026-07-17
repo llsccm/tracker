@@ -461,7 +461,17 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         !Number.isNaN(effectiveFromSeat) &&
         Boolean(fromSubZone)
 
-      if (isFromPlayerSource && !this.isCardInPlayerSource(card, playerSourceContext)) {
+      const shouldSwapSpeculativePlayerIdentity =
+        isFromPlayerSource &&
+        card.isKnown !== true &&
+        card.getLocationCandidates().length > 1 &&
+        Boolean(this.findExactUnknownPlayerSourcePlaceholder(playerSourceContext, card))
+
+      if (
+        isFromPlayerSource &&
+        (!this.isCardInPlayerSource(card, playerSourceContext) ||
+          shouldSwapSpeculativePlayerIdentity)
+      ) {
         const locationBeforeSwap = card.location
         const placeholder = this.swapKnownCardWithPlayerSourcePlaceholder(card, playerSourceContext)
         let fallbackPlaceholder: Card | null = null

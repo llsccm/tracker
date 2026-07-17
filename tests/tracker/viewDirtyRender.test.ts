@@ -5,6 +5,8 @@ import {
   markFullPlayerRender
 } from '@/tracker/view/dirtyRenderState'
 import { createTestRoom } from './helpers/room'
+import type { Room } from '@/tracker/Room'
+import type { Card } from '@/tracker/Card'
 
 describe('视图 dirty 渲染状态', () => {
   it('无新脏事件且 viewDirty=false 时返回空渲染计划', () => {
@@ -18,20 +20,84 @@ describe('视图 dirty 渲染状态', () => {
     })
   })
 
-  it('卡牌从玩家手牌移走时旧座位会进入受影响玩家', () => {
-    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
+  it.each([
+    {
+      name: '卡牌从玩家手牌移走时旧座位会进入受影响玩家',
+      seatIDs: [1, 2] as number[],
+      prepare(room: Room, card: Card) {
+        card.bindTo([1], 'hand')
+        collectDirtyRenderState(room)
+        finishDirtyRender(room)
+        card.moveToPublicZone('discard')
+      },
+      assert(state: ReturnType<typeof collectDirtyRenderState>) {
+        expect(state.shouldRenderPanels).toBe(true)
+        expect(state.shouldRenderAllPlayers).toBe(false)
+        expect([...state.affectedSeatIDs].sort()).toEqual([1])
+      }
+    },
+    {
+      name: '卡牌进入新玩家手牌时新座位会进入受影响玩家',
+      seatIDs: [1, 2] as number[],
+      prepare(_room: Room, card: Card) {
+        card.bindTo([2], 'hand')
+      },
+      assert(state: ReturnType<typeof collectDirtyRenderState>) {
+        expect(state.shouldRenderPanels).toBe(true)
+        expect(state.shouldRenderAllPlayers).toBe(false)
+        expect([...state.affectedSeatIDs].sort()).toEqual([2])
+      }
+    },
+    {
+      name: '多席位候选收缩时被移除座位会进入受影响玩家',
+      seatIDs: [1, 2, 3] as number[],
+      prepare(room: Room, card: Card) {
+        card.bindTo([1, 2, 3], 'hand')
+        finishDirtyRender(room, collectDirtyRenderState(room))
+        card.setSeats([2, 3], 'test-shrink')
+      },
+      assert(state: ReturnType<typeof collectDirtyRenderState>) {
+        // 座位 1 已不在事件 owner 字段与卡牌当前候选里，只能靠 previousSeats 找回；
+        // 同时确认不是溢出兜底在掩盖问题。
+        expect(state.shouldRenderAllPlayers).toBe(false)
+        expect(state.overflowed).toBe(false)
+        expect([...state.affectedSeatIDs].sort()).toEqual([1, 2, 3])
+      }
+    },
+    {
+      name: '完整位置候选收缩时被移除座位会进入受影响玩家',
+      seatIDs: [1, 2, 3] as number[],
+      prepare(room: Room, card: Card) {
+        card.bindTo([1, 2, 3], 'hand')
+        finishDirtyRender(room, collectDirtyRenderState(room))
+        const remaining = card
+          .getLocationCandidates()
+          .filter((candidate) => candidate.type !== 'player' || candidate.seatID !== 1)
+        card.setLocationCandidates(remaining, 'test-shrink-location')
+      },
+      assert(state: ReturnType<typeof collectDirtyRenderState>) {
+        expect(state.shouldRenderAllPlayers).toBe(false)
+        expect(state.affectedSeatIDs.has(1)).toBe(true)
+      }
+    },
+    {
+      name: '候选落定到其他座位时被排除座位会进入受影响玩家',
+      seatIDs: [1, 2, 3] as number[],
+      prepare(room: Room, card: Card) {
+        card.bindTo([1, 2, 3], 'hand')
+        finishDirtyRender(room, collectDirtyRenderState(room))
+        card.resolveLocationCandidate({ type: 'player', seatID: 2, subZone: 'hand' }, 'test-resolve')
+      },
+      assert(state: ReturnType<typeof collectDirtyRenderState>) {
+        expect(state.shouldRenderAllPlayers).toBe(false)
+        expect([...state.affectedSeatIDs].sort()).toEqual([1, 2, 3])
+      }
+    }
+  ])('受影响座位：$name', ({ seatIDs, prepare, assert }) => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs })
     const card = room.cardIndex.get(1)!
-
-    card.bindTo([1], 'hand')
-    collectDirtyRenderState(room)
-    finishDirtyRender(room)
-
-    card.moveToPublicZone('discard')
-
-    const state = collectDirtyRenderState(room)
-    expect(state.shouldRenderPanels).toBe(true)
-    expect(state.affectedSeatIDs.has(1)).toBe(true)
-    expect(state.shouldRenderAllPlayers).toBe(false)
+    prepare(room, card)
+    assert(collectDirtyRenderState(room))
   })
 
   it('收集脏状态不会在渲染完成前提前消费事件', () => {
@@ -67,69 +133,6 @@ describe('视图 dirty 渲染状态', () => {
     const nextState = collectDirtyRenderState(room)
     expect(nextState.shouldRenderPanels).toBe(true)
     expect(nextState.affectedSeatIDs.has(2)).toBe(true)
-  })
-
-  it('卡牌进入新玩家手牌时新座位会进入受影响玩家', () => {
-    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
-    const card = room.cardIndex.get(1)!
-
-    card.bindTo([2], 'hand')
-
-    const state = collectDirtyRenderState(room)
-    expect(state.shouldRenderPanels).toBe(true)
-    expect(state.affectedSeatIDs.has(2)).toBe(true)
-  })
-
-  it('多席位候选收缩时被移除座位会进入受影响玩家', () => {
-    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2, 3] })
-    const card = room.cardIndex.get(1)!
-
-    card.bindTo([1, 2, 3], 'hand')
-    finishDirtyRender(room, collectDirtyRenderState(room))
-
-    card.setSeats([2, 3], 'test-shrink')
-
-    const state = collectDirtyRenderState(room)
-    // 座位 1 已不在事件 owner 字段与卡牌当前候选里，只能靠 previousSeats 找回；
-    // 同时确认不是溢出兜底在掩盖问题。
-    expect(state.shouldRenderAllPlayers).toBe(false)
-    expect(state.overflowed).toBe(false)
-    expect(state.affectedSeatIDs.has(1)).toBe(true)
-    expect(state.affectedSeatIDs.has(2)).toBe(true)
-    expect(state.affectedSeatIDs.has(3)).toBe(true)
-  })
-
-  it('完整位置候选收缩时被移除座位会进入受影响玩家', () => {
-    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2, 3] })
-    const card = room.cardIndex.get(1)!
-
-    card.bindTo([1, 2, 3], 'hand')
-    finishDirtyRender(room, collectDirtyRenderState(room))
-
-    const remaining = card
-      .getLocationCandidates()
-      .filter((candidate) => candidate.type !== 'player' || candidate.seatID !== 1)
-    card.setLocationCandidates(remaining, 'test-shrink-location')
-
-    const state = collectDirtyRenderState(room)
-    expect(state.shouldRenderAllPlayers).toBe(false)
-    expect(state.affectedSeatIDs.has(1)).toBe(true)
-  })
-
-  it('候选落定到其他座位时被排除座位会进入受影响玩家', () => {
-    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2, 3] })
-    const card = room.cardIndex.get(1)!
-
-    card.bindTo([1, 2, 3], 'hand')
-    finishDirtyRender(room, collectDirtyRenderState(room))
-
-    card.resolveLocationCandidate({ type: 'player', seatID: 2, subZone: 'hand' }, 'test-resolve')
-
-    const state = collectDirtyRenderState(room)
-    expect(state.shouldRenderAllPlayers).toBe(false)
-    expect(state.affectedSeatIDs.has(1)).toBe(true)
-    expect(state.affectedSeatIDs.has(2)).toBe(true)
-    expect(state.affectedSeatIDs.has(3)).toBe(true)
   })
 
   it('dirty event 日志被裁剪时触发全玩家手牌兜底刷新', () => {

@@ -9,11 +9,7 @@ export function handleStartGame(msg) {
     Game.init()
     // 这里如果要识别机器人 则要遍历损失性能
     const { Infos } = msg
-    Game.size = Infos.length
-    // 录像中不一定有使用者的uuid 或者使用者并非主视角 贸然使用uuid匹配会导致视角错误
-    const uuid = Infos[0].ClientID ?? user.userID
-
-    tracker.registerTrackerPlayers(Infos, uuid)
+    tracker.registerTrackerPlayers(Infos, user.userID)
   }
 }
 
@@ -22,9 +18,8 @@ export function handleRecordStartGame(msg) {
   tracker.initTrackerRoom()
   Game.init()
   const { seatinfo } = msg.data.protoObj
-  Game.size = seatinfo.length
 
-  // 看录像时并一定有当前用户
+  // 看录像时不一定有当前用户
   // 当前用户不一定是主视角
   // for (const info of seatinfo) {
   //   if (info.user_id == user.userID) {

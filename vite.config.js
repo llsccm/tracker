@@ -50,6 +50,7 @@ export default defineConfig(({ mode }) => {
           name: '三国杀小抄',
           version,
           author: '三国杀小抄',
+          license: 'GPL-3.0-or-later',
           'run-at': 'document-start',
           description: '三国杀小抄',
           icon: 'https://i0.hdslb.com/bfs/new_dyn/17ec41a0ca79633b77399065ab80da3f2138912.png',

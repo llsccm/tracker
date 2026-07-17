@@ -22,3 +22,5 @@
 - 不要依赖或提交构建产物 `dist/` 与本地 `.env` 配置文件；`pnpm-lock.yaml` 当前为仓库跟踪文件，除依赖或版本任务外不要无关删除、重生成或格式化。
 - 界面 HTML 已改为从外部 URL 加载（通过 `src/utils/htmlResource.js`），不再依赖构建时 HTML 转 JS 生成链。
 - `html/iframe.html` 是界面 HTML 源文件，部署到远端后由脚本运行时加载。
+
+- 测试策略、补测约定与手工验收见 [testing.md](testing.md)。

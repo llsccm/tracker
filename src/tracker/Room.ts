@@ -258,7 +258,7 @@ export class Room {
     // 排序物理座位
     this.seatIDs.sort((a, b) => a - b)
     this.size = this.seatIDs.length
-    this.game?.syncRoomSeats?.(this)
+    this.game?.syncRoomSeats(this)
 
     // 观看别人录像时
     this.game.isRecord = this.mySeatID === undefined
@@ -540,6 +540,7 @@ export class Room {
       if (existing) existing.push(card)
       else hiddenHandCardsBySeat.set(ownerSeatID, [card])
     }
+    const ambiguousHiddenCoverageBySeat = this.constraints.collectAmbiguousHiddenHandCoverage()
 
     this.players.forEach((player, seatID) => {
       if (!player.hasObservedHandCount) return
@@ -549,7 +550,9 @@ export class Room {
       }
 
       const unknownHandCards = hiddenHandCardsBySeat.get(seatID) ?? []
-      const missingCount = Math.max(0, player.unknownCardCount - unknownHandCards.length)
+      const ambiguousHiddenCoverage = ambiguousHiddenCoverageBySeat.get(seatID) ?? 0
+      const coveredUnknownCount = unknownHandCards.length + ambiguousHiddenCoverage
+      const missingCount = Math.max(0, player.unknownCardCount - coveredUnknownCount)
 
       if (missingCount > 0) {
         const placeholders = this.createExternalCards([], missingCount)
@@ -559,7 +562,7 @@ export class Room {
         created.push(...placeholders)
       }
 
-      let excessCount = Math.max(0, unknownHandCards.length - player.unknownCardCount)
+      let excessCount = Math.max(0, coveredUnknownCount - player.unknownCardCount)
       if (excessCount <= 0) return
 
       for (const card of unknownHandCards) {

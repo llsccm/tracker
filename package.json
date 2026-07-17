@@ -1,6 +1,7 @@
 {
   "name": "daxiaochao",
   "author": "yimadaOrz",
+  "license": "GPL-3.0-or-later",
   "private": true,
   "version": "1.0.0",
   "packageManager": "pnpm@10.33.4",

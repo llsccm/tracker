@@ -62,32 +62,44 @@ describe('handleGameFlowState 录像主视角', () => {
     setTrackerMySeatID.mockReset()
   })
 
-  it('将首次从牌堆摸明牌的座位设为主视角', () => {
-    const { game } = createRecordGame()
+  it.each([
+    {
+      name: '将首次从牌堆摸明牌的座位设为主视角',
+      run({ game }) {
+        handleGameFlowState(createDrawContext(game))
+      },
+      expectedCalls: 1,
+      expectedSeat: 3,
+      expectedRoomSeat: undefined as number | undefined
+    },
+    {
+      name: '主视角确定后不再随后续明牌摸牌变化',
+      run({ game, room }) {
+        handleGameFlowState(createDrawContext(game))
+        room.mySeatID = 3
+        handleGameFlowState(createDrawContext(game, { ToID: 5, CardIDs: [105, 106, 107, 108] }))
+      },
+      expectedCalls: 1,
+      expectedSeat: 3,
+      expectedRoomSeat: 3 as number | undefined
+    },
+    {
+      name: '首次摸到暗牌时不确定主视角',
+      run({ game }) {
+        handleGameFlowState(createDrawContext(game, { CardIDs: [0, 0, 0, 0] }))
+      },
+      expectedCalls: 0,
+      expectedSeat: undefined as number | undefined,
+      expectedRoomSeat: undefined as number | undefined
+    }
+  ])('$name', ({ run, expectedCalls, expectedSeat, expectedRoomSeat }) => {
+    const ctx = createRecordGame()
+    run(ctx)
 
-    handleGameFlowState(createDrawContext(game))
-
-    expect(setTrackerMySeatID).toHaveBeenCalledOnce()
-    expect(setTrackerMySeatID).toHaveBeenCalledWith(3)
-  })
-
-  it('主视角确定后不再随后续明牌摸牌变化', () => {
-    const { game, room } = createRecordGame()
-
-    handleGameFlowState(createDrawContext(game))
-    room.mySeatID = 3
-    handleGameFlowState(createDrawContext(game, { ToID: 5, CardIDs: [105, 106, 107, 108] }))
-
-    expect(setTrackerMySeatID).toHaveBeenCalledOnce()
-    expect(setTrackerMySeatID).toHaveBeenCalledWith(3)
-  })
-
-  it('首次摸到暗牌时不确定主视角', () => {
-    const { game, room } = createRecordGame()
-
-    handleGameFlowState(createDrawContext(game, { CardIDs: [0, 0, 0, 0] }))
-
-    expect(setTrackerMySeatID).not.toHaveBeenCalled()
-    expect(room.mySeatID).toBeUndefined()
+    expect(setTrackerMySeatID).toHaveBeenCalledTimes(expectedCalls)
+    if (expectedCalls > 0) {
+      expect(setTrackerMySeatID).toHaveBeenCalledWith(expectedSeat)
+    }
+    expect(ctx.room.mySeatID).toBe(expectedRoomSeat)
   })
 })

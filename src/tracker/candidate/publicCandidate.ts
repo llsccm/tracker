@@ -6,8 +6,8 @@ export type PublicCandidatePosition = 'top' | 'bottom' | 'random'
 export function normalizePublicPosition(
   position: PublicPosition | null | undefined
 ): PublicCandidatePosition {
-  if (position === POSITION_BOTTOM) return 'bottom'
-  if (position === POSITION_TOP) return 'top'
+  if (position === POSITION_BOTTOM || position === 'bottom') return 'bottom'
+  if (position === POSITION_TOP || position === 'top') return 'top'
   return 'random'
 }
 

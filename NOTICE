@@ -1,0 +1,20 @@
+本项目分发版本以 GNU General Public License v3 或后续版本（GPL-3.0-or-later）授权。
+
+## 版权
+
+Copyright (c) 2024 yimadaOrz
+Copyright (c) 2026 llsccm
+
+## 来源说明
+
+本仓库包含对 yimadaOrz 原作的二次创作与后续修改。
+原作以 MIT License 发布；原始版权与归属予以保留。
+
+本仓库当前分发的源代码、构建产物与相关文档，整体按 GPL-3.0-or-later 授权。
+完整许可证正文见根目录 LICENSE 文件。
+
+## 与 MIT 原作的关系
+
+- 原作者 yimadaOrz 对原始 MIT 版本仍可按 MIT 授权使用与分发。
+- 基于本仓库修改版再分发时，须遵守 GPL-3.0-or-later，并保留本 NOTICE 与版权声明。
+- 不得删除或篡改既有版权与许可声明。

@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { trackerLogger } from '@/utils/logger'
+import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
+import type { RoomMoveContext } from '@/tracker/roomMovement/types'
 import { createTestRoom, getCard } from './helpers/room'
+import { playerLocation } from './helpers/locationCandidates'
 
 describe('玩家手牌数观测', () => {
   it('未观测时负向 delta 不建立 0 张手牌快照', () => {
@@ -100,6 +103,96 @@ describe('玩家手牌数观测', () => {
     expect(room.movement.getPlayerHandCardsBySeat(3)).toHaveLength(9)
 
     expect(targetPlayer.candidateHandCards).toEqual(knownIDs.map((id) => getCard(room, id)))
+  })
+
+  it('随机转移已有暗实体完整覆盖手牌槽时不重复补建匿名实体', () => {
+    const knownIDs = [116]
+    const hiddenIDs = [130, 131, 132]
+    const allIDs = [...knownIDs, ...hiddenIDs]
+    const { room } = createTestRoom({ cardIDs: allIDs, seatIDs: [1, 2] })
+    const sourceCards = allIDs.map((id) => getCard(room, id))
+
+    room.clearCardsFromPublicZones(sourceCards)
+    sourceCards.forEach((card) => {
+      card.bindCandidates([2], 'hand', null, { known: knownIDs.includes(card.id) })
+      if (hiddenIDs.includes(card.id)) {
+        card.isKnown = false
+        room.notifyCardChanged(card, { type: 'test:hidden-card' })
+      }
+    })
+    room.getPlayer(1).syncObservedHandCount(0)
+    room.getPlayer(2).syncObservedHandCount(4)
+
+    room.moveCards([], 'player', {
+      fromZone: null,
+      fromSeatID: 2,
+      fromSubZone: 'hand',
+      seatID: 1,
+      subZone: 'hand',
+      cardCount: 1,
+      sourceEvent: { type: 'test:random-transfer-with-hidden-coverage' }
+    })
+
+    const playerCards = room.cards.filter((card) => card.location === 'player')
+    expect(playerCards).toHaveLength(4)
+    expect(playerCards).toEqual(expect.arrayContaining(sourceCards))
+    expect(room.cards.some((card) => card.id === 0)).toBe(false)
+    expect(room.getPlayer(1).unknownCardCount).toBe(0)
+    expect(room.getPlayer(2).unknownCardCount).toBe(2)
+  })
+
+  it('共享部分暗实体的约束包保留不同座位的可行覆盖', () => {
+    const { room } = createTestRoom({ cardIDs: [130, 131, 132], seatIDs: [1, 2, 3] })
+    const [first, shared, third] = [130, 131, 132].map((id) => getCard(room, id))
+    const seat1Hand = playerLocation(1, 'hand')
+    const seat2Hand = playerLocation(2, 'hand')
+
+    room.clearCardsFromPublicZones([first, shared, third])
+    first.bindCandidates([1, 3], 'hand', null, { known: false })
+    shared.bindCandidates([1, 2], 'hand', null, { known: false })
+    third.bindCandidates([2, 3], 'hand', null, { known: false })
+
+    room.createConstraintGroup({
+      id: 'overlap-seat-1',
+      cards: [first, shared],
+      expectedSlotsByLocation: new Map([[createLocationCandidateKey(seat1Hand), 1]])
+    })
+    room.createConstraintGroup({
+      id: 'overlap-seat-2',
+      cards: [shared, third],
+      expectedSlotsByLocation: new Map([[createLocationCandidateKey(seat2Hand), 1]])
+    })
+
+    expect(room.constraints.collectAmbiguousHiddenHandCoverage()).toEqual(
+      new Map([
+        [1, 1],
+        [2, 1]
+      ])
+    )
+  })
+
+  it('同一席位的多个手牌位置约束合并全部暗实体候选', () => {
+    const { room } = createTestRoom({ cardIDs: [130, 131], seatIDs: [1, 2] })
+    const first = getCard(room, 130)
+    const second = getCard(room, 131)
+    const firstHand = playerLocation(1, 'hand', 100)
+    const secondHand = playerLocation(1, 'hand', 200)
+    const otherHand = playerLocation(2, 'hand')
+
+    // 两个完整位置键都属于 1 号位；旧实现会用第二批候选覆盖第一批候选。
+    room.clearCardsFromPublicZones([first, second])
+    first.setLocationCandidates([firstHand, otherHand])
+    second.setLocationCandidates([secondHand, otherHand])
+    room.createConstraintGroup({
+      id: 'same-seat-multiple-hand-locations',
+      cards: [first, second],
+      expectedSlotsByLocation: new Map([
+        [createLocationCandidateKey(firstHand), 1],
+        [createLocationCandidateKey(secondHand), 1]
+      ])
+    })
+
+    expect(room.constraints.collectAmbiguousHiddenHandCoverage()).toEqual(new Map([[1, 2]]))
   })
 
   it('主动实体化未知手牌槽并在明牌打出时回补原公共位置', () => {
@@ -244,5 +337,36 @@ describe('玩家手牌数观测', () => {
     expect(anonymousReplacement).toBeDefined()
     expect(anonymousReplacement.entityID).toBeLessThan(0)
     expect(sourcePlayer.observedHandCount).toBe(2)
+  })
+
+  it('模糊身份迁移约束组后保留新组合标签', () => {
+    const { room } = createTestRoom({ cardIDs: [29, 130], seatIDs: [1, 2] })
+    const candidateCard = getCard(room, 29)
+    const placeholder = getCard(room, 130)
+    const sourceHand = playerLocation(1, 'hand')
+    const otherHand = playerLocation(2, 'hand')
+    const context = {
+      fromSeat: 1,
+      fromSubZone: 'hand',
+      knownCards: [],
+      sourceEvent: { type: 'test:preserve-migrated-combination-id' }
+    } as RoomMoveContext
+
+    room.clearCardsFromPublicZones([candidateCard, placeholder])
+    candidateCard.setLocationCandidates([sourceHand, otherHand])
+    placeholder.bindCandidates([1], 'hand', null, { known: false })
+    const group = room.createConstraintGroup({
+      id: 'migrated-group',
+      cards: [candidateCard]
+    })
+    // combinationID 是最近标签，可能落后于实体实际参与的约束组。
+    candidateCard.combinationID = 'stale-group'
+
+    expect(room.movement.swapKnownCardWithPlayerSourcePlaceholder(candidateCard, context)).toBe(
+      placeholder
+    )
+    expect(group.cards.has(candidateCard)).toBe(false)
+    expect(group.cards.has(placeholder)).toBe(true)
+    expect(placeholder.combinationID).toBe('migrated-group')
   })
 })
