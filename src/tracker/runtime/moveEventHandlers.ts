@@ -2,6 +2,7 @@ import { CARD_INSTANCE_STATUS } from '../CardCounter'
 import { POSITION_RANDOM } from '../candidate/cardPositions'
 import { trackerLogger } from '@/utils/logger'
 import type { Room } from '../Room'
+import decorateHandExchange from '../skill/HandExchange'
 
 export type MoveEventDraft = any
 type MoveEventHandler = (event: MoveEventDraft, room: Room) => MoveEventDraft
@@ -142,7 +143,8 @@ function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEventDraft 
 
   observePendingChengLieFinalDiscard(event, room)
 
-  return event
+  // 整手牌经交换区互易：按协议模式处理，不绑定单一 SpellID。
+  return decorateHandExchange(event, room)
 }
 
 export function getChengLieState(room: Room): any {

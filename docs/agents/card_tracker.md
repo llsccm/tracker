@@ -177,6 +177,14 @@
 
 ---
 
+## 整手牌交换（通用协议模式）
+
+- 协议文档：`docs/protocols/PubGsCMoveCard-spell-121-hand-exchange.md`（以技能 121 为完整示例）。
+- 装饰器：`src/tracker/skill/HandExchange.ts`，经 `decorateGenericMove`（`*`）统一接入，不绑定单一 SpellID。
+- 识别门槛：`MoveType=11` + `5<->10` + 整手张数；允许己方整手正 `CardIDs`，避免误伤佐练/诫厉等非整手路径。
+- 手牌进 `exchange` 时按 `SpellID + FromID` 登记整批实体；回手时 `FromID` 是原持有者批次键，目标座位看 `ToID`。
+- 明牌回填 `cardIDs`，暗实体回填 `sourceCards`；明暗混合批次不共用 `combinationID`。
+
 ## 已知未完成项
 
 - 尚未完整恢复旧版 `cardManager.pack()` 链表推理承载的所有不确定性语义；宴戏、权变、诫厉等技能仍需要用新版 `ConstraintGroup` 做进一步精细化。
