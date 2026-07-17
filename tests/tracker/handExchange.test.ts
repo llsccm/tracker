@@ -241,6 +241,36 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
+  it('未登记批次回手时不创建空账本', () => {
+    const { room } = setupController()
+    const event = {
+      type: 'moveCards',
+      cardIDs: [],
+      cardCount: 4,
+      toZone: 'player',
+      options: {
+        seatID: seatB,
+        subZone: 'hand',
+        fromZone: 'exchange',
+        cardCount: 4
+      },
+      raw: {
+        CardIDs: [],
+        CardCount: 4,
+        FromID: seatA,
+        FromZone: 10,
+        ToID: seatB,
+        ToZone: 5,
+        MoveType: 11,
+        SpellID: 121
+      }
+    }
+
+    const decorated = room.decorateMoveEvent(event)
+    expect(decorated.options?.sourceCards).toBeUndefined()
+    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+  })
+
   it('己方整手正 CardIDs 也会接管，并与对侧全暗批次完成互换', () => {
     const { controller, room } = setupController()
 
