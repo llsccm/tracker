@@ -189,7 +189,7 @@
 
 ## 风险与验证清单
 
-通用命令、补测约定与手工验收见 [	esting.md](testing.md)。以下聚焦记牌器领域风险。
+通用命令、补测约定与手工验收见 [testing.md](testing.md)。以下聚焦记牌器领域风险。
 
 - `Room.moveCards()` 中 `fromSubZone` 是区分来源玩家子区的关键字段，手写调用若省略它仍可能误判。
 - 解析 `PubGsCMoveCard` 时不要仅凭 `FromID` / `ToID` 推断座位；必须结合 `FromZone` / `ToZone`、`FromZoneParam` / `ToZoneParam`、`SpellID` 与归一化后的 `fromSubZone` / `spellID` 判断。已知边界包括 `FromZone=8, MoveType=7` 的 `FromID` 可能是技能空间 ID，以及 `FromZone=1, MoveType=6` 的 `FromID=255` 可能表示牌堆/无座位。

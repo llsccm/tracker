@@ -77,25 +77,29 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
             new Set(sourceSpellIDs.flatMap((spellID) => getCompatibleMarkSpellIDs(spellID)))
           )
         : []
+    const matchesSpellID = (spellID: PlayerLocationCandidate['spellID']): boolean =>
+      subZone !== 'mark' ||
+      markSpellIDs.length === 0 ||
+      (spellID !== null && markSpellIDs.includes(spellID))
 
     for (const card of this.room.cards) {
       if (excluded.has(card)) continue
 
-      if (
-        card.location !== 'player' ||
-        card.subZone !== subZone ||
-        card.seats.has(seatID) !== true ||
-        card.isKnown === true ||
-        card.suspended === true
-      ) {
-        continue
-      }
+      if (card.isKnown === true || card.suspended === true) continue
 
-      if (subZone === 'mark' && markSpellIDs.length > 0) {
-        if (card.spellID === null || !markSpellIDs.includes(card.spellID)) {
-          continue
-        }
-      }
+      const hasSourceProjection =
+        card.location === 'player' &&
+        card.subZone === subZone &&
+        card.seats.has(seatID) === true &&
+        matchesSpellID(card.spellID)
+      const hasSourceCandidate = this.getCardPlayerLocationCandidates(card).some(
+        (candidate) =>
+          Number(candidate.seatID) === Number(seatID) &&
+          candidate.subZone === subZone &&
+          matchesSpellID(candidate.spellID)
+      )
+
+      if (!hasSourceProjection && !hasSourceCandidate) continue
 
       const isExactSource = this.isExactUnknownPlayerSourceCard(card, seatID)
       if (isExactSource) exactCards.push(card)

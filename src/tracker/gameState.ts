@@ -195,6 +195,7 @@ export class GameState {
   init(): void {
     this.resetSessionState()
     this.resetRoomState()
+    this.clearDomContainers()
     this.isGameStart = true
     this.isPassed = false
     this.onInit()

@@ -20,11 +20,11 @@
 
 ### 主要目录
 
-| 路径 | 覆盖重点 |
-| --- | --- |
-| `tests/tracker/` | Room 移动、候选、收敛、Controller、脏渲染、遍历基线等 |
-| `tests/tracker/helpers/` | 测试夹具与 noop runtime/view |
-| `tests/utils/` | 非 tracker 工具逻辑，如裴秀路线 |
+| 路径                     | 覆盖重点                                              |
+| ------------------------ | ----------------------------------------------------- |
+| `tests/tracker/`         | Room 移动、候选、收敛、Controller、脏渲染、遍历基线等 |
+| `tests/tracker/helpers/` | 测试夹具与 noop runtime/view                          |
+| `tests/utils/`           | 非 tracker 工具逻辑，如裴秀路线                       |
 
 ### 现有 tracker 回归主题（按文件名归类）
 
@@ -85,16 +85,16 @@ Windows 本机执行时遵循 [`commands.md`](commands.md) 与 Serena 本机记�
 
 ## 何时跑什么
 
-| 改动范围 | 最低验证 |
-| --- | --- |
-| 仅文档 / 注释 | 无需构建与测试 |
-| 普通 `src/` 代码（非 tracker 高风险） | `pnpm lint` + `pnpm build` |
-| `src/tracker/` 或 `tests/tracker/` | 上表 + `pnpm test:tracker` + `pnpm typecheck:tracker` |
+| 改动范围                                                   | 最低验证                                                        |
+| ---------------------------------------------------------- | --------------------------------------------------------------- |
+| 仅文档 / 注释                                              | 无需构建与测试                                                  |
+| 普通 `src/` 代码（非 tracker 高风险）                      | `pnpm lint` + `pnpm build`                                      |
+| `src/tracker/` 或 `tests/tracker/`                         | `pnpm lint` + `pnpm build` + `pnpm test:tracker`                |
 | TS 类型契约、`tsconfig*`、ESLint TS 覆盖、tracker 类型迁移 | `pnpm typecheck:tracker`；需要确认全仓入口时再 `pnpm typecheck` |
-| `tests/utils/` 或非 tracker 测试 | `pnpm exec vitest run`（或对应文件）+ 适用 lint/build |
-| 发布配置、打包参数、用户脚本元信息、核心协议高风险路径 | 额外 `pnpm build:prod` |
-| 修改 `html/iframe.html` / 远端配置加载 | 本地 dev 注入验收 + 确认远端部署流程 |
-| Serena 记忆 | `serena memories check` |
+| `tests/utils/` 或非 tracker 测试                           | `pnpm exec vitest run`（或对应文件）+ 适用 lint/build           |
+| 发布配置、打包参数、用户脚本元信息、核心协议高风险路径     | 额外 `pnpm build:prod`                                          |
+| 修改 `html/iframe.html` / 远端配置加载                     | 本地 dev 注入验收 + 确认远端部署流程                            |
+| Serena 记忆                                                | `serena memories check`                                         |
 
 CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑：`lint`、`typecheck`、`test:tracker`、`build`；`main` 的 push 额外 `build:prod`。本地提交前尽量对齐，避免只靠 CI 兜底。
 

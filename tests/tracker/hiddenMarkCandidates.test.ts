@@ -210,6 +210,25 @@ describe('隐藏标记区候选', () => {
     ])
   })
 
+  it('混合完整位置候选即使投影为空也可作为玩家标记来源', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [6, 7] })
+    const mixedCandidate = getCard(room, 1)
+    const exactSource = getCard(room, 2)
+    const incompatibleCandidate = getCard(room, 3)
+    const otherHand = playerLocation(7, 'hand')
+
+    mixedCandidate.setLocationCandidates([playerLocation(6, 'mark', 414), otherHand])
+    exactSource.bindCandidates([6], 'mark', 414, { known: false })
+    incompatibleCandidate.setLocationCandidates([playerLocation(6, 'mark', 999), otherHand])
+
+    expect(mixedCandidate.subZone).toBe(null)
+    expect(mixedCandidate.spellID).toBe(null)
+    expect(room.movement.getUnknownPlayerSourceCards(6, 'mark', 3389)).toEqual([
+      exactSource,
+      mixedCandidate
+    ])
+  })
+
   it.each([1, 3])('全明手牌暗置 %s 张标记区时创建完整位置强约束', (markCount) => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4], seatIDs: [1] })
     const cards = [1, 2, 3, 4].map((id) => getCard(room, id))

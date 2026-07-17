@@ -87,13 +87,20 @@ describe('Room Node 导入边界', () => {
     expect(gameState.myID).toBeUndefined()
   })
 
-  it('GameState reset 保留 domContainer 数字键与名称键别名', () => {
+  it('GameState reset/init 保留 domContainer 别名并清空容器', () => {
     const gameState = new GameState()
     const tempContainer = gameState.domContainer.temp
 
     expect(gameState.domContainer[0]).toBe(tempContainer)
     gameState.domContainer.temp.push({ count: 1 })
     gameState.reset()
+
+    expect(gameState.domContainer.temp).toBe(tempContainer)
+    expect(gameState.domContainer[0]).toBe(tempContainer)
+    expect(gameState.domContainer.temp).toEqual([])
+
+    gameState.domContainer[0].push({ count: 1 })
+    gameState.init()
 
     expect(gameState.domContainer.temp).toBe(tempContainer)
     expect(gameState.domContainer[0]).toBe(tempContainer)

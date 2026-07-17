@@ -23,4 +23,4 @@
 - 界面 HTML 已改为从外部 URL 加载（通过 `src/utils/htmlResource.js`），不再依赖构建时 HTML 转 JS 生成链。
 - `html/iframe.html` 是界面 HTML 源文件，部署到远端后由脚本运行时加载。
 
-- 测试策略、补测约定与手工验收见 [	esting.md](testing.md)。
+- 测试策略、补测约定与手工验收见 [testing.md](testing.md)。
