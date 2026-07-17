@@ -78,7 +78,100 @@ interface ConstraintGroupCreateOptions extends ConstraintCardOptions {
 interface AmbiguousHiddenHandCoveragePackage {
   coverageBySeat: Map<SeatID, number>
   hiddenCards: Set<Card>
-  totalCoverage: number
+  hiddenCardsBySeat: Map<SeatID, Set<Card>>
+}
+
+function haveHiddenCardOverlap(
+  left: AmbiguousHiddenHandCoveragePackage,
+  right: AmbiguousHiddenHandCoveragePackage
+): boolean {
+  for (const card of left.hiddenCards) {
+    if (right.hiddenCards.has(card)) return true
+  }
+  return false
+}
+
+function collectCoverageComponents(
+  packages: AmbiguousHiddenHandCoveragePackage[]
+): AmbiguousHiddenHandCoveragePackage[][] {
+  const remaining = new Set(packages)
+  const components: AmbiguousHiddenHandCoveragePackage[][] = []
+
+  // 重叠关系具有传递性：A 与 B、B 与 C 共享实体时，三者必须在同一分量内统一分配。
+  while (remaining.size > 0) {
+    const first = remaining.values().next().value as AmbiguousHiddenHandCoveragePackage
+    const component: AmbiguousHiddenHandCoveragePackage[] = []
+    const queue = [first]
+    remaining.delete(first)
+
+    while (queue.length > 0) {
+      const current = queue.pop()
+      if (!current) continue
+      component.push(current)
+
+      for (const candidate of remaining) {
+        if (!haveHiddenCardOverlap(current, candidate)) continue
+        remaining.delete(candidate)
+        queue.push(candidate)
+      }
+    }
+
+    components.push(component)
+  }
+
+  return components
+}
+
+function addCoverageComponent(
+  component: AmbiguousHiddenHandCoveragePackage[],
+  coverageBySeat: Map<SeatID, number>
+): void {
+  const requiredBySeat = new Map<SeatID, number>()
+  const eligibleCardsBySeat = new Map<SeatID, Set<Card>>()
+
+  component.forEach((coveragePackage) => {
+    coveragePackage.coverageBySeat.forEach((count, seatID) => {
+      // 同一席位的历史组可能重复描述同一事实，取最大需求可避免把重复约束相加。
+      requiredBySeat.set(seatID, Math.max(requiredBySeat.get(seatID) ?? 0, count))
+      const eligibleCards = eligibleCardsBySeat.get(seatID) ?? new Set<Card>()
+      coveragePackage.hiddenCardsBySeat.get(seatID)?.forEach((card) => eligibleCards.add(card))
+      eligibleCardsBySeat.set(seatID, eligibleCards)
+    })
+  })
+
+  const slots = Array.from(requiredBySeat.entries())
+    .flatMap(([seatID, count]) =>
+      Array.from({ length: count }, () => ({
+        seatID,
+        eligibleCards: eligibleCardsBySeat.get(seatID) ?? new Set<Card>()
+      }))
+    )
+    .sort((left, right) => left.eligibleCards.size - right.eligibleCards.size)
+  const matchedSlotByCard = new Map<Card, number>()
+
+  // 用增广路径为席位槽寻找不同实体；重新安置旧匹配可避免共享实体造成贪心误判。
+  const matchSlot = (slotIndex: number, visitedCards: Set<Card>): boolean => {
+    for (const card of slots[slotIndex].eligibleCards) {
+      if (visitedCards.has(card)) continue
+      visitedCards.add(card)
+
+      const previousSlotIndex = matchedSlotByCard.get(card)
+      if (previousSlotIndex === undefined || matchSlot(previousSlotIndex, visitedCards)) {
+        matchedSlotByCard.set(card, slotIndex)
+        return true
+      }
+    }
+    return false
+  }
+
+  slots.forEach((_, slotIndex) => {
+    matchSlot(slotIndex, new Set<Card>())
+  })
+
+  matchedSlotByCard.forEach((slotIndex) => {
+    const seatID = slots[slotIndex].seatID
+    coverageBySeat.set(seatID, (coverageBySeat.get(seatID) ?? 0) + 1)
+  })
 }
 
 /**
@@ -156,6 +249,7 @@ export class RoomConstraints {
     this.room.constraintGroups.forEach((group) => {
       const coverageBySeat = new Map<SeatID, number>()
       const hiddenCards = new Set<Card>()
+      const hiddenCardsBySeat = new Map<SeatID, Set<Card>>()
       const groupCards = Array.from(group.cards)
 
       group.expectedSlotsByLocation.forEach((expectedCount, key) => {
@@ -182,8 +276,7 @@ export class RoomConstraints {
           (card) => card.isKnown === true && card.suspended !== true
         ).length
         const ambiguousHiddenCards = candidateCards.filter(
-          (card) =>
-            card.isKnown !== true && card.suspended !== true && card.resolvedSeat === null
+          (card) => card.isKnown !== true && card.suspended !== true && card.resolvedSeat === null
         )
         const remainingExpected = Math.max(0, expectedCount - exactCards.length)
         const hiddenCoverage = Math.min(
@@ -196,30 +289,20 @@ export class RoomConstraints {
           handCandidate.seatID,
           (coverageBySeat.get(handCandidate.seatID) ?? 0) + hiddenCoverage
         )
+        hiddenCardsBySeat.set(handCandidate.seatID, new Set(ambiguousHiddenCards))
         ambiguousHiddenCards.forEach((card) => hiddenCards.add(card))
       })
 
-      const totalCoverage = Array.from(coverageBySeat.values()).reduce(
-        (total, count) => total + count,
-        0
-      )
-      if (totalCoverage > 0) {
-        packages.push({ coverageBySeat, hiddenCards, totalCoverage })
+      if (coverageBySeat.size > 0) {
+        packages.push({ coverageBySeat, hiddenCards, hiddenCardsBySeat })
       }
     })
 
-    // 同一批暗实体可能同时属于历史组与后续扩展组。重叠组只采用覆盖量更大的一个，
-    // 避免同一实体被多次用于抵扣匿名缺口；互不相交的约束组可以安全累加。
-    packages.sort((left, right) => right.totalCoverage - left.totalCoverage)
-    const usedHiddenCards = new Set<Card>()
+    // 历史组与后续扩展组可能共享部分暗实体。按重叠连通分量合并需求，再通过匹配确保
+    // 每个实体最多覆盖一个席位槽；同一席位的重复约束取最大值，互不相交的分量继续累加。
     const coverageBySeat = new Map<SeatID, number>()
-    packages.forEach((coveragePackage) => {
-      if (Array.from(coveragePackage.hiddenCards).some((card) => usedHiddenCards.has(card))) return
-
-      coveragePackage.hiddenCards.forEach((card) => usedHiddenCards.add(card))
-      coveragePackage.coverageBySeat.forEach((count, seatID) => {
-        coverageBySeat.set(seatID, (coverageBySeat.get(seatID) ?? 0) + count)
-      })
+    collectCoverageComponents(packages).forEach((component) => {
+      addCoverageComponent(component, coverageBySeat)
     })
 
     return coverageBySeat

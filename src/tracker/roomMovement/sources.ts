@@ -70,8 +70,13 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     const exactCards: Card[] = []
     const candidateCards: Card[] = []
     const excluded = new Set(excludedCards)
-    const sourceSpellID = Array.isArray(spellIDs) ? (spellIDs[0] ?? null) : spellIDs
-    const markSpellIDs = subZone === 'mark' ? getCompatibleMarkSpellIDs(sourceSpellID) : []
+    const sourceSpellIDs = Array.isArray(spellIDs) ? spellIDs : [spellIDs]
+    const markSpellIDs =
+      subZone === 'mark'
+        ? Array.from(
+            new Set(sourceSpellIDs.flatMap((spellID) => getCompatibleMarkSpellIDs(spellID)))
+          )
+        : []
 
     for (const card of this.room.cards) {
       if (excluded.has(card)) continue
@@ -252,16 +257,12 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       return null
     }
 
-    const excludedCards = [excludeCard, ...context.knownCards].filter(
-      (card): card is Card => Boolean(card)
+    const excludedCards = [excludeCard, ...context.knownCards].filter((card): card is Card =>
+      Boolean(card)
     )
     return (
-      this.getUnknownPlayerSourceCards(
-        fromSeat,
-        fromSubZone,
-        sourceSpellID,
-        excludedCards
-      )[0] ?? null
+      this.getUnknownPlayerSourceCards(fromSeat, fromSubZone, sourceSpellID, excludedCards)[0] ??
+      null
     )
   }
 
@@ -275,16 +276,13 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       return null
     }
 
-    const excludedCards = [excludeCard, ...context.knownCards].filter(
-      (card): card is Card => Boolean(card)
+    const excludedCards = [excludeCard, ...context.knownCards].filter((card): card is Card =>
+      Boolean(card)
     )
     return (
-      this.getUnknownPlayerSourceCards(
-        fromSeat,
-        fromSubZone,
-        sourceSpellID,
-        excludedCards
-      ).find((card) => this.isExactUnknownPlayerSourceCard(card, fromSeat)) ?? null
+      this.getUnknownPlayerSourceCards(fromSeat, fromSubZone, sourceSpellID, excludedCards).find(
+        (card) => this.isExactUnknownPlayerSourceCard(card, fromSeat)
+      ) ?? null
     )
   }
 

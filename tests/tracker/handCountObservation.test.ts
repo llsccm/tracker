@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { trackerLogger } from '@/utils/logger'
+import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from './helpers/room'
+import { playerLocation } from './helpers/locationCandidates'
 
 describe('玩家手牌数观测', () => {
   it('未观测时负向 delta 不建立 0 张手牌快照', () => {
@@ -136,6 +138,36 @@ describe('玩家手牌数观测', () => {
     expect(room.cards.some((card) => card.id === 0)).toBe(false)
     expect(room.getPlayer(1).unknownCardCount).toBe(0)
     expect(room.getPlayer(2).unknownCardCount).toBe(2)
+  })
+
+  it('共享部分暗实体的约束包保留不同座位的可行覆盖', () => {
+    const { room } = createTestRoom({ cardIDs: [130, 131, 132], seatIDs: [1, 2, 3] })
+    const [first, shared, third] = [130, 131, 132].map((id) => getCard(room, id))
+    const seat1Hand = playerLocation(1, 'hand')
+    const seat2Hand = playerLocation(2, 'hand')
+
+    room.clearCardsFromPublicZones([first, shared, third])
+    first.bindCandidates([1, 3], 'hand', null, { known: false })
+    shared.bindCandidates([1, 2], 'hand', null, { known: false })
+    third.bindCandidates([2, 3], 'hand', null, { known: false })
+
+    room.createConstraintGroup({
+      id: 'overlap-seat-1',
+      cards: [first, shared],
+      expectedSlotsByLocation: new Map([[createLocationCandidateKey(seat1Hand), 1]])
+    })
+    room.createConstraintGroup({
+      id: 'overlap-seat-2',
+      cards: [shared, third],
+      expectedSlotsByLocation: new Map([[createLocationCandidateKey(seat2Hand), 1]])
+    })
+
+    expect(room.constraints.collectAmbiguousHiddenHandCoverage()).toEqual(
+      new Map([
+        [1, 1],
+        [2, 1]
+      ])
+    )
   })
 
   it('主动实体化未知手牌槽并在明牌打出时回补原公共位置', () => {
