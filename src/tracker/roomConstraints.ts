@@ -289,7 +289,10 @@ export class RoomConstraints {
           handCandidate.seatID,
           (coverageBySeat.get(handCandidate.seatID) ?? 0) + hiddenCoverage
         )
-        hiddenCardsBySeat.set(handCandidate.seatID, new Set(ambiguousHiddenCards))
+        // 同一席位可能由多个完整 hand key 贡献候选，实体集合必须与覆盖量同步累加。
+        const seatHiddenCards = hiddenCardsBySeat.get(handCandidate.seatID) ?? new Set<Card>()
+        ambiguousHiddenCards.forEach((card) => seatHiddenCards.add(card))
+        hiddenCardsBySeat.set(handCandidate.seatID, seatHiddenCards)
         ambiguousHiddenCards.forEach((card) => hiddenCards.add(card))
       })
 

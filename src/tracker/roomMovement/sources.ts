@@ -366,9 +366,10 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     // 否则多席位暗实体仍是未解析状态，组内对应位置名额不会随实体离开而扣减。
     this.resolveSourcePlayerCandidate(placeholder, context)
     this.room.removeCardsFromConstraintGroups([placeholder])
-    if (preserveAmbiguousIdentity) {
+    // 后续是否恢复旧标签必须依据实际迁移结果，不能只看是否进入身份保留分支。
+    const migratedConstraintGroups =
+      preserveAmbiguousIdentity &&
       this.room.constraints.replaceCardInConstraintGroups(card, placeholder)
-    }
 
     card.location = 'player'
     card.subZone = fromSubZone
@@ -389,7 +390,8 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
         oldLocationCandidates,
         'swapKnownCardWithPlayerSourcePlaceholder:preserveAmbiguousIdentity'
       )
-      placeholder.combinationID = oldCombinationID
+      // 迁移成功时 replaceCardInConstraintGroups 已写入新组标签，不能再被旧单值标签覆盖。
+      if (!migratedConstraintGroups) placeholder.combinationID = oldCombinationID
       this.room.markCounterDirty(placeholder)
     } else if (replacementCandidate) {
       const oldPublicZone = this.room.zones.get(oldLocation as PublicZoneName)
