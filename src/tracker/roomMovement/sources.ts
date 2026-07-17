@@ -57,6 +57,67 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
   }
 
   /**
+   * 收集某玩家指定子区的暗牌来源，并把位置已确定的实体排在跨位置候选之前。
+   * 协议只证明“某张暗牌来自该玩家”时，应优先消耗确定来源实体，不能因 Room.cards
+   * 的物理顺序碰巧先命中跨座位候选，就提前收敛随机转移约束。
+   */
+  getUnknownPlayerSourceCards(
+    seatID: SeatID,
+    subZone: SubZone = 'hand',
+    spellIDs: SpellIDInput | SpellIDInput[] = [],
+    excludedCards: Iterable<Card> = []
+  ): Card[] {
+    const exactCards: Card[] = []
+    const candidateCards: Card[] = []
+    const excluded = new Set(excludedCards)
+    const sourceSpellIDs = Array.isArray(spellIDs) ? spellIDs : [spellIDs]
+    const markSpellIDs =
+      subZone === 'mark'
+        ? Array.from(
+            new Set(sourceSpellIDs.flatMap((spellID) => getCompatibleMarkSpellIDs(spellID)))
+          )
+        : []
+
+    for (const card of this.room.cards) {
+      if (excluded.has(card)) continue
+
+      if (
+        card.location !== 'player' ||
+        card.subZone !== subZone ||
+        card.seats.has(seatID) !== true ||
+        card.isKnown === true ||
+        card.suspended === true
+      ) {
+        continue
+      }
+
+      if (subZone === 'mark' && markSpellIDs.length > 0) {
+        if (card.spellID === null || !markSpellIDs.includes(card.spellID)) {
+          continue
+        }
+      }
+
+      const isExactSource = this.isExactUnknownPlayerSourceCard(card, seatID)
+      if (isExactSource) exactCards.push(card)
+      else candidateCards.push(card)
+    }
+
+    return [...exactCards, ...candidateCards]
+  }
+
+  isExactUnknownPlayerSourceCard(card: Card, seatID: SeatID): boolean {
+    return (
+      card.location === 'player' &&
+      card.isKnown !== true &&
+      card.suspended !== true &&
+      card.resolvedSeat === Number(seatID) &&
+      card.seats.size === 1 &&
+      !card.hasLocationCandidates?.() &&
+      !card.hasSubZoneCandidates?.()
+    )
+  }
+
+  /**
    * 从某玩家指定子区取出暗牌占位实体。
    */
   takeUnknownCardsFromPlayer(
@@ -65,30 +126,8 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     subZone: SubZone = 'hand',
     spellIDs: SpellIDInput | SpellIDInput[] = []
   ): Card[] {
-    const playerCards: Card[] = []
-    if (!(count > 0)) return playerCards
-    const sourceSpellID = Array.isArray(spellIDs) ? (spellIDs[0] ?? null) : spellIDs
-    const markSpellIDs = subZone === 'mark' ? getCompatibleMarkSpellIDs(sourceSpellID) : []
-
-    for (const card of this.room.cards) {
-      if (
-        card.location === 'player' &&
-        card.subZone === subZone &&
-        card.seats.has(seatID) &&
-        card.isKnown !== true
-      ) {
-        if (
-          markSpellIDs.length > 0 &&
-          (card.spellID === null || !markSpellIDs.includes(card.spellID))
-        ) {
-          continue
-        }
-        playerCards.push(card)
-        if (playerCards.length >= count) break
-      }
-    }
-
-    return playerCards
+    if (!(count > 0)) return []
+    return this.getUnknownPlayerSourceCards(seatID, subZone, spellIDs).slice(0, count)
   }
 
   /**
@@ -218,27 +257,32 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       return null
     }
 
+    const excludedCards = [excludeCard, ...context.knownCards].filter((card): card is Card =>
+      Boolean(card)
+    )
     return (
-      this.room.cards.find((card) => {
-        if (
-          card === excludeCard ||
-          context.knownCards.includes(card) ||
-          card.location !== 'player' ||
-          card.subZone !== fromSubZone ||
-          card.seats.has(fromSeat) !== true ||
-          card.isKnown === true ||
-          card.suspended === true
-        ) {
-          return false
-        }
+      this.getUnknownPlayerSourceCards(fromSeat, fromSubZone, sourceSpellID, excludedCards)[0] ??
+      null
+    )
+  }
 
-        return (
-          fromSubZone !== 'mark' ||
-          sourceSpellID === null ||
-          sourceSpellID === undefined ||
-          card.spellID === sourceSpellID
-        )
-      }) ?? null
+  findExactUnknownPlayerSourcePlaceholder(
+    context: RoomMoveContext,
+    excludeCard: Card | null = null
+  ): Card | null {
+    const { fromSeat, fromSubZone } = context
+    const sourceSpellID = this.getSourceSpellID(context)
+    if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone) {
+      return null
+    }
+
+    const excludedCards = [excludeCard, ...context.knownCards].filter((card): card is Card =>
+      Boolean(card)
+    )
+    return (
+      this.getUnknownPlayerSourceCards(fromSeat, fromSubZone, sourceSpellID, excludedCards).find(
+        (card) => this.isExactUnknownPlayerSourceCard(card, fromSeat)
+      ) ?? null
     )
   }
 
@@ -310,12 +354,22 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     const oldSeats = new Set(Array.from(card.seats, Number))
     const oldCombinationID = card.combinationID
     const oldSpellID = card.spellID
+    const oldLocationCandidates = card.getLocationCandidates()
+    const oldSuspended = card.suspended
     const keepPlaceholderAtPreviousPublicPosition = this.hasPublicCandidateAt(card, oldLocation)
+    const preserveAmbiguousIdentity =
+      card.isKnown !== true &&
+      oldLocationCandidates.length > 1 &&
+      this.isExactUnknownPlayerSourceCard(placeholder, fromSeat)
 
     // 协议已经证明被替换的暗实体来自该玩家区。必须先确认来源位置，再移出约束组，
     // 否则多席位暗实体仍是未解析状态，组内对应位置名额不会随实体离开而扣减。
     this.resolveSourcePlayerCandidate(placeholder, context)
     this.room.removeCardsFromConstraintGroups([placeholder])
+    // 后续是否恢复旧标签必须依据实际迁移结果，不能只看是否进入身份保留分支。
+    const migratedConstraintGroups =
+      preserveAmbiguousIdentity &&
+      this.room.constraints.replaceCardInConstraintGroups(card, placeholder)
 
     card.location = 'player'
     card.subZone = fromSubZone
@@ -327,7 +381,19 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     card.combinationID = null
     this.room.markCounterDirty(card)
 
-    if (replacementCandidate) {
+    if (preserveAmbiguousIdentity) {
+      placeholder.location = oldLocation
+      placeholder.subZone = oldSubZone
+      placeholder.spellID = oldSpellID
+      placeholder.suspended = oldSuspended
+      placeholder.setLocationCandidates(
+        oldLocationCandidates,
+        'swapKnownCardWithPlayerSourcePlaceholder:preserveAmbiguousIdentity'
+      )
+      // 迁移成功时 replaceCardInConstraintGroups 已写入新组标签，不能再被旧单值标签覆盖。
+      if (!migratedConstraintGroups) placeholder.combinationID = oldCombinationID
+      this.room.markCounterDirty(placeholder)
+    } else if (replacementCandidate) {
       const oldPublicZone = this.room.zones.get(oldLocation as PublicZoneName)
       if (oldPublicZone) {
         trackerLogger.warn('来源占位置换跳过公共区回补，占位改为继承其它候选', {
@@ -607,15 +673,8 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
 
     const excludedCards = new Set(excludeCards)
     // 1. 查找该玩家手牌中当前未知的卡牌
-    const unknownCard = this.room.cards.find(
-      (sourceCard) =>
-        sourceCard !== card &&
-        !excludedCards.has(sourceCard) &&
-        sourceCard.location === 'player' &&
-        sourceCard.subZone === 'hand' &&
-        sourceCard.seats.has(fromSeat) &&
-        sourceCard.isKnown !== true
-    )
+    excludedCards.add(card)
+    const unknownCard = this.getUnknownPlayerSourceCards(fromSeat, 'hand', [], excludedCards)[0]
 
     if (!unknownCard) return null
 

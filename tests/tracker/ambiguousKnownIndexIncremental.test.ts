@@ -54,7 +54,7 @@ describe('AmbiguousKnownIndex 增量维护（Step 6）', () => {
     card.confirmKnown()
     card.setLocationCandidates([pileTop, hand], 'test:public-or-hand')
     rebuildAmbiguousIndex(room)
-    expect(room.ambiguousKnownIndex.describe(1)).toContain('牌堆随机2张')
+    expect(room.ambiguousKnownIndex.describe(1)).toContain('牌堆顶前2张')
 
     card.removeLocationCandidate(pileTop, 'test:remove-public')
     room.ambiguousKnownIndex.applyDirtyCardEvents(Array.from(room.constraintGroups.values()))

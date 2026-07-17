@@ -195,6 +195,21 @@ describe('隐藏标记区候选', () => {
     expect(placeholder.seats.has(7)).toBe(true)
   })
 
+  it('玩家暗标记来源保留 spell ID 数组中的全部兼容值', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [6] })
+    const first = getCard(room, 1)
+    const second = getCard(room, 2)
+
+    room.clearCardsFromPublicZones([first, second])
+    first.bindCandidates([6], 'mark', 100, { known: false })
+    second.bindCandidates([6], 'mark', 200, { known: false })
+
+    expect(room.movement.getUnknownPlayerSourceCards(6, 'mark', [100, 200])).toEqual([
+      first,
+      second
+    ])
+  })
+
   it.each([1, 3])('全明手牌暗置 %s 张标记区时创建完整位置强约束', (markCount) => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4], seatIDs: [1] })
     const cards = [1, 2, 3, 4].map((id) => getCard(room, id))

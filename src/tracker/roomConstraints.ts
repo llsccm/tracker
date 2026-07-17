@@ -5,6 +5,7 @@ import {
   createLocationCandidateKey,
   fromSubZoneCandidate,
   getPlayerLocationCandidates,
+  parseLocationCandidateKey,
   toSubZoneCandidate
 } from './candidate/locationCandidate'
 import { trackerLogger } from '@/utils/logger'
@@ -74,6 +75,105 @@ interface ConstraintGroupCreateOptions extends ConstraintCardOptions {
   sourceEvent?: MoveSourceEvent | string | null
 }
 
+interface AmbiguousHiddenHandCoveragePackage {
+  coverageBySeat: Map<SeatID, number>
+  hiddenCards: Set<Card>
+  hiddenCardsBySeat: Map<SeatID, Set<Card>>
+}
+
+function haveHiddenCardOverlap(
+  left: AmbiguousHiddenHandCoveragePackage,
+  right: AmbiguousHiddenHandCoveragePackage
+): boolean {
+  for (const card of left.hiddenCards) {
+    if (right.hiddenCards.has(card)) return true
+  }
+  return false
+}
+
+function collectCoverageComponents(
+  packages: AmbiguousHiddenHandCoveragePackage[]
+): AmbiguousHiddenHandCoveragePackage[][] {
+  const remaining = new Set(packages)
+  const components: AmbiguousHiddenHandCoveragePackage[][] = []
+
+  // 重叠关系具有传递性：A 与 B、B 与 C 共享实体时，三者必须在同一分量内统一分配。
+  while (remaining.size > 0) {
+    const first = remaining.values().next().value as AmbiguousHiddenHandCoveragePackage
+    const component: AmbiguousHiddenHandCoveragePackage[] = []
+    const queue = [first]
+    remaining.delete(first)
+
+    while (queue.length > 0) {
+      const current = queue.pop()
+      if (!current) continue
+      component.push(current)
+
+      for (const candidate of remaining) {
+        if (!haveHiddenCardOverlap(current, candidate)) continue
+        remaining.delete(candidate)
+        queue.push(candidate)
+      }
+    }
+
+    components.push(component)
+  }
+
+  return components
+}
+
+function addCoverageComponent(
+  component: AmbiguousHiddenHandCoveragePackage[],
+  coverageBySeat: Map<SeatID, number>
+): void {
+  const requiredBySeat = new Map<SeatID, number>()
+  const eligibleCardsBySeat = new Map<SeatID, Set<Card>>()
+
+  component.forEach((coveragePackage) => {
+    coveragePackage.coverageBySeat.forEach((count, seatID) => {
+      // 同一席位的历史组可能重复描述同一事实，取最大需求可避免把重复约束相加。
+      requiredBySeat.set(seatID, Math.max(requiredBySeat.get(seatID) ?? 0, count))
+      const eligibleCards = eligibleCardsBySeat.get(seatID) ?? new Set<Card>()
+      coveragePackage.hiddenCardsBySeat.get(seatID)?.forEach((card) => eligibleCards.add(card))
+      eligibleCardsBySeat.set(seatID, eligibleCards)
+    })
+  })
+
+  const slots = Array.from(requiredBySeat.entries())
+    .flatMap(([seatID, count]) =>
+      Array.from({ length: count }, () => ({
+        seatID,
+        eligibleCards: eligibleCardsBySeat.get(seatID) ?? new Set<Card>()
+      }))
+    )
+    .sort((left, right) => left.eligibleCards.size - right.eligibleCards.size)
+  const matchedSlotByCard = new Map<Card, number>()
+
+  // 用增广路径为席位槽寻找不同实体；重新安置旧匹配可避免共享实体造成贪心误判。
+  const matchSlot = (slotIndex: number, visitedCards: Set<Card>): boolean => {
+    for (const card of slots[slotIndex].eligibleCards) {
+      if (visitedCards.has(card)) continue
+      visitedCards.add(card)
+
+      const previousSlotIndex = matchedSlotByCard.get(card)
+      if (previousSlotIndex === undefined || matchSlot(previousSlotIndex, visitedCards)) {
+        matchedSlotByCard.set(card, slotIndex)
+        return true
+      }
+    }
+    return false
+  }
+
+  slots.forEach((_, slotIndex) => {
+    matchSlot(slotIndex, new Set<Card>())
+  })
+
+  matchedSlotByCard.forEach((slotIndex) => {
+    const seatID = slots[slotIndex].seatID
+    coverageBySeat.set(seatID, (coverageBySeat.get(seatID) ?? 0) + 1)
+  })
+}
+
 /**
  * Room 的局部约束与视图同步辅助模块。
  * 收敛主循环保留在 Room；这里负责约束组维护、稳定列表同步和暂停追踪等细节。
@@ -135,6 +235,103 @@ export class RoomConstraints {
       subZone: card.subZone,
       spellID: card.spellID
     }
+  }
+
+  /**
+   * 收集精确手牌位置约束中必然由跨位置暗实体占用的槽位。
+   *
+   * 这些实体没有唯一 resolvedSeat，不能当作某个玩家的确定暗手牌；但约束已经保证其中
+   * 至少若干张会落到对应手牌位置，因此匿名对账不能为同一批槽位再次补建实体。
+   */
+  collectAmbiguousHiddenHandCoverage(): Map<SeatID, number> {
+    const packages: AmbiguousHiddenHandCoveragePackage[] = []
+
+    this.room.constraintGroups.forEach((group) => {
+      const coverageBySeat = new Map<SeatID, number>()
+      const hiddenCards = new Set<Card>()
+      const hiddenCardsBySeat = new Map<SeatID, Set<Card>>()
+      const groupCards = Array.from(group.cards)
+
+      group.expectedSlotsByLocation.forEach((expectedCount, key) => {
+        const locationCandidate = parseLocationCandidateKey(key)
+        const handCandidate = toSubZoneCandidate(locationCandidate)
+        if (!handCandidate || handCandidate.subZone !== 'hand' || expectedCount <= 0) return
+
+        const subZoneKey = createSubZoneCandidateKey(handCandidate)
+        const exactCards = groupCards.filter(
+          (card) =>
+            card.location === 'player' &&
+            !card.hasLocationCandidates?.() &&
+            !card.hasSubZoneCandidates?.() &&
+            card.seats.size === 1 &&
+            card.seats.has(handCandidate.seatID) &&
+            card.subZone === 'hand'
+        )
+        const candidateCards = groupCards.filter(
+          (card) =>
+            card.hasLocationCandidate?.(key) ||
+            (subZoneKey && card.hasSubZoneCandidate?.(subZoneKey))
+        )
+        const knownCandidateCount = candidateCards.filter(
+          (card) => card.isKnown === true && card.suspended !== true
+        ).length
+        const ambiguousHiddenCards = candidateCards.filter(
+          (card) => card.isKnown !== true && card.suspended !== true && card.resolvedSeat === null
+        )
+        const remainingExpected = Math.max(0, expectedCount - exactCards.length)
+        const hiddenCoverage = Math.min(
+          ambiguousHiddenCards.length,
+          Math.max(0, remainingExpected - knownCandidateCount)
+        )
+
+        if (hiddenCoverage <= 0) return
+        coverageBySeat.set(
+          handCandidate.seatID,
+          (coverageBySeat.get(handCandidate.seatID) ?? 0) + hiddenCoverage
+        )
+        // 同一席位可能由多个完整 hand key 贡献候选，实体集合必须与覆盖量同步累加。
+        const seatHiddenCards = hiddenCardsBySeat.get(handCandidate.seatID) ?? new Set<Card>()
+        ambiguousHiddenCards.forEach((card) => seatHiddenCards.add(card))
+        hiddenCardsBySeat.set(handCandidate.seatID, seatHiddenCards)
+        ambiguousHiddenCards.forEach((card) => hiddenCards.add(card))
+      })
+
+      if (coverageBySeat.size > 0) {
+        packages.push({ coverageBySeat, hiddenCards, hiddenCardsBySeat })
+      }
+    })
+
+    // 历史组与后续扩展组可能共享部分暗实体。按重叠连通分量合并需求，再通过匹配确保
+    // 每个实体最多覆盖一个席位槽；同一席位的重复约束取最大值，互不相交的分量继续累加。
+    const coverageBySeat = new Map<SeatID, number>()
+    collectCoverageComponents(packages).forEach((component) => {
+      addCoverageComponent(component, coverageBySeat)
+    })
+
+    return coverageBySeat
+  }
+
+  /**
+   * 用另一个暗实体接管原实体参与的全部约束组，不改变任何期望槽位。
+   * 用于未公开正 ID 仅作为身份占位、后续明牌协议需要交换身份但不能确认候选位置的场景。
+   */
+  replaceCardInConstraintGroups(previousCard: Card, nextCard: Card): boolean {
+    if (previousCard === nextCard) return false
+
+    let changed = false
+    this.room.constraintGroups.forEach((group) => {
+      if (!group.cards.has(previousCard)) return
+
+      group.cards.delete(previousCard)
+      group.cards.add(nextCard)
+      nextCard.combinationID = group.id ?? previousCard.combinationID
+      changed = true
+    })
+
+    if (changed) {
+      this.room.markConstraintGroupsDirty('replaceCardInConstraintGroups')
+    }
+    return changed
   }
 
   /**

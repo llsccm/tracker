@@ -6,6 +6,35 @@ import { createTestRoom, getCard } from './helpers/room'
 import { playerHand, publicLocation } from './helpers/locationCandidates'
 
 describe('公共候选传播', () => {
+  it('暗手牌置于牌堆顶时显示牌顶候选文案', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [1] })
+    const knownCandidate = getCard(room, 1)
+    const hiddenCard = getCard(room, 2)
+
+    room.clearCardsFromPublicZones([knownCandidate, hiddenCard])
+    knownCandidate.bindCandidates([1], 'hand', null, { known: true })
+    hiddenCard.bindCandidates([1], 'hand', null, { known: false })
+    room.getPlayer(1).syncObservedHandCount(2)
+
+    room.moveCards([], 'pile', {
+      fromSeatID: 1,
+      fromZone: null,
+      fromSubZone: 'hand',
+      cardCount: 1,
+      position: POSITION_TOP,
+      sourceEvent: { type: 'test:spell-743-put-on-pile-top' }
+    })
+
+    expect(knownCandidate.publicCandidates).toEqual([
+      expect.objectContaining({
+        zone: 'pile',
+        position: 'top',
+        count: 1,
+        label: '牌堆顶前1张'
+      })
+    ])
+  })
+
   it('牌堆顶候选进入手牌时保留公共候选与玩家候选', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [1] })
     const first = getCard(room, 1)
