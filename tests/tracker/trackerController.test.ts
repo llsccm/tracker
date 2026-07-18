@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
 import { TrackerController } from '@/tracker/runtime/trackerController'
 import {
   createTrackerControllerHarness,
@@ -28,6 +29,44 @@ describe('TrackerController', () => {
     const dirtyCardSeq = room.dirtyCardSeq
     addSpy.mockClear()
     controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, revealedIDs)
+
+    expect(addSpy).not.toHaveBeenCalled()
+    expect(room.dirtyCardSeq).toBe(dirtyCardSeq)
+  })
+
+  it('嚣翻牌底明牌同步将已有卡牌定位到牌底且重复消息保持幂等', () => {
+    const { controller } = createTrackerControllerHarness()
+    // 协议 Datas 第一项是牌底最外层；handler 会 reverse 后再带 POSITION_BOTTOM 进入。
+    const protocolDatas = [149, 123, 1]
+    const revealedIDs = [...protocolDatas].reverse()
+
+    controller.initTrackerRoom()
+    // 初始顺序故意不在牌底，验证 reposition 会把它们纠正到底部。
+    controller.initTrackerDeck([200, 201, 202, ...protocolDatas])
+
+    const room = controller.getTrackerRoom()
+    const pile = room.zones.get('pile')
+    const addSpy = vi.spyOn(pile, 'add')
+
+    controller.revealTrackerCardsInZone(
+      { id: 255, zone: 1, pos: POSITION_BOTTOM },
+      revealedIDs
+    )
+
+    // 内部顺序底 -> 顶；牌底端点第一张应是 149。
+    expect(pile.cards.slice(0, revealedIDs.length).map((card) => card.id)).toEqual([
+      149, 123, 1
+    ])
+    expect(pile.cards[0]?.id).toBe(149)
+    protocolDatas.forEach((id) => expect(room.cardIndex.get(id).isKnown).toBe(true))
+    expect(addSpy).toHaveBeenCalledOnce()
+
+    const dirtyCardSeq = room.dirtyCardSeq
+    addSpy.mockClear()
+    controller.revealTrackerCardsInZone(
+      { id: 255, zone: 1, pos: POSITION_BOTTOM },
+      revealedIDs
+    )
 
     expect(addSpy).not.toHaveBeenCalled()
     expect(room.dirtyCardSeq).toBe(dirtyCardSeq)
