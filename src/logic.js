@@ -433,25 +433,7 @@ export function logic(msg) {
 
         if (Game.myID == SeatID) drawCard([msg.CardID])
 
-        // 权变花色 目前不适配
-        // if (
-        //   Game.currentID == SeatID &&
-        //   Game.getSeatUI(Game.currentID)?.seat?.HasSkill(7011) &&
-        //   msg.useType == 1 &&
-        //   msg.fromZone != 1 &&
-        //   !msg.isSend
-        // ) {
-        //   if (!Game.spellSpace[7011]) Game.spellSpace[7011] = { count: 0, color: new Set() }
-
-        //   if (CardConfig.GetInstance().getCard(msg.CardID).type != 3) Game.spellSpace[7011].count++
-
-        //   Game.spellSpace[7011].color.add(CardConfig.GetInstance().getCardColor(msg.CardID))
-
-        //   setSuitRecord(
-        //     Array.from(Game.spellSpace[7011].color).join(''),
-        //     '[' + Game.spellSpace[7011].count + ']'
-        //   )
-        // }
+        // 权变花色 官方已实现 这里废弃
 
         if (
           Game.currentID == SeatID &&

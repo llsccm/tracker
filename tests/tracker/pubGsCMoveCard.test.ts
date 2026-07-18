@@ -79,4 +79,30 @@ describe('PubGsCMoveCard', () => {
       ToPosition: POSITION_TOP
     })
   })
+
+  it('观虚的牌堆同区展示将来源和目标都归一为牌顶', () => {
+    const msg = {
+      CardCount: 5,
+      CardIDs: [62, 67, 37, 53, 142],
+      FromID: 255,
+      FromPosition: POSITION_RANDOM,
+      FromZone: 1,
+      FromZoneParam: 0,
+      MoveType: 21,
+      SpellID: 987,
+      ToID: 255,
+      ToPosition: POSITION_RANDOM,
+      ToZone: 1,
+      ToZoneParam: 0
+    }
+
+    handleMoveCard(msg)
+
+    expect(syncTrackerMove).toHaveBeenCalledOnce()
+    expect(syncTrackerMove).toHaveBeenCalledWith(msg, {
+      CardIDs: [62, 67, 37, 53, 142],
+      FromPosition: POSITION_TOP,
+      ToPosition: POSITION_TOP
+    })
+  })
 })

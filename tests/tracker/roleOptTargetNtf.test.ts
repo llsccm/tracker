@@ -90,4 +90,35 @@ describe('GsCRoleOptTargetNtf', () => {
     )
     expect(Game.getSpellState(7009)).toBeUndefined()
   })
+
+  it('观虚同时公开牌堆顶与目标手牌', () => {
+    handleRoleOptTargetNtf({
+      Param: 1,
+      Params: [5, 4, 62, 67, 37, 53, 142, 16, 160, 79, 106],
+      SeatID: 6,
+      SpellID: 987,
+      SrcSeatID: 6,
+      Timeout: 30,
+      Type: 29,
+      targetSeatID: 1,
+      className: 'GsCRoleOptTargetNtf'
+    })
+
+    expect(revealTrackerCards).toHaveBeenCalledTimes(2)
+    expect(revealTrackerCards).toHaveBeenNthCalledWith(
+      1,
+      {
+        type: 'public',
+        zoneName: 'pile',
+        reposition: true,
+        cardIDsTopFirst: true
+      },
+      [62, 67, 37, 53, 142]
+    )
+    expect(revealTrackerCards).toHaveBeenNthCalledWith(
+      2,
+      { type: 'player', seatID: 1 },
+      [16, 160, 79, 106]
+    )
+  })
 })

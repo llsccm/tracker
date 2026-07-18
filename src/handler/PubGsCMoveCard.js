@@ -65,9 +65,9 @@ function normalizeMovePosition({
     ToID == 255 &&
     ToZone == 1 &&
     MoveType == 21 &&
-    SpellID == 7011
+    [7011, 987, 988].includes(SpellID)
   ) {
-    // 权变查看牌堆顶不会移动卡牌；统一端点后由同区展示分支跳过实体重排。
+    // 权变/观虚查看牌堆顶不会移动卡牌；统一端点后由同区展示分支纠正牌顶序列。
     FromPosition = POSITION_TOP
     ToPosition = POSITION_TOP
   }
