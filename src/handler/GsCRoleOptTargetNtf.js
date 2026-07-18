@@ -14,7 +14,16 @@ function revealPlayerHandCards(seatID, cardIDs, options = {}) {
 }
 
 function revealPileCards(cardIDs) {
-  tracker.revealTrackerCards({ type: 'public', zoneName: 'pile' }, cardIDs)
+  // 看牌堆消息不仅公开牌面，也确认这些实体位于牌堆端点。
+  tracker.revealTrackerCards(
+    {
+      type: 'public',
+      zoneName: 'pile',
+      reposition: true,
+      cardIDsTopFirst: true
+    },
+    cardIDs
+  )
 }
 
 function revealTargetCards(seatID, cardIDs) {
@@ -183,7 +192,6 @@ export function handleRoleOptTargetNtf(arg) {
     case 7010:
     case 7011:
       if (Params?.length > 0 && targetSeatID == 255) {
-        Game.spellSpace[7009] = Params.length
         if (SrcSeatID == Game.myID || import.meta.env.DEV) {
           revealPileCards(Params)
         }

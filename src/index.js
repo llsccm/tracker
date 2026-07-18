@@ -27,7 +27,7 @@ console.info(
 window.SGSMODULE = []
 
 const sgsConsoleLog = function (...args) {
-  if (window._debug) console.info(...args)
+  if (window._debug && args[0]?.className !== 'decodeSSCChatmsgNtf') console.info(...args)
   window.SGSMODULE.forEach((fn) => fn?.(...args))
 }
 
