@@ -188,9 +188,21 @@
 - 暗实体占位仍随物理批次移动；回到己方并由正 ID 揭示时，真实身份若尚在其它公共区，使用 exchange 暗实体回填原槽位后再把真实身份移入手牌，避免占位残留或重复计数。
 - 明牌回填 `cardIDs`，暗实体回填 `sourceCards`；明暗混合批次不共用 `combinationID`。
 
+## 诫厉观看与交换区暂存（SpellID=3483）
+
+- 协议文档：`docs/protocols/GsCRoleOptTargetNtf-3483.md`。
+- 观看阶段 `Params` 布局与观虚同类：`[pileCount, handCount, ...pileTop, ...handPartial]`；手牌片段默认是部分手牌，仅当 `handCount` 恰好等于目标整手数时 `fullHand`。
+- 观看/同区展示的牌堆序列是 **top-first**（例：`[81, 99, 124, 4]`，`81` 为顶）；后续交换 `CardIDs` 可能整段逆序或混合重排（例进交换区 `[4, 124, 99, 81]`），不能跨消息沿用“第一项=牌顶”。
+- 配对 `PubGsCMoveCard` 为牌堆同区展示（`FromZone=ToZone=1`、`MoveType=21`、两端 `255`）；`CardIDs` 即牌堆顶 top-first 序列。
+- 目标通知主动路径：`handleRoleOptTargetNtf` 在 `Param == 1` 时写入 `expectedPileCount`，并同步牌堆顶与目标手牌片段。回归见 `tests/tracker/roleOptTargetNtf.test.ts`。
+- 后续交换序列已文档化：`1->10`（牌堆）+ `5->10`（部分手牌）后拆回 `10->1` / `10->5`；旧 `decorateJieLi` **暂不挂上**，默认走通用移动路径。
+- `PILE_SAME_ZONE_SHOW_SPELL_IDS` **不需要**仅为 `3483` 扩展；该白名单只修正权变/观虚的 RANDOM 端点。诫厉应先判断消息本身是否已明确为同区展示。
+- 不走整手交换账本：`HandExchange` 识别门槛会排除诫厉的非整手、回牌堆路径。
+
 ## 已知未完成项
 
 - 尚未完整恢复旧版 `cardManager.pack()` 链表推理承载的所有不确定性语义；宴戏、权变、诫厉等技能仍需要用新版 `ConstraintGroup` 做进一步精细化。
+- 诫厉观看阶段目标通知已同步牌堆顶与手牌片段；仍缺：交换默认路径实测/回归，以及按实战序列重写交换装饰（旧 `decorateJieLi` 暂不挂）。
 - 主动运行路径不再依赖 `cardManager.findKZ()`；遗留文件中残留的旧 `cardManager` / `Zone` 引用需要后续清理或删除。
 - 技能处理器目前仍是偏单牌回调，可能需要向批量拦截器演进。
 - 已有 `pnpm test:tracker` 的 Node/Vitest 回归覆盖导入边界、Controller、位置候选、公共候选、位置索引、暗置标记、脏渲染与遍历基线等；仍需补齐更多 `Room.moveCards()` 组合路线与浏览器运行时验证。

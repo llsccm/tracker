@@ -12,7 +12,11 @@ import {
 } from '../runtime/moveEventHandlers'
 import type { Room } from '../Room'
 
-// 族钟繇【诫厉】：跨多条移动消息追踪暂存牌，并在全暗回牌堆时补回实体 ID。
+// 族钟繇【诫厉】：历史装饰器，当前不要挂到主动路径。
+// 已观测实战与下列假设不一致：
+// 1) 观看 top-first（如 [81,99,124,4]，81 为顶）后，交换 CardIDs 可能整段逆序（[4,124,99,81]）
+// 2) 回出是 10->1 与 10->5 拆分，且回牌堆可能混入手牌来源，不是“暂存手牌整批全暗回牌堆”
+// 协议见 docs/protocols/GsCRoleOptTargetNtf-3483.md
 export default function decorateJieLi(event: MoveEventDraft, room: Room): MoveEventDraft {
   const raw = getRaw(event)
   const cardIDs = event.cardIDs ?? []
