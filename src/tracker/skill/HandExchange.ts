@@ -420,11 +420,13 @@ function isWholeHandExchangeStage(
 
   if (handCards.length === 0) return false
 
-  // 本地实体数已对齐协议张数：最常见、也最可靠。
-  if (cardCount === handCards.length) return true
+  // 观测手牌数是协议事实；一旦存在，不能再用可能尚未补齐的实体快照放宽整手门槛。
+  if (player?.hasObservedHandCount === true) {
+    return cardCount === player.observedHandCount
+  }
 
-  // 本地实体可能因候选/占位尚未完全对齐，但观测手牌数已确认整手。
-  return player?.hasObservedHandCount === true && cardCount === player.observedHandCount
+  // 没有观测总数时，才退回本地实体数判断是否为整手。
+  return cardCount === handCards.length
 }
 
 /**

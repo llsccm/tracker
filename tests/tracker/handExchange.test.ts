@@ -368,6 +368,47 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
+  it('观测手牌数存在时不会用较短实体快照把单张移动误判为整手', () => {
+    const { room } = setupCandidateController({
+      candidateIDs: [],
+      candidateSeats: [],
+      hiddenHands: {
+        1: [556]
+      },
+      observedCounts: {
+        1: 4
+      }
+    })
+    const event = {
+      type: 'moveCards',
+      cardIDs: [],
+      cardCount: 1,
+      toZone: 'exchange',
+      options: {
+        fromSeatID: 1,
+        fromSubZone: 'hand',
+        fromZone: null,
+        cardCount: 1
+      },
+      raw: {
+        CardIDs: [],
+        CardCount: 1,
+        FromID: 1,
+        FromZone: 5,
+        ToID: 1,
+        ToZone: 10,
+        MoveType: 11,
+        SpellID: 3488
+      }
+    }
+
+    const decorated = room.decorateMoveEvent(event)
+
+    expect(decorated.cardIDs).toEqual([])
+    expect(decorated.options?.sourceCards).toBeUndefined()
+    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+  })
+
   it('未登记批次回手时不创建空账本', () => {
     const { room } = setupController()
     const event = {
