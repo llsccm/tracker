@@ -89,6 +89,11 @@ ToZoneParam: 0
 
 这样观看 5 张后，牌堆展示仍应是“5 明 + 剩余暗”，而不是多出一张。
 
+## 相关技能
+
+- 权变：docs/protocols/GsCRoleOptTargetNtf-7011.md
+- 诫厉：docs/protocols/GsCRoleOptTargetNtf-3483.md（同类 Params 布局，但手牌片段是部分手牌，且后续还有交换区暂存链）
+
 ## 代码位置
 
 - 目标通知与牌堆/手牌明牌：`src/handler/GsCRoleOptTargetNtf.js`

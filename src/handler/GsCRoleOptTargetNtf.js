@@ -34,6 +34,34 @@ function revealTargetCards(seatID, cardIDs) {
   }
 }
 
+// 部分手牌协议在 handCount 恰好等于目标整手数时，应按 fullHand 同步。
+// 优先信观测手牌数；没有观测时才退回本地手牌实体数。
+function shouldRevealAsFullHand(seatID, handCount) {
+  const count = Number(handCount) || 0
+  if (count <= 0) return false
+
+  const room = tracker.getReadyTrackerRoom()
+  if (!room) return false
+
+  const player = room.getPlayer?.(seatID)
+  if (player?.hasObservedHandCount === true) {
+    return count === Number(player.observedHandCount)
+  }
+
+  const handCards =
+    typeof room.refreshPlayerSnapshot === 'function'
+      ? room
+          .refreshPlayerSnapshot()
+          .filter((card) => card.subZone === 'hand' && card.seats?.has?.(Number(seatID)))
+      : null
+
+  if (Array.isArray(handCards) && handCards.length > 0) {
+    return count === handCards.length
+  }
+
+  return false
+}
+
 export function handleRoleOptTargetNtf(arg) {
   const { SpellID, Param, Params, SeatID, SrcSeatID, targetSeatID, Type } = arg
 
@@ -175,14 +203,31 @@ export function handleRoleOptTargetNtf(arg) {
       break
 
     // 族钟繇 诫厉
+    // Params: [pileCount, handCount, ...pileTopCardIDs, ...handCardIDs]
+    // 手牌片段是目标部分手牌，不一定等于全部手牌
     case 3483:
-      if (Param == 1) {
-        if (Params?.length > 2 && targetSeatID !== undefined && targetSeatID !== 255) {
-          revealPlayerHandCards(targetSeatID, Params.slice(-Params[1]))
-        } else if (Params?.[0] > 0) {
+      if (Param == 1 && Params?.length > 0) {
+        const pileCount = Number(Params[0]) || 0
+        const handCount = Number(Params[1]) || 0
+
+        if (pileCount > 0) {
           const trackerRoom = tracker.getReadyTrackerRoom()
           if (trackerRoom) {
-            trackerRoom.getSkillState(SpellID).expectedPileCount = Params[0]
+            trackerRoom.getSkillState(SpellID).expectedPileCount = pileCount
+          }
+        }
+
+        if (Params.length > 2) {
+          if (pileCount > 0) {
+            revealPileCards(Params.slice(2, 2 + pileCount))
+          }
+          if (handCount > 0 && targetSeatID !== undefined && targetSeatID !== 255) {
+            const handCardIDs = Params.slice(2 + pileCount, 2 + pileCount + handCount)
+            revealPlayerHandCards(
+              targetSeatID,
+              handCardIDs,
+              shouldRevealAsFullHand(targetSeatID, handCount) ? { fullHand: true } : {}
+            )
           }
         }
       }

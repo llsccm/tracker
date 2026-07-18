@@ -56,6 +56,11 @@ ToZoneParam: 0
 - 不应把卡牌从牌堆移出后再随机放回。
 - 预处理会把 `FromPosition` 和 `ToPosition` 都归一为牌顶，使后续归一化识别为同区展示并跳过实体重排。
 
+## 相关技能
+
+- 观虚：docs/protocols/GsCRoleOptTargetNtf-987.md
+- 诫厉：docs/protocols/GsCRoleOptTargetNtf-3483.md（Params 含牌堆顶与目标部分手牌，且后续有交换区暂存）
+
 ## 代码位置
 
 - 目标通知与牌堆明牌：`src/handler/GsCRoleOptTargetNtf.js`
