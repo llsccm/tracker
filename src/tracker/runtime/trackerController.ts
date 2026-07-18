@@ -104,8 +104,8 @@ function hasCardsAtPublicPosition(
   }
 
   if (position === POSITION_BOTTOM) {
-    const expectedCards = [...cards].reverse()
-    return expectedCards.every((card, index) => zoneCards[index] === card)
+    const len = cards.length
+    return cards.every((_, index) => zoneCards[index] === cards[len - 1 - index])
   }
 
   return false

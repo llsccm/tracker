@@ -44,7 +44,7 @@ data_count: 4
 
 - 消息路由：`src/logic.js`
 - 鹰视协议处理：`src/handler/CGsRoleSpellOptRep.js`
-- 牌堆明牌同步：`src/tracker/runtime/trackerController.ts` 的 `revealTrackerCards`
+- 牌堆明牌同步：`src/tracker/runtime/trackerController.ts` 的 `revealTrackerCardsInZone`
 
 ## 裴秀：地图选择回复
 

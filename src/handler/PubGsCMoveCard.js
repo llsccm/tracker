@@ -75,7 +75,7 @@ function normalizeMovePosition({
   if (
     FromZone == 1 &&
     FromPosition == POSITION_RANDOM &&
-    [3208, 7011, 987, 988, 3903].includes(SpellID)
+    [3208, 987, 988, 3903].includes(SpellID)
   ) {
     FromPosition = POSITION_TOP //骋烈 权变 观虚 天候
   }
