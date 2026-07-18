@@ -39,6 +39,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       fromSeatID,
       fromSpellID,
       cardCount = normalizedCardIDs.length,
+      handMoveCount: requestedHandMoveCount,
       position = POSITION_TOP,
       fromPosition = position,
       expectedSlotsBySeat,
@@ -62,7 +63,11 @@ export class RoomMovement extends RoomMovementCandidateMethods {
           ? parseInt(String(fromZone))
           : null
     const fromSubZone = opt.fromSubZone ?? subZone ?? 'hand'
-    const handMoveCount = Math.max(0, Number(cardCount ?? normalizedCardIDs.length))
+    // 候选身份可由逻辑账本迁移而不移动实体；此时手牌总数变化量与实体移动数不同。
+    const handMoveCount = Math.max(
+      0,
+      Number(requestedHandMoveCount ?? cardCount ?? normalizedCardIDs.length)
+    )
     const sourceHandSeat =
       fromSeat !== null && !Number.isNaN(fromSeat) && fromSubZone === 'hand' ? fromSeat : null
     const targetHandSeat =

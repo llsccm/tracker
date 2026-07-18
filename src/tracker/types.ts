@@ -107,6 +107,8 @@ export interface MoveOptions {
   fromSubZone?: SubZone
   fromSpellID?: SpellID | string | null
   cardCount?: number
+  /** 协议手牌总数变化量；候选身份不移动实体时可与 cardCount 不同。 */
+  handMoveCount?: number
   moveType?: RawMoveCardEvent['MoveType']
   position?: PublicPosition
   fromPosition?: PublicPosition
