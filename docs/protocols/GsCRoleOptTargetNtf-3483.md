@@ -257,7 +257,7 @@ ToZoneParam: 0
 - 同区展示识别：`src/tracker/MoveEventNormalizer.ts` 的 `isSameZoneShowEvent`
 - 历史交换装饰（未挂载）：`src/tracker/skill/JieLi.ts`
 - 移动装饰注册：`src/tracker/runtime/moveEventHandlers.ts` 的 `registerDefaultMoveEventHandlers`
-- 相关排除说明：`docs/protocols/PubGsCMoveCard-spell-121-hand-exchange.md`（诫厉不走整手交换账本）
+- 相关排除说明：`docs/protocols/hand-exchange.md`（诫厉不走整手交换账本）
 
 ## 已知适配缺口
 

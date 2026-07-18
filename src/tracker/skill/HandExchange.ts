@@ -12,7 +12,7 @@
  * - FromZone=10 时 FromID 不能当座位解释，只能当批次键
  *
  * 详细协议说明见：
- * docs/protocols/PubGsCMoveCard-spell-121-hand-exchange.md
+ * docs/protocols/hand-exchange.md
  */
 import { MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Card } from '../Card'
