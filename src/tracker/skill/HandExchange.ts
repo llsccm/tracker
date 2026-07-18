@@ -13,8 +13,20 @@
  *
  * 详细协议说明见：
  * docs/protocols/hand-exchange.md
+ *
+ * ## 不变式（改动前务必对齐三处读写口径）
+ * 1. Card.locationCandidates 是候选位置（含 exchange 批次令牌）的唯一可写来源；
+ *    seats / subZoneCandidates 只是它的只读投影。
+ * 2. HandExchangeCandidateRecord 只保存 spellID / subZone 元数据用于恢复兼容读面，
+ *    绝不保存候选集合副本，避免通用约束收敛后的分支被旧快照复活。
+ * 3. card.location / subZone / spellID 兼容读面由 projectCandidateRecord 同步；
+ *    当通用约束删掉最后一个玩家分支时，改由 Card.syncLegacyCandidatesFromLocationCandidates
+ *    的 exchange 分支兜底为 location='exchange'。改其一必须同步其二。
+ * 4. 逻辑暂存的候选牌 location 记为 'exchange'，但刻意不加入 zones.get('exchange')；
+ *    因此按 Zone 成员统计的口径不会计入它们，按 card.location 统计的口径才会。
  */
 import { MOVE_TYPE } from '../MoveEventNormalizer'
+import { trackerLogger } from '@/utils/logger'
 import type { Card } from '../Card'
 import type { Room } from '../Room'
 import type {
@@ -44,8 +56,6 @@ type HandExchangeBatch = {
   batchID: string
   /** 进区时快照的实体列表；回手时只取仍在 exchange 的成员。 */
   cards: Card[]
-  /** 协议整手数；用于保留 cardCount，避免明暗拆分后张数丢失。 */
-  cardCount: number
   /** 是否有候选位置由逻辑账本迁移；此时实体数与协议手牌变化量需要解耦。 */
   hasCandidateAlternatives: boolean
   /** 原持有座位；也是 batches 字典的 key。 */
@@ -65,17 +75,21 @@ type HandExchangeCandidateRecord = {
   subZone: SubZone | null
 }
 
-/** 单个 SpellID 下尚未取回的进区批次；同座位按嵌套顺序使用栈。 */
+/** 单个 SpellID 下尚未取回的进区批次与候选记录；同座位按嵌套顺序使用栈。 */
 type HandExchangeSpellState = {
   /** 同一座位可能在外层交换尚未回手时再次参与内层交换，因此不能只保存单个批次。 */
   batches: Record<string, HandExchangeBatch[]>
+  /**
+   * 本 SpellID 私有的候选元数据索引；与 batches 一样按技能隔离，
+   * 两个交换技能并发时不会互相串走对方的候选分支。候选位置本身保存在 Card.locationCandidates。
+   */
+  candidateRecords: Map<Card, HandExchangeCandidateRecord>
 }
 
 /** 房间内所有交换技能的批次账本。 */
 type HandExchangeRoomState = {
   bySpell: Record<string, HandExchangeSpellState>
-  /** 跨 SpellID 共享的候选元数据索引；批次位置本身保存在 Card.locationCandidates。 */
-  candidateRecords: Map<Card, HandExchangeCandidateRecord>
+  /** 仅用于生成全局唯一 batchID 的自增序号；批次与候选均已按 SpellID 隔离。 */
   nextBatchSeq: number
 }
 
@@ -118,7 +132,6 @@ function resolveSpellID(event: MoveEventDraft): number {
 function getRoomExchangeState(room: Room): HandExchangeRoomState {
   return room.getSkillState(HAND_EXCHANGE_STATE_KEY, () => ({
     bySpell: {},
-    candidateRecords: new Map(),
     nextBatchSeq: 0
   })) as HandExchangeRoomState
 }
@@ -136,7 +149,8 @@ function getSpellExchangeState(room: Room, spellID: number): HandExchangeSpellSt
   const roomState = getRoomExchangeState(room)
   const key = String(spellID)
   if (!roomState.bySpell[key]) {
-    roomState.bySpell[key] = { batches: {} }
+    // 候选记录随批次字典一起按 SpellID 建账，回手结算后随该技能账本一并清理。
+    roomState.bySpell[key] = { batches: {}, candidateRecords: new Map() }
   }
   return roomState.bySpell[key]
 }
@@ -149,12 +163,21 @@ function getSpellExchangeStateReadonly(
   return getRoomExchangeStateReadonly(room)?.bySpell[String(spellID)]
 }
 
-/** 某 SpellID 的批次全部取回后清理；房间账本空了再删 skillState key。 */
-function clearSpellExchangeState(room: Room, spellID: number): void {
+/**
+ * 某 SpellID 的批次与候选都结算完后清理其账本；房间账本空了再删 skillState key。
+ * 必须在候选恢复（returnCandidateAlternatives）之后调用：候选记录已按 SpellID 隔离，
+ * 过早删除该技能账本会连带丢失尚未回手的候选令牌。
+ */
+function clearSpellExchangeStateIfEmpty(room: Room, spellID: number): void {
   const roomState = getRoomExchangeStateReadonly(room)
   if (!roomState) return
-  delete roomState.bySpell[String(spellID)]
-  if (Object.keys(roomState.bySpell).length === 0 && roomState.candidateRecords.size === 0) {
+
+  const state = roomState.bySpell[String(spellID)]
+  if (state && Object.keys(state.batches).length === 0 && state.candidateRecords.size === 0) {
+    delete roomState.bySpell[String(spellID)]
+  }
+
+  if (Object.keys(roomState.bySpell).length === 0) {
     room.clearSkillState(HAND_EXCHANGE_STATE_KEY)
   }
 }
@@ -230,10 +253,11 @@ function projectCandidateRecord(room: Room, record: HandExchangeCandidateRecord)
  * 将 fromSeat 对应的所有候选分支替换为本次 batchID。
  *
  * 返回集合只包含本批次接管的候选 Card，调用方据此把它们排除在确定实体列表之外。
+ * 候选记录取自本 SpellID 私有账本，不会波及并发的其它交换技能。
  */
 function stageCandidateAlternatives(
   room: Room,
-  roomState: HandExchangeRoomState,
+  state: HandExchangeSpellState,
   handCards: Card[],
   fromSeat: SeatID,
   batchID: string,
@@ -241,7 +265,7 @@ function stageCandidateAlternatives(
 ): Set<Card> {
   handCards.forEach((card) => {
     // 协议明确给出正 ID 时，来源身份已经确定，应继续走普通实体移动而不是保留候选。
-    if (protocolKnownIDs.has(card.id) || roomState.candidateRecords.has(card)) return
+    if (protocolKnownIDs.has(card.id) || state.candidateRecords.has(card)) return
     // 当前候选 UI 只追踪已公开正 ID；暗占位仍由 sourceCards 和数量约束处理。
     if (!(card.isKnown === true && card.id > 0)) return
 
@@ -250,13 +274,13 @@ function stageCandidateAlternatives(
       record &&
       card.getLocationCandidates().some((candidate) => isHandCandidate(candidate, fromSeat))
     ) {
-      roomState.candidateRecords.set(card, record)
+      state.candidateRecords.set(card, record)
     }
   })
 
   const stagedCandidates = new Set<Card>()
   // 始终改写 Card 当前候选，通用约束在嵌套交换期间消除的分支不会被元数据索引复活。
-  roomState.candidateRecords.forEach((record) => {
+  state.candidateRecords.forEach((record) => {
     let staged = false
     const nextCandidates = record.card.getLocationCandidates().map((candidate) => {
       if (!isHandCandidate(candidate, fromSeat)) return candidate
@@ -279,18 +303,18 @@ function stageCandidateAlternatives(
 /**
  * 把指定 batchID 的候选分支恢复为接收座位手牌。
  *
- * 只有一张牌的全部批次令牌都已返回后，才移除房间级记录并重新完全交给通用候选模型。
+ * 只有一张牌的全部批次令牌都已返回后，才移除该 SpellID 记录并重新完全交给通用候选模型。
  */
 function returnCandidateAlternatives(
   room: Room,
-  roomState: HandExchangeRoomState,
+  state: HandExchangeSpellState,
   batchID: string,
   toSeat: SeatID,
   protocolKnownIDs: Set<number>,
   revealsWholeBatch: boolean
 ): Set<number> {
   const logicallyResolvedKnownIDs = new Set<number>()
-  roomState.candidateRecords.forEach((record, card) => {
+  state.candidateRecords.forEach((record, card) => {
     const currentCandidates = card.getLocationCandidates()
     const belongsToBatch = currentCandidates.some(
       (candidate) => isBatchCandidate(candidate) && candidate.batchID === batchID
@@ -311,7 +335,7 @@ function returnCandidateAlternatives(
         'handExchange:candidateKnownReturn'
       )
       projectCandidateRecord(room, record)
-      roomState.candidateRecords.delete(card)
+      state.candidateRecords.delete(card)
       // 该 ID 已由候选模型直接落到目标手牌，不能再交给物理移动路径重复搬运。
       logicallyResolvedKnownIDs.add(card.id)
       return
@@ -338,8 +362,19 @@ function returnCandidateAlternatives(
     // 等待后续协议重新建立可证明的位置。
     card.setLocationCandidates(nextCandidates, 'handExchange:candidateReturn')
     projectCandidateRecord(room, record)
+
+    // 正常情况下总会留下另一个玩家/批次分支；删空说明协议整手明牌与本地候选相互矛盾，
+    // 多半是上游观测有误。开发环境显式告警，避免静默留下一张无位置的已知牌难以定位。
+    if (import.meta.env?.DEV && nextCandidates.length === 0) {
+      trackerLogger.warn('整手交换回手后候选牌已无任何可证明位置（疑似协议矛盾或上游观测错误）', {
+        cardID: card.id,
+        batchID,
+        toSeat
+      })
+    }
+
     if (nextCandidates.length === 0 || !nextCandidates.some(isBatchCandidate)) {
-      roomState.candidateRecords.delete(card)
+      state.candidateRecords.delete(card)
     }
   })
   return logicallyResolvedKnownIDs
@@ -493,11 +528,12 @@ function stageHandToExchange(event: MoveEventDraft, room: Room, spellID: number)
   const state = getSpellExchangeState(room, spellID)
   const batchKey = String(fromSeat)
   const batchStack = state.batches[batchKey] ?? []
+  // batchID 用房间级自增序号保证全局唯一；候选账本则取本 SpellID 私有的 state。
   const batchID = nextBatchID(roomState, spellID, fromSeat)
   const protocolKnownIDs = new Set(getPositiveIDs(event.cardIDs ?? []))
   const stagedCandidates = stageCandidateAlternatives(
     room,
-    roomState,
+    state,
     handCards,
     fromSeat,
     batchID,
@@ -505,13 +541,10 @@ function stageHandToExchange(event: MoveEventDraft, room: Room, spellID: number)
   )
   // 候选身份已有 batchID 承载，不能再次放入 cardIDs/sourceCards，否则会被实锤到来源座位。
   const batchCards = handCards.filter((card) => !stagedCandidates.has(card))
-  const cardCount =
-    stagedCandidates.size > 0 ? getCount(event) : Math.max(getCount(event), handCards.length)
   // 内层交换后结算先于外层；同座位批次按后进先出保存才能对应协议回手顺序。
   batchStack.push({
     batchID,
     cards: batchCards.slice(),
-    cardCount,
     hasCandidateAlternatives: stagedCandidates.size > 0,
     fromSeat,
     spellID
@@ -547,7 +580,7 @@ function returnExchangeBatchToHand(
   const batchStack = state?.batches[batchKey]
   // 优先弹出内层批次，避免空手回牌事件误消费仍待结算的外层实体批次。
   const batch = batchStack?.pop()
-  if (!batch) return event
+  if (!batch || !state || !batchStack) return event
 
   // 批次可能被中途打断；只取仍停在 exchange 的实体，避免把已离开的牌再搬一次。
   const stagedCards = batch.cards.filter((card) => card.location === 'exchange')
@@ -555,28 +588,23 @@ function returnExchangeBatchToHand(
   if (batchStack.length === 0) {
     delete state.batches[batchKey]
   }
-  if (Object.keys(state.batches).length === 0) {
-    clearSpellExchangeState(room, spellID)
-  }
 
-  const roomState = getRoomExchangeStateReadonly(room)
-  let logicallyResolvedKnownIDs = new Set<number>()
-  if (roomState) {
-    const protocolKnownIDs = new Set(getPositiveIDs(event.cardIDs ?? []))
-    const protocolCardCount = getCount(event)
-    const revealsWholeBatch = protocolCardCount > 0 && protocolKnownIDs.size >= protocolCardCount
-    logicallyResolvedKnownIDs = returnCandidateAlternatives(
-      room,
-      roomState,
-      batch.batchID,
-      Number(raw.ToID),
-      protocolKnownIDs,
-      revealsWholeBatch
-    )
-    if (Object.keys(roomState.bySpell).length === 0 && roomState.candidateRecords.size === 0) {
-      room.clearSkillState(HAND_EXCHANGE_STATE_KEY)
-    }
-  }
+  // 候选分支必须在清理账本之前恢复：候选记录已按 SpellID 隔离，
+  // 若先删空该技能账本，会连带丢失尚未回手的候选令牌。
+  const protocolKnownIDs = new Set(getPositiveIDs(event.cardIDs ?? []))
+  const protocolCardCount = getCount(event)
+  const revealsWholeBatch = protocolCardCount > 0 && protocolKnownIDs.size >= protocolCardCount
+  const logicallyResolvedKnownIDs = returnCandidateAlternatives(
+    room,
+    state,
+    batch.batchID,
+    Number(raw.ToID),
+    protocolKnownIDs,
+    revealsWholeBatch
+  )
+
+  // 批次与候选都结算后再清理该 SpellID 账本；房间账本空了顺带删除 skillState key。
+  clearSpellExchangeStateIfEmpty(room, spellID)
 
   // 即使所有成员都已离开 exchange，也必须保留协议手牌变化量；不能退回原事件去抽取其它批次。
   // 回手协议也可能带正 ID；与进区一致，先对齐批次内对应实体的公开状态。

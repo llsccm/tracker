@@ -435,6 +435,8 @@ export class Card extends BaseCard {
     } else if (hasExchangeBatchCandidate) {
       // 批次令牌是统一候选模型中的逻辑 exchange 位置；通用约束删掉最后一个玩家分支时，
       // 这里必须立即同步物理读面，避免实体继续伪装成无座位玩家牌。
+      // 该分支与 skill/HandExchange.ts 的 projectCandidateRecord 是同一读面契约的两端：
+      // 逻辑 exchange 牌只记 location，不加入 zones.get('exchange')，两处改动需保持对齐。
       this.location = 'exchange'
       this.subZone = null
       this.spellID = null

@@ -127,7 +127,8 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     firstSeat: number,
     firstCount: number,
     secondSeat: number,
-    secondCount: number
+    secondCount: number,
+    spellID = 121
   ) {
     const steps = [
       protocolMove({
@@ -138,7 +139,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
         ToID: firstSeat,
         ToZone: 10,
         MoveType: 11,
-        SpellID: 121
+        SpellID: spellID
       }),
       protocolMove({
         CardIDs: [],
@@ -148,7 +149,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
         ToID: secondSeat,
         ToZone: 10,
         MoveType: 11,
-        SpellID: 121
+        SpellID: spellID
       }),
       protocolMove({
         CardIDs: [],
@@ -158,7 +159,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
         ToID: firstSeat,
         ToZone: 5,
         MoveType: 11,
-        SpellID: 121
+        SpellID: spellID
       }),
       protocolMove({
         CardIDs: [],
@@ -168,7 +169,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
         ToID: secondSeat,
         ToZone: 5,
         MoveType: 11,
-        SpellID: 121
+        SpellID: spellID
       })
     ]
     steps.forEach((msg) => controller.syncTrackerMove(msg))
@@ -653,6 +654,42 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(room.getPlayer(1).observedHandCount).toBe(2)
     expect(room.getPlayer(2).observedHandCount).toBe(2)
     expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
+    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+  })
+
+  it('候选账本按 SpellID 隔离：非 121 技能同样能置换并完全清账', () => {
+    // 候选记录已随批次一起按 SpellID 建账，任意交换技能都应独立结算，
+    // 不再依赖单一 121 的房间级共享候选索引。
+    const candidateIDs = [601, 602]
+    const otherSpellID = 888
+    const { controller, room } = setupCandidateController({
+      candidateIDs,
+      candidateSeats: [1, 2],
+      hiddenHands: {
+        1: [501],
+        2: [502]
+      },
+      observedCounts: {
+        1: 2,
+        2: 2
+      }
+    })
+
+    runTwoSeatExchange(controller, 1, 2, 2, 2, otherSpellID)
+
+    expect(getCard(room, 501).seats).toEqual(new Set([2]))
+    expect(getCard(room, 502).seats).toEqual(new Set([1]))
+    candidateIDs.forEach((id) => {
+      const card = getCard(room, id)
+      expect(card.location).toBe('player')
+      expect(card.subZone).toBe('hand')
+      expect(card.seats).toEqual(new Set([1, 2]))
+      expect(card.isKnown).toBe(true)
+    })
+    expect(room.getPlayer(1).observedHandCount).toBe(2)
+    expect(room.getPlayer(2).observedHandCount).toBe(2)
+    expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
+    // 批次与候选都结算完毕后，SpellID 账本必须完全清空。
     expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
