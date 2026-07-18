@@ -13,8 +13,8 @@ vi.mock('../../src/tracker/runtime/browser', () => ({
   }
 }))
 
-import { handleRoleSpellOptRep } from '../../src/handler/CGsRoleSpellOptRep'
-import { Game } from '../../src/tracker'
+import { handleRoleSpellOptRep } from '`@/handler/CGsRoleSpellOptRep`'
+import { Game } from '`@/tracker`'
 
 describe('CGsRoleSpellOptRep', () => {
   beforeEach(() => {

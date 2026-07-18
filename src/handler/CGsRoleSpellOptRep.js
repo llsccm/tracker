@@ -1,6 +1,6 @@
-import { Game } from '../tracker'
-import { POSITION_BOTTOM } from '../tracker/candidate/cardPositions'
-import { tracker } from '../tracker/runtime/browser'
+import { Game } from '`@/tracker`'
+import { POSITION_BOTTOM } from '`@/tracker/candidate/cardPositions`'
+import { tracker } from '`@/tracker/runtime/browser`'
 
 const PROTOCOL_PILE_ZONE = 1
 const PROTOCOL_HAND_ZONE = 5
