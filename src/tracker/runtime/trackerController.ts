@@ -850,9 +850,8 @@ export class TrackerController {
     const id = Number(String(protocolZone.id ?? parts[1] ?? 255).split('-')[0])
     const spellID = Number(parts[2] ?? protocolZone.spellID)
     const normalizedZone = Number.isFinite(zone) ? zone : 5
-    const hasExplicitPosition = protocolZone.pos !== undefined && protocolZone.pos !== null
     // 未携带 pos 的看牌消息默认表示牌顶。
-    const position = hasExplicitPosition ? protocolZone.pos : POSITION_TOP
+    const position = protocolZone.pos ?? POSITION_TOP
 
     return {
       zone: normalizedZone,
