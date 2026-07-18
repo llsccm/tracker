@@ -29,7 +29,7 @@ describe('GsCRoleOptTargetNtf', () => {
   beforeEach(() => {
     destroyPeiXiuMapWindow.mockClear()
     revealTrackerCards.mockClear()
-    tracker.getReadyTrackerRoom.mockReset()
+    vi.mocked(tracker.getReadyTrackerRoom).mockReset()
     Game.deleteSpellState(7009)
     Game.deleteSpellState(4022)
   })
@@ -125,12 +125,12 @@ describe('GsCRoleOptTargetNtf', () => {
   })
 
   it('诫厉同时公开牌堆顶与目标部分手牌，并记录 expectedPileCount', () => {
-    const skillState = {}
+    const skillState: Record<string, any> = {}
     const getSkillState = vi.fn(() => skillState)
-    tracker.getReadyTrackerRoom.mockReturnValue({
+    vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({
       getSkillState,
       getPlayer: vi.fn(() => ({ hasObservedHandCount: true, observedHandCount: 5 }))
-    })
+    } as any)
 
     handleRoleOptTargetNtf({
       Param: 1,
@@ -161,12 +161,12 @@ describe('GsCRoleOptTargetNtf', () => {
   })
 
   it('诫厉 handCount 等于目标整手数时按 fullHand 同步', () => {
-    const skillState = {}
+    const skillState: Record<string, any> = {}
     const getSkillState = vi.fn(() => skillState)
-    tracker.getReadyTrackerRoom.mockReturnValue({
+    vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({
       getSkillState,
       getPlayer: vi.fn(() => ({ hasObservedHandCount: true, observedHandCount: 2 }))
-    })
+    } as any)
 
     handleRoleOptTargetNtf({
       Param: 1,
@@ -188,9 +188,9 @@ describe('GsCRoleOptTargetNtf', () => {
   })
 
   it('诫厉仅有牌堆张数时只写入 expectedPileCount', () => {
-    const skillState = {}
+    const skillState: Record<string, any> = {}
     const getSkillState = vi.fn(() => skillState)
-    tracker.getReadyTrackerRoom.mockReturnValue({ getSkillState })
+    vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({ getSkillState } as any)
 
     handleRoleOptTargetNtf({
       Param: 1,
