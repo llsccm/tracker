@@ -412,12 +412,12 @@ export class TrackerController {
     }
 
     const zoneName = getProtocolPublicZone(zone, event.toZone ?? 'process')
-    const targetZone = readyRoom.zones.get(zoneName)
     const knownCards = this.resolveKnownCards(ids)
+    const position = event.options?.position ?? event.options?.fromPosition ?? POSITION_TOP
     this.controllerLogger.info('展示明牌进入公共区', {
       ids,
       zoneName,
-      position: event.options?.position ?? POSITION_TOP,
+      position,
       resolvedCount: knownCards.length
     })
 
@@ -436,18 +436,16 @@ export class TrackerController {
       return
     }
 
-    knownCards.forEach((card) => {
-      readyRoom.removeCardsFromConstraintGroups([card])
-      card.confirmKnown()
+    // 牌堆同区展示描述的是端点明牌事实，不能只确认牌面而保留原随机位置。
+    // CardIDs 按牌顶向内排列，与 revealPileCards / 权变看牌保持一致。
+    const shouldRepositionPile =
+      zoneName === 'pile' && (position === POSITION_TOP || position === POSITION_BOTTOM)
+
+    this.placePublicRevealCards(knownCards, zoneName, {
+      position,
+      reposition: shouldRepositionPile,
+      cardIDsTopFirst: shouldRepositionPile && position === POSITION_TOP
     })
-
-    const missingCards = knownCards.filter((card) => !targetZone?.cards.includes(card))
-
-    if (missingCards.length > 0) {
-      targetZone?.add(missingCards, event.options?.position ?? POSITION_TOP)
-    }
-
-    readyRoom.resolveConstraints()
   }
 
   /**
@@ -491,31 +489,11 @@ export class TrackerController {
         const zoneName = target.zoneName ?? 'pile'
         const position = target.position ?? POSITION_TOP
         const knownCards = this.resolveKnownCards(ids)
-        const targetZone = readyRoom.zones.get(zoneName)
-
-        knownCards.forEach((card) => {
-          readyRoom.removeCardsFromConstraintGroups([card])
-          card.confirmKnown()
+        this.placePublicRevealCards(knownCards, zoneName, {
+          position,
+          reposition: target.reposition === true,
+          cardIDsTopFirst: target.cardIDsTopFirst === true
         })
-
-        const missingCards = knownCards.filter((card) => !targetZone?.cards.includes(card))
-        const repositionCards =
-          target.cardIDsTopFirst === true && position === POSITION_TOP
-            ? [...knownCards].reverse()
-            : knownCards
-        // 普通明牌只补缺失实体；牌堆端点明牌还要纠正已有实体的位置。
-        // 先比较端点序列，避免重复协议再次改动 Zone 并制造无效脏渲染。
-        const shouldReposition =
-          target.reposition === true &&
-          Boolean(targetZone) &&
-          !hasCardsAtPublicPosition(targetZone.cards, repositionCards, position)
-        const cardsToPlace = shouldReposition ? repositionCards : missingCards
-
-        if (cardsToPlace.length > 0) {
-          targetZone?.add(cardsToPlace, position)
-        }
-
-        readyRoom.resolveConstraints()
       } else {
         return
       }
@@ -524,6 +502,212 @@ export class TrackerController {
     } catch (e) {
       this.onError('[Refactor] 明牌同步失败:', e, { target, cardIDs: ids })
     }
+  }
+
+  /**
+   * 公共区明牌落点：确认牌面，并按需把已有实体纠正到指定端点。
+   * 普通明牌只补缺失实体；牌堆端点明牌还要纠正已有实体的位置。
+   * 先比较端点序列，避免重复协议再次改动 Zone 并制造无效脏渲染。
+   */
+  private placePublicRevealCards(
+    knownCards: Card[],
+    zoneName: PublicZoneName,
+    options: {
+      position?: PublicPosition
+      reposition?: boolean
+      cardIDsTopFirst?: boolean
+    } = {}
+  ): void {
+    const readyRoom = this.getReadyTrackerRoom()
+    if (!readyRoom) return
+
+    const position = options.position ?? POSITION_TOP
+    const targetZone = readyRoom.zones.get(zoneName)
+
+    // 协议确认某正 ID 位于公共区端点时，若该身份正被玩家区实体占用，
+    // 先在玩家区留下匿名占位，再把真实身份收回目标公共区。
+    // 不能直接 Zone.add 抽走玩家实体，也不能永久跳过导致牌顶缺牌。
+    const placeableCards: Card[] = []
+    const skippedCards: Card[] = []
+
+    const revealCardSet = new Set(knownCards)
+
+    knownCards.forEach((card) => {
+      if (card.location === 'player') {
+        const recovered = this.recoverPlayerOccupiedIdentityForPublicReveal(
+          card,
+          zoneName,
+          revealCardSet
+        )
+        if (recovered) {
+          placeableCards.push(card)
+          return
+        }
+        skippedCards.push(card)
+        return
+      }
+
+      if (targetZone?.cards.includes(card) || card.location === zoneName) {
+        placeableCards.push(card)
+        return
+      }
+
+      if (card.location === 'outside' || card.location === 'suspended') {
+        placeableCards.push(card)
+        return
+      }
+
+      if (!readyRoom.zones.has(card.location as PublicZoneName)) {
+        placeableCards.push(card)
+        return
+      }
+
+      // 其它公共区（如 discard/process）留给跨区移动分支，避免把弃牌直接拽回牌顶。
+      skippedCards.push(card)
+    })
+
+    if (skippedCards.length > 0) {
+      this.controllerLogger.info('公共区展示跳过无法回收的实体', {
+        zoneName,
+        skippedIDs: skippedCards.map((card) => card.id),
+        skippedLocations: skippedCards.map((card) => card.location)
+      })
+    }
+
+    placeableCards.forEach((card) => {
+      readyRoom.removeCardsFromConstraintGroups([card])
+      card.confirmKnown()
+    })
+
+    const missingCards = placeableCards.filter((card) => !targetZone?.cards.includes(card))
+    const repositionCards =
+      options.cardIDsTopFirst === true && position === POSITION_TOP
+        ? [...placeableCards].reverse()
+        : placeableCards
+    const shouldReposition =
+      options.reposition === true &&
+      Boolean(targetZone) &&
+      placeableCards.length > 0 &&
+      !hasCardsAtPublicPosition(targetZone.cards, repositionCards, position)
+    const cardsToPlace = shouldReposition ? repositionCards : missingCards
+
+    if (cardsToPlace.length > 0) {
+      targetZone?.add(cardsToPlace, position)
+    }
+
+    readyRoom.resolveConstraints()
+  }
+
+  /**
+   * 公共区展示命中“正 ID 仍被玩家区实体占用”时，用公共区未知实体（优先）或匿名占位
+   * 接管原玩家槽位，再把真实身份交给公共区落点。
+   * 优先从目标公共区换出未知实体，避免 createExternal 导致牌堆张数 +1。
+   */
+  private recoverPlayerOccupiedIdentityForPublicReveal(
+    card: Card,
+    zoneName: PublicZoneName,
+    excludedCards: Set<Card> = new Set()
+  ): boolean {
+    const readyRoom = this.getReadyTrackerRoom()
+    if (!readyRoom || card.location !== 'player' || card.id <= 0) return false
+
+    const oldSubZone = card.subZone ?? 'hand'
+    const oldSeats = Array.from(card.seats, Number)
+    const oldSpellID = card.spellID
+    const oldCombinationID = card.combinationID
+    const oldLocationCandidates = card.getLocationCandidates()
+    const oldIsKnown = card.isKnown === true
+    const targetZone = readyRoom.zones.get(zoneName)
+
+    // 优先从目标公共区取一张未知实体作为玩家占位，保持公共区张数守恒。
+    // 牌顶已确认明牌段不参与抽取，避免破坏正在展示的端点序列。
+    let placeholder: Card | null = null
+    let placeholderFromPublicZone = false
+    if (targetZone) {
+      const zoneCards = targetZone.cards
+      let knownTopCount = 0
+      if (zoneName === 'pile') {
+        for (let i = zoneCards.length - 1; i >= 0; i -= 1) {
+          if (zoneCards[i]?.isKnown === true) knownTopCount += 1
+          else break
+        }
+      }
+
+      const unknownPool =
+        zoneName === 'pile' && knownTopCount > 0
+          ? zoneCards.slice(0, zoneCards.length - knownTopCount)
+          : zoneCards
+
+      placeholder =
+        [...unknownPool]
+          .reverse()
+          .find(
+            (candidate) =>
+              candidate !== card && !excludedCards.has(candidate) && candidate.isKnown !== true
+          ) ?? null
+
+      if (placeholder) {
+        targetZone.removeCard(placeholder)
+        placeholderFromPublicZone = true
+      }
+    }
+
+    if (!placeholder) {
+      placeholder = readyRoom.createExternalCards([], 1)[0] ?? null
+      if (placeholder) {
+        this.controllerLogger.warn('公共区展示回收身份时目标区无未知实体，已创建匿名占位', {
+          cardID: card.id,
+          zoneName,
+          placeholderEntityID: placeholder.entityID
+        })
+      }
+    }
+    if (!placeholder) return false
+
+    // 公共区未知实体通常无约束组；若有先摘除，再接管玩家约束组，避免把公共组名额带进玩家槽。
+    readyRoom.removeCardsFromConstraintGroups([placeholder])
+    readyRoom.constraints.replaceCardInConstraintGroups(card, placeholder)
+    if (oldLocationCandidates.length > 0) {
+      placeholder.location = 'player'
+      placeholder.subZone = oldSubZone
+      placeholder.spellID = oldSpellID
+      placeholder.suspended = false
+      placeholder.isKnown = false
+      placeholder.setLocationCandidates(
+        oldLocationCandidates,
+        'recoverPlayerOccupiedIdentityForPublicReveal:placeholder'
+      )
+      placeholder.setSeats(oldSeats, 'recoverPlayerOccupiedIdentityForPublicReveal:placeholder')
+      placeholder.combinationID = oldCombinationID
+      readyRoom.markCounterDirty(placeholder)
+      readyRoom.notifyCardChanged(placeholder, {
+        type: 'card-bound',
+        subZone: oldSubZone,
+        spellID: oldSpellID
+      })
+    } else {
+      placeholder.bindCandidates(oldSeats, oldSubZone, oldSpellID, { known: false })
+      placeholder.combinationID = oldCombinationID
+    }
+
+    // 真实身份脱离玩家区，等待后续公共区落点。
+    card.setLocationCandidates([], 'recoverPlayerOccupiedIdentityForPublicReveal:known')
+    card.combinationID = null
+    card.moveToPublicZone('outside')
+    card.confirmKnown()
+
+    this.controllerLogger.info('公共区展示回收玩家区占用身份', {
+      cardID: card.id,
+      zoneName,
+      placeholderCardID: placeholder.id,
+      placeholderEntityID: placeholder.entityID,
+      placeholderFromPublicZone,
+      seats: oldSeats,
+      subZone: oldSubZone,
+      previousKnown: oldIsKnown
+    })
+
+    return true
   }
 
   /**

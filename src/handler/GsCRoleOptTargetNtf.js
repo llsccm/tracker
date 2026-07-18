@@ -132,12 +132,19 @@ export function handleRoleOptTargetNtf(arg) {
     case 987:
     case 988:
       if (Param == 1 && Params?.length > 2) {
-        if (
-          targetSeatID !== undefined &&
-          targetSeatID !== 255 &&
-          (SrcSeatID == Game.myID || import.meta.env.DEV)
-        ) {
-          revealPlayerHandCards(targetSeatID, Params.slice(-Params[1]))
+        if (SrcSeatID == Game.myID || import.meta.env.DEV) {
+          const pileCount = Number(Params[0]) || 0
+          const handCount = Number(Params[1]) || 0
+          if (pileCount > 0) {
+            // Params: [牌堆张数, 手牌张数, ...牌堆顶, ...目标手牌]
+            revealPileCards(Params.slice(2, 2 + pileCount))
+          }
+          if (handCount > 0 && targetSeatID !== undefined && targetSeatID !== 255) {
+            revealPlayerHandCards(
+              targetSeatID,
+              Params.slice(2 + pileCount, 2 + pileCount + handCount)
+            )
+          }
         }
       }
       break

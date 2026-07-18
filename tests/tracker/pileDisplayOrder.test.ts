@@ -311,10 +311,7 @@ describe('牌堆展示顺序', () => {
     )
     const seat4Placeholder = room.cards.find(
       (card) =>
-        card.id === 0 &&
-        card.location === 'player' &&
-        card.subZone === 'hand' &&
-        card.seats.has(4)
+        card.id === 0 && card.location === 'player' && card.subZone === 'hand' && card.seats.has(4)
     )
     expect(seat0Placeholder).toBeTruthy()
     expect(seat4Placeholder).toBeTruthy()
@@ -623,6 +620,49 @@ describe('牌堆展示顺序', () => {
       expect(card.seats.has(7)).toBe(true)
       expect(card.isKnown).toBe(true)
     })
+    expectConsistentPublicZones(room)
+  })
+
+  it('牌顶已是连续明牌时来源占位回补插到明牌段下方', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5, 6], seatIDs: [1] })
+    const pile = getPile(room)
+    const topKnownIDs = [4, 5, 6]
+    const revealedIDs = [1, 2]
+
+    topKnownIDs.forEach((id) => room.cardIndex.get(id)!.confirmKnown())
+    // 手牌用瞬时匿名占位；真实身份 1/2 仍留在牌堆，揭开时会触发公共区占位回补。
+    const placeholders = room.createExternalCards([], 2)
+    placeholders.forEach((card) => {
+      card.bindCandidates([1], 'hand', null, { known: false })
+    })
+    room.getPlayer(1).syncObservedHandCount(2)
+
+    room.moveCards(revealedIDs, 'process', {
+      fromSeatID: 1,
+      fromSubZone: 'hand',
+      cardCount: revealedIDs.length,
+      sourceEvent: { type: 'test:reveal-hand-after-known-pile-top' }
+    })
+
+    expect(
+      getPileDisplayCards(pile.cards)
+        .slice(0, 3)
+        .map((card) => card.id)
+    ).toEqual([6, 5, 4])
+    expect(
+      getPileDisplayCards(pile.cards)
+        .slice(0, 3)
+        .every((card) => card.isKnown)
+    ).toBe(true)
+    const knownSegmentStart = pile.cards.length - topKnownIDs.length
+    expect(
+      pile.cards.slice(knownSegmentStart - placeholders.length, knownSegmentStart)
+    ).toEqual(expect.arrayContaining(placeholders))
+    placeholders.forEach((card) => {
+      expect(card.location).toBe('pile')
+      expect(pile.cards).toContain(card)
+    })
+    expect(pile.cards.slice(-3).map((card) => card.id)).toEqual([4, 5, 6])
     expectConsistentPublicZones(room)
   })
 
