@@ -236,7 +236,7 @@ export class GameState {
       this.currentID = seat
       this.round++
       this.phase = 0
-      // 此处应该补注释
+      // 此处应该补注释 7011 权变
       ;[7011, 2143, 3271, 3659].forEach((id) => delete this.spellSpace[id])
 
       this.clear('round')

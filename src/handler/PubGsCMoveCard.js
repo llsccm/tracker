@@ -49,6 +49,7 @@ function prepareMoveCardIDs({ arg, CardIDs, CardCount, MoveType, ToZone, SpellID
 function normalizeMovePosition({
   CardIDs,
   CardCount,
+  FromID,
   FromZone,
   FromPosition,
   ToID,
@@ -59,9 +60,22 @@ function normalizeMovePosition({
   room
 }) {
   if (
+    FromID == 255 &&
+    FromZone == 1 &&
+    ToID == 255 &&
+    ToZone == 1 &&
+    MoveType == 21 &&
+    SpellID == 7011
+  ) {
+    // 权变查看牌堆顶不会移动卡牌；统一端点后由同区展示分支跳过实体重排。
+    FromPosition = POSITION_TOP
+    ToPosition = POSITION_TOP
+  }
+
+  if (
     FromZone == 1 &&
     FromPosition == POSITION_RANDOM &&
-    [3208, 7011, 987, 988, 3903].includes(SpellID)
+    [3208, 987, 988, 3903].includes(SpellID)
   ) {
     FromPosition = POSITION_TOP //骋烈 权变 观虚 天候
   }
@@ -156,6 +170,7 @@ export function handleMoveCard(msg) {
   const normalizedMove = normalizeMovePosition({
     CardIDs,
     CardCount,
+    FromID,
     FromZone,
     FromPosition,
     ToID,

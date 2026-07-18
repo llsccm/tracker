@@ -7,6 +7,32 @@ import {
 } from './helpers/trackerController'
 
 describe('TrackerController', () => {
+  it('牌堆明牌同步将已有卡牌定位到牌顶且重复消息保持幂等', () => {
+    const { controller } = createTrackerControllerHarness()
+    const revealedIDs = [158, 2, 63, 125]
+
+    controller.initTrackerRoom()
+    controller.initTrackerDeck([...revealedIDs, 200, 201])
+
+    const room = controller.getTrackerRoom()
+    const pile = room.zones.get('pile')
+    const addSpy = vi.spyOn(pile, 'add')
+
+    controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, revealedIDs)
+
+    expect(pile.cards.slice(-revealedIDs.length).map((card) => card.id)).toEqual([125, 63, 2, 158])
+    expect(pile.cards.at(-1)?.id).toBe(158)
+    revealedIDs.forEach((id) => expect(room.cardIndex.get(id).isKnown).toBe(true))
+    expect(addSpy).toHaveBeenCalledOnce()
+
+    const dirtyCardSeq = room.dirtyCardSeq
+    addSpy.mockClear()
+    controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, revealedIDs)
+
+    expect(addSpy).not.toHaveBeenCalled()
+    expect(room.dirtyCardSeq).toBe(dirtyCardSeq)
+  })
+
   it('未注入 gameState 时使用 Room 自身默认状态', () => {
     const controller = new TrackerController()
 

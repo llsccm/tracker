@@ -38,6 +38,10 @@ interface RevealTarget {
   handCount?: number | string
   zoneName?: PublicZoneName
   position?: PublicPosition
+  // 已在公共区中的牌是否也需要重新定位到指定端点。
+  reposition?: boolean
+  // CardIDs 是否按牌堆顶向内排列；Zone 写入前需要转换为内部的底到顶顺序。
+  cardIDsTopFirst?: boolean
   sourceEvent?: MoveOptions['sourceEvent']
 }
 
@@ -81,6 +85,30 @@ function defaultErrorHandler(...args: unknown[]): void {
 
 function createDefaultRoom({ gameState }: { gameState?: TrackerRuntime | null } = {}): Room {
   return gameState == null ? new Room() : new Room({ gameState } as any)
+}
+
+/**
+ * 判断目标牌组是否已经位于公共区指定端点。
+ * Zone 内部按底到顶保存；插入底部时会反转输入，所以底部比较也要使用反序。
+ */
+function hasCardsAtPublicPosition(
+  zoneCards: Card[],
+  cards: Card[],
+  position: PublicPosition
+): boolean {
+  if (cards.length === 0 || zoneCards.length < cards.length) return false
+
+  if (position === POSITION_TOP) {
+    const offset = zoneCards.length - cards.length
+    return cards.every((card, index) => zoneCards[offset + index] === card)
+  }
+
+  if (position === POSITION_BOTTOM) {
+    const len = cards.length
+    return cards.every((_, index) => zoneCards[index] === cards[len - 1 - index])
+  }
+
+  return false
 }
 
 /**
@@ -471,9 +499,20 @@ export class TrackerController {
         })
 
         const missingCards = knownCards.filter((card) => !targetZone?.cards.includes(card))
+        const repositionCards =
+          target.cardIDsTopFirst === true && position === POSITION_TOP
+            ? [...knownCards].reverse()
+            : knownCards
+        // 普通明牌只补缺失实体；牌堆端点明牌还要纠正已有实体的位置。
+        // 先比较端点序列，避免重复协议再次改动 Zone 并制造无效脏渲染。
+        const shouldReposition =
+          target.reposition === true &&
+          Boolean(targetZone) &&
+          !hasCardsAtPublicPosition(targetZone.cards, repositionCards, position)
+        const cardsToPlace = shouldReposition ? repositionCards : missingCards
 
-        if (missingCards.length > 0) {
-          targetZone?.add(missingCards, position)
+        if (cardsToPlace.length > 0) {
+          targetZone?.add(cardsToPlace, position)
         }
 
         readyRoom.resolveConstraints()
@@ -522,6 +561,10 @@ export class TrackerController {
         type: 'public',
         zoneName: getProtocolPublicZone(zoneInfo.zone, 'process'),
         position: zoneInfo.position,
+        // 牌堆观看协议描述的是端点事实，不能只确认牌面而保留原随机位置。
+        reposition: zoneInfo.zone === 1,
+        // 未携带 pos 的牌堆观看结果按“第一张是牌顶”解释。
+        cardIDsTopFirst: zoneInfo.zone === 1 && protocolZone.pos == null,
         sourceEvent: {
           type: 'revealCards',
           label: 'protocolZone.reveal',
@@ -622,10 +665,12 @@ export class TrackerController {
     const id = Number(String(protocolZone.id ?? parts[1] ?? 255).split('-')[0])
     const spellID = Number(parts[2] ?? protocolZone.spellID)
     const normalizedZone = Number.isFinite(zone) ? zone : 5
-    let position = protocolZone.pos ?? POSITION_TOP
+    const hasExplicitPosition = protocolZone.pos !== undefined && protocolZone.pos !== null
+    // 未携带 pos 的看牌消息默认表示牌顶；只有协议显式端点才需要做方向翻转。
+    let position = hasExplicitPosition ? protocolZone.pos : POSITION_TOP
 
     // 协议牌堆端点和 Zone.add/remove 的内部端点约定相反，进入记牌器前先交换方向。
-    if (normalizedZone === 1) {
+    if (normalizedZone === 1 && hasExplicitPosition) {
       if (position === POSITION_BOTTOM) position = POSITION_TOP
       else if (position === POSITION_TOP) position = POSITION_BOTTOM
     }

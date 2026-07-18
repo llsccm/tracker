@@ -10,6 +10,7 @@ import {
   handleGameTurn,
   handleMoveCard,
   handleRogueLike,
+  handleRoleSpellOptRep,
   handleRoleOptTargetNtf,
   handleTriggerSpellNew,
   hasRuntime,
@@ -19,7 +20,6 @@ import { handleRecordStartGame } from './handler/StartGame'
 import { laya } from './runtime/gameAdapter'
 import { Game, globalConfig, UI, user } from './tracker'
 import { tracker } from './tracker/runtime/browser'
-import { POSITION_BOTTOM } from './tracker/candidate/cardPositions'
 import {
   getRenderedMainHandCardIDs,
   subscribeRenderedMainHandCardIDs
@@ -46,7 +46,6 @@ const DOUDIZHU_MSGS = new Set([
 
 const ShanHeTu_regex = /\[\d+\]$/
 
-const PROTOCOL_PILE_ZONE = 1
 const PROTOCOL_HAND_ZONE = 5
 
 /**
@@ -119,7 +118,7 @@ export function logic(msg) {
     if (msg.className === undefined && msg.ClassName === undefined) return
 
     let { ClassName: className } = msg
-    const { ProtoObj, SeatID, SrcSeatID, SpellID, Datas, CardIDs, Type } = msg
+    const { ProtoObj, SeatID, SrcSeatID, SpellID, Datas, CardIDs } = msg
 
     if (!className) className = msg.className || msg.toString()
 
@@ -434,24 +433,27 @@ export function logic(msg) {
 
         if (Game.myID == SeatID) drawCard([msg.CardID])
 
+        // 权变花色 目前不适配
+        // if (
+        //   Game.currentID == SeatID &&
+        //   Game.getSeatUI(Game.currentID)?.seat?.HasSkill(7011) &&
+        //   msg.useType == 1 &&
+        //   msg.fromZone != 1 &&
+        //   !msg.isSend
+        // ) {
+        //   if (!Game.spellSpace[7011]) Game.spellSpace[7011] = { count: 0, color: new Set() }
+
+        //   if (CardConfig.GetInstance().getCard(msg.CardID).type != 3) Game.spellSpace[7011].count++
+
+        //   Game.spellSpace[7011].color.add(CardConfig.GetInstance().getCardColor(msg.CardID))
+
+        //   setSuitRecord(
+        //     Array.from(Game.spellSpace[7011].color).join(''),
+        //     '[' + Game.spellSpace[7011].count + ']'
+        //   )
+        // }
+
         if (
-          Game.currentID == SeatID &&
-          Game.getSeatUI(Game.currentID)?.seat?.HasSkill(7011) &&
-          msg.useType == 1 &&
-          msg.fromZone != 1 &&
-          !msg.isSend
-        ) {
-          if (!Game.spellSpace[7011]) Game.spellSpace[7011] = { count: 0, color: new Set() }
-
-          if (CardConfig.GetInstance().getCard(msg.CardID).type != 3) Game.spellSpace[7011].count++
-
-          Game.spellSpace[7011].color.add(CardConfig.GetInstance().getCard(msg.CardID).c)
-
-          setSuitRecord(
-            Array.from(Game.spellSpace[7011].color).join(''),
-            '[' + Game.spellSpace[7011].count + ']'
-          )
-        } else if (
           Game.currentID == SeatID &&
           Game.getSeatUI(Game.currentID)?.seat?.HasSkill(491) &&
           msg.useType == 1 &&
@@ -536,102 +538,9 @@ export function logic(msg) {
         handleRoleOptTargetNtf(msg)
         break
 
-      case 'CGsRoleSpellOptRep': {
-        switch (Type) {
-          // 斗地主叫分结果 Datas: [300] data_count: 1
-          case 44:
-            if (SeatID !== undefined) {
-              tracker.setTrackerFirstHand(SeatID)
-            }
-            break
-
-          default:
-            break
-        }
-
-        // 技能操作
-        switch (SpellID) {
-          // 知己知彼
-          case 2022:
-            Game.setGeneral(SeatID, Datas[0], Datas[1], true)
-            break
-
-          // 族杨修 捷悟
-          case 3659:
-            revealCardsInProtocolZone(SeatID, Datas)
-            break
-
-          // 谋诸葛 知天
-          case 3744:
-            if (Type !== 73) revealCardsInProtocolZone(255, Datas, PROTOCOL_PILE_ZONE)
-            break
-
-          // 诸葛恪 傲才
-          case 3868:
-            if (Type === 50) revealCardsInProtocolZone(255, Datas, PROTOCOL_PILE_ZONE)
-            break
-
-          // TODO 初始牌
-          case 0:
-            if (Type === 72 && Game.isGameStart && Datas?.length && !Game.round && !Game.phase) {
-              const spellCards = Game.getSpellState(3731)
-              const prev = Array.isArray(spellCards) ? spellCards : []
-              const uniqueIds = new Set(prev.concat(Datas))
-
-              Game.setSpellState(
-                3731,
-                Array.from(uniqueIds).filter((id) => id > 0)
-              ) // 魔吕布 夺炁
-            }
-
-            break
-
-          // TODO
-          // 鹰视
-          case 7009: {
-            const count = Number(Game.getSpellState(7009)) - 0.5
-            Game.setSpellState(7009, count)
-            if (count <= 0) revealCardsInProtocolZone(255, Datas, PROTOCOL_PILE_ZONE)
-            break
-          }
-
-          // 嚣翻
-          case 3336:
-            if (Type === 50 && Array.isArray(Datas)) {
-              revealCardsInProtocolZone(
-                255,
-                [...Datas].reverse(),
-                PROTOCOL_PILE_ZONE,
-                POSITION_BOTTOM
-              )
-            }
-            break
-
-          // TODO
-          // 郭照 椒遇
-          case 3571:
-            if (Type === 10) Game.getSpellState(SpellID)?.add?.(Datas[0])
-            break
-
-          // 裴秀
-          case 4021:
-            // console.info(msg)
-            // 绘制裴秀地图 Datas: [12,18] data_count: 2 第一位为地图id 第二位为起始格子
-            break
-
-          case 4022:
-            // Datas: [2, 0] data_count: 2 第一位为方向
-            // 用于触发提示 向东绘制所有地图
-            // console.info(msg)
-            // 似乎没那么重要
-            break
-
-          default:
-            break
-        }
-
+      case 'CGsRoleSpellOptRep':
+        handleRoleSpellOptRep(msg)
         break
-      }
 
       case 'PubGsCMoveCard':
         handleMoveCard(msg)

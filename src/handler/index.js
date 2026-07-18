@@ -1,4 +1,5 @@
 export { handleChatMessage } from './chat'
+export { handleRoleSpellOptRep } from './CGsRoleSpellOptRep'
 export { handleDoudizhuMessage, hasRuntime } from './doudizhu'
 export { handleRoleOptTargetNtf } from './GsCRoleOptTargetNtf'
 export { handleMoveCard } from './PubGsCMoveCard'

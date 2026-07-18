@@ -28,6 +28,7 @@ describe('GsCRoleOptTargetNtf', () => {
   beforeEach(() => {
     destroyPeiXiuMapWindow.mockClear()
     revealTrackerCards.mockClear()
+    Game.deleteSpellState(7009)
     Game.deleteSpellState(4022)
   })
 
@@ -62,5 +63,31 @@ describe('GsCRoleOptTargetNtf', () => {
 
     expect(destroyPeiXiuMapWindow).toHaveBeenCalledOnce()
     expect(Game.getSpellState(4022)).toBeUndefined()
+  })
+
+  it('权变将 Params 作为牌堆顶明牌且不借用鹰视状态', () => {
+    handleRoleOptTargetNtf({
+      Param: 1,
+      Params: [158, 2, 63, 125],
+      SeatID: 2,
+      SpellID: 7011,
+      SrcSeatID: 2,
+      Timeout: 30,
+      Type: 28,
+      targetSeatID: 255,
+      className: 'GsCRoleOptTargetNtf'
+    })
+
+    expect(revealTrackerCards).toHaveBeenCalledOnce()
+    expect(revealTrackerCards).toHaveBeenCalledWith(
+      {
+        type: 'public',
+        zoneName: 'pile',
+        reposition: true,
+        cardIDsTopFirst: true
+      },
+      [158, 2, 63, 125]
+    )
+    expect(Game.getSpellState(7009)).toBeUndefined()
   })
 })
