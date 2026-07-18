@@ -145,7 +145,9 @@ describe('TrackerController', () => {
     ])
     expect(pile.cards.slice(-pileTopIDs.length).every((card) => card.isKnown)).toBe(true)
     // 被置换回牌堆的暗占位必须落在明牌段下方，不能盖住牌顶。
-    expect(pile.cards.at(-(pileTopIDs.length + 1))?.isKnown).not.toBe(true)
+    const cardBelowKnownSegment = pile.cards.at(-(pileTopIDs.length + 1))
+    expect(cardBelowKnownSegment).toBeDefined()
+    expect(cardBelowKnownSegment?.isKnown).not.toBe(true)
 
     handIDs.forEach((id) => {
       const card = room.cardIndex.get(id)

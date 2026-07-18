@@ -654,6 +654,10 @@ describe('牌堆展示顺序', () => {
         .slice(0, 3)
         .every((card) => card.isKnown)
     ).toBe(true)
+    const knownSegmentStart = pile.cards.length - topKnownIDs.length
+    expect(
+      pile.cards.slice(knownSegmentStart - placeholders.length, knownSegmentStart)
+    ).toEqual(expect.arrayContaining(placeholders))
     placeholders.forEach((card) => {
       expect(card.location).toBe('pile')
       expect(pile.cards).toContain(card)
