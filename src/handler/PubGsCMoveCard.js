@@ -7,6 +7,13 @@ import { handleGameFlowState } from './gameFlowState'
 import { handleSpecialZones } from './specialZones'
 import { applySpellEffect } from './spellEffects'
 
+// 牌堆同区展示（权变/观虚）：From/To 都是牌堆且 MoveType=21 时，两端点都归一为牌顶
+const PILE_SAME_ZONE_SHOW_SPELL_IDS = [7011, 987, 988]
+// 牌堆来源标记为 RANDOM 但实际是牌顶（骋烈/天候）。
+const PILE_RANDOM_AS_TOP_SPELL_IDS = [3208, 3903]
+// 王元姬 宴戏 拿牌
+const YANXI_DRAW_SPELL_IDS = [7016, 7017]
+
 function syncMoveToTracker(msg, { CardIDs, FromPosition, ToPosition }) {
   tracker.syncTrackerMove(msg, {
     CardIDs: Array.isArray(CardIDs) ? CardIDs.slice() : CardIDs,
@@ -59,31 +66,34 @@ function normalizeMovePosition({
   SpellID,
   room
 }) {
+  // 权变/观虚查看牌堆顶不会移动卡牌；统一端点后由同区展示分支纠正牌顶序列。
   if (
     FromID == 255 &&
     FromZone == 1 &&
     ToID == 255 &&
     ToZone == 1 &&
     MoveType == 21 &&
-    [7011, 987, 988].includes(SpellID)
+    PILE_SAME_ZONE_SHOW_SPELL_IDS.includes(SpellID)
   ) {
-    // 权变/观虚查看牌堆顶不会移动卡牌；统一端点后由同区展示分支纠正牌顶序列。
     FromPosition = POSITION_TOP
     ToPosition = POSITION_TOP
   }
 
+  //骋烈 天候
   if (
     FromZone == 1 &&
     FromPosition == POSITION_RANDOM &&
-    [3208, 987, 988, 3903].includes(SpellID)
+    PILE_RANDOM_AS_TOP_SPELL_IDS.includes(SpellID)
   ) {
-    FromPosition = POSITION_TOP //骋烈 权变 观虚 天候
+    FromPosition = POSITION_TOP
   }
 
+  //秦宓 天辩 13拼点
   if (FromZone == 1 && FromPosition == POSITION_RANDOM && MoveType == 13 && CardCount == 1) {
-    FromPosition = POSITION_TOP //秦宓 天辩 13拼点
+    FromPosition = POSITION_TOP
   }
 
+  //蔡邕 辟撰
   if (
     FromZone == 1 &&
     FromPosition == POSITION_RANDOM &&
@@ -92,9 +102,10 @@ function normalizeMovePosition({
     SpellID == 795 &&
     CardCount == 1
   ) {
-    FromPosition = POSITION_TOP //蔡邕 辟撰
+    FromPosition = POSITION_TOP
   }
 
+  //伊籍 机捷
   if (
     FromZone == 1 &&
     FromPosition == POSITION_RANDOM &&
@@ -102,20 +113,22 @@ function normalizeMovePosition({
     SpellID == 3101 &&
     CardCount == 1
   ) {
-    FromPosition = POSITION_BOTTOM //伊籍 机捷
+    FromPosition = POSITION_BOTTOM
   }
 
+  //王元姬 宴戏 拿牌
   if (
     FromZone == 1 &&
     FromPosition == POSITION_RANDOM &&
     ToZone == 5 &&
     !room.isGuoZhan &&
-    [7016, 7017].includes(SpellID) &&
+    YANXI_DRAW_SPELL_IDS.includes(SpellID) &&
     CardCount == 1
   ) {
-    FromPosition = POSITION_TOP //王元姬 宴戏 拿牌
+    FromPosition = POSITION_TOP
   }
 
+  // 游戏开始后特殊装备牌
   if (
     FromZone == 1 &&
     FromPosition == POSITION_TOP + 1 &&
@@ -125,16 +138,17 @@ function normalizeMovePosition({
     CardCount == 4 &&
     CardIDs.every((id) => CardConfig.GetInstance().getCard(id)?.type == 8)
   ) {
-    FromPosition = POSITION_RANDOM // 游戏开始后特殊装备牌
+    FromPosition = POSITION_RANDOM
   }
 
+  // 回魂牌随机加入牌堆
   if (
     ToZone == 1 &&
     ToID == 255 &&
     ToPosition == POSITION_TOP &&
     CardIDs.some((id) => id == 4400 || id == 4401)
   ) {
-    ToPosition = POSITION_RANDOM // 回魂牌随机加入牌堆
+    ToPosition = POSITION_RANDOM
   }
 
   //手牌中 不处理回魂
