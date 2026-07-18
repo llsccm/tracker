@@ -208,7 +208,8 @@ Room.skillState['handExchangeBatches'] = {
     }
   },
   candidateRecords: Map<Card, {
-    alternatives: (LocationCandidate | BatchToken)[]
+    spellID: SpellID | null,
+    subZone: SubZone | null
   }>,
   nextBatchSeq: number
 }
@@ -218,8 +219,11 @@ Room.skillState['handExchangeBatches'] = {
 - 同一座位在结算中再次参与交换时，批次按栈保存；回手牌（`10 -> 5`）时按
   `SpellID + FromID` 后进先出，不按交换区当前物理顺序猜测。
 - 已明确观测为空手的座位仍登记零张空批次，防止内层空手回牌误消费外层尚未结算的批次。
-- 手牌候选不直接归入先处理座位的实体批次，而是把对应位置候选临时替换为唯一
-  `batchID`；回手时再把该批次候选替换为 `ToID` 手牌位置。
+- 手牌候选不直接归入先处理座位的实体批次，而是在唯一候选主模型
+  `Card.locationCandidates` 中把对应位置临时替换为 `{ type: 'outside', zone: 'exchange', batchID }`；
+  回手时再把该批次候选替换为 `ToID` 手牌位置。
+- `candidateRecords` 只保存恢复兼容读面所需的 `spellID` / `subZone` 元数据，不复制候选集合；
+  交换期间通用约束消除的候选因此不会被旧快照恢复。
 - 某 SpellID 的全部批次都取回后清理该技能账本；全部清空后删除房间级 key。
 
 ### 候选牌置换

@@ -571,7 +571,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       const [previousZoneID, previousZone] = previousPublicZoneEntry
       // 真实身份原先仍停在牌堆/弃牌等公共区时，把 exchange 中的暗实体放回它的旧槽位；
       // 随后 known 路径会把真实身份移入目标手牌，从而保持两边实体数量守恒。
-      replacement.isKnown = false
+      // 来源端点可能已经是确认明牌；换回旧公共槽位只迁移位置，不能抹掉身份。
       replacement.setLocationCandidates(
         [],
         'swapKnownCardWithPublicSourcePlaceholder:publicCandidates'

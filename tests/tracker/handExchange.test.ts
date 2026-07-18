@@ -656,6 +656,134 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
+  it('交换期间通用约束排除的候选不会在回手时复活', () => {
+    const candidateID = 601
+    const { controller, room } = setupCandidateController({
+      candidateIDs: [candidateID],
+      candidateSeats: [1, 2],
+      hiddenHands: {
+        1: [501],
+        2: [502]
+      },
+      observedCounts: {
+        1: 2,
+        2: 1
+      }
+    })
+    // seat2 的唯一手牌名额已被确定明牌占满；seat1 进交换区后，通用约束会排除 seat2 分支。
+    getCard(room, 502).confirmKnown()
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 2,
+        FromID: 1,
+        FromZone: 5,
+        ToID: 1,
+        ToZone: 10,
+        MoveType: 11,
+        SpellID: 121
+      })
+    )
+
+    const candidateCard = getCard(room, candidateID)
+    expect(
+      candidateCard
+        .getLocationCandidates()
+        .some((candidate) => candidate.type === 'player' && candidate.seatID === 2)
+    ).toBe(false)
+    expect(candidateCard.location).toBe('exchange')
+    expect(candidateCard.seats).toEqual(new Set())
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 2,
+        FromID: 1,
+        FromZone: 10,
+        ToID: 3,
+        ToZone: 5,
+        MoveType: 11,
+        SpellID: 121
+      })
+    )
+
+    expect(candidateCard.location).toBe('player')
+    expect(candidateCard.seats).toEqual(new Set([3]))
+    expect(
+      candidateCard
+        .getLocationCandidates()
+        .some((candidate) => candidate.type === 'player' && candidate.seatID === 2)
+    ).toBe(false)
+  })
+
+  it('中断批次回手只移动仍在交换区的成员且不串走其它批次', () => {
+    const { controller } = createTrackerControllerHarness()
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers(
+      [
+        { SeatID: 1, ClientID: 100 },
+        { SeatID: 2, ClientID: 200 },
+        { SeatID: 3, ClientID: 300 }
+      ],
+      100
+    )
+    controller.initTrackerDeck([701, 702, 801, 802])
+
+    const room = controller.getTrackerRoom()!
+    bindHiddenHand(room, [701, 702], 1)
+    bindHiddenHand(room, [801, 802], 2)
+    room.getPlayer(1).syncObservedHandCount(2)
+    room.getPlayer(2).syncObservedHandCount(2)
+    ;[1, 2].forEach((seatID) => {
+      controller.syncTrackerMove(
+        protocolMove({
+          CardIDs: [],
+          CardCount: 2,
+          FromID: seatID,
+          FromZone: 5,
+          ToID: seatID,
+          ToZone: 10,
+          MoveType: 11,
+          SpellID: 121
+        })
+      )
+    })
+
+    const departedCard = getCard(room, 701)
+    room.moveCards([], 'discard', {
+      fromZone: 'exchange',
+      sourceCards: [departedCard],
+      cardCount: 1,
+      sourceEvent: { type: 'test:hand-exchange-interrupted-member' }
+    })
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 2,
+        FromID: 1,
+        FromZone: 10,
+        ToID: 3,
+        ToZone: 5,
+        MoveType: 11,
+        SpellID: 121
+      })
+    )
+
+    expect(departedCard.location).toBe('discard')
+    expect(getCard(room, 702).location).toBe('player')
+    expect(getCard(room, 702).seats).toEqual(new Set([3]))
+    // seat2 的批次仍完整停在 exchange，证明协议 CardCount 没有从其它批次补足实体。
+    expect([801, 802].map((id) => getCard(room, id).location)).toEqual(['exchange', 'exchange'])
+    expect(
+      room.zones
+        .get('exchange')
+        ?.cards.map((card) => card.id)
+        .sort()
+    ).toEqual([801, 802])
+  })
+
   it('只涉及一名交换角色的候选会把该候选座位置换到接收者', () => {
     const candidateIDs = [611, 612]
     const { controller, room } = setupCandidateController({

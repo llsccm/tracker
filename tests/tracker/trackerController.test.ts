@@ -48,25 +48,17 @@ describe('TrackerController', () => {
     const pile = room.zones.get('pile')
     const addSpy = vi.spyOn(pile, 'add')
 
-    controller.revealTrackerCardsInZone(
-      { id: 255, zone: 1, pos: POSITION_BOTTOM },
-      revealedIDs
-    )
+    controller.revealTrackerCardsInZone({ id: 255, zone: 1, pos: POSITION_BOTTOM }, revealedIDs)
 
     // 内部顺序底 -> 顶；牌底端点第一张应是 149。
-    expect(pile.cards.slice(0, revealedIDs.length).map((card) => card.id)).toEqual([
-      149, 123, 1
-    ])
+    expect(pile.cards.slice(0, revealedIDs.length).map((card) => card.id)).toEqual([149, 123, 1])
     expect(pile.cards[0]?.id).toBe(149)
     protocolDatas.forEach((id) => expect(room.cardIndex.get(id).isKnown).toBe(true))
     expect(addSpy).toHaveBeenCalledOnce()
 
     const dirtyCardSeq = room.dirtyCardSeq
     addSpy.mockClear()
-    controller.revealTrackerCardsInZone(
-      { id: 255, zone: 1, pos: POSITION_BOTTOM },
-      revealedIDs
-    )
+    controller.revealTrackerCardsInZone({ id: 255, zone: 1, pos: POSITION_BOTTOM }, revealedIDs)
 
     expect(addSpy).not.toHaveBeenCalled()
     expect(room.dirtyCardSeq).toBe(dirtyCardSeq)
@@ -271,6 +263,42 @@ describe('TrackerController', () => {
       )
     ).toHaveLength(0)
     expect(room.getPlayer(3).unknownCardCount).toBe(1)
+  })
+
+  it('牌底展示回收玩家区占用身份时从底侧选择占位并保持牌顶顺序', () => {
+    const { controller } = createTrackerControllerHarness()
+    const occupiedID = 10
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers(
+      [
+        { SeatID: 1, ClientID: 100 },
+        { SeatID: 3, ClientID: 300 }
+      ],
+      100
+    )
+    // 牌堆内部顺序为底 -> 顶；14、15 构成不应受牌底揭示影响的牌顶明牌段。
+    controller.initTrackerDeck([occupiedID, 11, 12, 13, 14, 15])
+
+    const room = controller.getTrackerRoom()!
+    const pile = room.zones.get('pile')!
+    const occupiedCard = room.cardIndex.get(occupiedID)!
+    const bottomPlaceholder = room.cardIndex.get(11)!
+    const topKnownCards = [room.cardIndex.get(14)!, room.cardIndex.get(15)!]
+    topKnownCards.forEach((card) => card.confirmKnown())
+
+    pile.removeCard(occupiedCard)
+    occupiedCard.bindCandidates([3], 'hand', null, { known: false })
+    room.getPlayer(3).syncObservedHandCount(1)
+    room.resolveConstraints()
+
+    controller.revealTrackerCardsInZone({ id: 255, zone: 1, pos: POSITION_BOTTOM }, [occupiedID])
+
+    expect(pile.cards.map((card) => card.id)).toEqual([occupiedID, 12, 13, 14, 15])
+    expect(bottomPlaceholder.location).toBe('player')
+    expect(bottomPlaceholder.seats).toEqual(new Set([3]))
+    expect(topKnownCards.map((card) => card.location)).toEqual(['pile', 'pile'])
+    expect(topKnownCards.every((card) => card.isKnown)).toBe(true)
   })
 
   it('牌堆展示不会抽走仍属于玩家区且未声明为牌顶的实体', () => {

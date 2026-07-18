@@ -49,6 +49,8 @@ export interface ContainerLocationCandidate {
 export interface OutsideLocationCandidate {
   type: 'outside'
   zone: PublicZoneName
+  /** exchange 暂存候选的批次令牌；缺省时仍表示普通游戏外位置。 */
+  batchID?: string
 }
 
 export type LocationCandidate =

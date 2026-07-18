@@ -537,6 +537,7 @@ export class TrackerController {
         const recovered = this.recoverPlayerOccupiedIdentityForPublicReveal(
           card,
           zoneName,
+          position,
           revealCardSet
         )
         if (recovered) {
@@ -606,6 +607,7 @@ export class TrackerController {
   private recoverPlayerOccupiedIdentityForPublicReveal(
     card: Card,
     zoneName: PublicZoneName,
+    position: PublicPosition,
     excludedCards: Set<Card> = new Set()
   ): boolean {
     const readyRoom = this.getReadyTrackerRoom()
@@ -619,32 +621,23 @@ export class TrackerController {
     const oldIsKnown = card.isKnown === true
     const targetZone = readyRoom.zones.get(zoneName)
 
-    // 优先从目标公共区取一张未知实体作为玩家占位，保持公共区张数守恒。
-    // 牌顶已确认明牌段不参与抽取，避免破坏正在展示的端点序列。
+    // 优先从揭示端点附近取未知实体作为玩家占位，同时保护该端点已经确认的连续明牌段。
+    // Zone 内部顺序固定为底 -> 顶，因此牌顶从尾部反查，牌底从头部正查。
     let placeholder: Card | null = null
     let placeholderFromPublicZone = false
     if (targetZone) {
       const zoneCards = targetZone.cards
-      let knownTopCount = 0
-      if (zoneName === 'pile') {
-        for (let i = zoneCards.length - 1; i >= 0; i -= 1) {
-          if (zoneCards[i]?.isKnown === true) knownTopCount += 1
-          else break
-        }
-      }
-
-      const unknownPool =
-        zoneName === 'pile' && knownTopCount > 0
-          ? zoneCards.slice(0, zoneCards.length - knownTopCount)
-          : zoneCards
+      const endpointCards = position === POSITION_BOTTOM ? zoneCards : [...zoneCards].reverse()
+      const protectedKnownCount =
+        zoneName === 'pile' ? endpointCards.findIndex((candidate) => candidate.isKnown !== true) : 0
+      const knownCount = protectedKnownCount < 0 ? endpointCards.length : protectedKnownCount
+      const unknownPool = endpointCards.slice(knownCount)
 
       placeholder =
-        [...unknownPool]
-          .reverse()
-          .find(
-            (candidate) =>
-              candidate !== card && !excludedCards.has(candidate) && candidate.isKnown !== true
-          ) ?? null
+        unknownPool.find(
+          (candidate) =>
+            candidate !== card && !excludedCards.has(candidate) && candidate.isKnown !== true
+        ) ?? null
 
       if (placeholder) {
         targetZone.removeCard(placeholder)

@@ -655,9 +655,9 @@ describe('牌堆展示顺序', () => {
         .every((card) => card.isKnown)
     ).toBe(true)
     const knownSegmentStart = pile.cards.length - topKnownIDs.length
-    expect(
-      pile.cards.slice(knownSegmentStart - placeholders.length, knownSegmentStart)
-    ).toEqual(expect.arrayContaining(placeholders))
+    expect(pile.cards.slice(knownSegmentStart - placeholders.length, knownSegmentStart)).toEqual(
+      expect.arrayContaining(placeholders)
+    )
     placeholders.forEach((card) => {
       expect(card.location).toBe('pile')
       expect(pile.cards).toContain(card)
@@ -774,6 +774,33 @@ describe('牌堆展示顺序', () => {
     })
 
     assert(room, knownCard, placeholder, pileCountBefore)
+    expectConsistentPublicZones(room)
+  })
+
+  it('公共来源端点明牌回填旧公共槽位时保留已知状态', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5], seatIDs: [1] })
+    const pile = getPile(room)
+    const knownCard = room.cardIndex.get(2)!
+    const sourceEndpoint = room.cardIndex.get(4)!
+    const playerPlaceholder = room.cardIndex.get(5)!
+
+    pile.removeCard(playerPlaceholder)
+    playerPlaceholder.bindCandidates([1], 'hand', null, { known: false })
+    room.getPlayer(1).syncObservedHandCount(1)
+    // 来源端点的身份已经由其它协议确认，回填只应迁移位置而不能重新盖暗。
+    sourceEndpoint.confirmKnown()
+
+    room.moveCards([knownCard.id], 'discard', {
+      fromSeatID: 1,
+      fromSubZone: 'hand',
+      cardCount: 1,
+      sourceEvent: { type: 'test:known-public-source-placeholder' }
+    })
+
+    expect(sourceEndpoint.location).toBe('pile')
+    expect(sourceEndpoint.isKnown).toBe(true)
+    expect(pile.cards).toContain(sourceEndpoint)
+    expect(getDiscard(room).cards).toContain(knownCard)
     expectConsistentPublicZones(room)
   })
 

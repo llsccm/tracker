@@ -17,7 +17,13 @@
 import { MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Card } from '../Card'
 import type { Room } from '../Room'
-import type { LocationCandidate, SeatID, SpellID, SubZone } from '../types'
+import type {
+  LocationCandidate,
+  OutsideLocationCandidate,
+  SeatID,
+  SpellID,
+  SubZone
+} from '../types'
 import { recordTraversal } from '../traversalStats'
 
 /** 兼容旧导出名；整手交换已不再绑定单一技能 ID。 */
@@ -48,27 +54,13 @@ type HandExchangeBatch = {
 }
 
 /**
- * 候选位置进入交换区后的逻辑替身。
+ * 单张候选牌的交换期元数据。
  *
- * 它不会作为真实 Card 加入 exchange Zone，只用于区分同一座位的外层、内层批次。
- */
-type HandExchangeBatchAlternative = {
-  type: 'handExchangeBatch'
-  batchID: string
-}
-
-/** 候选牌在交换期间可以同时指向普通完整位置或尚未返回的交换批次。 */
-type HandExchangeCandidateAlternative = LocationCandidate | HandExchangeBatchAlternative
-
-/**
- * 单张候选牌的交换期快照。
- *
- * alternatives 是推理主状态；Card.locationCandidates 只是当前可投影到通用位置模型的兼容读面。
+ * 候选集合始终只写 Card.locationCandidates；这里不保存副本，避免通用约束收敛后被旧快照覆盖。
  */
 type HandExchangeCandidateRecord = {
   card: Card
-  alternatives: HandExchangeCandidateAlternative[]
-  /** 进入候选账本前的兼容字段，最终恢复玩家位置时一并还原。 */
+  /** 进入候选账本前的兼容字段，最终恢复玩家读面时一并还原。 */
   spellID: SpellID | null
   subZone: SubZone | null
 }
@@ -82,7 +74,7 @@ type HandExchangeSpellState = {
 /** 房间内所有交换技能的批次账本。 */
 type HandExchangeRoomState = {
   bySpell: Record<string, HandExchangeSpellState>
-  /** 候选记录跨 SpellID 共享，使不同技能嵌套时仍能逐批置换候选位置。 */
+  /** 跨 SpellID 共享的候选元数据索引；批次位置本身保存在 Card.locationCandidates。 */
   candidateRecords: Map<Card, HandExchangeCandidateRecord>
   nextBatchSeq: number
 }
@@ -179,37 +171,15 @@ function getPlayerHandCards(room: Room, seatID: SeatID): Card[] {
 }
 
 /** 判断某个逻辑候选是否表示指定座位的手牌分支。 */
-function isHandCandidate(
-  alternative: HandExchangeCandidateAlternative,
-  seatID: SeatID
-): alternative is LocationCandidate {
-  return (
-    alternative.type === 'player' && alternative.subZone === 'hand' && alternative.seatID === seatID
-  )
+function isHandCandidate(candidate: LocationCandidate, seatID: SeatID): boolean {
+  return candidate.type === 'player' && candidate.subZone === 'hand' && candidate.seatID === seatID
 }
 
-/** 批次候选不是通用 LocationCandidate，只能由本模块解释和还原。 */
-function isBatchAlternative(
-  alternative: HandExchangeCandidateAlternative
-): alternative is HandExchangeBatchAlternative {
-  return alternative.type === 'handExchangeBatch'
-}
-
-/** 为普通位置与批次令牌生成统一去重键，防止座位置换后产生重复分支。 */
-function candidateAlternativeKey(alternative: HandExchangeCandidateAlternative): string {
-  if (isBatchAlternative(alternative)) return `batch:${alternative.batchID}`
-  return JSON.stringify(alternative)
-}
-
-/** 合并交换置换后指向同一完整位置的候选分支。 */
-function dedupeCandidateAlternatives(
-  alternatives: HandExchangeCandidateAlternative[]
-): HandExchangeCandidateAlternative[] {
-  const unique = new Map<string, HandExchangeCandidateAlternative>()
-  alternatives.forEach((alternative) => {
-    unique.set(candidateAlternativeKey(alternative), alternative)
-  })
-  return Array.from(unique.values())
+/** exchange 批次令牌直接参与统一候选模型，并以 batchID 区分嵌套层级。 */
+function isBatchCandidate(
+  candidate: LocationCandidate
+): candidate is OutsideLocationCandidate & { batchID: string } {
+  return candidate.type === 'outside' && candidate.zone === 'exchange' && Boolean(candidate.batchID)
 }
 
 /**
@@ -218,47 +188,41 @@ function dedupeCandidateAlternatives(
  * 单一位置已经是确定实体，不需要候选账本接管。
  */
 function createCandidateRecord(card: Card): HandExchangeCandidateRecord | null {
-  const alternatives = card.locationCandidates.map((candidate) => ({ ...candidate }))
-  if (alternatives.length <= 1) return null
+  if (card.locationCandidates.length <= 1) return null
 
   return {
     card,
-    alternatives,
     spellID: card.spellID,
     subZone: card.subZone
   }
 }
 
 /**
- * 把模块内的批次候选投影回 Card 可理解的 LocationCandidate。
+ * 根据 Card 当前候选同步物理位置兼容读面。
  *
- * 尚未返回的批次统一投影为 exchange outside 候选；唯一 batchID 仍保留在 record 中，
- * 所以多个嵌套批次即使投影相同，也不会丢失各自的返回目标。
+ * batchID 已直接保存在 locationCandidates；record 只负责恢复旧版 subZone / spellID 读面。
  */
 function projectCandidateRecord(room: Room, record: HandExchangeCandidateRecord): void {
-  const projected = dedupeCandidateAlternatives(
-    record.alternatives.map((alternative) => {
-      if (!isBatchAlternative(alternative)) return alternative
-      // 完整位置主模型没有批次维度；exchange outside 候选只作为暂存投影，
-      // 真正的批次身份仍由 candidateRecords 中的唯一 batchID 保留。
-      return { type: 'outside', zone: 'exchange' } satisfies LocationCandidate
-    })
-  ) as LocationCandidate[]
-  const hasPlayerCandidate = projected.some((candidate) => candidate.type === 'player')
+  const candidates = record.card.getLocationCandidates()
+  const hasPlayerCandidate = candidates.some((candidate) => candidate.type === 'player')
+  const hasBatchCandidate = candidates.some(isBatchCandidate)
 
-  // 候选身份由逻辑账本承载，不能同时残留在真实公共 Zone 中被默认移动路径再次取走。
-  room.clearCardsFromPublicZones([record.card])
+  // 批次令牌只是逻辑候选，实体不能同时残留在真实公共 Zone 中被默认来源再次取走。
+  if (hasPlayerCandidate || hasBatchCandidate) {
+    room.clearCardsFromPublicZones([record.card])
+  }
+
   if (hasPlayerCandidate) {
     // 仍有玩家位置分支时保留手牌兼容读面，供索引和后续嵌套交换继续识别。
     record.card.subZone = record.subZone
     record.card.spellID = record.spellID
-  } else {
-    // 所有分支都已暂存时，只把 Card 停在逻辑 exchange；不加入 Zone，避免重复占实体槽。
+  } else if (hasBatchCandidate) {
+    // 只有批次分支时停在逻辑 exchange；不加入 Zone，避免占用其它批次的实体槽。
     record.card.location = 'exchange'
     record.card.subZone = null
     record.card.spellID = null
   }
-  record.card.setLocationCandidates(projected, 'handExchange:candidateProjection')
+
   room.notifyCardChanged(record.card, { type: 'hand-exchange-candidate-projected' })
 }
 
@@ -284,26 +248,29 @@ function stageCandidateAlternatives(
     const record = createCandidateRecord(card)
     if (
       record &&
-      record.alternatives.some((alternative) => isHandCandidate(alternative, fromSeat))
+      card.getLocationCandidates().some((candidate) => isHandCandidate(candidate, fromSeat))
     ) {
       roomState.candidateRecords.set(card, record)
     }
   })
 
   const stagedCandidates = new Set<Card>()
-  // 遍历房间级记录而不是当前玩家快照，使已完全暂存的候选仍可参与跨 SpellID 嵌套交换。
+  // 始终改写 Card 当前候选，通用约束在嵌套交换期间消除的分支不会被元数据索引复活。
   roomState.candidateRecords.forEach((record) => {
     let staged = false
-    record.alternatives = dedupeCandidateAlternatives(
-      record.alternatives.map((alternative) => {
-        if (!isHandCandidate(alternative, fromSeat)) return alternative
-        staged = true
-        return { type: 'handExchangeBatch', batchID }
-      })
-    )
+    const nextCandidates = record.card.getLocationCandidates().map((candidate) => {
+      if (!isHandCandidate(candidate, fromSeat)) return candidate
+      staged = true
+      return {
+        type: 'outside',
+        zone: 'exchange',
+        batchID
+      } satisfies OutsideLocationCandidate
+    })
     if (!staged) return
 
     stagedCandidates.add(record.card)
+    record.card.setLocationCandidates(nextCandidates, 'handExchange:candidateStage')
     projectCandidateRecord(room, record)
   })
   return stagedCandidates
@@ -324,63 +291,54 @@ function returnCandidateAlternatives(
 ): Set<number> {
   const logicallyResolvedKnownIDs = new Set<number>()
   roomState.candidateRecords.forEach((record, card) => {
-    let returned = false
+    const currentCandidates = card.getLocationCandidates()
+    const belongsToBatch = currentCandidates.some(
+      (candidate) => isBatchCandidate(candidate) && candidate.batchID === batchID
+    )
 
     // 回手协议明确给出该候选 ID 时，已经证明它属于本批次；
     // 其它座位或嵌套批次分支全部失效，可直接确认到接收者手牌。
-    if (
-      protocolKnownIDs.has(card.id) &&
-      record.alternatives.some(
-        (alternative) => isBatchAlternative(alternative) && alternative.batchID === batchID
-      )
-    ) {
-      record.alternatives = [
-        {
-          type: 'player',
-          seatID: toSeat,
-          subZone: 'hand',
-          spellID: null
-        }
-      ]
-      projectCandidateRecord(room, record)
-      roomState.candidateRecords.delete(card)
-      // 该 ID 已由候选账本直接落到目标手牌，不能再交给物理移动路径重复搬运。
-      logicallyResolvedKnownIDs.add(card.id)
-      return
-    }
-
-    record.alternatives = dedupeCandidateAlternatives(
-      record.alternatives
-        .map((alternative) => {
-          if (!isBatchAlternative(alternative) || alternative.batchID !== batchID) {
-            return alternative
-          }
-          returned = true
-          // CardIDs 覆盖整批时，未出现的候选不属于该批次；删除该分支而不是移到接收者。
-          if (revealsWholeBatch) return null
-          return {
+    if (protocolKnownIDs.has(card.id) && belongsToBatch) {
+      card.setLocationCandidates(
+        [
+          {
             type: 'player',
             seatID: toSeat,
             subZone: 'hand',
             spellID: null
-          } satisfies LocationCandidate
-        })
-        .filter(
-          (alternative): alternative is HandExchangeCandidateAlternative => alternative !== null
-        )
-    )
-    if (!returned) return
-
-    // 完整明牌与候选账本矛盾时可能删空全部分支；保留当前 Card 状态并等待后续协议，
-    // 不凭空构造一个错误位置。
-    if (record.alternatives.length === 0) {
+          }
+        ],
+        'handExchange:candidateKnownReturn'
+      )
+      projectCandidateRecord(room, record)
       roomState.candidateRecords.delete(card)
+      // 该 ID 已由候选模型直接落到目标手牌，不能再交给物理移动路径重复搬运。
+      logicallyResolvedKnownIDs.add(card.id)
       return
     }
 
+    let returned = false
+    const nextCandidates = currentCandidates
+      .map((candidate) => {
+        if (!isBatchCandidate(candidate) || candidate.batchID !== batchID) return candidate
+        returned = true
+        // CardIDs 覆盖整批时，未出现的候选不属于该批次；删除该分支而不是移到接收者。
+        if (revealsWholeBatch) return null
+        return {
+          type: 'player',
+          seatID: toSeat,
+          subZone: 'hand',
+          spellID: null
+        } satisfies LocationCandidate
+      })
+      .filter((candidate): candidate is LocationCandidate => candidate !== null)
+    if (!returned) return
+
+    // 完整明牌与当前候选矛盾时可能删空全部分支；清除批次令牌但保留实体当前位置，
+    // 等待后续协议重新建立可证明的位置。
+    card.setLocationCandidates(nextCandidates, 'handExchange:candidateReturn')
     projectCandidateRecord(room, record)
-    // 仍有令牌表示该身份还横跨未结算的外层/内层交换，必须继续保留自定义账本。
-    if (!record.alternatives.some(isBatchAlternative)) {
+    if (nextCandidates.length === 0 || !nextCandidates.some(isBatchCandidate)) {
       roomState.candidateRecords.delete(card)
     }
   })
@@ -483,7 +441,8 @@ function buildExchangePatch(
   spellID: number,
   label: string,
   hasCandidateAlternatives = false,
-  logicallyResolvedKnownIDs: Set<number> = new Set()
+  logicallyResolvedKnownIDs: Set<number> = new Set(),
+  moveOnlyStagedCards = false
 ): MoveEventDraft {
   const { knownIDs: stagedKnownIDs, unknownCards } = splitKnownAndUnknownCards(cards)
   // 回到可见手牌时，协议正 ID 可能对应 exchange 中的匿名占位；
@@ -493,8 +452,10 @@ function buildExchangePatch(
   )
   const knownIDs = Array.from(new Set([...stagedKnownIDs, ...protocolKnownIDs]))
   const protocolCardCount = getCount(event)
-  // 候选模式只移动确定实体，完整手牌数量改由 handMoveCount 单独同步。
-  const cardCount = hasCandidateAlternatives
+  const separatesEntityMovement = hasCandidateAlternatives || moveOnlyStagedCards
+  // 回手批次可能已有成员提前离开 exchange；实体数只能取当前仍在区内的 cards，
+  // 协议手牌变化量必须通过 handMoveCount 独立同步，不能从其它批次补足实体。
+  const cardCount = separatesEntityMovement
     ? cards.length
     : Math.max(protocolCardCount, cards.length)
   // 纯明或纯暗才挂 combinationID；混批只靠 cardIDs + sourceCards 分别移动。
@@ -505,7 +466,7 @@ function buildExchangePatch(
     options: {
       ...(unknownCards.length > 0 ? { sourceCards: unknownCards } : {}),
       cardCount,
-      ...(hasCandidateAlternatives ? { handMoveCount: protocolCardCount } : {}),
+      ...(separatesEntityMovement ? { handMoveCount: protocolCardCount } : {}),
       ...(isPureBatch ? { combinationID: nextGroupID(room, spellID, label) } : {})
     }
   })
@@ -617,8 +578,7 @@ function returnExchangeBatchToHand(
     }
   }
 
-  if (stagedCards.length === 0 && !batch.hasCandidateAlternatives) return event
-
+  // 即使所有成员都已离开 exchange，也必须保留协议手牌变化量；不能退回原事件去抽取其它批次。
   // 回手协议也可能带正 ID；与进区一致，先对齐批次内对应实体的公开状态。
   alignProtocolKnownCards(event, stagedCards)
 
@@ -629,7 +589,8 @@ function returnExchangeBatchToHand(
     spellID,
     'hand_exchange_return',
     batch.hasCandidateAlternatives,
-    logicallyResolvedKnownIDs
+    logicallyResolvedKnownIDs,
+    true
   )
 }
 
