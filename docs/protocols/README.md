@@ -27,7 +27,7 @@
 
 | 文档 | SpellID | 场景 | 关键识别 |
 | --- | ---: | --- | --- |
-| [`CGsRoleSpellOptRep.md`](CGsRoleSpellOptRep.md) | 多技能 | 技能操作回复；含鹰视看牌堆顶、裴秀地图等 | `Datas` 语义依赖 `SpellID` + `Type` |
+| [`CGsRoleSpellOptRep.md`](CGsRoleSpellOptRep.md) | 多技能 | 技能操作回复；含鹰视看牌堆顶、嚣翻看牌堆底、裴秀地图等 | `Datas` 语义依赖 `SpellID` + `Type` |
 
 ## `GsCUpdateRoleDataExNtf`
 

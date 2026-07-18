@@ -839,7 +839,8 @@ export class TrackerController {
 
   /**
    * 兼容旧 zoneID 字符串和新版结构化 protocolZone。
-   * 牌堆顶/底方向在协议和 Zone 内部表示相反，所以这里统一翻转。
+   * 协议 pos 与 Zone.add/remove 共用 POSITION_TOP / POSITION_BOTTOM 约定，
+   * 显式端点直接透传，不能再做顶底互换。
    */
   private normalizeProtocolZoneTarget(
     protocolZone: ProtocolZoneInput = {}
@@ -850,14 +851,8 @@ export class TrackerController {
     const spellID = Number(parts[2] ?? protocolZone.spellID)
     const normalizedZone = Number.isFinite(zone) ? zone : 5
     const hasExplicitPosition = protocolZone.pos !== undefined && protocolZone.pos !== null
-    // 未携带 pos 的看牌消息默认表示牌顶；只有协议显式端点才需要做方向翻转。
-    let position = hasExplicitPosition ? protocolZone.pos : POSITION_TOP
-
-    // 协议牌堆端点和 Zone.add/remove 的内部端点约定相反，进入记牌器前先交换方向。
-    if (normalizedZone === 1 && hasExplicitPosition) {
-      if (position === POSITION_BOTTOM) position = POSITION_TOP
-      else if (position === POSITION_TOP) position = POSITION_BOTTOM
-    }
+    // 未携带 pos 的看牌消息默认表示牌顶。
+    const position = hasExplicitPosition ? protocolZone.pos : POSITION_TOP
 
     return {
       zone: normalizedZone,
