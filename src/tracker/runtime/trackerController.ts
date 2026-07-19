@@ -1,5 +1,6 @@
 import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
 import type { Card } from '../Card'
+import { recordTraversal } from '../traversalStats'
 import { summarizeMoveEvent } from '../helper/moveSummary'
 import { getProtocolMoveSpecialLabel, normalizeMoveEvent } from '../MoveEventNormalizer'
 import {
@@ -381,7 +382,7 @@ export class TrackerController {
     )
 
     if (subZone && !Number.isNaN(seatID) && seatID !== 255) {
-      // 同区展示可能首次公开由 id=0 承载的游戏外卡牌；先注册真实 ID，
+      // 同区展示可能首次公开由匿名实体承载的游戏外卡牌；先注册真实 ID，
       // 标准移动链路才能用新实体置换来源手牌中的匿名占位。
       const knownCards = this.resolveKnownCards(ids)
       const resolvedIDs = knownCards.map((card) => card.id)
@@ -688,6 +689,7 @@ export class TrackerController {
     card.combinationID = null
     card.moveToPublicZone('outside')
     card.confirmKnown()
+    recordTraversal('anonymousSlot:recoverPlayerOccupiedIdentityForPublicReveal', 1)
 
     this.controllerLogger.info('公共区展示回收玩家区占用身份', {
       cardID: card.id,

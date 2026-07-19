@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { isAnonymous } from '@/tracker/Card'
 import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
 import { TrackerController } from '@/tracker/runtime/trackerController'
 import {
@@ -191,7 +192,7 @@ describe('TrackerController', () => {
     expect(
       room.cards.filter(
         (card) =>
-          card.id === 0 &&
+          isAnonymous(card) &&
           card.location === 'player' &&
           card.subZone === 'hand' &&
           card.seats.has(1)
@@ -251,12 +252,12 @@ describe('TrackerController', () => {
     ])
     expect(occupiedCard.location).toBe('pile')
     expect(occupiedCard.isKnown).toBe(true)
-    // 用牌堆未知实体换回玩家槽位，不新增 id=0 导致 5+123。
+    // 用牌堆未知实体换回玩家槽位，不新增匿名实体导致 5+123。
     expect(fillerA.location === 'player' || fillerB.location === 'player').toBe(true)
     expect(
       room.cards.filter(
         (card) =>
-          card.id === 0 &&
+          isAnonymous(card) &&
           card.location === 'player' &&
           card.subZone === 'hand' &&
           card.seats.has(3)
@@ -345,7 +346,7 @@ describe('TrackerController', () => {
     expect(
       room.cards.filter(
         (card) =>
-          card.id === 0 &&
+          isAnonymous(card) &&
           card.location === 'player' &&
           card.subZone === 'hand' &&
           card.seats.has(3)
@@ -704,7 +705,7 @@ describe('TrackerController', () => {
     expect(
       room.cards.filter(
         (card) =>
-          card.id === 0 &&
+          isAnonymous(card) &&
           card.location === 'player' &&
           card.subZone === 'hand' &&
           card.seats.has(0)
@@ -781,7 +782,7 @@ describe('TrackerController', () => {
     expect(
       room.cards.filter(
         (card) =>
-          card.id === 0 &&
+          isAnonymous(card) &&
           card.location === 'player' &&
           card.subZone === 'hand' &&
           card.seats.has(1)
@@ -809,7 +810,7 @@ describe('TrackerController', () => {
     expect(
       room.cards.filter(
         (card) =>
-          card.id === 0 &&
+          isAnonymous(card) &&
           card.location === 'player' &&
           card.subZone === 'hand' &&
           card.seats.has(1)

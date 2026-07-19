@@ -1,4 +1,4 @@
-import { Card } from './Card'
+import { Card, hasRealIdentity, isAnonymous } from './Card'
 import { Player } from './Player'
 import { Zone } from './Zone'
 import { CardCounter, CARD_INSTANCE_STATUS } from './CardCounter'
@@ -488,6 +488,10 @@ export class Room {
   createExternalCards(cardIDs: CardID[] = [], count = cardIDs.length): Card[] {
     const ids = cardIDs.filter((id) => id > 0)
     const unknownCount = Math.max(0, Number(count) || 0, cardIDs.length) - ids.length
+    if (unknownCount > 0) {
+      recordTraversal('anonymousSlot:createExternalCardsFallback', unknownCount)
+    }
+
     const cards = [
       ...ids.map((id) => {
         const card = new Card(id, this)
@@ -567,7 +571,7 @@ export class Room {
 
       for (const card of unknownHandCards) {
         if (excessCount <= 0) break
-        if (card.id !== 0) continue
+        if (!isAnonymous(card)) continue
 
         this.removeCardsFromConstraintGroups([card])
         card.moveToPublicZone('outside')
@@ -717,7 +721,7 @@ export class Room {
 
   /**
    * 将牌堆和弃牌堆中的实体牌重置后洗回牌堆。
-   * 洗牌时实际牌堆只由“剩余牌堆 + 弃牌堆”组成，不再为了协议张数补 id=0 占位。
+   * 洗牌时实际牌堆只由“剩余牌堆 + 弃牌堆”组成，不再为了协议张数补匿名占位。
    * 协议牌堆空间剩余身份由实际牌堆与从未在场上出现的牌共同解释；
    * 非实际牌堆内的正 ID 暗身份暂停具体位置追踪，等待后续明示/交互时恢复。
    */
@@ -763,7 +767,7 @@ export class Room {
 
     const knownPileCards = [...remainingPileCards, ...recycledCards]
     const knownPileSet = new Set(knownPileCards)
-    const preShufflePilePlaceholderCount = knownPileCards.filter((card) => card.id === 0).length
+    const preShufflePilePlaceholderCount = knownPileCards.filter(isAnonymous).length
     const statusBuckets = this.counter?.cardsByStatus
     const unknownStatusCards = Array.from(statusBuckets?.[CARD_INSTANCE_STATUS.UNKNOWN] ?? [])
     const appearedCards = Array.from(statusBuckets?.[CARD_INSTANCE_STATUS.APPEARED] ?? [])
@@ -781,7 +785,7 @@ export class Room {
     // 因此洗牌分类先保持为空，避免把木马/手牌暗实体误记为已出现身份。
     const appearedHiddenIdentityCards: Card[] = []
     // 洗牌不会把这些正 ID 迁入实际牌堆；若它们原本承载玩家区暗槽位，
-    // 会按暂停前实体所在的玩家/子区/技能空间创建 id=0 替身，避免丢失位置数量账本。
+    // 会按暂停前实体所在的玩家/子区/技能空间创建匿名替身，避免丢失位置数量账本。
     // 正 ID 自身暂停前会 confirmKnown()，表示身份已明确；后续协议再次出现该 ID 时恢复具体位置追踪。
     const suspendedIdentityCards = [...neverAppearedCards, ...appearedHiddenIdentityCards]
     // 这是“协议牌堆空间”的解释集合，不是实际 pile.cards。
@@ -793,14 +797,14 @@ export class Room {
     this.removeCardsFromConstraintGroups([...knownPileCards, ...suspendedIdentityCards])
 
     // 实际牌堆只重建 pile + discard。协议张数仅用于判断哪些正 ID 身份应暂停，
-    // 不再为了“凑长度”向 pile.cards 填入 id=0 或玩家暗手牌实体。
+    // 不再为了“凑长度”向 pile.cards 填入匿名占位或玩家暗手牌实体。
     const rebuiltPileCards = rebuildPileAfterShuffle()
 
     const suspendedCardIDs: CardID[] = []
     const preservedPlayerPlaceholders: PreservedPlayerPlaceholderSummary[] = []
     let preservedPlayerHandPlaceholderCount = 0
     suspendedIdentityCards.forEach((card) => {
-      // 正 ID 暂停前若仍承担玩家区暗槽位，必须先按实体当前位置复制 id=0 替身；
+      // 正 ID 暂停前若仍承担玩家区暗槽位，必须先按实体当前位置复制匿名替身；
       // observedHandCount 只用于后置校验，不参与主动补位，避免掩盖实体位置链路异常。
       const placeholder = this.preserveUnknownPlaceholderForShuffle(card)
       if (placeholder) {
@@ -829,7 +833,7 @@ export class Room {
     const actualPileCount = pile.cards.length
     const rebuiltPileCount = rebuiltPileCards.length
     const discardCountAfterShuffle = discard.cards.length
-    const actualPilePlaceholderCount = rebuiltPileCards.filter((card) => card.id === 0).length
+    const actualPilePlaceholderCount = rebuiltPileCards.filter(isAnonymous).length
     const explainedPileSpaceCount = actualPileCount + suspendedIdentityCards.length
 
     // 校验点 1：实际牌堆一致性。
@@ -851,8 +855,8 @@ export class Room {
     // 现阶段不要求严格相等，避免把多出的暗身份误迁回实际牌堆。
     if (explainedPileSpaceCount < normalizedCardCount) {
       // 只有当“实际牌堆 + 可解释的正 ID 暗身份”仍少于协议张数时才告警；
-      // 这里仍然不创建 id=0，因为缺口已经无法由本局已知身份解释，补占位会制造错误实体。
-      trackerLogger.warn('洗牌后可枚举正 ID 仍少于协议牌堆空间张数，未创建 id=0 牌堆占位', {
+      // 这里仍然不创建匿名占位，因为缺口已经无法由本局已知身份解释，补占位会制造错误实体。
+      trackerLogger.warn('洗牌后可枚举正 ID 仍少于协议牌堆空间张数，未创建匿名牌堆占位', {
         reason: 'shufflePile:remainingIdentityShortage',
         cardCount: normalizedCardCount,
         actualPileCount,
@@ -868,11 +872,11 @@ export class Room {
       })
     }
 
-    // 校验点 3：洗牌不新增 id=0 牌堆占位。
-    // 如果洗牌前实际牌堆/弃牌堆中已有 id=0，占位会随实际牌一起洗回；
-    // 但洗牌流程本身不应为了协议张数创建新的 id=0 并塞入 pile.cards。
+    // 校验点 3：洗牌不新增匿名牌堆占位。
+    // 如果洗牌前实际牌堆/弃牌堆中已有匿名占位，它会随实际牌一起洗回；
+    // 但洗牌流程本身不应为了协议张数创建新的匿名占位并塞入 pile.cards。
     if (actualPilePlaceholderCount > preShufflePilePlaceholderCount) {
-      trackerLogger.warn('洗牌后实际牌堆出现新增 id=0 占位', {
+      trackerLogger.warn('洗牌后实际牌堆出现新增匿名占位', {
         reason: 'shufflePile:unexpectedZeroPlaceholder',
         preShufflePilePlaceholderCount,
         actualPilePlaceholderCount,
@@ -914,7 +918,7 @@ export class Room {
       { known: false }
     )
     this.movement.replaceHiddenMarkPlaceholder(card, placeholder)
-    trackerLogger.info('洗牌暂停正 ID 暗身份时创建 id=0 玩家区占位替身', {
+    trackerLogger.info('洗牌暂停正 ID 暗身份时创建匿名玩家区占位替身', {
       reason: 'shufflePile:preserveUnknownPlayerPlaceholder',
       sourceCardID: card.id,
       sourceLocation: card.location,
@@ -1220,7 +1224,7 @@ export class Room {
     // 触发计数器与视图订阅更新
     this.counter.update()
 
-    this.publicZones.assertPublicZoneConsistency('resolveConstraints')
+    this.assertConservation('resolveConstraints')
   }
 
   /**
@@ -1307,6 +1311,101 @@ export class Room {
    * 开发期 A2 等价性检查：收敛循环退出时，增量维护的 player 快照
    * 必须与全量过滤结果（含顺序）一致。生产环境零成本。
    */
+  /**
+   * 开发期身份与槽位守恒观测：阶段 0 只告警，不抛错、不自愈。
+   * I1 检查真实身份与 cardIndex 的唯一性；I2 复用公共区实体槽位一致性检查。
+   */
+  assertConservation(context = ''): void {
+    if (!import.meta.env.DEV) return
+
+    const cardsSet = new Set(this.cards)
+    const entityOwnerByID = new Map<number, Card>()
+    const realCardsByID = new Map<number, Card[]>()
+    const identityIssues: Record<string, unknown>[] = []
+
+    this.cards.forEach((card) => {
+      const previousEntity = entityOwnerByID.get(card.entityID)
+      if (previousEntity) {
+        identityIssues.push({
+          type: 'duplicated-entity-id',
+          entityID: card.entityID,
+          cardIDs: [previousEntity.id, card.id]
+        })
+      } else {
+        entityOwnerByID.set(card.entityID, card)
+      }
+
+      if (hasRealIdentity(card)) {
+        const realCards = realCardsByID.get(card.id) ?? []
+        realCards.push(card)
+        realCardsByID.set(card.id, realCards)
+
+        if (card.entityID !== card.id) {
+          identityIssues.push({
+            type: 'real-card-entity-mismatch',
+            cardID: card.id,
+            entityID: card.entityID
+          })
+        }
+
+        if (this.cardIndex.get(card.id) !== card) {
+          identityIssues.push({
+            type: 'card-index-mismatch',
+            cardID: card.id,
+            cardEntityID: card.entityID
+          })
+        }
+        return
+      }
+
+      if (card.id !== card.entityID || card.entityID >= 0) {
+        identityIssues.push({
+          type: 'anonymous-card-identity-mismatch',
+          cardID: card.id,
+          entityID: card.entityID
+        })
+      }
+    })
+
+    realCardsByID.forEach((cards, cardID) => {
+      if (cards.length <= 1) return
+      identityIssues.push({
+        type: 'duplicated-real-id',
+        cardID,
+        entityIDs: cards.map((card) => card.entityID)
+      })
+    })
+
+    this.cardIndex.forEach((card, cardID) => {
+      if (
+        !hasRealIdentity(card) ||
+        card.id !== cardID ||
+        !cardsSet.has(card) ||
+        card.entityID !== cardID
+      ) {
+        identityIssues.push({
+          type: 'invalid-card-index-entry',
+          cardID,
+          entityID: card.entityID,
+          cardIsTracked: cardsSet.has(card)
+        })
+      }
+    })
+
+    const slotIssues = this.publicZones.getPublicZoneConsistencyIssues()
+    const issues = [
+      ...identityIssues.map((issue) => ({ domain: 'identity', ...issue })),
+      ...slotIssues.map((issue) => ({ domain: 'slot', ...issue }))
+    ]
+
+    if (issues.length > 0) {
+      trackerLogger.warn('Room 身份/槽位守恒观测发现不一致', {
+        context,
+        issues
+      })
+    }
+  }
+
   assertPlayerSnapshotConsistency(playerCards: Card[]): void {
     if (!import.meta.env.DEV) return
 

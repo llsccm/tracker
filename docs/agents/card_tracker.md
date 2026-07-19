@@ -48,7 +48,7 @@
 - `resolveEquipmentContainerLocationCandidates()` 将装备容器候选投影到当前装备承载座位的标记区；容器候选本身固定在装备实体上，装备迁移时无需重写候选 key。
 - `syncObservedPlayerHandCount()` 用于同步外部观测到的手牌数量快照；它不是由候选牌反推手牌数，而是将协议事实写入 `Player.observedHandCount` 后触发房间级收敛，例如某席位手牌数归零时剔除该席位的手牌候选并保留装备容器候选。
 - `collectPlayerHandSlotCounts()` 支持传入目标座位集合；`resolveConstraints()` 内已按 seat 增量重算手牌槽统计，首轮只计算有观测手牌数的座位，后续轮次只重算上一轮/本轮触碰座位并复用未变缓存。该缓存只在一次 `resolveConstraints()` 调用内有效，依赖 `Room.resolveTouchedSeats` 的保守触碰集合。`Player.refreshUnknownCardCount()` 的兜底路径也会一次性收集 known/candidate，避免同一 seat 连扫两次。
-- `shufflePile({ cardCount })` 会把 `discard` 洗回 `pile`，只随机弃牌堆部分，保留原剩余牌堆的相对顺序；未提供协议张数时按本地可枚举牌堆处理。协议给出剩余牌堆张数时，该张数是硬约束：可枚举实体不足会在牌堆前补 `id=0` 暗占位，正 ID 但不在协议牌堆、也不是可见明牌的身份会暂停追踪并作为场上候选展示；若这些身份原本是玩家暗牌或暗标记占位，会先复制一个 `id=0` 暗占位继续承担玩家区数量与 `hiddenMarkCandidates` 账本。
+- `shufflePile({ cardCount })` 会把 `discard` 洗回 `pile`，只随机弃牌堆部分，保留原剩余牌堆的相对顺序；未提供协议张数时按本地可枚举牌堆处理。协议给出剩余牌堆张数时，该张数是硬约束：不会仅为凑齐张数新增牌堆实体，正 ID 但不在协议牌堆、也不是可见明牌的身份会暂停追踪并作为场上候选展示；若这些身份原本是玩家暗牌或暗标记占位，会先复制稳定负 `id/entityID` 的匿名占位继续承担玩家区数量与 `hiddenMarkCandidates` 账本。
 
 ### `Room` 行为模块
 
@@ -62,7 +62,7 @@
 
 - 继承 `BaseCard`，通过 `CardConfig` 单例取得牌名、花色、点数、类型等展示元数据。
 - 保存物理位置与推断状态：`location`、`subZone`、`isKnown`、`spellID`、`turn`、`round`、`phase`、`owner`、`locationCandidates`、`suspended`、`combinationID`；`seats`、`subZoneCandidates`、`publicCandidates` 是从 `locationCandidates` 或确定位置派生的兼容读面。
-- 匿名暗牌协议 ID 继续保持 `id=0`，但每个匿名实体拥有递减负数的唯一 `entityID`。`Room.resolveConstraints()` 稳定后会按玩家观测手牌数、确定明牌和候选明牌主动对账匿名手牌实体；缺失时补建，过量时仅把匿名实体释放到 `outside`。存在未被精确槽位约束覆盖的候选手牌时不会提前实体化；若后续具体明牌移动协议证明该牌来自此手牌，则按该事实创建瞬时匿名实体完成身份交换并回补明牌原位置。
+- 匿名暗牌使用稳定负 `id/entityID`，不再使用 `id=0`；每个匿名实体拥有递减负数的唯一内部句柄。`Room.resolveConstraints()` 稳定后会按玩家观测手牌数、确定明牌和候选明牌主动对账匿名手牌实体；缺失时补建，过量时仅把匿名实体释放到 `outside`。存在未被精确槽位约束覆盖的候选手牌时不会提前实体化；若后续具体明牌移动协议证明该牌来自此手牌，则按该事实创建瞬时匿名实体完成身份交换并回补明牌原位置。
 - `bindCandidates()` 只绑定候选席位，默认不确认明牌；`bindTo()` 是默认确认明牌的便捷入口。
 - `locationCandidates` 是完整位置候选唯一主模型，可同时表达玩家区候选、公共区候选与装备容器候选；`subZoneCandidates`、`publicCandidates` 与 `seats` 均为只读兼容投影，外部写入必须通过 `setLocationCandidates()` 或保留的兼容方法转发。
 - `subZoneCandidates` 表达玩家区完整位置候选（三元组 `seatID/subZone/spellID`），用于同一张明牌可能处于多个玩家或多个玩家子区域的情况，例如 `A 手牌 / B 手牌 / A 标记`。
@@ -135,7 +135,7 @@
 5. 当范围 `knownMarkMin === knownMarkMax` 且候选全集只剩 `来源手牌 / 目标标记` 时，创建 `ConstraintGroup.expectedSlotsByLocation` 精确约束，并同步可镜像的 `expectedSlotsBySubZone`，支持 4 选 1、4 选 2、4 选 3 等 N 选 K。木马容器候选只参与 `expectedSlotsByLocation`，不生成 `expectedSlotsBySubZone` 镜像。
 6. 后续某张候选明牌明确从同一标记空间进入弃牌区时，确认它占用该标记区名额；明确从来源手牌移动时，确认它占用手牌名额。普通标记要求座位与标记 ID 同时匹配；木马标记 `700` 若 `markID` 一致但座位变化，会先把账本的当前投影座位重定向，再继续使用同一个装备容器候选收敛。161 木马被其他技能移动时，即使本次协议 `spellID` 不是 700，也会通过装备物理牌 ID 识别并迁移容器投影。
 7. 技能 `414` 的标记牌暗置回手牌时，返回协议可能使用 `3389` 作为 `SpellID`；同样由 `3389` 触发的标记也会以 `3389` 返回。因此从标记区按暗牌数量取源牌时，`414` 与 `3389` 作为兼容标记空间互扫，避免明牌仍残留在 `414` 标记区。
-8. 洗牌按协议牌堆 ID 做差集时，原本承担暗标记数量的正 ID 占位会被暂停为场上候选；此时会创建新的 `id=0` 暗标记占位并替换账本引用，避免标记区数量和候选明牌账本被洗牌破坏。
+8. 洗牌按协议牌堆 ID 做差集时，原本承担暗标记数量的正 ID 占位会被暂停为场上候选；此时会创建新的稳定负 `id/entityID` 暗标记占位并替换账本引用，避免标记区数量和候选明牌账本被洗牌破坏。
 
 示例：
 
@@ -231,9 +231,10 @@
 - 若新增会影响手牌槽 known/candidate 计数的收敛路径，必须确保相关座位进入 `Room.resolveTouchedSeats`；E1 会复用未触碰座位的手牌槽统计缓存。
 - 新增或修改 `this.cards.filter(...)` 等全牌池扫描前，必须先判断能否改用现有增量快照、索引、脏事件集合，或在入口一次性归组后复用结果；尤其避免把全牌池扫描放进玩家、约束组或收敛轮循环中，意外放大为 O(玩家数 × 全牌数) 或更高复杂度。若确认全量扫描确有必要，必须使用 `recordTraversal(...)` 对该扫描站点显式插桩，并在 `tests/tracker/traversalBaseline.test.ts` 中新增或更新对应场景与内联快照，使后续遍历量增长可见且可解释；不得以未插桩的隐藏扫描绕过基线护栏。
 - [`tests/tracker/traversalBaseline.test.ts`](../../tests/tracker/traversalBaseline.test.ts) 的内联快照是遍历量回归护栏：结构性优化使数字下降属预期（`vitest run -u` 刷新），无关改动使数字上升需要先解释原因再更新快照。
+- DEV 真实回放可通过 `window.__DXC_TRAVERSAL__` 开启长生命周期遍历会话：`start()` 开始新局，`snapshot()` 查看中途累计值，`stop()` 获取最终 JSON 并停止，`reset()` 清空后继续；G0 直接读取快照的 `g0.totals` 与固定五项 `g0.sites`。
 - 初始牌堆初始化后，`pile.cards` 顺序应独立于 `room.cards`。
 - 摸暗牌、摸明牌时手牌额度及状态维护应保持准确。
-- 洗牌时协议 `cardCount` 与本地可枚举牌堆不一致属于高风险路径：需要确认 id=0 暗占位补齐、剩余牌堆顶部顺序、暂停追踪候选展示和暗标记账本迁移。
+- 洗牌时协议 `cardCount` 与本地可枚举牌堆不一致属于高风险路径：需要确认匿名暗占位账本、剩余牌堆顶部顺序、暂停追踪候选展示和暗标记账本迁移。
 - 玩家来源明牌残留公共区时，需要确认旧公共区槽位被占位修复，且同批已知牌不会被用作其它明牌的回补占位。
 - `AmbiguousKnownIndex.describe()` 多候选位置展示应准确。
 - 手牌暗置到标记区的 4 选 1 / 4 选 2 / 4 选 3、逐张明置、混有暗牌和叠加跨角色候选的场景应保持保守且可收敛。

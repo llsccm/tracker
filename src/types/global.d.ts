@@ -1,3 +1,5 @@
+import type { TraversalStatsBrowserControl } from '@/tracker/runtime/traversalStatsBrowser'
+
 export {}
 
 declare global {
@@ -8,6 +10,7 @@ declare global {
       [key: string]: unknown
     }
     padding?: unknown
+    __DXC_TRAVERSAL__?: TraversalStatsBrowserControl
   }
 
   const unsafeWindow: Window | undefined

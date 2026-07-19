@@ -356,7 +356,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       const fallbackCount = unknownCount - takenCount
       const fallbackCards = this.room.createExternalCards([], fallbackCount)
       if (fallbackCards.length > 0) {
-        trackerLogger.warn('来源实体不足，创建 id=0 暗占位补足公共区移动', {
+        trackerLogger.warn('来源实体不足，创建匿名暗占位补足公共区移动', {
           reason: 'moveUnknownCardsForContext:publicFallback',
           requestedCount: unknownCount,
           takenCount,
@@ -632,7 +632,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
 
       const usedPublicResiduePlaceholders = new Set<Card>()
       // 只有观测到来源手牌已被本次移动清空时，确定明牌才可作为旧公共区槽位的替身。
-      // 未观测手牌总数时保持保守，优先用暗占位或新建 id=0 占位，避免偷走仍可能在手里的明牌。
+      // 未观测手牌总数时保持保守，优先用暗占位或新建匿名占位，避免偷走仍可能在手里的明牌。
       const canUseKnownSourcePlaceholder =
         context.sourceHandTotalObserved &&
         fromSubZone === 'hand' &&
@@ -701,7 +701,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
           if (!placeholder) {
             placeholder = this.room.createExternalCards([], 1)[0] ?? null
             if (placeholder) {
-              trackerLogger.warn('公共区残留修复创建 id=0 回补占位', {
+              trackerLogger.warn('公共区残留修复创建匿名回补占位', {
                 reason: 'moveKnownCardsForContext:publicResidueFallback',
                 knownCardID: card.id,
                 placeholderCardID: placeholder.id,
