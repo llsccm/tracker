@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { isAnonymous } from '@/tracker/Card'
 import { HAND_EXCHANGE_STATE_KEY } from '@/tracker/skill/HandExchange'
 import type { Room } from '@/tracker/Room'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
@@ -1006,7 +1007,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(getCard(room, revealedPlaceholderID).isKnown).toBe(true)
     expect(getCard(room, 641).seats).toEqual(new Set([1]))
     expect(getCard(room, 642).seats).toEqual(new Set([3]))
-    expect(placeholder.id).toBe(0)
+    expect(isAnonymous(placeholder)).toBe(true)
     expect(placeholder.seats.has(1)).toBe(false)
     expect(room.getPlayer(1).observedHandCount).toBe(2)
     expect(room.getPlayer(2).observedHandCount).toBe(2)

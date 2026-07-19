@@ -14,6 +14,6 @@
   - `mem:local_environment`：应反映当前开发者本机的操作系统、默认 Shell、沙箱/权限限制、编码设置与检索工具回退；这些环境差异不写入仓库通用文档。
   - `mem:suggested_commands`：应包含 `pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm typecheck:tracker`、`pnpm test:tracker` 等项目脚本；具体本机 Shell 等价命令可引用 `mem:local_environment`。
   - `mem:task_completion`：应反映阶段 E、F-lite 已完成，`src/tracker/` 与 `src/config/` 重构已完成；文档-only 修改无需构建，代码修改需运行适用的 lint/build，TypeScript 类型相关变更需运行适用的 typecheck，tracker 变更需运行 `pnpm test:tracker` 与 `pnpm typecheck:tracker`。
-  - `mem:card_tracker`：应与 [`card_tracker.md`](card_tracker.md) 对齐，反映新版记牌器重构主动接入已完成，完全从影子模式切换为主动运行，`src/refactor/` 已更名并归并为 `src/tracker/`，`src/context/` 主动实现已不存在；同时列出 `CardLocationIndex`、`locationCandidates`、`publicCandidates`、匿名实体与随机手牌转移的全实体候选、完整位置约束、洗牌协议张数与 id=0 暗占位补齐、暗置标记候选与占位账本迁移、玩家来源明牌残留公共区回补、暂停追踪、脏变更缓存、全牌池扫描的 `traversalBaseline` 插桩要求、仍未补齐的边缘推断、视图脏渲染与 `trackerVisibility` 已落地；`handler/old` 已不存在；遗留 `legacyMoveCard` 与边缘推断、更多自动化回归仍为缺口。
+  - `mem:card_tracker`：应与 [`card_tracker.md`](card_tracker.md) 对齐，反映新版记牌器重构主动接入已完成，完全从影子模式切换为主动运行，`src/refactor/` 已更名并归并为 `src/tracker/`，`src/context/` 主动实现已不存在；同时列出 `CardLocationIndex`、`locationCandidates`、`publicCandidates`、匿名实体与随机手牌转移的全实体候选、完整位置约束、洗牌协议张数与稳定负 ID 匿名占位、暗置标记候选与占位账本迁移、玩家来源明牌残留公共区回补、暂停追踪、脏变更缓存、全牌池扫描的 `traversalBaseline` 插桩要求、仍未补齐的边缘推断、视图脏渲染与 `trackerVisibility` 已落地；`handler/old` 已不存在；遗留 `legacyMoveCard` 与边缘推断、更多自动化回归仍为缺口。
 - 未来代理应优先阅读 `mem:core`，再根据任务读取 `mem:tech_stack`、`mem:conventions`、`mem:local_environment`、`mem:suggested_commands`、`mem:task_completion`、`mem:card_tracker`。
 - `.serena` 目录已加入 `.gitignore`，记忆文件不会被提交到版本控制。

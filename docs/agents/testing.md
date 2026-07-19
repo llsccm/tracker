@@ -128,13 +128,39 @@ CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑�
 - 远端 `Config_w.sgs` / HTML 资源加载
 - 录像 UI 与宿主页面耦合行为
 
+### 真实回放冲突计数
+
+阶段 0 的五个匿名占位冲突站点支持 Vite 开发服务器脚本累计采集。通过 `pnpm dev` 安装脚本并打开目标页面后，在 DevTools Console 执行：
+
+```js
+window.__DXC_TRAVERSAL__.start()
+```
+
+完整播放一局后，用以下命令导出最终快照：
+
+```js
+copy(JSON.stringify(window.__DXC_TRAVERSAL__.stop(), null, 2))
+```
+
+从 `g0.totals` 和 `g0.sites` 读取五站点累计值；`g0.sites` 会固定输出以下 key，即使没有触发也明确为零：
+
+```text
+anonymousSlot:swapKnownCardWithPublicSourcePlaceholder
+anonymousSlot:swapKnownCardWithPlayerSourcePlaceholder
+anonymousSlot:recoverPlayerOccupiedIdentityForPublicReveal
+anonymousSlot:insertUnknownPlaceholderIntoPile
+anonymousSlot:createExternalCardsFallback
+```
+
+每局应独立保存 JSON，并记录回放来源、局号、采集日期和代码提交。`snapshot()` 可在回放中途查看累计值，`reset()` 可在不关闭会话的情况下开始新的采集段。
+
 ---
 
 ## 编写测试的约定
 
 - 新测试放在与主题接近的现有文件；新主题再开 `tests/<area>/*.test.ts`
 - 优先复用 `tests/tracker/helpers/`，避免每个用例重复搭 Room / Controller
-- 测试名写清场景与期望，例如“洗牌 cardCount 大于本地枚举时补 id=0 暗占位”
+- 测试名写清场景与期望，例如“洗牌 cardCount 大于本地枚举时保持匿名占位账本”
 - 断言关注**可观察状态**：owner、locationCandidates、手牌额度、公共区顺序、脏集合、遍历计数；少断言实现细节私有字段
 - 不要依赖真实 DOM / Laya；需要视图时用 helper 中的 noop 或最小 stub
 - 保持与源码一致的风格：2 空格、LF、单引号、无分号（Prettier）

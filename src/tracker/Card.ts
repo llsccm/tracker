@@ -54,6 +54,18 @@ interface BindOptions {
   known?: boolean
 }
 
+interface CardIdentityLike {
+  id: number
+}
+
+export function hasRealIdentity(card: CardIdentityLike): boolean {
+  return card.id > 0
+}
+
+export function isAnonymous(card: CardIdentityLike): boolean {
+  return !hasRealIdentity(card)
+}
+
 /**
  * 重构版卡牌实体类
  * 放弃双向链表，采用状态标记与座位候选集绑定机制
@@ -83,6 +95,7 @@ export class Card extends BaseCard {
     super(id) // 内部由 BaseCard 自动通过 CardConfig 单例拉取 cardInfo
     this.room = room
     this.entityID = id > 0 ? id : room.allocateAnonymousEntityID()
+    if (!hasRealIdentity(this)) this.id = this.entityID
 
     // 1. 位置绑定与标记
     this.location = 'pile' // 'pile' | 'discard' | 'exile' | 'player' | 'suspended'

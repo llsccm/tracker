@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { POSITION_BOTTOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import type { Card } from '@/tracker/Card'
+import { isAnonymous, type Card } from '@/tracker/Card'
 import type { Room } from '@/tracker/Room'
 import { getPileDisplayCards } from '@/tracker/helper/pileOrder'
 import { getPublicFieldCandidateCards } from '@/tracker/view/publicFieldCandidates'
@@ -70,7 +70,7 @@ function expectConsistentPublicZones(room: Room) {
 function playerHandPlaceholders(room: Room, seatID?: number) {
   return room.cards.filter(
     (card) =>
-      card.id === 0 &&
+      isAnonymous(card) &&
       card.location === 'player' &&
       card.subZone === 'hand' &&
       (seatID === undefined || card.seats.has(seatID))
@@ -227,7 +227,7 @@ describe('牌堆展示顺序', () => {
       }
 
       expect(getPile(room).cards.map((card) => card.id)).toEqual([1, 2, 3])
-      expect(getPile(room).cards.filter((card) => card.id === 0)).toHaveLength(0)
+      expect(getPile(room).cards.filter((card) => isAnonymous(card))).toHaveLength(0)
       hiddenHandCards.forEach((card) => {
         expect(card.location).toBe('suspended')
         expect(card.subZone).toBeNull()
@@ -251,7 +251,7 @@ describe('牌堆展示顺序', () => {
     })
   })
 
-  it('协议牌堆空间数量偏大但无正 ID 可解释时只提示不补 id=0', () => {
+  it('协议牌堆空间数量偏大但无正 ID 可解释时只提示不补匿名占位', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3] })
     const pile = getPile(room)
 
@@ -260,9 +260,9 @@ describe('牌堆展示顺序', () => {
 
       expect(pile.cards).toHaveLength(3)
       expect(pile.cards.map((card) => card.id)).toEqual([1, 2, 3])
-      expect(pile.cards.filter((card) => card.id === 0)).toHaveLength(0)
+      expect(pile.cards.filter((card) => isAnonymous(card))).toHaveLength(0)
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('未创建 id=0 牌堆占位'),
+        expect.stringContaining('未创建匿名牌堆占位'),
         expect.objectContaining({
           cardCount: 5,
           knownPileCount: 3,
@@ -307,11 +307,14 @@ describe('牌堆展示顺序', () => {
     })
 
     const seat0Placeholder = room.cards.find(
-      (card) => card.id === 0 && card.location === 'player' && card.seats.has(0)
+      (card) => isAnonymous(card) && card.location === 'player' && card.seats.has(0)
     )
     const seat4Placeholder = room.cards.find(
       (card) =>
-        card.id === 0 && card.location === 'player' && card.subZone === 'hand' && card.seats.has(4)
+        isAnonymous(card) &&
+        card.location === 'player' &&
+        card.subZone === 'hand' &&
+        card.seats.has(4)
     )
     expect(seat0Placeholder).toBeTruthy()
     expect(seat4Placeholder).toBeTruthy()
@@ -345,7 +348,7 @@ describe('牌堆展示顺序', () => {
       expect(suspendedHandIdentity.suspended).toBe(false)
       expect(knownHandCard.location).toBe('process')
       const fallbackSeat4Placeholder = room.cards.find(
-        (card) => card.id === 0 && card.location === 'outside' && card.subZone === null
+        (card) => isAnonymous(card) && card.location === 'outside' && card.subZone === null
       )
       expect(fallbackSeat4Placeholder).toBeTruthy()
       expectConsistentPublicZones(room)
@@ -367,7 +370,7 @@ describe('牌堆展示顺序', () => {
     room.shufflePile({ cardCount: 3 })
 
     const preservedPlaceholder = room.cards.find(
-      (card) => card.id === 0 && card.location === 'player' && card.subZone === 'hand'
+      (card) => isAnonymous(card) && card.location === 'player' && card.subZone === 'hand'
     )
     expect(preservedPlaceholder).toBeTruthy()
     expect(suspendedHandIdentity.location).toBe('suspended')
@@ -442,7 +445,7 @@ describe('牌堆展示顺序', () => {
     expect(recycledCard.location).toBe('pile')
   })
 
-  it('洗牌暂停暗标记正 ID 时按实体位置创建 id=0 替身', () => {
+  it('洗牌暂停暗标记正 ID 时按实体位置创建匿名替身', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5], seatIDs: [1] })
     const visibleHandCard = room.cardIndex.get(4)!
     const hiddenMarkPlaceholder = room.cardIndex.get(5)!
@@ -477,7 +480,7 @@ describe('牌堆展示顺序', () => {
     expect(updatedRecord.placeholderCards.has(hiddenMarkPlaceholder)).toBe(false)
     expect(placeholderCards).toHaveLength(1)
     expect(currentPlaceholder).not.toBe(hiddenMarkPlaceholder)
-    expect(currentPlaceholder.id).toBe(0)
+    expect(isAnonymous(currentPlaceholder)).toBe(true)
     expect(currentPlaceholder.location).toBe('player')
     expect(currentPlaceholder.subZone).toBe('mark')
     expect(currentPlaceholder.spellID).toBe(700)
@@ -488,7 +491,7 @@ describe('牌堆展示顺序', () => {
     expect(hiddenMarkPlaceholder.suspended).toBe(true)
     expect(hiddenMarkPlaceholder.isKnown).toBe(true)
     expect(getPublicFieldCandidateCards(room)).toContain(hiddenMarkPlaceholder)
-    expect(room.cards.filter((card) => card.id === 0)).toHaveLength(1)
+    expect(room.cards.filter((card) => isAnonymous(card))).toHaveLength(1)
     expectConsistentPublicZones(room)
   })
 
@@ -543,7 +546,7 @@ describe('牌堆展示顺序', () => {
     expectConsistentPublicZones(room)
   })
 
-  it('木牛流马出现完整明牌快照时用明牌置换 id=0 实体位置替身', () => {
+  it('木牛流马出现完整明牌快照时用明牌置换匿名实体位置替身', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 11, 12, 73, 105], seatIDs: [7] })
     const pile = getPile(room)
     const visibleHandCard = room.cardIndex.get(1)!
@@ -573,7 +576,7 @@ describe('牌堆展示顺序', () => {
 
     const preservedMarkPlaceholders = room.cards.filter(
       (card) =>
-        card.id === 0 &&
+        isAnonymous(card) &&
         card.location === 'player' &&
         card.subZone === 'mark' &&
         card.spellID === 700 &&
@@ -602,7 +605,7 @@ describe('牌堆展示顺序', () => {
     expect(
       room.cards.filter(
         (card) =>
-          card.id === 0 &&
+          isAnonymous(card) &&
           card.location === 'player' &&
           card.subZone === 'mark' &&
           card.spellID === 700 &&
@@ -740,10 +743,10 @@ describe('牌堆展示顺序', () => {
       }
     },
     {
-      name: 'id=0 暗占位揭示为牌堆明牌时仍回补牌堆槽位',
+      name: '匿名暗占位揭示为牌堆明牌时仍回补牌堆槽位',
       cardIDs: [1, 2, 3, 4],
       knownId: 2,
-      sourceEvent: 'test:player-source-id-zero-placeholder',
+      sourceEvent: 'test:player-source-anonymous-placeholder',
       setup(room: Room) {
         const [placeholder] = room.createExternalCards([], 1)
         placeholder.bindCandidates([1], 'hand', null, { known: false })
@@ -821,7 +824,7 @@ describe('牌堆展示顺序', () => {
       sourceEvent: { type: 'test:unobserved-player-source-public-residue' }
     })
 
-    const fallbackPlaceholder = pile.cards.find((card) => card.id === 0)
+    const fallbackPlaceholder = pile.cards.find((card) => isAnonymous(card))
 
     expect(room.getPlayer(1).hasObservedHandCount).toBe(false)
     expect(pile.cards).toHaveLength(pileCountBefore)

@@ -175,7 +175,7 @@ export class CardCounter {
 
     recordTraversal('cardCounter:update', newRoomCards.length + dirtyCards.length)
 
-    // 先注册新牌：正 ID 需要补建 name/color/number/type 倒排索引，id=0 只进入状态桶。
+    // 先注册新牌：正 ID 需要补建 name/color/number/type 倒排索引，匿名牌只进入状态桶。
     newRoomCards.forEach((card) => this.addCard(card))
     dirtyCards.forEach((card) => {
       if (this.registeredCards.has(card)) {

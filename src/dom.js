@@ -2,7 +2,12 @@ import { CardConfig } from './config'
 import { ConfigManager } from './config/ConfigManager'
 import { drawMiZhu, drawSeatUIs } from './draw'
 import { Game, globalConfig, globalState, UI } from './tracker'
-import { setTrackerSeatUIReader, tracker } from './tracker/runtime/browser'
+import {
+  installTraversalStatsBrowserControl,
+  setTrackerSeatUIReader,
+  tracker,
+  uninstallTraversalStatsBrowserControl
+} from './tracker/runtime/browser'
 import { drawCitiesUI } from './ui/CitiesUI'
 import { bindDelegatedTooltips } from './ui/domHelpers'
 import { addDragHint, initDragElement } from './ui/drag'
@@ -34,12 +39,18 @@ function getTrackedHandNumbers(seatID) {
 }
 
 export function Init() {
+  if (import.meta.env.DEV) {
+    installTraversalStatsBrowserControl(window)
+  }
   bindInitialResize(globalConfig, resize)
   console.info('🚀 初始化...')
   return waitForLegacyFrameReady(initFrame)
 }
 
 export function Exit() {
+  if (import.meta.env.DEV) {
+    uninstallTraversalStatsBrowserControl()
+  }
   return cleanupLifecycle({ resize, scheduleSetGameSize, SGSresize, globalState })
 }
 

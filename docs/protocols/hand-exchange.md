@@ -247,7 +247,7 @@ Room.skillState['handExchangeBatches'] = {
 
 ### 实体占位牌
 
-玩家手牌中的暗实体（包括 `id=0` 匿名实体）仍属于确定的物理批次：
+玩家手牌中的暗实体（包括稳定负 `id/entityID` 的匿名实体）仍属于确定的物理批次：
 
 1. 进交换区时写入 `sourceCards`，同一实体随批次进入 `exchange`。
 2. 回到暗手牌时继续作为暗实体绑定到接收座位。

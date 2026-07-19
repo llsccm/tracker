@@ -1,7 +1,8 @@
 import { trackerLogger } from '@/utils/logger'
 import { POSITION_TOP } from '../candidate/cardPositions'
 import { getCompatibleMarkSpellIDs, type SpellIDInput } from '../candidate/markSpellID'
-import type { Card } from '../Card'
+import { isAnonymous, type Card } from '../Card'
+import { recordTraversal } from '../traversalStats'
 import type {
   PlayerLocationCandidate,
   PublicPosition,
@@ -349,6 +350,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
   swapKnownCardWithPlayerSourcePlaceholder(card: Card, context: RoomMoveContext): Card | null {
     const placeholder = this.findUnknownPlayerSourcePlaceholder(context, card)
     if (!placeholder) return null
+    recordTraversal('anonymousSlot:swapKnownCardWithPlayerSourcePlaceholder', 1)
 
     const { fromSeat, fromSubZone } = context
     const sourceSpellID = this.getSourceSpellID(context)
@@ -527,6 +529,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     },
     placeholder: Card
   ): void {
+    recordTraversal('anonymousSlot:insertUnknownPlaceholderIntoPile', 1)
     const pileCards = zone.cards
     let knownTopCount = 0
     for (let i = pileCards.length - 1; i >= 0; i -= 1) {
@@ -564,6 +567,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
 
     const replacement = this.takeCardsFromPublicZone(1, fromZone, fromPosition)[0]
     if (!replacement) return null
+    recordTraversal('anonymousSlot:swapKnownCardWithPublicSourcePlaceholder', 1)
 
     this.room.removeCardsFromConstraintGroups([replacement])
 
@@ -648,9 +652,9 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
 
     if (sourceIsOutside) {
       const externalCards = this.room.createExternalCards([], count)
-      const placeholderCards = externalCards.filter((card) => card.id === 0)
+      const placeholderCards = externalCards.filter(isAnonymous)
       if (placeholderCards.length > 0) {
-        trackerLogger.warn('游戏外来源创建 id=0 暗占位', {
+        trackerLogger.warn('游戏外来源创建匿名暗占位', {
           reason: 'takeSourceCards:sourceOutside',
           requestedCount: count,
           createdPlaceholderCount: placeholderCards.length,
@@ -682,7 +686,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       )
 
       // 弹窗 mark 回牌堆时 FromID 可能是技能空间 ID，不一定能按座位取到实体。
-      // 先从 spellID 对应的无席位 mark 空间补足，避免误创建 id=0 fallback。
+      // 先从 spellID 对应的无席位 mark 空间补足，避免误创建匿名 fallback。
       const unassignedUnknownCards =
         sourceSubZone === 'mark' && unknownCards.length < count
           ? this.takeUnassignedMarkSpaceCards(count - unknownCards.length, sourceSpellID)
