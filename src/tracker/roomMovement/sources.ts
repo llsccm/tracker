@@ -478,7 +478,13 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       }
 
       zone.removeCard(card)
-      zone.add(placeholder, POSITION_TOP)
+      // 确定明牌槽不能被占位污染；若牌堆顶已是连续明牌（如观虚刚展示的牌顶），
+      // 占位必须插到该明牌段下方，否则会盖住端点明牌并制造“N 暗 + 牌顶明牌”的假象。
+      if (oldLocation === 'pile') {
+        this.insertUnknownPlaceholderIntoPile(zone, placeholder)
+      } else {
+        zone.add(placeholder, POSITION_TOP)
+      }
       return
     }
 
@@ -510,26 +516,88 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
   }
 
   /**
+   * 把无公共候选的暗占位放回牌堆时，避免盖住已确认的牌堆顶明牌段。
+   * 全是明牌时保持旧语义：占位落到牌顶。
+   */
+  insertUnknownPlaceholderIntoPile(
+    zone: {
+      cards: Card[]
+      add: (cards: Card | Card[], position?: typeof POSITION_TOP) => void
+      remove: (count: number, position?: typeof POSITION_TOP) => Card[]
+    },
+    placeholder: Card
+  ): void {
+    const pileCards = zone.cards
+    let knownTopCount = 0
+    for (let i = pileCards.length - 1; i >= 0; i -= 1) {
+      if (pileCards[i]?.isKnown === true) knownTopCount += 1
+      else break
+    }
+
+    // 没有牌顶明牌段，或整堆都是明牌时，沿用牌顶回补，兼容既有单牌置换回归。
+    if (knownTopCount === 0 || knownTopCount === pileCards.length) {
+      zone.add(placeholder, POSITION_TOP)
+      return
+    }
+
+    // remove(TOP) 返回顶 -> 内；add(TOP) 按数组顺序 push，末张成为新牌顶。
+    const knownTopCards = zone.remove(knownTopCount, POSITION_TOP)
+    zone.add(placeholder, POSITION_TOP)
+    zone.add([...knownTopCards].reverse(), POSITION_TOP)
+  }
+
+  /**
    * 从牌堆摸到明牌时，CardID 可能正被其他座位的暗手牌占位实体占用。
    * 此时不能直接把该实体搬到当前玩家手里，而要先从牌堆取一张未知实体替回原暗位。
    */
   swapKnownCardWithPublicSourcePlaceholder(card: Card, context: RoomMoveContext): Card | null {
     const { fromZone, fromPosition } = context
     const sourceZone = typeof fromZone === 'string' ? this.room.zones.get(fromZone) : undefined
-    if (!sourceZone || sourceZone.cards.includes(card) || card.location !== 'player') return null
-    // 协议已明确牌来自公共区；即使本地把该实体标成明牌，玩家位置也只是陈旧状态。
-    // 必须取一个公共区实体回补原玩家槽位，保持手牌实体与公共区数量守恒。
-    if (card.suspended === true) return null
+    if (!sourceZone || sourceZone.cards.includes(card) || card.suspended === true) return null
+
+    const previousPublicZoneEntry = Array.from(this.room.zones.entries()).find(([, zone]) => {
+      return zone.cards.includes(card)
+    })
+    const isPlayerResidue = card.location === 'player'
+    // 已知身份既不在玩家区，也不在其它公共区时，没有可由来源占位回补的旧位置。
+    if (!isPlayerResidue && !previousPublicZoneEntry) return null
 
     const replacement = this.takeCardsFromPublicZone(1, fromZone, fromPosition)[0]
     if (!replacement) return null
+
+    this.room.removeCardsFromConstraintGroups([replacement])
+
+    if (previousPublicZoneEntry) {
+      const [previousZoneID, previousZone] = previousPublicZoneEntry
+      // 真实身份原先仍停在牌堆/弃牌等公共区时，把 exchange 中的暗实体放回它的旧槽位；
+      // 随后 known 路径会把真实身份移入目标手牌，从而保持两边实体数量守恒。
+      // 来源端点可能已经是确认明牌；换回旧公共槽位只迁移位置，不能抹掉身份。
+      replacement.setLocationCandidates(
+        [],
+        'swapKnownCardWithPublicSourcePlaceholder:publicCandidates'
+      )
+      replacement.suspended = false
+      replacement.moveToPublicZone(previousZoneID)
+      previousZone.replaceCard(card, replacement)
+
+      trackerLogger.debug('公共区已知牌命中其它公共区实体，使用来源占位回填旧槽位', {
+        cardID: card.id,
+        replacementCardID: replacement.id,
+        fromZone,
+        fromPosition,
+        previousZoneID
+      })
+      return replacement
+    }
+
+    // 协议已明确牌来自公共区；即使本地把该实体标成明牌，玩家位置也只是陈旧状态。
+    // 必须取一个公共区实体回补原玩家槽位，保持手牌实体与公共区数量守恒。
 
     const oldSubZone = card.subZone
     const oldSeats = new Set(Array.from(card.seats, Number))
     const oldCombinationID = card.combinationID
     const oldSpellID = card.spellID
 
-    this.room.removeCardsFromConstraintGroups([replacement])
     replacement.isKnown = false
     replacement.setLocationCandidates([], 'swapKnownCardWithPublicSourcePlaceholder:candidates')
     replacement.suspended = false

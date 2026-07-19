@@ -23,11 +23,14 @@ vi.mock('../../src/draw', () => ({
 
 import { handleRoleOptTargetNtf } from '../../src/handler/GsCRoleOptTargetNtf'
 import { Game } from '../../src/tracker'
+import { tracker } from '../../src/tracker/runtime/browser'
 
 describe('GsCRoleOptTargetNtf', () => {
   beforeEach(() => {
     destroyPeiXiuMapWindow.mockClear()
     revealTrackerCards.mockClear()
+    vi.mocked(tracker.getReadyTrackerRoom).mockReset()
+    Game.deleteSpellState(7009)
     Game.deleteSpellState(4022)
   })
 
@@ -62,5 +65,147 @@ describe('GsCRoleOptTargetNtf', () => {
 
     expect(destroyPeiXiuMapWindow).toHaveBeenCalledOnce()
     expect(Game.getSpellState(4022)).toBeUndefined()
+  })
+
+  it('权变将 Params 作为牌堆顶明牌且不借用鹰视状态', () => {
+    handleRoleOptTargetNtf({
+      Param: 1,
+      Params: [158, 2, 63, 125],
+      SeatID: 2,
+      SpellID: 7011,
+      SrcSeatID: 2,
+      Timeout: 30,
+      Type: 28,
+      targetSeatID: 255,
+      className: 'GsCRoleOptTargetNtf'
+    })
+
+    expect(revealTrackerCards).toHaveBeenCalledOnce()
+    expect(revealTrackerCards).toHaveBeenCalledWith(
+      {
+        type: 'public',
+        zoneName: 'pile',
+        reposition: true,
+        cardIDsTopFirst: true
+      },
+      [158, 2, 63, 125]
+    )
+    expect(Game.getSpellState(7009)).toBeUndefined()
+  })
+
+  it('观虚同时公开牌堆顶与目标手牌', () => {
+    handleRoleOptTargetNtf({
+      Param: 1,
+      Params: [5, 4, 62, 67, 37, 53, 142, 16, 160, 79, 106],
+      SeatID: 6,
+      SpellID: 987,
+      SrcSeatID: 6,
+      Timeout: 30,
+      Type: 29,
+      targetSeatID: 1,
+      className: 'GsCRoleOptTargetNtf'
+    })
+
+    expect(revealTrackerCards).toHaveBeenCalledTimes(2)
+    expect(revealTrackerCards).toHaveBeenNthCalledWith(
+      1,
+      {
+        type: 'public',
+        zoneName: 'pile',
+        reposition: true,
+        cardIDsTopFirst: true
+      },
+      [62, 67, 37, 53, 142]
+    )
+    expect(revealTrackerCards).toHaveBeenNthCalledWith(
+      2,
+      { type: 'player', seatID: 1 },
+      [16, 160, 79, 106]
+    )
+  })
+
+  it('诫厉同时公开牌堆顶与目标部分手牌，并记录 expectedPileCount', () => {
+    const skillState: Record<string, any> = {}
+    const getSkillState = vi.fn(() => skillState)
+    vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({
+      getSkillState,
+      getPlayer: vi.fn(() => ({ hasObservedHandCount: true, observedHandCount: 5 }))
+    } as any)
+
+    handleRoleOptTargetNtf({
+      Param: 1,
+      Params: [4, 2, 81, 99, 124, 4, 91, 158],
+      SeatID: 3,
+      SpellID: 3483,
+      SrcSeatID: 3,
+      Timeout: 30,
+      Type: 28,
+      targetSeatID: 4,
+      className: 'GsCRoleOptTargetNtf'
+    })
+
+    expect(getSkillState).toHaveBeenCalledWith(3483)
+    expect(skillState.expectedPileCount).toBe(4)
+    expect(revealTrackerCards).toHaveBeenCalledTimes(2)
+    expect(revealTrackerCards).toHaveBeenNthCalledWith(
+      1,
+      {
+        type: 'public',
+        zoneName: 'pile',
+        reposition: true,
+        cardIDsTopFirst: true
+      },
+      [81, 99, 124, 4]
+    )
+    expect(revealTrackerCards).toHaveBeenNthCalledWith(2, { type: 'player', seatID: 4 }, [91, 158])
+  })
+
+  it('诫厉 handCount 等于目标整手数时按 fullHand 同步', () => {
+    const skillState: Record<string, any> = {}
+    const getSkillState = vi.fn(() => skillState)
+    vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({
+      getSkillState,
+      getPlayer: vi.fn(() => ({ hasObservedHandCount: true, observedHandCount: 2 }))
+    } as any)
+
+    handleRoleOptTargetNtf({
+      Param: 1,
+      Params: [4, 2, 81, 99, 124, 4, 91, 158],
+      SeatID: 3,
+      SpellID: 3483,
+      SrcSeatID: 3,
+      Timeout: 30,
+      Type: 28,
+      targetSeatID: 4,
+      className: 'GsCRoleOptTargetNtf'
+    })
+
+    expect(revealTrackerCards).toHaveBeenNthCalledWith(
+      2,
+      { type: 'player', seatID: 4, fullHand: true },
+      [91, 158]
+    )
+  })
+
+  it('诫厉仅有牌堆张数时只写入 expectedPileCount', () => {
+    const skillState: Record<string, any> = {}
+    const getSkillState = vi.fn(() => skillState)
+    vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({ getSkillState } as any)
+
+    handleRoleOptTargetNtf({
+      Param: 1,
+      Params: [4],
+      SeatID: 3,
+      SpellID: 3483,
+      SrcSeatID: 3,
+      Timeout: 30,
+      Type: 28,
+      targetSeatID: 255,
+      className: 'GsCRoleOptTargetNtf'
+    })
+
+    expect(getSkillState).toHaveBeenCalledWith(3483)
+    expect(skillState.expectedPileCount).toBe(4)
+    expect(revealTrackerCards).not.toHaveBeenCalled()
   })
 })

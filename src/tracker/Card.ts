@@ -382,6 +382,10 @@ export class Card extends BaseCard {
       .filter(Boolean)
 
     const containerCandidates = getContainerLocationCandidates(this.locationCandidates)
+    const hasExchangeBatchCandidate = this.locationCandidates.some(
+      (candidate) =>
+        candidate.type === 'outside' && candidate.zone === 'exchange' && Boolean(candidate.batchID)
+    )
 
     const previousSubZoneKeys = this.subZoneCandidates
       .map((candidate) => createSubZoneCandidateKey(candidate))
@@ -406,9 +410,11 @@ export class Card extends BaseCard {
     const previousLocation = this.location
     let changed = previousSubZoneKeys !== nextSubZoneKeys || previousPublicKeys !== nextPublicKeys
 
-    // 玩家/容器候选都属于玩家相关区域，不能继续残留在公共 Zone 被后续摸牌再次取到。
+    // 玩家/容器/交换批次候选都不能继续残留在真实公共 Zone 被后续摸牌再次取到。
     if (
-      (playerCandidates.length > 0 || containerCandidates.length > 0) &&
+      (playerCandidates.length > 0 ||
+        containerCandidates.length > 0 ||
+        hasExchangeBatchCandidate) &&
       publicCandidates.length === 0
     ) {
       this.room?.clearCardsFromPublicZones?.([this])
@@ -426,6 +432,17 @@ export class Card extends BaseCard {
         // 容器候选不直接归属某个 seat，owner 只由容器投影阶段解释。
         changed = this.clearSeats(`${reason}:seats`) || changed
       }
+    } else if (hasExchangeBatchCandidate) {
+      // 批次令牌是统一候选模型中的逻辑 exchange 位置；通用约束删掉最后一个玩家分支时，
+      // 这里必须立即同步物理读面，避免实体继续伪装成无座位玩家牌。
+      // 该分支与 skill/HandExchange.ts 的 projectCandidateRecord 是同一读面契约的两端：
+      // 逻辑 exchange 牌只记 location，不加入 zones.get('exchange')，两处改动需保持对齐。
+      this.location = 'exchange'
+      this.subZone = null
+      this.spellID = null
+      changed = previousLocation !== this.location || changed
+      changed = this.clearSeats(`${reason}:seats`) || changed
+      this.syncTimestamp()
     } else if (this.seats.size > 0 || this.owner !== null) {
       changed = this.clearSeats(`${reason}:seats`) || changed
     }

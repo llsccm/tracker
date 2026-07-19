@@ -49,6 +49,8 @@ export interface ContainerLocationCandidate {
 export interface OutsideLocationCandidate {
   type: 'outside'
   zone: PublicZoneName
+  /** exchange 暂存候选的批次令牌；缺省时仍表示普通游戏外位置。 */
+  batchID?: string
 }
 
 export type LocationCandidate =
@@ -107,6 +109,8 @@ export interface MoveOptions {
   fromSubZone?: SubZone
   fromSpellID?: SpellID | string | null
   cardCount?: number
+  /** 协议手牌总数变化量；候选身份不移动实体时可与 cardCount 不同。 */
+  handMoveCount?: number
   moveType?: RawMoveCardEvent['MoveType']
   position?: PublicPosition
   fromPosition?: PublicPosition

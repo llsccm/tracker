@@ -45,7 +45,7 @@ export function createUnknownButton(doc: Document, count: number): HTMLButtonEle
   const button = doc.createElement('button')
   button.classList.add(CARD_BUTTON_CLASS, UNKNOWN_CARD_CLASS)
   button.disabled = true
-  button.innerHTML = count > 1 ? `暗×${count}` : '暗'
+  button.innerHTML = count > 1 ? `${count}` : '暗'
   button.title = `${count} 张暗牌`
   return button
 }

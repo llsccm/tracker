@@ -28,6 +28,8 @@ export interface LocationCandidateInput {
   cardID?: CardID | string
   containerCardID?: CardID | string
   containerType?: string | null
+  /** 交换区逻辑候选的批次令牌；仅 type=outside 且 zone=exchange 时使用。 */
+  batchID?: string | null
 }
 
 function isPlayerLocationCandidate(
@@ -101,10 +103,14 @@ export function normalizeLocationCandidate(
   }
 
   if (type === 'outside') {
-    return {
-      type: 'outside',
-      zone: candidate.zone ?? 'outside'
-    } as OutsideLocationCandidate
+    const zone = candidate.zone ?? 'outside'
+    const batchID = candidate.batchID == null ? '' : String(candidate.batchID)
+    // 批次令牌是 exchange 逻辑位置的一部分，不能附着到普通游戏外候选。
+    if (batchID && zone !== 'exchange') return null
+
+    return batchID
+      ? { type: 'outside', zone, batchID }
+      : ({ type: 'outside', zone } satisfies OutsideLocationCandidate)
   }
 
   return null
@@ -146,7 +152,10 @@ export function createLocationCandidateKey(candidate: LocationCandidateInput = {
   }
 
   if (normalized.type === 'outside') {
-    return ['outside', normalized.zone ?? 'outside'].join(':')
+    const baseKey = ['outside', normalized.zone ?? 'outside']
+    // batchID 允许包含冒号；解析时会把第三段以后重新拼回完整令牌。
+    if (normalized.batchID) baseKey.push(normalized.batchID)
+    return baseKey.join(':')
   }
 
   return ''
@@ -190,7 +199,8 @@ export function parseLocationCandidateKey(key: string): LocationCandidate | null
   if (type === 'outside') {
     return normalizeLocationCandidate({
       type,
-      zone: parts[1]
+      zone: parts[1],
+      batchID: parts.length > 2 ? parts.slice(2).join(':') : null
     })
   }
 

@@ -14,7 +14,16 @@ function revealPlayerHandCards(seatID, cardIDs, options = {}) {
 }
 
 function revealPileCards(cardIDs) {
-  tracker.revealTrackerCards({ type: 'public', zoneName: 'pile' }, cardIDs)
+  // 看牌堆消息不仅公开牌面，也确认这些实体位于牌堆端点。
+  tracker.revealTrackerCards(
+    {
+      type: 'public',
+      zoneName: 'pile',
+      reposition: true,
+      cardIDsTopFirst: true
+    },
+    cardIDs
+  )
 }
 
 function revealTargetCards(seatID, cardIDs) {
@@ -23,6 +32,34 @@ function revealTargetCards(seatID, cardIDs) {
   } else {
     revealPlayerHandCards(seatID, cardIDs)
   }
+}
+
+// 部分手牌协议在 handCount 恰好等于目标整手数时，应按 fullHand 同步。
+// 优先信观测手牌数；没有观测时才退回本地手牌实体数。
+function shouldRevealAsFullHand(seatID, handCount) {
+  const count = Number(handCount) || 0
+  if (count <= 0) return false
+
+  const room = tracker.getReadyTrackerRoom()
+  if (!room) return false
+
+  const player = room.getPlayer?.(seatID)
+  if (player?.hasObservedHandCount === true) {
+    return count === Number(player.observedHandCount)
+  }
+
+  const handCards =
+    typeof room.refreshPlayerSnapshot === 'function'
+      ? room
+          .refreshPlayerSnapshot()
+          .filter((card) => card.subZone === 'hand' && card.seats?.has?.(Number(seatID)))
+      : null
+
+  if (Array.isArray(handCards) && handCards.length > 0) {
+    return count === handCards.length
+  }
+
+  return false
 }
 
 export function handleRoleOptTargetNtf(arg) {
@@ -123,12 +160,19 @@ export function handleRoleOptTargetNtf(arg) {
     case 987:
     case 988:
       if (Param == 1 && Params?.length > 2) {
-        if (
-          targetSeatID !== undefined &&
-          targetSeatID !== 255 &&
-          (SrcSeatID == Game.myID || import.meta.env.DEV)
-        ) {
-          revealPlayerHandCards(targetSeatID, Params.slice(-Params[1]))
+        if (SrcSeatID == Game.myID || import.meta.env.DEV) {
+          const pileCount = Number(Params[0]) || 0
+          const handCount = Number(Params[1]) || 0
+          if (pileCount > 0) {
+            // Params: [牌堆张数, 手牌张数, ...牌堆顶, ...目标手牌]
+            revealPileCards(Params.slice(2, 2 + pileCount))
+          }
+          if (handCount > 0 && targetSeatID !== undefined && targetSeatID !== 255) {
+            revealPlayerHandCards(
+              targetSeatID,
+              Params.slice(2 + pileCount, 2 + pileCount + handCount)
+            )
+          }
         }
       }
       break
@@ -159,14 +203,31 @@ export function handleRoleOptTargetNtf(arg) {
       break
 
     // 族钟繇 诫厉
+    // Params: [pileCount, handCount, ...pileTopCardIDs, ...handCardIDs]
+    // 手牌片段是目标部分手牌，不一定等于全部手牌
     case 3483:
-      if (Param == 1) {
-        if (Params?.length > 2 && targetSeatID !== undefined && targetSeatID !== 255) {
-          revealPlayerHandCards(targetSeatID, Params.slice(-Params[1]))
-        } else if (Params?.[0] > 0) {
+      if (Param == 1 && Params?.length > 0) {
+        const pileCount = Number(Params[0]) || 0
+        const handCount = Number(Params[1]) || 0
+
+        if (pileCount > 0) {
           const trackerRoom = tracker.getReadyTrackerRoom()
           if (trackerRoom) {
-            trackerRoom.getSkillState(SpellID).expectedPileCount = Params[0]
+            trackerRoom.getSkillState(SpellID).expectedPileCount = pileCount
+          }
+        }
+
+        if (Params.length > 2) {
+          if (pileCount > 0) {
+            revealPileCards(Params.slice(2, 2 + pileCount))
+          }
+          if (handCount > 0 && targetSeatID !== undefined && targetSeatID !== 255) {
+            const handCardIDs = Params.slice(2 + pileCount, 2 + pileCount + handCount)
+            revealPlayerHandCards(
+              targetSeatID,
+              handCardIDs,
+              shouldRevealAsFullHand(targetSeatID, handCount) ? { fullHand: true } : {}
+            )
           }
         }
       }
@@ -183,7 +244,6 @@ export function handleRoleOptTargetNtf(arg) {
     case 7010:
     case 7011:
       if (Params?.length > 0 && targetSeatID == 255) {
-        Game.spellSpace[7009] = Params.length
         if (SrcSeatID == Game.myID || import.meta.env.DEV) {
           revealPileCards(Params)
         }

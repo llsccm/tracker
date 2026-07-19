@@ -19,6 +19,7 @@
 | Serena 记忆库、同步状态与引用对齐检查 | [`docs/agents/serena.md`](docs/agents/serena.md) | 需要操作 `serena` 工具链、管理或修改 `mem:*` 格式的记忆文件。 |
 | 测试策略、回归命令、补测约定、手工验收清单 | [`docs/agents/testing.md`](docs/agents/testing.md) | 选择验证命令、补充 Vitest 回归、更新遍历基线、撰写 PR 验证说明，或做浏览器手工验收时。 |
 | 记牌器当前实现、历史设计、重构方案与领域验证清单 | [`docs/agents/card_tracker.md`](docs/agents/card_tracker.md) | 继续推进记牌器能力演进、排查协议同步异常、理解旧链表/Seats 方案或完善领域单测时。 |
+| 协议样例与适配说明索引 | [`docs/protocols/README.md`](docs/protocols/README.md) | 按 className / SpellID / 通用模式定位 `docs/protocols/` 专页时。 |
 | 应用全局生命周期、页面与 UI 框架注入流程、记牌器 Room/View 挂载与对局运行周期 | [`docs/agents/lifecycle.md`](docs/agents/lifecycle.md) | 需要理清小抄初始化与销毁时序、了解 Room 创建与 View 挂载机制、或排查消息分发链路时。 |
 | 终端执行、跨 Shell 命令与避坑指南 | [`docs/agents/commands.md`](docs/agents/commands.md) | 需要执行构建、校验、文本检索或文件操作命令时。 |
 

@@ -311,10 +311,7 @@ describe('牌堆展示顺序', () => {
     )
     const seat4Placeholder = room.cards.find(
       (card) =>
-        card.id === 0 &&
-        card.location === 'player' &&
-        card.subZone === 'hand' &&
-        card.seats.has(4)
+        card.id === 0 && card.location === 'player' && card.subZone === 'hand' && card.seats.has(4)
     )
     expect(seat0Placeholder).toBeTruthy()
     expect(seat4Placeholder).toBeTruthy()
@@ -626,6 +623,49 @@ describe('牌堆展示顺序', () => {
     expectConsistentPublicZones(room)
   })
 
+  it('牌顶已是连续明牌时来源占位回补插到明牌段下方', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5, 6], seatIDs: [1] })
+    const pile = getPile(room)
+    const topKnownIDs = [4, 5, 6]
+    const revealedIDs = [1, 2]
+
+    topKnownIDs.forEach((id) => room.cardIndex.get(id)!.confirmKnown())
+    // 手牌用瞬时匿名占位；真实身份 1/2 仍留在牌堆，揭开时会触发公共区占位回补。
+    const placeholders = room.createExternalCards([], 2)
+    placeholders.forEach((card) => {
+      card.bindCandidates([1], 'hand', null, { known: false })
+    })
+    room.getPlayer(1).syncObservedHandCount(2)
+
+    room.moveCards(revealedIDs, 'process', {
+      fromSeatID: 1,
+      fromSubZone: 'hand',
+      cardCount: revealedIDs.length,
+      sourceEvent: { type: 'test:reveal-hand-after-known-pile-top' }
+    })
+
+    expect(
+      getPileDisplayCards(pile.cards)
+        .slice(0, 3)
+        .map((card) => card.id)
+    ).toEqual([6, 5, 4])
+    expect(
+      getPileDisplayCards(pile.cards)
+        .slice(0, 3)
+        .every((card) => card.isKnown)
+    ).toBe(true)
+    const knownSegmentStart = pile.cards.length - topKnownIDs.length
+    expect(pile.cards.slice(knownSegmentStart - placeholders.length, knownSegmentStart)).toEqual(
+      expect.arrayContaining(placeholders)
+    )
+    placeholders.forEach((card) => {
+      expect(card.location).toBe('pile')
+      expect(pile.cards).toContain(card)
+    })
+    expect(pile.cards.slice(-3).map((card) => card.id)).toEqual([4, 5, 6])
+    expectConsistentPublicZones(room)
+  })
+
   it.each([
     {
       name: '实体占位揭示为牌堆明牌时回到牌堆但不顶回明牌位置',
@@ -734,6 +774,33 @@ describe('牌堆展示顺序', () => {
     })
 
     assert(room, knownCard, placeholder, pileCountBefore)
+    expectConsistentPublicZones(room)
+  })
+
+  it('公共来源端点明牌回填旧公共槽位时保留已知状态', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5], seatIDs: [1] })
+    const pile = getPile(room)
+    const knownCard = room.cardIndex.get(2)!
+    const sourceEndpoint = room.cardIndex.get(4)!
+    const playerPlaceholder = room.cardIndex.get(5)!
+
+    pile.removeCard(playerPlaceholder)
+    playerPlaceholder.bindCandidates([1], 'hand', null, { known: false })
+    room.getPlayer(1).syncObservedHandCount(1)
+    // 来源端点的身份已经由其它协议确认，回填只应迁移位置而不能重新盖暗。
+    sourceEndpoint.confirmKnown()
+
+    room.moveCards([knownCard.id], 'discard', {
+      fromSeatID: 1,
+      fromSubZone: 'hand',
+      cardCount: 1,
+      sourceEvent: { type: 'test:known-public-source-placeholder' }
+    })
+
+    expect(sourceEndpoint.location).toBe('pile')
+    expect(sourceEndpoint.isKnown).toBe(true)
+    expect(pile.cards).toContain(sourceEndpoint)
+    expect(getDiscard(room).cards).toContain(knownCard)
     expectConsistentPublicZones(room)
   })
 

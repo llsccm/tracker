@@ -1,6 +1,88 @@
-# `CGsRoleSpellOptRep`：裴秀地图选择回复
+# `CGsRoleSpellOptRep`：技能操作回复
 
 ## 消息用途
+
+`CGsRoleSpellOptRep` 携带技能操作结果。`Datas` 的具体语义由 `SpellID` 和 `Type`
+共同决定，不能脱离技能上下文统一解释。
+
+当前已确认的消息包括：
+
+| `SpellID` | `Type` | 技能 | `Datas` 语义            |
+| --------: | -----: | ---- | ----------------------- |
+|    `7009` |   `30` | 鹰视 | 本次看到的牌堆顶卡牌 ID |
+|    `3336` |   `50` | 嚣翻 | 本次看到的牌堆底卡牌 ID |
+|    `4021` |      - | 裴秀 | 地图 ID 和起始格        |
+
+## 鹰视：观看牌堆顶
+
+### 消息示例
+
+```text
+className: "CGsRoleSpellOptRep"
+SpellID: 7009
+Type: 30
+SeatID: 2
+Datas: [158, 2, 63, 125]
+data_count: 4
+```
+
+字段说明：
+
+| 字段         |                示例 | 含义                                  |
+| ------------ | ------------------: | ------------------------------------- |
+| `SpellID`    |              `7009` | 鹰视                                  |
+| `Type`       |                `30` | 鹰视返回牌堆顶观看结果                |
+| `SeatID`     |                 `2` | 执行技能的座位 ID；不作为卡牌所属区域 |
+| `Datas`      | `[158, 2, 63, 125]` | 本次看到的牌堆顶卡牌 ID               |
+| `data_count` |                 `4` | `Datas` 的元素数量                    |
+
+`Datas` 按牌堆顶向内排列，第一项是最顶牌；本例中 `158` 位于牌堆顶。
+
+处理时将 `Datas` 作为牌堆可见牌同步给记牌器，并将对应实体定位到牌堆顶。牌仍位于
+牌堆，不会被移动到玩家区域；相同牌组已经位于牌堆顶时，重复消息不会再次重排。
+
+代码位置：
+
+- 消息路由：`src/logic.js`
+- 鹰视协议处理：`src/handler/CGsRoleSpellOptRep.js`
+- 牌堆明牌同步：`src/tracker/runtime/trackerController.ts` 的 `revealTrackerCardsInZone`
+
+## 嚣翻：观看牌堆底
+
+### 消息示例
+
+```text
+className: "CGsRoleSpellOptRep"
+SpellID: 3336
+Type: 50
+SeatID: 2
+Datas: [149, 123, 1]
+data_count: 3
+```
+
+字段说明：
+
+| 字段         |             示例 | 含义                                  |
+| ------------ | ---------------: | ------------------------------------- |
+| `SpellID`    |            `3336` | 嚣翻                                  |
+| `Type`       |              `50` | 嚣翻返回牌堆底观看结果                |
+| `SeatID`     |               `2` | 执行技能的座位 ID；不作为卡牌所属区域 |
+| `Datas`      | `[149, 123, 1]` | 本次看到的牌堆底卡牌 ID               |
+| `data_count` |               `3` | `Datas` 的元素数量                    |
+
+`Datas` 按牌堆底向外向内排列，第一项是最底牌；本例中 `149` 位于牌堆底。
+
+处理时先将 `Datas` 逆序，再以 `POSITION_BOTTOM` 同步到牌堆底端点。Zone 内部顺序是
+底 -> 顶，因此落点后内部前段应为 `[149, 123, 1]`。牌仍位于牌堆，不会被移动到玩家区域；
+相同牌组已经位于牌堆底时，重复消息不会再次重排。
+
+代码位置：
+
+- 消息路由：`src/logic.js`
+- 嚣翻协议处理：`src/handler/CGsRoleSpellOptRep.js`
+- 牌堆明牌同步：`src/tracker/runtime/trackerController.ts` 的 `revealTrackerCardsInZone`
+
+## 裴秀：地图选择回复
 
 `SpellID = 4021` 对应裴秀的地图技能回复。己方收到该消息后，可根据 `Datas`
 取得本局地图 ID 和起始格，并从 `SpellExtendConfig.PeiXiuCellDic` 读取地图配置。
