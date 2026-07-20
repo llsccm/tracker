@@ -119,6 +119,17 @@ export class Card extends BaseCard {
     this.combinationID = null // 局部约束组 ID，用于记录这张牌参与的最近一次模糊分组
   }
 
+  /**
+   * 把匿名槽原地升级为真实身份；位置、候选与区域引用保持不变。
+   * Room 负责在调用后同步身份集合、cardIndex 与计数器。
+   */
+  materializeIdentity(cardID: CardID): void {
+    if (!isAnonymous(this) || cardID <= 0) return
+
+    this.setCardInfo(cardID)
+    this.entityID = cardID
+  }
+
   get resolvedSeat(): SeatID | null {
     if (this.location !== 'player' || this.seats.size !== 1) return null
     return this.seats.values().next().value ?? null

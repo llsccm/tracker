@@ -626,14 +626,18 @@ describe('牌堆展示顺序', () => {
     expectConsistentPublicZones(room)
   })
 
-  it('牌顶已是连续明牌时来源占位回补插到明牌段下方', () => {
-    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5, 6], seatIDs: [1] })
+  it('手牌匿名槽物化时不改写连续牌顶明牌段', () => {
+    const { room } = createTestRoom({
+      cardIDs: [1, 2, 3, 4, 5, 6],
+      seatIDs: [1],
+      materializeDeckIdentities: false
+    })
     const pile = getPile(room)
-    const topKnownIDs = [4, 5, 6]
     const revealedIDs = [1, 2]
 
-    topKnownIDs.forEach((id) => room.cardIndex.get(id)!.confirmKnown())
-    // 手牌用瞬时匿名占位；真实身份 1/2 仍留在牌堆，揭开时会触发公共区占位回补。
+    room.materialize(4, pile.cards.at(-3)!)
+    room.materialize(5, pile.cards.at(-2)!)
+    room.materialize(6, pile.cards.at(-1)!)
     const placeholders = room.createExternalCards([], 2)
     placeholders.forEach((card) => {
       card.bindCandidates([1], 'hand', null, { known: false })
@@ -642,6 +646,7 @@ describe('牌堆展示顺序', () => {
 
     room.moveCards(revealedIDs, 'process', {
       fromSeatID: 1,
+      fromZone: null,
       fromSubZone: 'hand',
       cardCount: revealedIDs.length,
       sourceEvent: { type: 'test:reveal-hand-after-known-pile-top' }
@@ -657,13 +662,10 @@ describe('牌堆展示顺序', () => {
         .slice(0, 3)
         .every((card) => card.isKnown)
     ).toBe(true)
-    const knownSegmentStart = pile.cards.length - topKnownIDs.length
-    expect(pile.cards.slice(knownSegmentStart - placeholders.length, knownSegmentStart)).toEqual(
-      expect.arrayContaining(placeholders)
-    )
     placeholders.forEach((card) => {
-      expect(card.location).toBe('pile')
-      expect(pile.cards).toContain(card)
+      expect(card.location).toBe('process')
+      expect(isAnonymous(card)).toBe(false)
+      expect(pile.cards).not.toContain(card)
     })
     expect(pile.cards.slice(-3).map((card) => card.id)).toEqual([4, 5, 6])
     expectConsistentPublicZones(room)
@@ -671,11 +673,11 @@ describe('牌堆展示顺序', () => {
 
   it.each([
     {
-      name: '实体占位揭示为牌堆明牌时回到牌堆但不顶回明牌位置',
+      name: '实体占位揭示为牌堆明牌时精确回补原牌堆槽',
       sourceEvent: 'test:reveal-hidden-pile-card',
       setupCandidate: null as null | ((room: Room, candidateCard: Card) => void),
-      expectedPileIds: [1, 3, 4],
-      unexpectedPileIds: [1, 4, 3] as number[] | null
+      expectedPileIds: [1, 4, 3],
+      unexpectedPileIds: null as number[] | null
     },
     {
       name: '实体占位揭示为牌堆候选牌时继续占住候选位置',

@@ -30,6 +30,7 @@ describe('阶段 0 匿名身份与守恒观测', () => {
 
   it('重复真实身份只告警不抛错', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1] })
+    getCard(room, 1)
     const duplicate = new Card(1, room)
     room.cards.push(duplicate)
     room.zones.get('outside')!.add(duplicate)

@@ -185,14 +185,13 @@ describe('Room.cards 遍历基线', () => {
     expect(summarize(stats)).toMatchInlineSnapshot(`
       {
         "ambiguousKnownIndex:applyDirty": "calls=1 visited=6",
-        "anonymousSlot:createExternalCardsFallback": "calls=2 visited=3",
         "cardCounter:update": "calls=1 visited=6",
         "handSlotCounts:collectBySeat": "calls=3 visited=15",
         "locationIndex:applyDirty": "calls=1 visited=6",
         "reconcileAnonymousHandCards:group": "calls=2 visited=9",
         "resolveConstraints:constraint1": "calls=2 visited=9",
         "resolveConstraints:playerSnapshotIncremental": "calls=2 visited=6",
-        "total": "visited=60",
+        "total": "visited=57",
       }
     `)
   })
