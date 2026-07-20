@@ -94,4 +94,29 @@ describe('阶段 1 匿名牌堆 spike', () => {
     expect(room.deckIdentities.has(60992)).toBe(true)
     expect(room.unlocatedIdentities.has(60992)).toBe(false)
   })
+
+  it('公共区来源无匿名槽可物化时补建缺失正 ID', () => {
+    const { room } = createTestRoom({
+      cardIDs: [1],
+      seatIDs: [1],
+      materializeDeckIdentities: false
+    })
+    const pile = room.zones.get('pile')!
+    pile.clear()
+
+    room.moveCards([77], 'player', {
+      seatID: 1,
+      fromZone: 'pile',
+      cardCount: 1,
+      sourceEvent: { type: 'stage1:public-missing-fallback' }
+    })
+
+    const card = room.cardIndex.get(77)
+    expect(card).toBeTruthy()
+    expect(card?.location).toBe('player')
+    expect(card?.subZone).toBe('hand')
+    expect(card?.isKnown).toBe(true)
+    expect(room.deckIdentities.has(77)).toBe(true)
+    expect(room.unlocatedIdentities.has(77)).toBe(false)
+  })
 })

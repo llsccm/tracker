@@ -173,6 +173,17 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         })
         .filter((card): card is Card => Boolean(card))
       missingIDs = knownIDs.filter((id) => !this.room.cardIndex.has(id))
+
+      // 端点无匿名槽可物化时，与 outside/exile 一致：按协议正 ID 补建外部实体，避免 knownCards 静默短少。
+      if (missingIDs.length > 0) {
+        createdCards = this.room.createExternalCards(missingIDs, missingIDs.length)
+        const cardMap = new Map(context.knownCards.map((card) => [card.id, card]))
+        createdCards.forEach((card) => cardMap.set(card.id, card))
+        context.knownCards = knownIDs
+          .map((id) => cardMap.get(id))
+          .filter((card): card is Card => Boolean(card))
+        missingIDs = knownIDs.filter((id) => !cardMap.has(id))
+      }
     } else if (fromSeat !== null && !Number.isNaN(fromSeat) && fromSubZone) {
       // 阶段 1 的玩家区既可能是匿名槽，也可能仍沿用真 ID 暗牌，两者统一由 materialize 收口。
       const explicitTargets = sourceCards?.filter(isAnonymous) ?? []
