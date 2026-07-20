@@ -612,6 +612,10 @@ export class Room {
       return
     }
 
+    // 已知玩家实体（isKnown===true，未命中上面的暗手牌分支）或其它非 outside/suspended
+    // 位置命中此处：此时无 interop 可做，直接返回。注意调用方（resolveKnownMoveCards /
+    // materializeAtPublicEndpoint）已通过 shift 消费了传入的匿名 target，本分支不会接管它，
+    // 该匿名槽会被“浪费”一格；若下游出现匿名目标提前耗尽，应从这里的空操作路径排查。
     if (existing.location !== 'outside' && existing.location !== 'suspended') return
 
     const targetZoneEntry = Array.from(this.zones.entries()).find(([, zone]) =>
