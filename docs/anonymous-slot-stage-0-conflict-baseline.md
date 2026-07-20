@@ -1,5 +1,6 @@
 # 阶段 0 冲突频次基线
 
+> 状态：历史归档；G0 曾决定 GO，后续 G1 已决定 NO-GO / 收缩
 > 日期：2026-07-19
 > 基准分支：`dev`
 > 基准提交：`ac41259`
@@ -34,61 +35,15 @@
 | `anonymousSlot:insertUnknownPlaceholderIntoPile`             |     1 |       1 | 暗占位回牌堆并保护牌顶明牌段                      |
 | `anonymousSlot:createExternalCardsFallback`                  |     1 |       3 | 一次兜底创建 3 个匿名占位；`visited` 表示创建张数 |
 
-后续真实回放采集时，应使用 DEV 浏览器控制接口开启长生命周期会话；它会跨越整局回放累计所有 `recordTraversal` 站点的 `calls/visited`，不需要改动回放入口。
+本节数据用于冻结当时的计数语义。G0/G1 决策现已结束，不再要求继续采集这些临时站点。
 
-## 4. 真实回放采集步骤
+## 4. 回放采集状态
 
-1. 使用开发模式启动并安装用户脚本：
+DEV 浏览器控制接口与固定 G0 五站点只为阶段 0/1 决策采集服务。阶段 1 已完成三段对照回放，
+G1 最终决定 NO-GO / 收缩，因此该接口不再是活跃工作流，并进入后续代码清理范围。
 
-   ```sh
-   pnpm dev
-   ```
-
-2. 打开目标页面，在浏览器 DevTools Console 确认接口存在：
-
-   ```js
-   window.__DXC_TRAVERSAL__
-   ```
-
-   该接口只在 `pnpm dev` 的 Vite 开发服务器脚本中安装；`pnpm build` 与 `pnpm build:prod` 生成的构建产物都不会暴露它。
-
-3. 开始播放一局完整真实回放前，清空并启动本次会话：
-
-   ```js
-   window.__DXC_TRAVERSAL__.start()
-   ```
-
-4. 播放完整回放。需要中途检查时执行：
-
-   ```js
-   window.__DXC_TRAVERSAL__.snapshot()
-   ```
-
-5. 回放结束后停止并复制最终 JSON：
-
-   ```js
-   copy(JSON.stringify(window.__DXC_TRAVERSAL__.stop(), null, 2))
-   ```
-
-6. 记录快照中的 `g0.totals` 与 `g0.sites`。`g0.sites` 固定包含以下五个站点，即使没有触发也会显式输出 `calls=0, visited=0`：
-
-   ```text
-   anonymousSlot:swapKnownCardWithPublicSourcePlaceholder
-   anonymousSlot:swapKnownCardWithPlayerSourcePlaceholder
-   anonymousSlot:recoverPlayerOccupiedIdentityForPublicReveal
-   anonymousSlot:insertUnknownPlaceholderIntoPile
-   anonymousSlot:createExternalCardsFallback
-   ```
-
-   其中 `g0.sites['anonymousSlot:createExternalCardsFallback'].visited` 是实际创建的匿名牌张数，不是扫描访问数。
-
-7. 一局结束后若要继续采集下一局，先再次执行 `start()`；它会清空上一局并重新计时。若只想清空当前会话并继续，也可执行：
-
-   ```js
-   window.__DXC_TRAVERSAL__.reset()
-   ```
-
-   页面触发 `Exit()` 时会卸载接口，之后新的 `Init()` 会重新安装。建议每局使用一个独立 JSON 文件保存快照，并同时记录回放来源、局号、日期和版本/提交。
+历史采集结果继续保留在本文件与
+[`anonymous-slot-stage-1-comparison.md`](anonymous-slot-stage-1-comparison.md) 中，避免删除探针后丢失决策依据。
 
 ## 5. 真实回放冲突频次
 
@@ -96,8 +51,7 @@
 
 | 项目          | 值                         |
 | ------------- | -------------------------- |
-| 开始时间 UTC  | `2026-07-19T08:40:16.248Z` |
-| 结束时间 UTC  | `2026-07-19T08:44:49.585Z` |
+| 日期          | `2026-07-19`               |
 | 采集时长      | 273.337 秒（约 4.56 分钟） |
 | 最终状态      | `active=false`             |
 | 回放来源/局号 | 用户尚未提供               |
@@ -135,8 +89,5 @@
 2. 主要压力集中在玩家来源身份置换（65 次）与匿名占位插回牌堆（59 次），两者合计占 99.2%，与阶段 1 先验证牌堆匿名化的方向直接相关。
 3. 公共区来源置换只触发 1 次，占用回收与外部匿名兜底未触发；阶段 1 对照报告应分别观察各站点变化，不能只看五站点总数。
 
-后续动作：
-
-1. 补录本次回放来源、局号和版本/提交元数据。
-2. 阶段 1 隔离 spike 继续使用相同回放，比较五站点前后次数、遍历量和代码净增减。
-3. 是否全面推进阶段 2–6，仍由 G1 对照报告决定。
+后续执行结果：阶段 1 隔离 spike 已完成，三段对照回放中固定五站点均为零，且生产源码仍为净增。
+G1 最终决定 NO-GO / 收缩，保留匿名牌堆，不推进阶段 2–7；详见阶段 1 对照报告。

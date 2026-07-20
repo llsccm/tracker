@@ -128,31 +128,16 @@ CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑�
 - 远端 `Config_w.sgs` / HTML 资源加载
 - 录像 UI 与宿主页面耦合行为
 
-### 真实回放冲突计数
+### 匿名槽回放决策记录
 
-阶段 0 的五个匿名占位冲突站点支持 Vite 开发服务器脚本累计采集。通过 `pnpm dev` 安装脚本并打开目标页面后，在 DevTools Console 执行：
+匿名槽阶段 0/1 的 G0、G1 回放采集已经结束，最终决定为 NO-GO / 收缩：保留匿名牌堆，不推进
+阶段 2–7。日常 tracker 验证不再要求运行 `window.__DXC_TRAVERSAL__` 或采集固定 G0 五站点。
 
-```js
-window.__DXC_TRAVERSAL__.start()
-```
-
-完整播放一局后，用以下命令导出最终快照：
-
-```js
-copy(JSON.stringify(window.__DXC_TRAVERSAL__.stop(), null, 2))
-```
-
-从 `g0.totals` 和 `g0.sites` 读取五站点累计值；`g0.sites` 会固定输出以下 key，即使没有触发也明确为零：
-
-```text
-anonymousSlot:swapKnownCardWithPublicSourcePlaceholder
-anonymousSlot:swapKnownCardWithPlayerSourcePlaceholder
-anonymousSlot:recoverPlayerOccupiedIdentityForPublicReveal
-anonymousSlot:insertUnknownPlaceholderIntoPile
-anonymousSlot:createExternalCardsFallback
-```
-
-每局应独立保存 JSON，并记录回放来源、局号、采集日期和代码提交。`snapshot()` 可在回放中途查看累计值，`reset()` 可在不关闭会话的情况下开始新的采集段。
+历史采集方法与阶段 0 数据保存在
+[`anonymous-slot-stage-0-conflict-baseline.md`](../anonymous-slot-stage-0-conflict-baseline.md)，阶段 1 三段回放
+及最终决策保存在
+[`anonymous-slot-stage-1-comparison.md`](../anonymous-slot-stage-1-comparison.md)。通用性能变更仍必须使用
+`recordTraversal(...)` 和 `tests/tracker/traversalBaseline.test.ts` 维护自动化遍历护栏。
 
 ---
 

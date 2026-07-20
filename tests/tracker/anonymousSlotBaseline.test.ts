@@ -26,8 +26,7 @@ describe('阶段 0 匿名槽位冲突频次基线', () => {
   it('记录玩家来源已知牌与暗占位交换', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1] })
     const knownCard = getCard(room, 1)
-    const placeholder = getCard(room, 2)
-    room.zones.get('pile')!.removeCard(placeholder)
+    const [placeholder] = room.createExternalCards([], 1)
     placeholder.bindCandidates([1], 'hand', null, { known: false })
     const context = {
       fromSeat: 1,
@@ -73,21 +72,7 @@ describe('阶段 0 匿名槽位冲突频次基线', () => {
     })
   })
 
-  it('记录匿名占位插回牌堆', () => {
-    const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1] })
-    const [placeholder] = room.createExternalCards([], 1)
-
-    const { stats } = collectTraversalStats(() =>
-      room.movement.insertUnknownPlaceholderIntoPile(room.zones.get('pile')!, placeholder)
-    )
-
-    expectSite(stats, 'anonymousSlot:insertUnknownPlaceholderIntoPile', {
-      calls: 1,
-      visited: 1
-    })
-  })
-
-  it('记录公共揭示回收玩家区占用身份', () => {
+  it('记录公共揭示物化对旧玩家身份占用的兼容', () => {
     const { controller } = createTrackerControllerHarness()
     controller.initTrackerRoom()
     controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
@@ -96,6 +81,7 @@ describe('阶段 0 匿名槽位冲突频次基线', () => {
     const occupiedCard = getCard(room, 1)
     room.zones.get('pile')!.removeCard(occupiedCard)
     occupiedCard.bindCandidates([1], 'hand', null, { known: false })
+    occupiedCard.isKnown = false
     room.getPlayer(1)!.syncObservedHandCount(1)
     room.resolveConstraints()
 
@@ -103,9 +89,12 @@ describe('阶段 0 匿名槽位冲突频次基线', () => {
       controller.revealTrackerCardsInZone({ id: 255, zone: 1, pos: POSITION_TOP }, [1])
     )
 
-    expectSite(stats, 'anonymousSlot:recoverPlayerOccupiedIdentityForPublicReveal', {
+    expectSite(stats, 'anonymousSlot:materializePlayerIdentityInterop', {
       calls: 1,
       visited: 1
     })
+    expect(stats.sites.has('anonymousSlot:recoverPlayerOccupiedIdentityForPublicReveal')).toBe(
+      false
+    )
   })
 })

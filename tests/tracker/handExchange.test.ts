@@ -14,7 +14,10 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
   const allIDs = [...knownFromB, ...hiddenFromA, ...hiddenFromB, ...hiddenFromC]
 
   function getCard(room: Room, id: number) {
-    return room.cardIndex.get(id)!
+    const existing = room.cardIndex.get(id)
+    if (existing) return existing
+    const target = room.zones.get('pile')!.cards.find(isAnonymous) ?? null
+    return room.materialize(id, target)!
   }
 
   function handCards(room: Room, seatID: number) {
@@ -1007,8 +1010,10 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(getCard(room, revealedPlaceholderID).isKnown).toBe(true)
     expect(getCard(room, 641).seats).toEqual(new Set([1]))
     expect(getCard(room, 642).seats).toEqual(new Set([3]))
-    expect(isAnonymous(placeholder)).toBe(true)
-    expect(placeholder.seats.has(1)).toBe(false)
+    expect(isAnonymous(placeholder)).toBe(false)
+    expect(placeholder.id).toBe(revealedPlaceholderID)
+    expect(placeholder.isKnown).toBe(true)
+    expect(placeholder.seats).toEqual(new Set([1]))
     expect(room.getPlayer(1).observedHandCount).toBe(2)
     expect(room.getPlayer(2).observedHandCount).toBe(2)
     expect(room.getPlayer(3).observedHandCount).toBe(2)

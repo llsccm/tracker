@@ -5,6 +5,7 @@ import { CardCounter, CARD_INSTANCE_STATUS } from './CardCounter'
 import { GameState } from './gameState'
 import { AmbiguousKnownIndex } from './AmbiguousKnownIndex'
 import { CardLocationIndex } from './CardLocationIndex'
+import { POSITION_BOTTOM } from './candidate/cardPositions'
 import { summarizeMoveContext, summarizeMoveEvent } from './helper/moveSummary'
 import { RoomConstraints } from './roomConstraints'
 import { RoomMovement } from './roomMovement'
@@ -18,6 +19,7 @@ import type { ConstraintGroup } from './ConstraintGroup'
 import type {
   CardID,
   MoveOptions,
+  PublicPosition,
   PublicZoneName,
   SeatID,
   SeatInfo,
@@ -87,6 +89,16 @@ export class Room {
   isDeckReady = false
   cards: Card[] = []
   cardIndex: Map<CardID, Card> = new Map()
+  /**
+   * 尚未绑定到任何 Card 实体的真实身份，是 deckIdentities 的动态子集。
+   * 匿名槽只表达位置与数量；身份首次揭示后从这里移除并写入 cardIndex。
+   */
+  unlocatedIdentities: Set<CardID> = new Set()
+  /**
+   * 本局已发现的真实身份全集，用作身份守恒的稳定基准。
+   * 初始来自牌组；游戏外首次出现的新身份也会加入，但不会因物化或移动而移除。
+   */
+  deckIdentities: Set<CardID> = new Set()
   anonymousEntitySeq = -1
   declare players: Map<SeatID, Player>
   declare zones: Map<PublicZoneName, Zone>
@@ -195,19 +207,21 @@ export class Room {
     this.isDeckReady = false
     this.cards.length = 0
     this.cardIndex.clear()
+    this.unlocatedIdentities = new Set(cardIDs.filter((id) => id > 0))
+    this.deckIdentities = new Set(this.unlocatedIdentities)
     this.anonymousEntitySeq = -1
 
-    // 初始化摸牌堆
+    // 牌堆只保存匿名物理槽，真实身份在揭示前统一留在 unlocatedIdentities。
     const pile = this.zones.get('pile')
     this.zones.forEach((zone) => zone.clear())
 
     const deckCards: Card[] = []
-    for (const id of cardIDs) {
-      const card = new Card(id, this)
+    for (let index = 0; index < cardIDs.length; index += 1) {
+      const card = new Card(0, this)
       this.cards.push(card)
       deckCards.push(card)
-      this.cardIndex.set(card.id, card)
     }
+
     pile.replaceAll(deckCards)
 
     this.locationIndex.rebuild(this)
@@ -479,6 +493,140 @@ export class Room {
   }
 
   /**
+   * 按协议端点顺序取得公共区槽位；返回顺序始终是“端点向内”。
+   */
+  getPublicEndpointCards(zoneID: PublicZoneName, count: number, position: PublicPosition): Card[] {
+    const cards = this.zones.get(zoneID)?.cards ?? []
+    if (!(count > 0)) return []
+    if (position === POSITION_BOTTOM) return cards.slice(0, count)
+    return cards.slice(-count).reverse()
+  }
+
+  /**
+   * 将真实身份绑定到匿名目标槽，并同步身份守恒账本与查询索引。
+   * 已定位身份命中匿名目标时，仅允许阶段 1 的旧式暗手牌 interop 纠正槽位。
+   */
+  materialize(cardID: CardID, target: Card | null = null): Card | null {
+    const normalizedCardID = Number(cardID)
+    if (!(normalizedCardID > 0)) return null
+
+    const existing = this.cardIndex.get(normalizedCardID)
+    if (existing) {
+      if (target && target !== existing && isAnonymous(target)) {
+        this.materializeExistingIdentityAtTarget(existing, target)
+      }
+
+      existing.confirmKnown()
+      return existing
+    }
+
+    if (!target || !isAnonymous(target)) return null
+
+    // 游戏外首次出现的合法正 ID 不在初始牌组中，发现时扩展身份全集。
+    if (!this.deckIdentities.has(normalizedCardID)) {
+      this.deckIdentities.add(normalizedCardID)
+      this.unlocatedIdentities.add(normalizedCardID)
+    }
+
+    if (!this.unlocatedIdentities.has(normalizedCardID)) return null
+
+    target.materializeIdentity(normalizedCardID)
+    target.confirmKnown()
+    this.cardIndex.set(normalizedCardID, target)
+    this.unlocatedIdentities.delete(normalizedCardID)
+    this.counter?.addCard(target)
+
+    this.notifyCardChanged(target, {
+      type: 'card-identity-materialized',
+      cardID: normalizedCardID
+    })
+
+    return target
+  }
+
+  /**
+   * 依次把公开身份物化到公共区端点的匿名槽，保持协议给出的展示顺序。
+   */
+  materializeAtPublicEndpoint(
+    cardIDs: CardID[],
+    zoneID: PublicZoneName,
+    position: PublicPosition
+  ): Card[] {
+    const targets = this.getPublicEndpointCards(zoneID, cardIDs.length, position)
+    const availableTargets = targets.filter(isAnonymous)
+
+    return cardIDs
+      .map((cardID) => {
+        const existing = this.cardIndex.get(cardID)
+        const target = existing && targets.includes(existing) ? existing : availableTargets.shift()
+        return this.materialize(cardID, target ?? null)
+      })
+      .filter((card): card is Card => Boolean(card))
+  }
+
+  /**
+   * 阶段 1 兼容旧式“暗手牌借用真实 ID”模型。
+   * 将真实实体放入目标公共槽，并让被替换的匿名槽接管原玩家位置与候选。
+   */
+  private materializeExistingIdentityAtTarget(existing: Card, target: Card): void {
+    if (existing.location === 'player' && existing.isKnown !== true) {
+      const oldSubZone = existing.subZone ?? 'hand'
+      const oldSeats = Array.from(existing.seats, Number)
+      const oldSpellID = existing.spellID
+      const oldCombinationID = existing.combinationID
+      const oldLocationCandidates = existing.getLocationCandidates()
+      const targetZoneEntry = Array.from(this.zones.entries()).find(([, zone]) =>
+        zone.cards.includes(target)
+      )
+
+      if (!targetZoneEntry) return
+
+      const [targetZoneID, targetZone] = targetZoneEntry
+      this.removeCardsFromConstraintGroups([target])
+      this.constraints.replaceCardInConstraintGroups(existing, target)
+      existing.setLocationCandidates([], 'materialize:interop:known')
+      existing.combinationID = null
+      existing.moveToPublicZone(targetZoneID)
+      targetZone.replaceCard(target, existing)
+
+      if (oldLocationCandidates.length > 0) {
+        target.location = 'player'
+        target.subZone = oldSubZone
+        target.spellID = oldSpellID
+        target.suspended = false
+        target.setLocationCandidates(oldLocationCandidates, 'materialize:interop:placeholder')
+        target.setSeats(oldSeats, 'materialize:interop:placeholder')
+        target.combinationID = oldCombinationID
+        this.markCounterDirty(target)
+        this.notifyCardChanged(target, {
+          type: 'card-bound',
+          subZone: oldSubZone,
+          spellID: oldSpellID
+        })
+      } else {
+        target.bindCandidates(oldSeats, oldSubZone, oldSpellID, { known: false })
+        target.combinationID = oldCombinationID
+      }
+
+      this.movement.replaceHiddenMarkPlaceholder(existing, target)
+      recordTraversal('anonymousSlot:materializePlayerIdentityInterop', 1)
+      return
+    }
+
+    if (existing.location !== 'outside' && existing.location !== 'suspended') return
+
+    const targetZoneEntry = Array.from(this.zones.entries()).find(([, zone]) =>
+      zone.cards.includes(target)
+    )
+    if (!targetZoneEntry) return
+
+    const [targetZoneID, targetZone] = targetZoneEntry
+    existing.moveToPublicZone(targetZoneID)
+    targetZone.replaceCard(target, existing)
+    target.moveToPublicZone('outside')
+  }
+
+  /**
    * 为游戏外新出现的牌创建实体；用于回收区、临时区缺失等兜底场景。
    */
   allocateAnonymousEntityID(): number {
@@ -496,7 +644,9 @@ export class Room {
       ...ids.map((id) => {
         const card = new Card(id, this)
         this.cards.push(card)
+        this.deckIdentities.add(card.id)
         this.cardIndex.set(card.id, card)
+        this.unlocatedIdentities.delete(card.id)
         return card
       }),
       ...Array.from({ length: unknownCount }, () => {
@@ -1392,6 +1542,26 @@ export class Room {
       }
     })
 
+    this.deckIdentities.forEach((cardID) => {
+      const located = this.cardIndex.has(cardID)
+      const unlocated = this.unlocatedIdentities.has(cardID)
+      if (located === unlocated) {
+        identityIssues.push({
+          type: located ? 'identity-both-located-and-unlocated' : 'identity-missing',
+          cardID
+        })
+      }
+    })
+
+    this.unlocatedIdentities.forEach((cardID) => {
+      if (cardID <= 0 || !this.deckIdentities.has(cardID)) {
+        identityIssues.push({
+          type: 'invalid-unlocated-identity',
+          cardID
+        })
+      }
+    })
+
     const slotIssues = this.publicZones.getPublicZoneConsistencyIssues()
     const issues = [
       ...identityIssues.map((issue) => ({ domain: 'identity', ...issue })),
@@ -1563,6 +1733,8 @@ export class Room {
     this.viewDirty = false
     this.cards = []
     this.cardIndex.clear()
+    this.unlocatedIdentities.clear()
+    this.deckIdentities.clear()
     this.anonymousEntitySeq = -1
     this.isDeckReady = false
     this.seatIDs = []

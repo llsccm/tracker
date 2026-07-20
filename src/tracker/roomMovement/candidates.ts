@@ -293,6 +293,7 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
       const nextPublicLocationCandidates = nextPublicCandidates
         .map((candidate) => fromPublicCandidate(candidate))
         .filter((candidate): candidate is PublicLocationCandidate => Boolean(candidate))
+      // 同一身份可同时有牌顶与牌底分支；只消费本次命中的端点，其他公共分支必须保留。
       const retainedLocationCandidates = card
         .getLocationCandidates()
         .filter(
