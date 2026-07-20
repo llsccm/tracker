@@ -106,6 +106,57 @@ describe('玩家手牌数观测', () => {
     expect(targetPlayer.candidateHandCards).toEqual(knownIDs.map((id) => getCard(room, id)))
   })
 
+  it('来源全暗随机获取时不传播手牌候选，直接移动一张暗实体', () => {
+    const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
+    const { room } = createTestRoom({ cardIDs: [11, 12, 13, 14, 15, 16], seatIDs: [0, 1] })
+
+    try {
+      room.moveCards([], 'player', {
+        seatID: 1,
+        subZone: 'hand',
+        fromZone: 'pile',
+        cardCount: 4,
+        sourceEvent: { type: 'test:draw-four-unknown' }
+      })
+
+      const sourceBefore = room.movement.getPlayerHandCardsBySeat(1)
+      expect(sourceBefore).toHaveLength(4)
+      expect(sourceBefore.every((card) => card.isKnown !== true)).toBe(true)
+
+      room.moveCards([], 'player', {
+        fromZone: null,
+        fromSeatID: 1,
+        fromSubZone: 'hand',
+        seatID: 0,
+        subZone: 'hand',
+        cardCount: 1,
+        sourceEvent: { type: 'test:all-hidden-random-gain' }
+      })
+
+      const sourceAfter = room.movement.getPlayerHandCardsBySeat(1)
+      const targetAfter = room.movement.getPlayerHandCardsBySeat(0)
+      const transferGroup = Array.from(room.constraintGroups.values()).find(
+        (group) =>
+          (group.sourceEvent as { type?: string } | null)?.type === 'test:all-hidden-random-gain'
+      )
+
+      expect(infoSpy).not.toHaveBeenCalledWith(
+        '手牌候选传播',
+        expect.objectContaining({ fromSeat: 1, targetSeat: 0 })
+      )
+      // 全暗时不建 N 选 K，直接搬一张暗实体；默认未知移动可能不带同名 sourceEvent 组。
+      expect(transferGroup?.expectedSlotsBySeat?.get(1)).toBeUndefined()
+      expect(sourceAfter).toHaveLength(3)
+      expect(targetAfter).toHaveLength(1)
+      expect(targetAfter[0]?.isKnown).not.toBe(true)
+      expect(targetAfter[0]?.seats.has(0)).toBe(true)
+      expect(room.getPlayer(1).observedHandCount).toBe(3)
+      expect(room.getPlayer(0).observedHandCount).toBe(1)
+    } finally {
+      infoSpy.mockRestore()
+    }
+  })
+
   it('随机转移已有暗实体完整覆盖手牌槽时不重复补建匿名实体', () => {
     const knownIDs = [116]
     const hiddenIDs = [130, 131, 132]
@@ -140,6 +191,78 @@ describe('玩家手牌数观测', () => {
     expect(room.cards.some((card) => isAnonymous(card))).toBe(false)
     expect(room.getPlayer(1).unknownCardCount).toBe(0)
     expect(room.getPlayer(2).unknownCardCount).toBe(2)
+  })
+
+  it('来源已有跨座位候选时，后续随机转移不因 entityOverflow 放弃覆盖', () => {
+    const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
+    const { room } = createTestRoom({ cardIDs: [11, 12, 13, 14, 15, 16], seatIDs: [1, 5] })
+
+    try {
+      // 1 号：1 明 + 2 暗，再额外叠一张跨座位匿名候选。
+      // seats.has(1) 实体数 = 4，唯一归属实体 = 3，对应 sourceTotal=3。
+      // 至少 1 张明牌才会触发候选传播门槛。
+      room.moveCards([11], 'player', {
+        seatID: 1,
+        subZone: 'hand',
+        fromZone: 'pile',
+        cardCount: 1,
+        sourceEvent: { type: 'test:draw-one-known' }
+      })
+      room.moveCards([], 'player', {
+        seatID: 1,
+        subZone: 'hand',
+        fromZone: 'pile',
+        cardCount: 2,
+        sourceEvent: { type: 'test:draw-two-unknown' }
+      })
+
+      const residualCandidate = room.createExternalCards([], 1)[0]
+      residualCandidate.bindCandidates([1, 2], 'hand', null, { known: false })
+      residualCandidate.isKnown = false
+      room.notifyCardChanged(residualCandidate, { type: 'test:residual-multi-seat-candidate' })
+
+      const sourceEntitiesBefore = room.movement.getPlayerHandCardsBySeat(1)
+      expect(sourceEntitiesBefore).toHaveLength(4)
+      expect(sourceEntitiesBefore.filter((card) => card.seats.size === 1)).toHaveLength(3)
+      expect(sourceEntitiesBefore.some((card) => card.isKnown === true)).toBe(true)
+      expect(room.getPlayer(1).observedHandCount).toBe(3)
+
+      room.moveCards([], 'player', {
+        fromZone: null,
+        fromSeatID: 1,
+        fromSubZone: 'hand',
+        seatID: 5,
+        subZone: 'hand',
+        cardCount: 1,
+        sourceEvent: { type: 'test:random-transfer-after-residual-candidate' }
+      })
+
+      const transferGroup = Array.from(room.constraintGroups.values()).find(
+        (group) =>
+          (group.sourceEvent as { type?: string } | null)?.type ===
+          'test:random-transfer-after-residual-candidate'
+      )
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        '随机手牌转移无法建立完整实体候选覆盖',
+        expect.objectContaining({ reason: 'entityOverflow' })
+      )
+      expect(transferGroup).toBeDefined()
+      expect(transferGroup?.cards.size).toBe(3)
+      expect(transferGroup?.expectedSlotsBySeat.get(1)).toBe(2)
+      expect(transferGroup?.expectedSlotsBySeat.get(5)).toBe(1)
+      expect(room.getPlayer(1).observedHandCount).toBe(2)
+      expect(room.getPlayer(5).observedHandCount).toBe(1)
+      // 只有本次唯一归属覆盖的 3 张进入 N 选 K；残留跨座位候选不掺入。
+      expect(
+        Array.from(transferGroup?.cards ?? []).every(
+          (card) => card.seats.has(1) && card.seats.has(5) && card.seats.size === 2
+        )
+      ).toBe(true)
+      expect(residualCandidate.seats.has(5)).toBe(false)
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 
   it('共享部分暗实体的约束包保留不同座位的可行覆盖', () => {

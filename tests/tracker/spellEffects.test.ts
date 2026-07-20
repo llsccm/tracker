@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/draw', () => ({ drawChengXiang: vi.fn() }))
 
 import { applySpellEffect, spellEffectHandlers } from '@/handler/spellEffects'
+import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
 
 function createGameState(initialState = {}) {
   const states = new Map(Object.entries(initialState).map(([key, value]) => [Number(key), value]))
@@ -120,5 +121,67 @@ describe('技能副作用注册表', () => {
 
     expect(context.CardIDs).toEqual([11, 12])
     expect(game.getSpellState(3157)).toBeUndefined()
+  })
+
+  it('清议回填后经 tracker 同步，弃牌堆明牌进入目标手牌', () => {
+    const { controller } = createTrackerControllerHarness()
+    const cardIDs = [11, 12]
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
+    controller.initTrackerDeck([...cardIDs, 100, 101])
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: cardIDs,
+        CardCount: cardIDs.length,
+        FromZone: 1,
+        ToZone: 2,
+        ToID: 255,
+        MoveType: 4
+      })
+    )
+
+    const room = controller.getTrackerRoom()
+    expect(room.zones.get('discard')?.cards.map((card) => card.id)).toEqual(cardIDs)
+
+    const game = createGameState({ 3157: cardIDs })
+    const context = createContext({
+      game,
+      SpellID: 3157,
+      CardIDs: [0, 0],
+      CardCount: 2,
+      FromZone: 2,
+      ToZone: 5,
+      ToID: 1
+    })
+
+    applySpellEffect(context)
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: context.CardIDs,
+        CardCount: context.CardCount,
+        FromZone: 2,
+        FromID: 255,
+        ToZone: 5,
+        ToID: 1,
+        MoveType: 5,
+        SpellID: 3157
+      })
+    )
+
+    const handCards = room.cards.filter(
+      (card) => card.location === 'player' && card.subZone === 'hand' && card.seats.has(1)
+    )
+
+    expect(context.CardIDs).toEqual(cardIDs)
+    expect(game.getSpellState(3157)).toBeUndefined()
+    expect(room.zones.get('discard')?.cards.map((card) => card.id)).toEqual([])
+    expect(handCards.map((card) => card.id).sort((a, b) => a - b)).toEqual(cardIDs)
+    handCards.forEach((card) => {
+      expect(card.isKnown).toBe(true)
+      expect(card.seats.has(1)).toBe(true)
+    })
   })
 })

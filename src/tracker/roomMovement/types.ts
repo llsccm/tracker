@@ -123,6 +123,12 @@ export interface RandomHandTransferCheckOptions {
   targetSeat: SeatID | null
   count: number
   unknownCount: number
+  /** 移动前是否已观测到来源手牌总数。 */
+  sourceHandTotalObserved?: boolean
+  /** 候选传播前保存的来源手牌总数。 */
+  sourceHandTotalBefore?: number
+  /** 候选传播前保存的来源未知手牌额度。 */
+  sourceHandUnknownCount?: number
   sourceEvent?: MoveSourceEvent
 }
 
@@ -132,6 +138,10 @@ export interface RandomHandTransferOptions {
   count: number
   /** 候选传播前保存的来源手牌总数，避免被已应用的移动 delta 覆盖。 */
   sourceTotalBefore?: number
+  /** 移动前是否已观测到来源手牌总数；与 sourceTotalBefore/sourceUnknownCount 一起做 O(1) 门槛。 */
+  sourceHandTotalObserved?: boolean
+  /** 候选传播前保存的来源未知手牌额度。 */
+  sourceUnknownCount?: number
   sourceEvent?: MoveSourceEvent
 }
 
