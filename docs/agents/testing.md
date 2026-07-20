@@ -131,7 +131,7 @@ CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑�
 ### 匿名槽回放决策记录
 
 匿名槽阶段 0/1 的 G0、G1 回放采集已经结束，最终决定为 NO-GO / 收缩：保留匿名牌堆，不推进
-阶段 2–7。日常 tracker 验证不再要求运行 `window.__DXC_TRAVERSAL__` 或采集固定 G0 五站点。
+阶段 2–7。临时浏览器回放探针与固定 G0 五站点 schema 已从运行时移除。
 
 历史采集方法与阶段 0 数据保存在
 [`anonymous-slot-stage-0-conflict-baseline.md`](../anonymous-slot-stage-0-conflict-baseline.md)，阶段 1 三段回放

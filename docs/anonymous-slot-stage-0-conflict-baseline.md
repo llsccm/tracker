@@ -40,7 +40,7 @@
 ## 4. 回放采集状态
 
 DEV 浏览器控制接口与固定 G0 五站点只为阶段 0/1 决策采集服务。阶段 1 已完成三段对照回放，
-G1 最终决定 NO-GO / 收缩，因此该接口不再是活跃工作流，并进入后续代码清理范围。
+G1 最终决定 NO-GO / 收缩；运行时探针、固定 G0 schema 与对应测试现已清理。
 
 历史采集结果继续保留在本文件与
 [`anonymous-slot-stage-1-comparison.md`](anonymous-slot-stage-1-comparison.md) 中，避免删除探针后丢失决策依据。

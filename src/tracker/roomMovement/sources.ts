@@ -2,7 +2,6 @@ import { trackerLogger } from '@/utils/logger'
 import { POSITION_TOP } from '../candidate/cardPositions'
 import { getCompatibleMarkSpellIDs, type SpellIDInput } from '../candidate/markSpellID'
 import { isAnonymous, type Card } from '../Card'
-import { recordTraversal } from '../traversalStats'
 import type {
   PlayerLocationCandidate,
   PublicPosition,
@@ -350,7 +349,6 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
   swapKnownCardWithPlayerSourcePlaceholder(card: Card, context: RoomMoveContext): Card | null {
     const placeholder = this.findUnknownPlayerSourcePlaceholder(context, card)
     if (!placeholder) return null
-    recordTraversal('anonymousSlot:swapKnownCardWithPlayerSourcePlaceholder', 1)
 
     const { fromSeat, fromSubZone } = context
     const sourceSpellID = this.getSourceSpellID(context)
@@ -535,7 +533,6 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
 
     const replacement = this.takeCardsFromPublicZone(1, fromZone, fromPosition)[0]
     if (!replacement) return null
-    recordTraversal('anonymousSlot:swapKnownCardWithPublicSourcePlaceholder', 1)
 
     this.room.removeCardsFromConstraintGroups([replacement])
 

@@ -609,7 +609,6 @@ export class Room {
       }
 
       this.movement.replaceHiddenMarkPlaceholder(existing, target)
-      recordTraversal('anonymousSlot:materializePlayerIdentityInterop', 1)
       return
     }
 
@@ -636,9 +635,6 @@ export class Room {
   createExternalCards(cardIDs: CardID[] = [], count = cardIDs.length): Card[] {
     const ids = cardIDs.filter((id) => id > 0)
     const unknownCount = Math.max(0, Number(count) || 0, cardIDs.length) - ids.length
-    if (unknownCount > 0) {
-      recordTraversal('anonymousSlot:createExternalCardsFallback', unknownCount)
-    }
 
     const cards = [
       ...ids.map((id) => {

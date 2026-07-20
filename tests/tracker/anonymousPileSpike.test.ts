@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { CARD_INSTANCE_STATUS } from '@/tracker/CardCounter'
-import { collectTraversalStats } from '@/tracker/traversalStats'
 import { createTestRoom } from './helpers/room'
 
 describe('阶段 1 匿名牌堆 spike', () => {
@@ -54,13 +53,11 @@ describe('阶段 1 匿名牌堆 spike', () => {
     const pile = room.zones.get('pile')!
     const originalTopSlot = pile.cards.at(-1)
 
-    const { stats } = collectTraversalStats(() => {
-      room.moveCards([4], 'player', {
-        seatID: 1,
-        fromZone: 'pile',
-        cardCount: 1,
-        sourceEvent: { type: 'stage1:draw-known' }
-      })
+    room.moveCards([4], 'player', {
+      seatID: 1,
+      fromZone: 'pile',
+      cardCount: 1,
+      sourceEvent: { type: 'stage1:draw-known' }
     })
 
     const card = room.cardIndex.get(4)
@@ -70,11 +67,6 @@ describe('阶段 1 匿名牌堆 spike', () => {
     expect(card?.isKnown).toBe(true)
     expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3]))
     expect(pile.cards).toHaveLength(3)
-    expect(stats.sites.has('anonymousSlot:swapKnownCardWithPublicSourcePlaceholder')).toBe(false)
-    expect(stats.sites.has('anonymousSlot:recoverPlayerOccupiedIdentityForPublicReveal')).toBe(
-      false
-    )
-    expect(stats.sites.has('anonymousSlot:insertUnknownPlaceholderIntoPile')).toBe(false)
   })
 
   it('游戏外匿名手牌首次揭示时扩展并物化身份全集', () => {
