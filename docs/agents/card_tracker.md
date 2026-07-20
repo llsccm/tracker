@@ -232,8 +232,7 @@
 - 若新增会影响手牌槽 known/candidate 计数的收敛路径，必须确保相关座位进入 `Room.resolveTouchedSeats`；E1 会复用未触碰座位的手牌槽统计缓存。
 - 新增或修改 `this.cards.filter(...)` 等全牌池扫描前，必须先判断能否改用现有增量快照、索引、脏事件集合，或在入口一次性归组后复用结果；尤其避免把全牌池扫描放进玩家、约束组或收敛轮循环中，意外放大为 O(玩家数 × 全牌数) 或更高复杂度。若确认全量扫描确有必要，必须使用 `recordTraversal(...)` 对该扫描站点显式插桩，并在 `tests/tracker/traversalBaseline.test.ts` 中新增或更新对应场景与内联快照，使后续遍历量增长可见且可解释；不得以未插桩的隐藏扫描绕过基线护栏。
 - [`tests/tracker/traversalBaseline.test.ts`](../../tests/tracker/traversalBaseline.test.ts) 的内联快照是遍历量回归护栏：结构性优化使数字下降属预期（`vitest run -u` 刷新），无关改动使数字上升需要先解释原因再更新快照。
-- 匿名槽 G0/G1 真实回放已经完成并决定 NO-GO / 收缩；临时浏览器回放探针已退役。历史数据见阶段
-  0 基线与阶段 1 对照报告。
+- 匿名槽 G0/G1 真实回放已经完成并决定 NO-GO / 收缩；临时浏览器回放探针已退役。历史数据见本地归档 [`plans/anonymous-entity-and-slot.md`](../../plans/anonymous-entity-and-slot.md)。
 - 初始牌堆初始化后，`pile.cards` 顺序应独立于 `room.cards`。
 - 摸暗牌、摸明牌时手牌额度及状态维护应保持准确。
 - 洗牌时协议 `cardCount` 与本地可枚举牌堆不一致属于高风险路径：需要确认匿名暗占位账本、剩余牌堆顶部顺序、暂停追踪候选展示和暗标记账本迁移。
@@ -269,5 +268,4 @@
 - 2026-07-05：完成测试重构与合并，抽取 `locationCandidates` 与 `trackerController` 公共测试辅助，精简测试冗余，提升测试维护性。
 
 - 2026-07-15：文档对齐代码结构——去除文档行号锚点；开局路径以 `handleRecordStartGame` 为主、`GsCModifyUserseatNtf` 分发暂注释；`GameState` 纯状态与 `BrowserGameState` 钩子拆分；视图脏渲染与 `trackerVisibility` 已落地。
-- 2026-07-20：匿名牌堆阶段 1 完成；牌堆槽与身份解耦，G1 最终决定 NO-GO / 收缩，阶段
-  2–7 不执行，临时真实回放探针进入退役范围。
+- 2026-07-20：匿名牌堆阶段 1 完成；牌堆槽与身份解耦，G1 最终决定 NO-GO / 收缩，阶段 2–7 不执行，临时真实回放探针退役。决策归档见 [`plans/anonymous-entity-and-slot.md`](../../plans/anonymous-entity-and-slot.md)。
