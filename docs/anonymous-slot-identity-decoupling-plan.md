@@ -28,7 +28,7 @@
 
 当前记牌器把“**未知槽位**”用**真实 id 实体**表示（牌堆、暗手牌都是从初始牌池借一个 `id>0` 的实体来占位）。这使“**这张牌是什么身份**”与“**某个物理槽被谁占用**”耦合在同一个对象上。协议一旦揭示“真牌 X 在某处”，而本地实体 X 正被别处的未知槽借用，就出现**同一真 id 出现在两处**的矛盾，只能靠不断增长的置换/回收/回补代码擦屁股（`swapKnownCardWithPublicSourcePlaceholder`、`recoverPlayerOccupiedIdentityForPublicReveal`、`insertUnknownPlaceholderIntoPile`、各种 `id===0` 兜底）。
 
-**目标态**：未知槽位一律用**匿名占位**（`id<=0`、稳定负 `entityID`，基础设施已存在）；未揭示真牌的身份放进一个**未定位身份集** `unlocatedIdentities: Set<CardID>`；揭示时才把身份**物化**到某个匿名占位（或新建实体）并从集合移除。已知身份、位置待定的牌继续走 `locationCandidates` 候选模型（与本计划正交，不改）。
+**目标态**：未知槽位一律用**匿名占位**（`id<0`、稳定负 `entityID`，基础设施已存在）；未揭示真牌的身份放进一个**未定位身份集** `unlocatedIdentities: Set<CardID>`；揭示时才把身份**物化**到某个匿名占位（或新建实体）并从集合移除。已知身份、位置待定的牌继续走 `locationCandidates` 候选模型（与本计划正交，不改）。
 
 **收益**：整类“身份/槽位矛盾”消失 → 上述置换/回收/回补机器可随冲突源一起删除；守恒从“散落各处的隐式规则”变成“一个集中不变量 + DEV 断言”。
 
@@ -101,15 +101,15 @@
 ## 5. 术语与模型
 
 - **真实实体（located identity）**：`id>0` 的 `Card`，身份已定位。已知位置或“已知身份+位置候选”。
-- **匿名占位（anonymous placeholder）**：`id<=0`、`entityID<0` 的 `Card`。**不认领任何真 id**，只占一个物理槽。是未知槽的唯一表示。
-- **未定位身份集 `unlocatedIdentities: Set<CardID>`**：全牌集中尚未定位到任何真实实体的真 id。初始 = 整副牌；随揭示/发牌逐步缩小。
+- **匿名占位（anonymous placeholder）**：`id<0`、`entityID<0` 的 `Card`。**不认领任何真 id**，只占一个物理槽。是未知槽的唯一表示。
+- **未定位身份集 `unlocatedIdentities: Set<CardID>`**：`deckIdentities` 中尚未定位到任何真实实体的真 id。初始 = 开局牌组；`materialize` 发现游戏外合法正 ID 时会扩展 `deckIdentities`，并同步进入本集合，随后随揭示/发牌逐步缩小。
 - **物化 `materialize(cardID, target)`**：把一个 `unlocatedIdentities` 中的真 id 赋给 target 处的某个匿名占位（占位升级为真实实体，`id/entityID` 改为该真 id、`isKnown=true`），并从集合移除；target 无可用占位时新建实体。
 - **候选（candidate）**：已知身份、位置待定，继续由 `locationCandidates` 表达（不变）。
 
 模型关系：
 
-```
-身份未知           → 匿名占位（id<=0, entityID<0），不入身份索引
+```text
+身份未知           → 匿名占位（id<0, entityID<0），不入身份索引
 已知身份、位置待定 → 真实实体 + 多个 locationCandidates
 已知身份、位置确定 → 真实实体，收敛
 未揭示真牌的身份   → 只存在于 unlocatedIdentities 集合，无实体
@@ -119,9 +119,9 @@
 
 ## 6. 核心不变量（配 DEV 断言）
 
-- **I1 身份守恒**：`{已定位真 id} ⊎ unlocatedIdentities === 全牌集`；同一 id 不得既有真实实体又在 `unlocatedIdentities`。
+- **I1 身份守恒**：`{已定位真 id} ⊎ unlocatedIdentities === deckIdentities`；同一 id 不得既有真实实体又在 `unlocatedIdentities`。
 - **I2 槽位守恒**：每个区域实体数 === 该区域应有牌数（明牌 + 匿名占位）；牌堆实体数 === 牌堆剩余张数。
-- **I3 匿名无身份**：`id<=0` 实体不得进入按真 id 的 `cardIndex`、`AmbiguousKnownIndex`、明牌视图；不得 `confirmKnown()`。
+- **I3 匿名无身份**：`id<0` 实体不得进入按真 id 的 `cardIndex`、`AmbiguousKnownIndex`、明牌视图；不得 `confirmKnown()`。
 - **I4 揭示单调**：`materialize` 只把 id 从 `unlocatedIdentities` 移到“已定位”，不逆向；命中“已定位于别处且为已知”的真矛盾时 → DEV 抛错 + 保守对账。
 - **I5 候选正交**：候选身份收敛只作用于真实实体；匿名占位不参与候选身份推理（只参与数量/位置占位）。
 
@@ -343,7 +343,7 @@ git diff --check       # 空白/换行
 
 ## 15. 推荐执行顺序与决策门
 
-```
+```text
 阶段 0（负 id + 度量 + 断言骨架）── G0：冲突几乎不触发？→ 止步
    ↓ 否
 阶段 1（牌堆 spike，隔离分支，出对照报告）── G1：GO / NO-GO
