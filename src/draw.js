@@ -276,7 +276,13 @@ export function drawSeatUIs() {
     return
   }
 
-  const defaultWidth = (UI.unscaledWidth + UI.paddingRight) * UI.scale
+  // 此处计算 手牌框宽度 存在一个问题 某些情况下缩放比例不太正确
+  // 假设游戏缩放 那应该变大吗? 假设系统缩放呢?
+  // 假设系统缩放是1.0 游戏缩放1.5 手牌框就会变大 实际上武将框渲染的很小
+  // 假设系统缩放是1.0 游戏缩放1.0 高分屏武将框不变,间隙很大,这时手牌框应该要变大
+  // 手牌框需要变大的情况寥寥无几 不用乘上游戏缩放感觉会更好
+  // * UI.scale / window.devicePixelRatio
+  const defaultWidth = UI.unscaledWidth + UI.paddingRight
 
   for (const seat of UI.seatUIs) {
     if (!hasSeatPosition(seat)) continue
