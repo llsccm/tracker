@@ -5,7 +5,7 @@ import { CardCounter, CARD_INSTANCE_STATUS } from './CardCounter'
 import { GameState } from './gameState'
 import { AmbiguousKnownIndex } from './AmbiguousKnownIndex'
 import { CardLocationIndex } from './CardLocationIndex'
-import { POSITION_BOTTOM } from './candidate/cardPositions'
+import { normalizePublicPosition } from './candidate/publicCandidate'
 import { summarizeMoveContext, summarizeMoveEvent } from './helper/moveSummary'
 import { RoomConstraints } from './roomConstraints'
 import { RoomMovement } from './roomMovement'
@@ -498,7 +498,8 @@ export class Room {
   getPublicEndpointCards(zoneID: PublicZoneName, count: number, position: PublicPosition): Card[] {
     const cards = this.zones.get(zoneID)?.cards ?? []
     if (!(count > 0)) return []
-    if (position === POSITION_BOTTOM) return cards.slice(0, count)
+    // PublicPosition 兼容数值常量与 'bottom'/'top' 字符串；未归一化的 bottom 必须走牌底。
+    if (normalizePublicPosition(position) === 'bottom') return cards.slice(0, count)
     return cards.slice(-count).reverse()
   }
 
