@@ -181,6 +181,7 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
       new Set(sourceCandidateCards.flatMap((card) => Array.from(card.seats)).concat(targetSeat))
     )
 
+    // addSeat 会在已有完整位置候选时真正追加目标手牌候选，不再只过滤旧候选。
     sourceCandidateCards.forEach((card) => {
       card.addSeat(targetSeat, 'randomHandTransferCandidates')
     })
