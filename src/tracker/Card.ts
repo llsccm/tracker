@@ -54,6 +54,18 @@ interface BindOptions {
   known?: boolean
 }
 
+interface CardIdentityLike {
+  id: number
+}
+
+export function hasRealIdentity(card: CardIdentityLike): boolean {
+  return card.id > 0
+}
+
+export function isAnonymous(card: CardIdentityLike): boolean {
+  return !hasRealIdentity(card)
+}
+
 /**
  * 重构版卡牌实体类
  * 放弃双向链表，采用状态标记与座位候选集绑定机制
@@ -83,6 +95,7 @@ export class Card extends BaseCard {
     super(id) // 内部由 BaseCard 自动通过 CardConfig 单例拉取 cardInfo
     this.room = room
     this.entityID = id > 0 ? id : room.allocateAnonymousEntityID()
+    if (!hasRealIdentity(this)) this.id = this.entityID
 
     // 1. 位置绑定与标记
     this.location = 'pile' // 'pile' | 'discard' | 'exile' | 'player' | 'suspended'
@@ -104,6 +117,17 @@ export class Card extends BaseCard {
 
     // 3. 嵌套组合指纹 (同生共死关系)
     this.combinationID = null // 局部约束组 ID，用于记录这张牌参与的最近一次模糊分组
+  }
+
+  /**
+   * 把匿名槽原地升级为真实身份；位置、候选与区域引用保持不变。
+   * Room 负责在调用后同步身份集合、cardIndex 与计数器。
+   */
+  materializeIdentity(cardID: CardID): void {
+    if (!isAnonymous(this) || cardID <= 0) return
+
+    this.setCardInfo(cardID)
+    this.entityID = cardID
   }
 
   get resolvedSeat(): SeatID | null {

@@ -128,13 +128,24 @@ CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑�
 - 远端 `Config_w.sgs` / HTML 资源加载
 - 录像 UI 与宿主页面耦合行为
 
+### 匿名槽回放决策记录
+
+匿名槽阶段 0/1 的 G0、G1 回放采集已经结束，最终决定为 NO-GO / 收缩：保留匿名牌堆，不推进
+阶段 2–7。临时浏览器回放探针与固定 G0 五站点 schema 已从运行时移除。
+
+历史采集方法与阶段 0 数据保存在
+[`anonymous-slot-stage-0-conflict-baseline.md`](../anonymous-slot-stage-0-conflict-baseline.md)，阶段 1 三段回放
+及最终决策保存在
+[`anonymous-slot-stage-1-comparison.md`](../anonymous-slot-stage-1-comparison.md)。通用性能变更仍必须使用
+`recordTraversal(...)` 和 `tests/tracker/traversalBaseline.test.ts` 维护自动化遍历护栏。
+
 ---
 
 ## 编写测试的约定
 
 - 新测试放在与主题接近的现有文件；新主题再开 `tests/<area>/*.test.ts`
 - 优先复用 `tests/tracker/helpers/`，避免每个用例重复搭 Room / Controller
-- 测试名写清场景与期望，例如“洗牌 cardCount 大于本地枚举时补 id=0 暗占位”
+- 测试名写清场景与期望，例如“洗牌 cardCount 大于本地枚举时保持匿名占位账本”
 - 断言关注**可观察状态**：owner、locationCandidates、手牌额度、公共区顺序、脏集合、遍历计数；少断言实现细节私有字段
 - 不要依赖真实 DOM / Laya；需要视图时用 helper 中的 noop 或最小 stub
 - 保持与源码一致的风格：2 空格、LF、单引号、无分号（Prettier）

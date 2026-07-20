@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Card } from '@/tracker/Card'
 import { CARD_INSTANCE_STATUS } from '@/tracker/CardCounter'
 import { collectTraversalStats } from '@/tracker/traversalStats'
-import { createTestRoom } from './helpers/room'
+import { createTestRoom, getCard } from './helpers/room'
 
 function ids(set: Set<number>): number[] {
   return Array.from(set).sort((a, b) => a - b)
@@ -41,7 +41,7 @@ describe('CardCounter 状态索引', () => {
 
     const hiddenHandCard = room.cards.find(
       (card) =>
-        card.id > 0 &&
+        card.id < 0 &&
         card.location === 'player' &&
         card.subZone === 'hand' &&
         card.isKnown !== true
@@ -50,12 +50,9 @@ describe('CardCounter 状态索引', () => {
     room.counter.update()
 
     expect(hiddenHandCard).toBeTruthy()
-    const remainingPileIDs = room.zones.get('pile').cards.map((card) => card.id)
-    expect(ids(room.counter.statusIndex[CARD_INSTANCE_STATUS.UNKNOWN])).toEqual(
-      ids(new Set([hiddenHandCard!.id, ...remainingPileIDs]))
-    )
+    expect(ids(room.counter.statusIndex[CARD_INSTANCE_STATUS.UNKNOWN])).toEqual([1, 5])
     expect(room.counter.cardsByStatus[CARD_INSTANCE_STATUS.UNKNOWN].has(placeholder)).toBe(true)
-    expect(room.counter.statusIndex[CARD_INSTANCE_STATUS.UNKNOWN].has(0)).toBe(false)
+    expect(room.counter.statusIndex[CARD_INSTANCE_STATUS.UNKNOWN].has(placeholder.id)).toBe(false)
     expect(ids(room.counter.statusIndex[CARD_INSTANCE_STATUS.APPEARED])).toEqual([2])
     expect(ids(room.counter.statusIndex[CARD_INSTANCE_STATUS.DISCARD])).toEqual([3])
     expect(ids(room.counter.statusIndex[CARD_INSTANCE_STATUS.REMOVED])).toEqual([4])
@@ -71,6 +68,7 @@ describe('CardCounter 状态索引', () => {
 
     const [externalCard] = room.createExternalCards([2], 1)
 
+    expect(room.deckIdentities.has(externalCard.id)).toBe(true)
     expect(room.counter.cardsByStatus[CARD_INSTANCE_STATUS.UNKNOWN].has(externalCard)).toBe(false)
     expect(room.counter.cardsByStatus[CARD_INSTANCE_STATUS.REMOVED].has(externalCard)).toBe(true)
     expect(room.counter.statusIndex[CARD_INSTANCE_STATUS.UNKNOWN].has(externalCard.id)).toBe(false)
@@ -88,9 +86,7 @@ describe('CardCounter 状态索引', () => {
     expect(room.cards).not.toContain(registeredCard)
     expect(room.counter.cardsByStatus[CARD_INSTANCE_STATUS.REMOVED].has(registeredCard)).toBe(true)
     expect(room.counter.statusIndex[CARD_INSTANCE_STATUS.REMOVED].has(registeredCard.id)).toBe(true)
-    expect(room.counter.cardInstances[registeredCard.id].status).toBe(
-      CARD_INSTANCE_STATUS.REMOVED
-    )
+    expect(room.counter.cardInstances[registeredCard.id].status).toBe(CARD_INSTANCE_STATUS.REMOVED)
   })
 
   it('公开状态桶读取时会刷新占位牌的手牌明暗状态', () => {
@@ -110,7 +106,7 @@ describe('CardCounter 状态索引', () => {
 
   it('状态桶 getter 在无新变化时复用干净缓存', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1] })
-    const card = room.cardIndex.get(1)!
+    const card = getCard(room, 1)!
 
     card.bindTo([1], 'hand')
 
@@ -131,7 +127,7 @@ describe('CardCounter 状态索引', () => {
 
   it('状态变化后状态桶 getter 会失效并重建缓存', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1] })
-    const card = room.cardIndex.get(1)!
+    const card = getCard(room, 1)!
 
     expect(room.counter.statusIndex[CARD_INSTANCE_STATUS.UNKNOWN].has(1)).toBe(true)
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { isAnonymous } from '@/tracker/Card'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import type { TraversalStats } from '@/tracker/traversalStats'
 import { createTestRoom, getCard } from './helpers/room'
@@ -178,7 +179,7 @@ describe('Room.cards 遍历基线', () => {
     })
 
     const anonymousHandCards = room.cards.filter(
-      (card) => card.id === 0 && card.location === 'player'
+      (card) => isAnonymous(card) && card.location === 'player'
     )
     expect(anonymousHandCards).toHaveLength(3)
     expect(summarize(stats)).toMatchInlineSnapshot(`

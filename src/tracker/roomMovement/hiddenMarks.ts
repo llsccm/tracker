@@ -669,7 +669,7 @@ export abstract class RoomMovementHiddenMarkMethods {
         Number(card.spellID) === Number(record.spellID)
       if (!isSameMarkSpace) return
 
-      // 装备容器已经给出“全明且只有这些牌”的快照时，旧 id=0/暗实体只是在维护未知数量，
+      // 装备容器已经给出“全明且只有这些牌”的快照时，旧匿名/暗实体只是在维护未知数量，
       // 现在该数量已被快照归零，应退出玩家区，避免下一次洗牌继续保留幽灵占位。
       this.room.removeCardsFromConstraintGroups([card])
       card.moveToPublicZone('outside')

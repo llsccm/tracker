@@ -80,6 +80,49 @@ describe('公共候选传播', () => {
     })
   })
 
+  it('牌同时有顶底候选时只把命中的牌顶分支传播到手牌', () => {
+    const { room } = createTestRoom({ cardIDs: [116], seatIDs: [1, 2, 3] })
+    const card = getCard(room, 116)
+    const pileTop = publicLocation('pile', 'top', 1)
+    const pileBottom = publicLocation('pile', 'bottom', 1)
+    const hand1 = playerHand(1)
+    const hand2 = playerHand(2)
+    const hand3 = playerHand(3)
+
+    card.confirmKnown()
+    card.setLocationCandidates([pileTop, pileBottom, hand1, hand2])
+
+    const affectedCards = room.movement.propagatePublicCandidatesToHand({
+      fromZone: 'pile',
+      fromPosition: POSITION_TOP,
+      toZone: 'player',
+      targetSeat: 3,
+      subZone: 'hand',
+      count: 3,
+      sourceEvent: { type: 'test:draw-top-with-bottom-candidate-retained' }
+    })
+
+    expect(affectedCards).toEqual([card])
+    expect(card.publicCandidates).toEqual([
+      expect.objectContaining({
+        zone: 'pile',
+        position: 'bottom',
+        count: 1
+      })
+    ])
+    expect(
+      card
+        .getLocationCandidates()
+        .map((candidate) => createLocationCandidateKey(candidate))
+        .sort()
+    ).toEqual(
+      [pileBottom, hand1, hand2, hand3]
+        .map((candidate) => createLocationCandidateKey(candidate))
+        .sort()
+    )
+    expect(card.seats).toEqual(new Set([1, 2, 3]))
+  })
+
   it('牌堆顶候选数量未知时进入手牌后保留未知公共候选', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1] })
     const card = getCard(room, 1)

@@ -103,6 +103,11 @@ export class CardCounter {
    * 依据 Room 物理卡牌池生成查询副本实例并建立索引
    */
   initInstances(): void {
+    // 未定位身份没有 Card 实体，但仍属于完整牌表，必须以 UNKNOWN 状态参与查询。
+    this.room.unlocatedIdentities.forEach((cardID) => {
+      this.registerIdentity(cardID)
+    })
+
     this.room.cards.forEach((card) => {
       this.addCard(card)
     })
@@ -117,6 +122,7 @@ export class CardCounter {
     const isNewCard = this.registerCard(card)
 
     if (!isNewCard) {
+      if (card.id > 0) this.registerIdentity(card.id)
       this.syncCardStatus(card)
       this.dirtyCards.delete(card)
       return
@@ -128,28 +134,7 @@ export class CardCounter {
       return
     }
 
-    if (!this.cardInstancesCache[card.id]) {
-      const instance = new CardInstance(card.id)
-      this.cardInstancesCache[card.id] = instance
-    }
-
-    // 1. 建立倒排索引
-    if (!(card.name in this.nameIndex)) {
-      this.nameIndex[card.name] = new Set()
-    }
-    this.nameIndex[card.name].add(card.id)
-    this.colorIndex[card.color].add(card.id)
-    this.numberIndex[card.number].add(card.id)
-    this.typeIndex[card.type].add(card.id)
-
-    // 特殊花色与点数二次索引（如黑桃2-9闪电，杀花色）
-    if (card.color === 3 && card.number >= 2 && card.number <= 9) {
-      this.numberIndex[0].add(card.id)
-    }
-
-    if (card.name.match(/^(冰|火|雷)?杀$/)) {
-      this.colorIndex[Math.ceil(card.color / 2) + 4].add(card.id)
-    }
+    this.registerIdentity(card.id)
 
     this.syncCardStatus(card)
     this.dirtyCards.delete(card)
@@ -175,7 +160,7 @@ export class CardCounter {
 
     recordTraversal('cardCounter:update', newRoomCards.length + dirtyCards.length)
 
-    // 先注册新牌：正 ID 需要补建 name/color/number/type 倒排索引，id=0 只进入状态桶。
+    // 先注册新牌：正 ID 需要补建 name/color/number/type 倒排索引，匿名牌只进入状态桶。
     newRoomCards.forEach((card) => this.addCard(card))
     dirtyCards.forEach((card) => {
       if (this.registeredCards.has(card)) {
@@ -191,6 +176,36 @@ export class CardCounter {
     if (this.registeredCards.has(card)) return false
     this.registeredCards.add(card)
     return true
+  }
+
+  /**
+   * 为真实身份建立静态牌面索引；身份尚未定位时状态保持 UNKNOWN。
+   */
+  private registerIdentity(cardID: CardID): CardInstance {
+    const existing = this.cardInstancesCache[cardID]
+    if (existing) return existing
+
+    const instance = new CardInstance(cardID)
+    this.cardInstancesCache[cardID] = instance
+
+    if (!(instance.name in this.nameIndex)) {
+      this.nameIndex[instance.name] = new Set()
+    }
+    this.nameIndex[instance.name].add(cardID)
+    this.colorIndex[instance.color].add(cardID)
+    this.numberIndex[instance.number].add(cardID)
+    this.typeIndex[instance.type].add(cardID)
+
+    if (instance.color === 3 && instance.number >= 2 && instance.number <= 9) {
+      this.numberIndex[0].add(cardID)
+    }
+
+    if (instance.name.match(/^(冰|火|雷)?杀$/)) {
+      this.colorIndex[Math.ceil(instance.color / 2) + 4].add(cardID)
+    }
+
+    this.statusIndexCache[CARD_INSTANCE_STATUS.UNKNOWN].add(cardID)
+    return instance
   }
 
   private collectNewRoomCards(): Card[] {

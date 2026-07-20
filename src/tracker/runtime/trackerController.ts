@@ -381,27 +381,21 @@ export class TrackerController {
     )
 
     if (subZone && !Number.isNaN(seatID) && seatID !== 255) {
-      // 同区展示可能首次公开由 id=0 承载的游戏外卡牌；先注册真实 ID，
-      // 标准移动链路才能用新实体置换来源手牌中的匿名占位。
-      const knownCards = this.resolveKnownCards(ids)
-      const resolvedIDs = knownCards.map((card) => card.id)
-      if (resolvedIDs.length === 0) return
-
       this.controllerLogger.info('展示明牌进入玩家区', {
-        ids: resolvedIDs,
+        ids,
         seatID,
         subZone,
         spellID
       })
 
-      readyRoom.moveCards(resolvedIDs, 'player', {
+      readyRoom.moveCards(ids, 'player', {
         seatID,
         fromSeatID: seatID,
         fromZone: null,
         fromSubZone: subZone,
         subZone,
         spellID,
-        cardCount: resolvedIDs.length,
+        cardCount: ids.length,
         sourceEvent: event.options?.sourceEvent ?? {
           type: 'showCards',
           raw
@@ -412,8 +406,15 @@ export class TrackerController {
     }
 
     const zoneName = getProtocolPublicZone(zone, event.toZone ?? 'process')
-    const knownCards = this.resolveKnownCards(ids)
     const position = event.options?.position ?? event.options?.fromPosition ?? POSITION_TOP
+    const sourceZoneName = getProtocolPublicZone(raw.FromZone)
+    const materializationZone =
+      sourceZoneName && sourceZoneName !== zoneName ? sourceZoneName : zoneName
+    const knownCards = this.resolveKnownCards(ids, {
+      zoneName: materializationZone,
+      position: event.options?.fromPosition ?? position
+    })
+
     this.controllerLogger.info('展示明牌进入公共区', {
       ids,
       zoneName,
@@ -421,7 +422,6 @@ export class TrackerController {
       resolvedCount: knownCards.length
     })
 
-    const sourceZoneName = getProtocolPublicZone(raw.FromZone)
     if (sourceZoneName && sourceZoneName !== zoneName) {
       // 判定获得既会展示牌面，也会把实体移出来源公共区；复用标准移动链路完成来源置换，
       // 并清空协议残留的玩家槽位，避免公共区来源被误判为手牌。
@@ -433,6 +433,7 @@ export class TrackerController {
         fromSubZone: null,
         cardCount: ids.length
       })
+
       return
     }
 
@@ -488,7 +489,7 @@ export class TrackerController {
       } else if (target.type === 'public') {
         const zoneName = target.zoneName ?? 'pile'
         const position = target.position ?? POSITION_TOP
-        const knownCards = this.resolveKnownCards(ids)
+        const knownCards = this.resolveKnownCards(ids, { zoneName, position })
         this.placePublicRevealCards(knownCards, zoneName, {
           position,
           reposition: target.reposition === true,
@@ -524,26 +525,11 @@ export class TrackerController {
     const position = options.position ?? POSITION_TOP
     const targetZone = readyRoom.zones.get(zoneName)
 
-    // 协议确认某正 ID 位于公共区端点时，若该身份正被玩家区实体占用，
-    // 先在玩家区留下匿名占位，再把真实身份收回目标公共区。
-    // 不能直接 Zone.add 抽走玩家实体，也不能永久跳过导致牌顶缺牌。
     const placeableCards: Card[] = []
     const skippedCards: Card[] = []
 
-    const revealCardSet = new Set(knownCards)
-
     knownCards.forEach((card) => {
       if (card.location === 'player') {
-        const recovered = this.recoverPlayerOccupiedIdentityForPublicReveal(
-          card,
-          zoneName,
-          position,
-          revealCardSet
-        )
-        if (recovered) {
-          placeableCards.push(card)
-          return
-        }
         skippedCards.push(card)
         return
       }
@@ -597,110 +583,6 @@ export class TrackerController {
     }
 
     readyRoom.resolveConstraints()
-  }
-
-  /**
-   * 公共区展示命中“正 ID 仍被玩家区实体占用”时，用公共区未知实体（优先）或匿名占位
-   * 接管原玩家槽位，再把真实身份交给公共区落点。
-   * 优先从目标公共区换出未知实体，避免 createExternal 导致牌堆张数 +1。
-   */
-  private recoverPlayerOccupiedIdentityForPublicReveal(
-    card: Card,
-    zoneName: PublicZoneName,
-    position: PublicPosition,
-    excludedCards: Set<Card> = new Set()
-  ): boolean {
-    const readyRoom = this.getReadyTrackerRoom()
-    if (!readyRoom || card.location !== 'player' || card.id <= 0) return false
-
-    const oldSubZone = card.subZone ?? 'hand'
-    const oldSeats = Array.from(card.seats, Number)
-    const oldSpellID = card.spellID
-    const oldCombinationID = card.combinationID
-    const oldLocationCandidates = card.getLocationCandidates()
-    const oldIsKnown = card.isKnown === true
-    const targetZone = readyRoom.zones.get(zoneName)
-
-    // 优先从揭示端点附近取未知实体作为玩家占位，同时保护该端点已经确认的连续明牌段。
-    // Zone 内部顺序固定为底 -> 顶，因此牌顶从尾部反查，牌底从头部正查。
-    let placeholder: Card | null = null
-    let placeholderFromPublicZone = false
-    if (targetZone) {
-      const zoneCards = targetZone.cards
-      const endpointCards = position === POSITION_BOTTOM ? zoneCards : [...zoneCards].reverse()
-      const protectedKnownCount =
-        zoneName === 'pile' ? endpointCards.findIndex((candidate) => candidate.isKnown !== true) : 0
-      const knownCount = protectedKnownCount < 0 ? endpointCards.length : protectedKnownCount
-      const unknownPool = endpointCards.slice(knownCount)
-
-      placeholder =
-        unknownPool.find(
-          (candidate) =>
-            candidate !== card && !excludedCards.has(candidate) && candidate.isKnown !== true
-        ) ?? null
-
-      if (placeholder) {
-        targetZone.removeCard(placeholder)
-        placeholderFromPublicZone = true
-      }
-    }
-
-    if (!placeholder) {
-      placeholder = readyRoom.createExternalCards([], 1)[0] ?? null
-      if (placeholder) {
-        this.controllerLogger.warn('公共区展示回收身份时目标区无未知实体，已创建匿名占位', {
-          cardID: card.id,
-          zoneName,
-          placeholderEntityID: placeholder.entityID
-        })
-      }
-    }
-    if (!placeholder) return false
-
-    // 公共区未知实体通常无约束组；若有先摘除，再接管玩家约束组，避免把公共组名额带进玩家槽。
-    readyRoom.removeCardsFromConstraintGroups([placeholder])
-    readyRoom.constraints.replaceCardInConstraintGroups(card, placeholder)
-    if (oldLocationCandidates.length > 0) {
-      placeholder.location = 'player'
-      placeholder.subZone = oldSubZone
-      placeholder.spellID = oldSpellID
-      placeholder.suspended = false
-      placeholder.isKnown = false
-      placeholder.setLocationCandidates(
-        oldLocationCandidates,
-        'recoverPlayerOccupiedIdentityForPublicReveal:placeholder'
-      )
-      placeholder.setSeats(oldSeats, 'recoverPlayerOccupiedIdentityForPublicReveal:placeholder')
-      placeholder.combinationID = oldCombinationID
-      readyRoom.markCounterDirty(placeholder)
-      readyRoom.notifyCardChanged(placeholder, {
-        type: 'card-bound',
-        subZone: oldSubZone,
-        spellID: oldSpellID
-      })
-    } else {
-      placeholder.bindCandidates(oldSeats, oldSubZone, oldSpellID, { known: false })
-      placeholder.combinationID = oldCombinationID
-    }
-
-    // 真实身份脱离玩家区，等待后续公共区落点。
-    card.setLocationCandidates([], 'recoverPlayerOccupiedIdentityForPublicReveal:known')
-    card.combinationID = null
-    card.moveToPublicZone('outside')
-    card.confirmKnown()
-
-    this.controllerLogger.info('公共区展示回收玩家区占用身份', {
-      cardID: card.id,
-      zoneName,
-      placeholderCardID: placeholder.id,
-      placeholderEntityID: placeholder.entityID,
-      placeholderFromPublicZone,
-      seats: oldSeats,
-      subZone: oldSubZone,
-      previousKnown: oldIsKnown
-    })
-
-    return true
   }
 
   /**
@@ -812,20 +694,44 @@ export class TrackerController {
   }
 
   /**
-   * 按物理 ID 取得 Card 实体；若明牌来自游戏外区域且牌池没有实体，则补建外部牌。
+   * 按物理 ID 取得 Card 实体；公共区展示优先在端点匿名槽物化。
+   * 只有身份既未定位、也不属于本局待定位集合时，才按游戏外新牌补建实体。
    */
-  private resolveKnownCards(ids: CardID[]): Card[] {
+  private resolveKnownCards(
+    ids: CardID[],
+    target: { zoneName: PublicZoneName; position: PublicPosition } | null = null
+  ): Card[] {
     const readyRoom = this.getReadyTrackerRoom()
     if (!readyRoom) return []
 
+    if (target) {
+      readyRoom.materializeAtPublicEndpoint(ids, target.zoneName, target.position)
+    }
+
     const existingCards = readyRoom.findCardsByIDs(ids)
     const existingIDs = new Set(existingCards.map((card) => card.id))
-    const missingIDs = ids.filter((id) => !existingIDs.has(id))
+    const missingIDs = ids.filter(
+      (id) => !existingIDs.has(id) && !readyRoom.unlocatedIdentities.has(id)
+    )
     const createdCards =
       missingIDs.length > 0 ? readyRoom.createExternalCards(missingIDs, missingIDs.length) : []
     const cardMap = new Map<CardID, Card>()
     existingCards.forEach((card) => cardMap.set(card.id, card))
     createdCards.forEach((card) => cardMap.set(card.id, card))
+
+    // 仍停留在 unlocatedIdentities 的正 ID：既未物化到匿名槽（端点无匿名槽可用），
+    // 也不会被当作游戏外缺失身份补建，最终会静默从 knownCards 掉出。
+    // 这里补一条告警让「揭示丢失」可观测，而不是无声短少。
+    const unresolvedIdentityIDs = ids.filter(
+      (id) => !cardMap.has(id) && readyRoom.unlocatedIdentities.has(id)
+    )
+    if (unresolvedIdentityIDs.length > 0) {
+      this.controllerLogger.warn('揭示身份未能物化到匿名槽，已从已知牌集合中略过', {
+        reason: 'resolveKnownCards:unresolvedUnlocatedIdentity',
+        unresolvedIdentityIDs,
+        target
+      })
+    }
 
     return ids.map((id) => cardMap.get(id)).filter((card): card is Card => Boolean(card))
   }

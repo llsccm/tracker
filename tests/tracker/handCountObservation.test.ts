@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { isAnonymous } from '@/tracker/Card'
 import { trackerLogger } from '@/utils/logger'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import type { RoomMoveContext } from '@/tracker/roomMovement/types'
@@ -136,7 +137,7 @@ describe('玩家手牌数观测', () => {
     const playerCards = room.cards.filter((card) => card.location === 'player')
     expect(playerCards).toHaveLength(4)
     expect(playerCards).toEqual(expect.arrayContaining(sourceCards))
-    expect(room.cards.some((card) => card.id === 0)).toBe(false)
+    expect(room.cards.some((card) => isAnonymous(card))).toBe(false)
     expect(room.getPlayer(1).unknownCardCount).toBe(0)
     expect(room.getPlayer(2).unknownCardCount).toBe(2)
   })
@@ -211,7 +212,10 @@ describe('玩家手牌数观测', () => {
 
     const anonymousCard = room.cards.find(
       (card) =>
-        card.id === 0 && card.location === 'player' && card.subZone === 'hand' && card.seats.has(2)
+        isAnonymous(card) &&
+        card.location === 'player' &&
+        card.subZone === 'hand' &&
+        card.seats.has(2)
     )
     expect(anonymousCard).toBeDefined()
     expect(anonymousCard.entityID).toBeLessThan(0)
@@ -245,7 +249,7 @@ describe('玩家手牌数观测', () => {
     room.resolveConstraints()
 
     const anonymousCards = room.cards.filter(
-      (card) => card.id === 0 && card.location === 'player' && card.seats.has(2)
+      (card) => isAnonymous(card) && card.location === 'player' && card.seats.has(2)
     )
     expect(anonymousCards).toHaveLength(2)
     expect(new Set(anonymousCards.map((card) => card.entityID)).size).toBe(2)
@@ -255,7 +259,7 @@ describe('玩家手牌数观测', () => {
     room.resolveConstraints()
 
     const resolvedEntityIDs = room.cards
-      .filter((card) => card.id === 0 && card.location === 'player' && card.seats.has(2))
+      .filter((card) => isAnonymous(card) && card.location === 'player' && card.seats.has(2))
       .map((card) => card.entityID)
       .sort()
     expect(resolvedEntityIDs).toEqual(originalEntityIDs)
@@ -272,16 +276,16 @@ describe('玩家手牌数观测', () => {
     room.resolveConstraints()
 
     const originalEntityIDs = room.cards
-      .filter((card) => card.id === 0 && card.location === 'player')
+      .filter((card) => isAnonymous(card) && card.location === 'player')
       .map((card) => card.entityID)
     player.syncObservedHandCount(2)
     room.resolveConstraints()
 
     const activeAnonymousCards = room.cards.filter(
-      (card) => card.id === 0 && card.location === 'player' && card.seats.has(2)
+      (card) => isAnonymous(card) && card.location === 'player' && card.seats.has(2)
     )
     const releasedAnonymousCards = room.cards.filter(
-      (card) => card.id === 0 && card.location === 'outside'
+      (card) => isAnonymous(card) && card.location === 'outside'
     )
     expect(activeAnonymousCards).toHaveLength(1)
     expect(releasedAnonymousCards).toHaveLength(1)
@@ -305,7 +309,9 @@ describe('玩家手牌数观测', () => {
     room.resolveConstraints()
 
     expect(
-      room.cards.some((card) => card.id === 0 && card.location === 'player' && card.seats.has(2))
+      room.cards.some(
+        (card) => isAnonymous(card) && card.location === 'player' && card.seats.has(2)
+      )
     ).toBe(false)
 
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
@@ -331,7 +337,7 @@ describe('玩家手牌数观测', () => {
     }
 
     const anonymousReplacement = room.cards.find(
-      (card) => card.id === 0 && card.location === 'pile'
+      (card) => isAnonymous(card) && card.location === 'pile'
     )
     expect(revealedCard.location).toBe('process')
     expect(anonymousReplacement).toBeDefined()

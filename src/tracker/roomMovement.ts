@@ -1,5 +1,5 @@
 import { trackerLogger } from '@/utils/logger'
-import type { Card } from './Card'
+import { isAnonymous, type Card } from './Card'
 import { POSITION_TOP } from './candidate/cardPositions'
 import { normalizeSpellID } from './candidate/markSpellID'
 import { summarizeMoveContext } from './helper/moveSummary'
@@ -130,8 +130,16 @@ export class RoomMovement extends RoomMovementCandidateMethods {
    * 来源为 outside 时允许补建外部新出现的物理牌。
    */
   resolveKnownMoveCards(context: RoomMoveContext): void {
-    const { knownIDs, sourceIsOutside } = context
-    let missingIDs: CardID[] = []
+    const {
+      fromPosition,
+      fromSeat,
+      fromSubZone,
+      fromZone,
+      knownIDs,
+      sourceCards,
+      sourceIsOutside
+    } = context
+    let missingIDs: CardID[]
     let createdCards: Card[] = []
     // 12 区会暂存未进入初始牌池的技能生成牌，获得时需要按协议正 ID 补建实体。
     const canCreateMissingCards = sourceIsOutside || context.fromZone === 'exile'
@@ -146,8 +154,73 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       existingCards.forEach((card) => cardMap.set(card.id, card))
       createdCards.forEach((card) => cardMap.set(card.id, card))
       context.knownCards = knownIDs.map((id) => cardMap.get(id)).filter(Boolean)
+    } else if (typeof fromZone === 'string' && this.room.zones.has(fromZone)) {
+      // 公共区来源按协议端点顺序物化，避免从别处搬运被提前占用的真实实体。
+      const sourceZone = this.room.zones.get(fromZone)
+      const endpointCards = this.room.getPublicEndpointCards(
+        fromZone,
+        sourceZone?.cards.length ?? knownIDs.length,
+        fromPosition
+      )
+      const availableTargets = endpointCards.filter(isAnonymous)
+
+      context.knownCards = knownIDs
+        .map((cardID) => {
+          const existing = this.room.cardIndex.get(cardID)
+          const existingInSource = existing && sourceZone?.cards.includes(existing)
+          const target = existingInSource ? existing : availableTargets.shift()
+          return this.room.materialize(cardID, target ?? null) ?? existing
+        })
+        .filter((card): card is Card => Boolean(card))
+      missingIDs = knownIDs.filter((id) => !this.room.cardIndex.has(id))
+
+      // 端点无匿名槽可物化时，与 outside/exile 一致：按协议正 ID 补建外部实体，避免 knownCards 静默短少。
+      if (missingIDs.length > 0) {
+        createdCards = this.room.createExternalCards(missingIDs, missingIDs.length)
+        const cardMap = new Map(context.knownCards.map((card) => [card.id, card]))
+        createdCards.forEach((card) => cardMap.set(card.id, card))
+        context.knownCards = knownIDs
+          .map((id) => cardMap.get(id))
+          .filter((card): card is Card => Boolean(card))
+        missingIDs = knownIDs.filter((id) => !cardMap.has(id))
+      }
+    } else if (fromSeat !== null && !Number.isNaN(fromSeat) && fromSubZone) {
+      // 阶段 1 的玩家区既可能是匿名槽，也可能仍沿用真 ID 暗牌，两者统一由 materialize 收口。
+      const explicitTargets = sourceCards?.filter(isAnonymous) ?? []
+      const sourceTargets =
+        explicitTargets.length > 0
+          ? explicitTargets
+          : this.getUnknownPlayerSourceCards(
+              fromSeat,
+              fromSubZone,
+              context.fromSpellID ?? context.spellID
+            )
+              .filter(isAnonymous)
+              .slice(0, knownIDs.length)
+      const availableTargets = [...sourceTargets]
+
+      context.knownCards = knownIDs
+        .map((cardID) => {
+          const existing = this.room.cardIndex.get(cardID)
+          const existingInSource = existing && this.isCardInPlayerSource(existing, context)
+          const target = existingInSource ? existing : availableTargets.shift()
+          return this.room.materialize(cardID, target ?? null) ?? existing
+        })
+        .filter((card): card is Card => Boolean(card))
+      missingIDs = knownIDs.filter((id) => !this.room.cardIndex.has(id))
+
+      if (!this.room.players.has(fromSeat) && missingIDs.length > 0) {
+        createdCards = this.room.createExternalCards(missingIDs, missingIDs.length)
+        const cardMap = new Map(context.knownCards.map((card) => [card.id, card]))
+        createdCards.forEach((card) => cardMap.set(card.id, card))
+        context.knownCards = knownIDs
+          .map((id) => cardMap.get(id))
+          .filter((card): card is Card => Boolean(card))
+        missingIDs = knownIDs.filter((id) => !cardMap.has(id))
+      }
     } else {
       context.knownCards = this.room.findCardsByIDs(knownIDs)
+      missingIDs = knownIDs.filter((id) => !this.room.cardIndex.has(id))
     }
 
     const resumedCardIDs: CardID[] = []
@@ -156,6 +229,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       this.room.resumeSuspendedKnownCard(card)
       if (wasSuspended) resumedCardIDs.push(card.id)
     })
+
     trackerLogger.debug('已知牌解析完成', {
       knownIDs,
       resolvedCardIDs: context.knownCards.map((card) => card.id),
@@ -356,7 +430,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       const fallbackCount = unknownCount - takenCount
       const fallbackCards = this.room.createExternalCards([], fallbackCount)
       if (fallbackCards.length > 0) {
-        trackerLogger.warn('来源实体不足，创建 id=0 暗占位补足公共区移动', {
+        trackerLogger.warn('来源实体不足，创建匿名暗占位补足公共区移动', {
           reason: 'moveUnknownCardsForContext:publicFallback',
           requestedCount: unknownCount,
           takenCount,
@@ -632,7 +706,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
 
       const usedPublicResiduePlaceholders = new Set<Card>()
       // 只有观测到来源手牌已被本次移动清空时，确定明牌才可作为旧公共区槽位的替身。
-      // 未观测手牌总数时保持保守，优先用暗占位或新建 id=0 占位，避免偷走仍可能在手里的明牌。
+      // 未观测手牌总数时保持保守，优先用暗占位或新建匿名占位，避免偷走仍可能在手里的明牌。
       const canUseKnownSourcePlaceholder =
         context.sourceHandTotalObserved &&
         fromSubZone === 'hand' &&
@@ -701,7 +775,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
           if (!placeholder) {
             placeholder = this.room.createExternalCards([], 1)[0] ?? null
             if (placeholder) {
-              trackerLogger.warn('公共区残留修复创建 id=0 回补占位', {
+              trackerLogger.warn('公共区残留修复创建匿名回补占位', {
                 reason: 'moveKnownCardsForContext:publicResidueFallback',
                 knownCardID: card.id,
                 placeholderCardID: placeholder.id,
