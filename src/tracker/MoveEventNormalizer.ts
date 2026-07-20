@@ -33,6 +33,8 @@ import type { CardID, NormalizedMoveEvent, RawMoveCardEvent, RawMoveEventType } 
 //   20: '锻造',
 //   21: '展示',
 //   22: '替换装备',
+//   Mode_ZIRUO = 23;
+//   Mode_GAMEOVER_NOTIFY = 24;
 //   255: '系统'
 //
 

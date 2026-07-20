@@ -268,10 +268,14 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         targetSeat: targetHandSeat,
         count: handMoveCount,
         unknownCount,
+        sourceHandTotalObserved: context.sourceHandTotalObserved,
+        sourceHandTotalBefore: context.sourceHandTotalBefore,
+        sourceHandUnknownCount: context.sourceHandUnknownCount,
         sourceEvent
       })
     ) {
-      // 随机获得来源手牌时，来源明牌不能直接消失，而是扩展为“来源/目标都可能持有”。
+      // 随机获得来源手牌时：若来源仍有明牌，扩展为“来源/目标都可能持有”；
+      // 来源全暗则走下方默认暗牌移动，不必做无展示价值的 N 选 K。
       const propagatedCards = this.markRandomHandTransferCandidates({
         fromSeat: sourceHandSeat,
         targetSeat: targetHandSeat,
@@ -279,8 +283,13 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         sourceTotalBefore: context.sourceHandTotalObserved
           ? context.sourceHandTotalBefore
           : undefined,
+        sourceHandTotalObserved: context.sourceHandTotalObserved,
+        sourceUnknownCount: context.sourceHandTotalObserved
+          ? context.sourceHandUnknownCount
+          : undefined,
         sourceEvent
       })
+
       // 完整候选覆盖已经表达了这次 K 张转移；此时不能再确定性挑选暗实体搬到目标。
       // 返回空数组表示候选建模失败，仍允许默认未知移动路径执行保守回退。
       context.skipUnknownMovement = propagatedCards.length > 0
