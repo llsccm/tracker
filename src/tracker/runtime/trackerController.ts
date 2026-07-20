@@ -719,6 +719,20 @@ export class TrackerController {
     existingCards.forEach((card) => cardMap.set(card.id, card))
     createdCards.forEach((card) => cardMap.set(card.id, card))
 
+    // 仍停留在 unlocatedIdentities 的正 ID：既未物化到匿名槽（端点无匿名槽可用），
+    // 也不会被当作游戏外缺失身份补建，最终会静默从 knownCards 掉出。
+    // 这里补一条告警让「揭示丢失」可观测，而不是无声短少。
+    const unresolvedIdentityIDs = ids.filter(
+      (id) => !cardMap.has(id) && readyRoom.unlocatedIdentities.has(id)
+    )
+    if (unresolvedIdentityIDs.length > 0) {
+      this.controllerLogger.warn('揭示身份未能物化到匿名槽，已从已知牌集合中略过', {
+        reason: 'resolveKnownCards:unresolvedUnlocatedIdentity',
+        unresolvedIdentityIDs,
+        target
+      })
+    }
+
     return ids.map((id) => cardMap.get(id)).filter((card): card is Card => Boolean(card))
   }
 

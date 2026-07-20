@@ -1024,4 +1024,29 @@ describe('TrackerController', () => {
     expect(controller.getReadyTrackerRoom()).toBe(null)
     expect(room.zones.get('pile').cards).toEqual(initialPile)
   })
+
+  it('揭示身份无匿名槽可物化时告警并从已知牌集合略过', () => {
+    const warn = vi.fn()
+    const { controller } = createTrackerControllerHarness({ logger: { warn } })
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2, 3])
+
+    const room = controller.getTrackerRoom()!
+    // 清空牌堆后，牌堆端点没有匿名槽可承接揭示身份 1，它仍停留在 unlocatedIdentities。
+    room.zones.get('pile')!.clear()
+
+    controller.revealTrackerCardsInZone({ id: 255, zone: 1, pos: POSITION_BOTTOM }, [1])
+
+    expect(room.cardIndex.has(1)).toBe(false)
+    expect(room.unlocatedIdentities.has(1)).toBe(true)
+    const warning = warn.mock.calls.find(
+      ([, meta]) =>
+        (meta as { reason?: string } | undefined)?.reason ===
+        'resolveKnownCards:unresolvedUnlocatedIdentity'
+    )
+    expect(warning).toBeDefined()
+    expect((warning?.[1] as { unresolvedIdentityIDs: number[] }).unresolvedIdentityIDs).toContain(1)
+  })
 })
