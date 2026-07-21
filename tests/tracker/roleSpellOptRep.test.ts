@@ -26,7 +26,7 @@ describe('CGsRoleSpellOptRep', () => {
     Game.phase = 0
   })
 
-  it('Type 44 将叫分座位同步为先手', () => {
+  it('Type 44 叫分回包不设置先手', () => {
     handleRoleSpellOptRep({
       Datas: [300],
       SeatID: 2,
@@ -34,7 +34,18 @@ describe('CGsRoleSpellOptRep', () => {
       Type: 44
     })
 
-    expect(setTrackerFirstHand).toHaveBeenCalledWith(2)
+    expect(setTrackerFirstHand).not.toHaveBeenCalled()
+  })
+
+  it('Type 45 地主结果播报当前不设置先手', () => {
+    handleRoleSpellOptRep({
+      Datas: [300, 1],
+      SeatID: 2,
+      SpellID: 0,
+      Type: 45
+    })
+
+    expect(setTrackerFirstHand).not.toHaveBeenCalled()
   })
 
   it('Type 72 在开局阶段累计去重后的正 CardID', () => {
