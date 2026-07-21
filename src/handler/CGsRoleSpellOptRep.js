@@ -11,13 +11,15 @@ function revealCardsInProtocolZone(id, cardIDs, zone = PROTOCOL_HAND_ZONE, pos =
 }
 
 // Type 级结果不一定绑定单一技能，例如叫分和开局初始牌通知。
-function handleResultType({ Datas, SeatID, Type }) {
+function handleResultType({ Datas, Type }) {
   switch (Type) {
-    // 斗地主叫分结果 Datas: [300] data_count: 1
+    // 44: 斗地主玩家叫分结果 Datas: [300] data_count: 1 只是当前操作的返回 并非最终结果
     case 44:
-      if (SeatID !== undefined) {
-        tracker.setTrackerFirstHand(SeatID)
-      }
+      break
+
+    // 45: 斗地主地主结果 Datas: [betBaseCoin,betCoinMulti] [300, 1]
+    case 45:
+      // 但是这里是系统播报 没办法判断谁是地主
       break
 
     // TODO 初始牌 SpellID == 0
