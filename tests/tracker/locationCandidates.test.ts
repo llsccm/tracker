@@ -152,4 +152,29 @@ describe('完整位置候选回归', () => {
       [createLocationCandidateKey(seatTwoHand), createLocationCandidateKey(seatTwoMark)].sort()
     )
   })
+
+  it('已有完整位置候选时 addSeat 会真正追加目标座位候选', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0, 2, 7] })
+    const card = getCard(room, 1)
+    const seatZeroHand = playerLocation(0, 'hand')
+    const seatSevenHand = playerLocation(7, 'hand')
+    const seatTwoHand = playerLocation(2, 'hand')
+
+    card.confirmKnown()
+    card.setLocationCandidates([seatZeroHand, seatSevenHand])
+
+    expect(card.addSeat(2, 'test:add-seat-with-location-candidates')).toBe(true)
+    expect(locationKeys(card)).toEqual(
+      [
+        createLocationCandidateKey(seatZeroHand),
+        createLocationCandidateKey(seatTwoHand),
+        createLocationCandidateKey(seatSevenHand)
+      ].sort()
+    )
+    expect(
+      Array.from(card.seats)
+        .map((seatID) => Number(seatID))
+        .sort((a, b) => a - b)
+    ).toEqual([0, 2, 7])
+  })
 })
