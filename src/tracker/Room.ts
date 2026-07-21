@@ -525,7 +525,10 @@ export class Room {
     card.suspended = false
     card.combinationID = null
     card.spellID = null
-    card.locationCandidates = []
+    // 必须走候选写路径：直接清空 locationCandidates 不会同步 clear owner，
+    // seats 在 location 仍为 player 时会回退到旧座位投影。
+    card.setLocationCandidates([], `${reason}:candidates`)
+    card.clearSeats(`${reason}:seats`)
     card.subZone = null
     this.suspendedKnownCards.delete(card)
 
