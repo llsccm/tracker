@@ -695,11 +695,20 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       return
     }
 
-    // 手气卡把明牌洗回牌堆后，这些实体重新成为未知牌，后续重摸才能按牌堆实体处理。
+    // 手气卡把明牌洗回牌堆后，必须真正匿名化槽位：
+    // 只 isKnown=false 会留下正 ID 未知牌，后续暗摸会原样绑成正 ID 独占暗手。
     if (resetKnownToUnknown === true && toZone === 'pile') {
       knownCards.forEach((card) => {
+        const previousCardID = this.room.anonymizeLocatedIdentity(
+          card,
+          'moveKnownCardsForContext:resetKnownToUnknown'
+        )
         card.reset()
-        resetKnownCardIDs.push(card.id)
+        if (previousCardID !== null) {
+          resetKnownCardIDs.push(previousCardID)
+        } else if (card.id > 0) {
+          resetKnownCardIDs.push(card.id)
+        }
       })
     }
 

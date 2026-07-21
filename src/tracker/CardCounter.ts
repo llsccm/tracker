@@ -280,6 +280,24 @@ export class CardCounter {
   }
 
   /**
+   * 手气卡等路径把已定位正 ID 槽匿名化后：实体离开 identity 索引，身份回到 UNKNOWN 未定位桶。
+   */
+  releaseLocatedIdentityToUnknown(card: Card, previousCardID: CardID): void {
+    if (!(previousCardID > 0) || !card) return
+
+    this.cardsByStatusCache.forEach((set) => set.delete(card))
+    this.statusIndexCache.forEach((set) => set.delete(previousCardID))
+
+    const instance = this.cardInstancesCache[previousCardID]
+    if (instance) {
+      instance.status = CARD_INSTANCE_STATUS.UNKNOWN
+    }
+    this.statusIndexCache[CARD_INSTANCE_STATUS.UNKNOWN].add(previousCardID)
+    this.cardsByStatusCache[CARD_INSTANCE_STATUS.UNKNOWN].add(card)
+    this.dirtyCards.delete(card)
+  }
+
+  /**
    * 单维度快速过滤查询
    * @param dimension 'nameIndex' | 'colorIndex' | 'numberIndex' | 'typeIndex'
    */
