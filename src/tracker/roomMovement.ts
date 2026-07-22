@@ -231,9 +231,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
 
       const canCreatePlayerSourceMissingCards =
         !this.room.players.has(fromSeat) ||
-        (isFullKnownMarkSnapshot &&
-          Boolean(getEquipmentMarkContainerByMarkSpellID(markSpellID)) &&
-          missingIDs.length > 0)
+        (isFullKnownMarkSnapshot && Boolean(getEquipmentMarkContainerByMarkSpellID(markSpellID)))
       if (canCreatePlayerSourceMissingCards && missingIDs.length > 0) {
         createdCards = this.room.createExternalCards(missingIDs, missingIDs.length)
         const cardMap = new Map(context.knownCards.map((card) => [card.id, card]))

@@ -2,6 +2,7 @@ import { trackerLogger } from '@/utils/logger'
 import { POSITION_TOP } from '../candidate/cardPositions'
 import { getCompatibleMarkSpellIDs, type SpellIDInput } from '../candidate/markSpellID'
 import { isAnonymous, type Card } from '../Card'
+import type { Zone } from '../Zone'
 import type {
   PlayerLocationCandidate,
   PublicPosition,
@@ -515,18 +516,11 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     )
   }
 
-/**
+  /**
    * 把无公共候选的暗占位放回牌堆时，避免盖住已确认的牌堆顶明牌段。
    * 全是明牌时保持旧语义：占位落到牌顶。
    */
-  insertUnknownPlaceholderIntoPile(
-    zone: {
-      cards: Card[]
-      add: (cards: Card | Card[], position?: typeof POSITION_TOP) => void
-      remove: (count: number, position?: typeof POSITION_TOP) => Card[]
-    },
-    placeholder: Card
-  ): void {
+  insertUnknownPlaceholderIntoPile(zone: Zone, placeholder: Card): void {
     const pileCards = zone.cards
     let knownTopCount = 0
     for (let i = pileCards.length - 1; i >= 0; i -= 1) {

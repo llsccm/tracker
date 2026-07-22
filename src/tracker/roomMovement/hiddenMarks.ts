@@ -899,8 +899,9 @@ export abstract class RoomMovementHiddenMarkMethods {
     if (!state?.records?.size) return false
 
     const snapshot = this.getObservedEquipmentMarkSnapshot(context)
-    // 全明快照以协议 CardIDs 为准：即使部分身份尚未物化成功，弱候选也应按“不在可见集合”收敛回手牌。
-    if (!snapshot || context.cardCount <= 0 || context.knownIDs.length !== context.cardCount) {
+    // knownIDs/cardCount 全明约束已在 getObservedEquipmentMarkSnapshot 内校验；
+    // 这里只保留 snapshot 与 cardCount 边界。即使部分身份尚未物化，也按协议 ID 收敛弱候选。
+    if (!snapshot || context.cardCount <= 0) {
       return false
     }
 
