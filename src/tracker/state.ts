@@ -108,7 +108,7 @@ const UI: UIState = {
   stackCardAreaY: 0,
   MAX_SEAT_WIDTH: 149,
   inPopFirstTarget: false,
-  unscaledWidth: 146,
+  unscaledWidth: 146, // 手牌框宽度
   unscaledHeight: 172,
   MAX_HEIGHT: 180,
   MAX_WIDTH: 150,

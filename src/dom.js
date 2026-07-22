@@ -63,7 +63,7 @@ function scheduleSetGameSize() {
   updateTimeout = setTimeout(() => {
     setGameSize()
     updateTimeout = null
-  }, 500) // 延迟 100 毫秒调用 setGameSize
+  }, 500)
 }
 
 export async function initFrame(force = false) {
@@ -107,7 +107,7 @@ function setGameSize() {
   UI.height = (SystemContext.gameHeight * SystemContext.gameScale) >> 0
   UI.scale = SystemContext.gameScale
 
-  if (UI.seatUIs && UI.seatUIs.length > 0) {
+  if (UI.seatUIs?.length > 0) {
     getSeatUiPos()
     drawSeatUIs()
   }

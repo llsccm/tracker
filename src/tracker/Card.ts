@@ -162,6 +162,11 @@ export class Card extends BaseCard {
       .filter((candidate): candidate is PublicCandidate => Boolean(candidate))
   }
 
+  /**
+   * 规整座位输入为 Set<SeatID>。
+   * 兼容单值 / 数组 / Set，并丢弃 null、undefined 与 NaN。
+   * 这是 seats 写路径的统一入口格式化，不改变牌的候选语义。
+   */
   normalizeSeats(seats: SeatInput): Set<SeatID> {
     const rawSeats = seats instanceof Set || Array.isArray(seats) ? Array.from(seats) : [seats]
     return new Set(
@@ -204,6 +209,14 @@ export class Card extends BaseCard {
     this.syncTimestamp()
   }
 
+  /**
+   * 根据当前 seats 投影同步 owner / resolvedSeat，并在变化时发出脏事件。
+   *
+   * 注意：
+   * - seats.size === 1 只表示 owner 已确定，不等于手牌/标记等子区域已确定。
+   * - previousSeats 必须在候选收缩前捕获；被剔除的座位只会出现在事件快照里。
+   * - 调用方可传入 SeatChangeSnapshot，避免 setSeats 过程中读到半更新状态。
+   */
   syncOwnerFromSeats(reason = 'syncOwnerFromSeats', change: SeatChangeSnapshot = {}): boolean {
     const previousOwner = change.previousOwner ?? this.owner
     const previousResolvedSeat =
@@ -244,6 +257,16 @@ export class Card extends BaseCard {
     return false
   }
 
+  /**
+   * 收敛 seats 投影，并尽量同步 locationCandidates。
+   *
+   * 语义边界：
+   * - 主要用途是“过滤/收敛”，不是“新增完整位置候选”。
+   * - 已有 locationCandidates / subZoneCandidates 时：只按 seats 过滤对应玩家位置候选。
+   * - 尚无完整位置候选且 seats > 1 时：按当前 subZone 兼容生成玩家位置候选。
+   * - 若要扩展候选座位，应优先用 addSeat / setLocationCandidates，避免依赖本方法静默新增。
+   * - seats 只是位置候选的座位级投影；owner 确定不代表具体子区域已落定。
+   */
   setSeats(nextSeats: SeatInput, reason = 'setSeats'): boolean {
     const normalizedSeats = this.normalizeSeats(nextSeats)
     const previousOwner = this.owner
@@ -349,13 +372,79 @@ export class Card extends BaseCard {
     return candidatesChanged || ownerChanged
   }
 
+  /**
+   * 扩展候选座位。
+   *
+   * - 尚无完整位置候选时：走 setSeats 的兼容扩座位路径。
+   * - 已有完整位置候选时：真正追加目标座位的玩家位置候选，而不是只过滤旧候选。
+   *   默认优先复制已有 hand 候选模板；没有 hand 时复制现有玩家子区模板。
+   */
   addSeat(seat: SeatInput, reason = 'addSeat'): boolean {
     const normalizedSeats = this.normalizeSeats(seat)
     if (normalizedSeats.size === 0) return false
 
+    if (this.hasLocationCandidates()) {
+      const templates = this.getSeatExpansionTemplates(
+        getPlayerLocationCandidates(this.locationCandidates)
+      )
+      const nextCandidates = this.locationCandidates.slice()
+      let changed = false
+
+      normalizedSeats.forEach((seatID) => {
+        templates.forEach((template) => {
+          const candidate: PlayerLocationCandidate = {
+            type: 'player',
+            seatID,
+            subZone: template.subZone,
+            spellID: template.spellID
+          }
+          const key = createLocationCandidateKey(candidate)
+          if (!key || this.hasLocationCandidate(key)) return
+
+          nextCandidates.push(candidate)
+          changed = true
+        })
+      })
+
+      if (!changed) return false
+      return this.setLocationCandidates(nextCandidates, reason)
+    }
+
     const nextSeats = new Set(this.seats)
     normalizedSeats.forEach((seatID) => nextSeats.add(seatID))
     return this.setSeats(nextSeats, reason)
+  }
+
+  /**
+   * 推导 addSeat 需要追加的位置模板。
+   * 有 hand 候选时只扩 hand，避免把标记区等局部候选误复制到新座位。
+   */
+  private getSeatExpansionTemplates(
+    playerCandidates: PlayerLocationCandidate[]
+  ): { subZone: SubZone; spellID: SpellID | null }[] {
+    if (playerCandidates.length === 0) {
+      const subZone = this.subZone ?? 'hand'
+      return [
+        {
+          subZone,
+          spellID: subZone === 'mark' ? this.spellID : null
+        }
+      ]
+    }
+
+    const handCandidates = playerCandidates.filter((candidate) => candidate.subZone === 'hand')
+    const sourceCandidates = handCandidates.length > 0 ? handCandidates : playerCandidates
+    const templates = new Map<string, { subZone: SubZone; spellID: SpellID | null }>()
+
+    sourceCandidates.forEach((candidate) => {
+      const spellID = candidate.subZone === 'mark' ? candidate.spellID : null
+      const key = `${candidate.subZone}:${spellID ?? ''}`
+      if (!templates.has(key)) {
+        templates.set(key, { subZone: candidate.subZone, spellID })
+      }
+    })
+
+    return Array.from(templates.values())
   }
 
   deleteSeat(seat: SeatInput, reason = 'deleteSeat'): boolean {

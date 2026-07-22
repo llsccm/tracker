@@ -625,14 +625,14 @@ describe('TrackerController', () => {
 
     controller.syncTrackerMove(returnToPileMove({ CardIDs: cardIDs, FromID: 3 }))
 
-    const pileIDs = room.zones.get('pile').cards.map((card) => card.id)
+    const pileCards = room.zones.get('pile').cards
+    expect(pileCards).toHaveLength(cardIDs.length + 1)
+    expect(pileCards.every((card) => card.id < 0 && card.entityID < 0)).toBe(true)
+    expect(pileCards.every((card) => card.isKnown !== true)).toBe(true)
     cardIDs.forEach((id) => {
-      const card = room.cardIndex.get(id)
-      expect(card.location).toBe('pile')
-      expect(card.subZone).toBe(null)
-      expect(card.isKnown).toBe(false)
-      expect(card.seats.size).toBe(0)
-      expect(pileIDs).toContain(id)
+      expect(room.cardIndex.has(id)).toBe(false)
+      expect(room.unlocatedIdentities.has(id)).toBe(true)
+      expect(room.deckIdentities.has(id)).toBe(true)
     })
   })
 
@@ -822,6 +822,38 @@ describe('TrackerController', () => {
     ).toEqual([])
   })
 
+  it('手气卡回牌堆真正匿名化后，后续暗摸不会得到正ID暗手', () => {
+    const { controller } = createTrackerControllerHarness()
+    const knownIDs = [7, 139]
+    const seatID = 1
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: seatID, ClientID: 100 }], 100)
+    controller.initTrackerDeck([...knownIDs, 1, 2, 3, 4])
+    controller.syncTrackerMove(protocolMove({ CardIDs: knownIDs, ToID: seatID }))
+    controller.syncTrackerMove(returnToPileMove({ CardIDs: knownIDs, FromID: seatID }))
+
+    const room = controller.getTrackerRoom()
+    expect(room.zones.get('pile').cards.every((card) => card.id < 0)).toBe(true)
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 2,
+        ToID: seatID
+      })
+    )
+
+    const handCards = room.cards.filter(
+      (card) => card.location === 'player' && card.subZone === 'hand' && card.seats.has(seatID)
+    )
+    expect(handCards).toHaveLength(2)
+    expect(handCards.every((card) => card.id < 0 && card.isKnown !== true)).toBe(true)
+    knownIDs.forEach((id) => {
+      expect(room.unlocatedIdentities.has(id)).toBe(true)
+      expect(room.cardIndex.has(id)).toBe(false)
+    })
+  })
   it('手气卡重摸明牌命中其他座位暗占位时保持牌堆与手牌数量', () => {
     const { controller } = createTrackerControllerHarness()
     const hiddenSeat = 2

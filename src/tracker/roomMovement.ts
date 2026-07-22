@@ -268,10 +268,14 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         targetSeat: targetHandSeat,
         count: handMoveCount,
         unknownCount,
+        sourceHandTotalObserved: context.sourceHandTotalObserved,
+        sourceHandTotalBefore: context.sourceHandTotalBefore,
+        sourceHandUnknownCount: context.sourceHandUnknownCount,
         sourceEvent
       })
     ) {
-      // 随机获得来源手牌时，来源明牌不能直接消失，而是扩展为“来源/目标都可能持有”。
+      // 随机获得来源手牌时：若来源仍有明牌，扩展为“来源/目标都可能持有”；
+      // 来源全暗则走下方默认暗牌移动，不必做无展示价值的 N 选 K。
       const propagatedCards = this.markRandomHandTransferCandidates({
         fromSeat: sourceHandSeat,
         targetSeat: targetHandSeat,
@@ -279,8 +283,13 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         sourceTotalBefore: context.sourceHandTotalObserved
           ? context.sourceHandTotalBefore
           : undefined,
+        sourceHandTotalObserved: context.sourceHandTotalObserved,
+        sourceUnknownCount: context.sourceHandTotalObserved
+          ? context.sourceHandUnknownCount
+          : undefined,
         sourceEvent
       })
+
       // 完整候选覆盖已经表达了这次 K 张转移；此时不能再确定性挑选暗实体搬到目标。
       // 返回空数组表示候选建模失败，仍允许默认未知移动路径执行保守回退。
       context.skipUnknownMovement = propagatedCards.length > 0
@@ -686,11 +695,28 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       return
     }
 
-    // 手气卡把明牌洗回牌堆后，这些实体重新成为未知牌，后续重摸才能按牌堆实体处理。
+    // 手气卡把明牌洗回牌堆后，必须真正匿名化槽位：
+    // 只 isKnown=false 会留下正 ID 未知牌，后续暗摸会原样绑成正 ID 独占暗手。
     if (resetKnownToUnknown === true && toZone === 'pile') {
       knownCards.forEach((card) => {
+        const previousCardID = this.room.anonymizeLocatedIdentity(
+          card,
+          'moveKnownCardsForContext:resetKnownToUnknown'
+        )
+        if (previousCardID === null) {
+          trackerLogger.warn('已知牌匿名化失败：card/index 不一致，继续重置槽位', {
+            reason: 'moveKnownCardsForContext:resetKnownToUnknown',
+            cardID: card.id,
+            entityID: card.entityID,
+            isKnown: card.isKnown
+          })
+        }
         card.reset()
-        resetKnownCardIDs.push(card.id)
+        if (previousCardID !== null) {
+          resetKnownCardIDs.push(previousCardID)
+        } else if (card.id > 0) {
+          resetKnownCardIDs.push(card.id)
+        }
       })
     }
 

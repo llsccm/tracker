@@ -504,6 +504,52 @@ export class Room {
   }
 
   /**
+   * 把手气卡回牌堆等路径上的已定位正 ID 槽真正匿名化：
+   * 实体保留在牌堆位置，身份回到 unlocatedIdentities，供后续揭示时再物化。
+   */
+  anonymizeLocatedIdentity(card: Card, reason = 'anonymizeLocatedIdentity'): CardID | null {
+    if (!card || !hasRealIdentity(card) || card.id <= 0) return null
+    if (this.cardIndex.get(card.id) !== card) return null
+
+    const previousCardID = card.id
+    const previousEntityID = card.entityID
+
+    this.cardIndex.delete(previousCardID)
+    this.unlocatedIdentities.add(previousCardID)
+    this.deckIdentities.add(previousCardID)
+
+    const nextEntityID = this.allocateAnonymousEntityID()
+    card.entityID = nextEntityID
+    card.setCardInfo(nextEntityID)
+    card.isKnown = false
+    card.suspended = false
+    card.combinationID = null
+    card.spellID = null
+    // 必须走候选写路径：直接清空 locationCandidates 不会同步 clear owner，
+    // seats 在 location 仍为 player 时会回退到旧座位投影。
+    card.setLocationCandidates([], `${reason}:candidates`)
+    card.clearSeats(`${reason}:seats`)
+    card.subZone = null
+    this.suspendedKnownCards.delete(card)
+
+    this.notifyCardChanged(card, {
+      type: 'card-identity-anonymized',
+      previousCardID,
+      previousEntityID,
+      entityID: nextEntityID,
+      reason
+    })
+
+    if (this.counter) {
+      this.counter.releaseLocatedIdentityToUnknown(card, previousCardID)
+    } else {
+      this.markCounterDirty(card)
+    }
+
+    return previousCardID
+  }
+
+  /**
    * 将真实身份绑定到匿名目标槽，并同步身份守恒账本与查询索引。
    * 已定位身份命中匿名目标时，仅允许阶段 1 的旧式暗手牌 interop 纠正槽位。
    */
