@@ -934,6 +934,7 @@ export class Room {
     const hasProtocolPileCount = Number.isFinite(normalizedCardCount) && normalizedCardCount >= 0
     const remainingPileCards = [...pile.cards]
     const recycledCards = [...discard.cards]
+    const hasDiscardCards = recycledCards.length > 0
 
     // 洗牌
     const rebuildPileAfterShuffle = () => {
@@ -950,7 +951,9 @@ export class Room {
       return rebuiltPileCards
     }
 
-    if (!hasProtocolPileCount) {
+    // 只有弃牌堆确实有牌时才是“弃牌堆洗回牌堆”；首次空弃牌堆调用只保留原牌堆，
+    // 不应据协议张数把场上身份分类为暂停追踪。
+    if (!hasProtocolPileCount || !hasDiscardCards) {
       recycledCards.forEach((card) => card.reset())
       this.removeCardsFromConstraintGroups(remainingPileCards)
       this.removeCardsFromConstraintGroups(recycledCards)

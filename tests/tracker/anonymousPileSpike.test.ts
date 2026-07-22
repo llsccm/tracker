@@ -186,9 +186,15 @@ describe('阶段 1 匿名牌堆 spike', () => {
       seatIDs: [1]
     })
     const pile = room.zones.get('pile')!
+    const discard = room.zones.get('discard')!
     const hiddenMarkCard = room.cardIndex.get(5)!
     const visibleHandCard = room.cardIndex.get(4)!
 
+    room.moveCards([1], 'discard', {
+      fromZone: 'pile',
+      cardCount: 1,
+      sourceEvent: { type: 'stage1:discard-before-appeared-shuffle' }
+    })
     pile.removeCard(visibleHandCard)
     pile.removeCard(hiddenMarkCard)
     visibleHandCard.bindCandidates([1], 'hand', null, { known: true })
@@ -215,6 +221,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
       expect(hiddenMarkCard.suspended).toBe(true)
       expect(hiddenMarkCard.isKnown).toBe(true)
       expect(getPublicFieldCandidateCards(room)).toContain(hiddenMarkCard)
+      expect(discard.cards).toEqual([])
       expect(infoSpy).toHaveBeenCalledWith(
         '洗牌后暂停追踪非实际牌堆内正 ID 暗身份',
         expect.objectContaining({
