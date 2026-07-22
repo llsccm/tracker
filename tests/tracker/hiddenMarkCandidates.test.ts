@@ -716,11 +716,21 @@ describe('隐藏标记区候选', () => {
   })
 
   it('主视角看到木马内只有其他明牌时将弱候选收敛回手牌', () => {
+    // 实战约束：
+    // 1) 弱候选建立前，不要把快照明牌预置成已知 mark；
+    // 2) 24/70 首次出现在主视角全明快照中（此前 unlocated）；
+    // 3) 装备先迁到 7 号位后，协议 FromID 仍可能是旧座位 6。
     const { room } = createTestRoom({
-      cardIDs: [161, 24, 70, 85, 119, 43, 200],
-      seatIDs: [6, 7]
+      cardIDs: [161, 24, 70, 85, 119, 43, 200, 201],
+      seatIDs: [6, 7],
+      materializeDeckIdentities: false
     })
-    const visibleCards = [24, 70].map((id) => getCard(room, id))
+    const pile = room.zones.get('pile')!
+    ;[161, 85, 119, 43].forEach((cardID) => {
+      const slot = pile.cards.find((card) => card.id < 0)
+      if (slot) room.materialize(cardID, slot)
+    })
+    const visibleIDs = [24, 70]
     const candidateCards = [85, 119, 43].map((id) => getCard(room, id))
     const hand = playerLocation(6, 'hand')
     const mark = equipmentContainer(161, 700)
@@ -733,29 +743,24 @@ describe('隐藏标记区候选', () => {
       cardCount: 1,
       sourceEvent: { type: 'test:muniu-equip' }
     })
-    room.moveCards([24, 70], 'player', {
-      seatID: 6,
-      subZone: 'mark',
-      fromZone: 'pile',
-      spellID: 700,
-      cardCount: 2,
-      sourceEvent: { type: 'test:existing-muniu-mark' }
-    })
+    // 不预置 24/70 到 mark；只建立弱候选 + 与快照张数一致的暗占位。
     moveKnownCardsToHand(room, [85, 119, 43], 6)
-    room.moveCards([0], 'player', {
+    room.moveCards([0, 0], 'player', {
       seatID: 6,
       subZone: 'hand',
       fromZone: 'pile',
-      cardCount: 1,
+      cardCount: 2,
       sourceEvent: { type: 'test:unknown-hand' }
     })
-    room.players.get(6).syncObservedHandCount(4)
+    room.players.get(6).syncObservedHandCount(5)
     moveHiddenHandToMark(room, {
       seatID: 6,
-      count: 1,
+      count: 2,
       spellID: 700
     })
 
+    expect(room.cardIndex.has(24)).toBe(false)
+    expect(room.cardIndex.has(70)).toBe(false)
     candidateCards.forEach((card) => {
       expect(
         card
@@ -775,7 +780,9 @@ describe('隐藏标记区候选', () => {
       cardCount: 1,
       sourceEvent: { type: 'test:move-muniu-equip' }
     })
-    room.moveCards([24, 70], 'player', {
+
+    // 协议：FromZone=4/FromID=6 → ToZone=4/ToID=7，CardIDs 为首次揭示的明牌。
+    room.moveCards(visibleIDs, 'player', {
       seatID: 7,
       fromSeatID: 6,
       fromZone: null,
@@ -786,7 +793,21 @@ describe('隐藏标记区候选', () => {
       cardCount: 2,
       position: 65280,
       fromPosition: 65282,
-      sourceEvent: { type: 'test:visible-muniu-mark-snapshot' }
+      sourceEvent: {
+        type: 'test:visible-muniu-mark-snapshot',
+        raw: {
+          CardCount: 2,
+          CardIDs: visibleIDs,
+          FromID: 6,
+          FromZone: 4,
+          FromZoneParam: 700,
+          MoveType: 19,
+          SpellID: 700,
+          ToID: 7,
+          ToZone: 4,
+          ToZoneParam: 700
+        }
+      }
     })
 
     expect(room.getSkillState('hiddenMarkCandidates').records.has('6:7:700')).toBe(false)
@@ -796,7 +817,17 @@ describe('隐藏标记区候选', () => {
       expect(card.spellID).toBe(null)
       expect(card.seats.has(6)).toBe(true)
       expect(card.getLocationCandidates()).toEqual([])
-      expect(room.locationIndex.markBySeatAndSpell.get(7).get(700)).not.toContain(card)
+      expect(room.locationIndex.markBySeatAndSpell.get(7)?.get(700) ?? []).not.toContain(card)
+    })
+
+    const visibleCards = visibleIDs.map((id) => room.cardIndex.get(id))
+    visibleCards.forEach((card) => {
+      expect(card).toBeTruthy()
+      expect(card.location).toBe('player')
+      expect(card.subZone).toBe('mark')
+      expect(card.spellID).toBe(700)
+      expect(card.seats.has(7)).toBe(true)
+      expect(card.isKnown).toBe(true)
     })
     expect(room.locationIndex.markBySeatAndSpell.get(7).get(700)).toEqual(
       expect.arrayContaining(visibleCards)

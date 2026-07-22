@@ -1,6 +1,7 @@
 import { trackerLogger } from '@/utils/logger'
 import { isAnonymous, type Card } from './Card'
 import { POSITION_TOP } from './candidate/cardPositions'
+import { getEquipmentMarkContainerByMarkSpellID } from './candidate/equipmentMarkContainer'
 import { normalizeSpellID } from './candidate/markSpellID'
 import { summarizeMoveContext } from './helper/moveSummary'
 import type { Room } from './Room'
@@ -186,18 +187,37 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       }
     } else if (fromSeat !== null && !Number.isNaN(fromSeat) && fromSubZone) {
       // 阶段 1 的玩家区既可能是匿名槽，也可能仍沿用真 ID 暗牌，两者统一由 materialize 收口。
+      const markSpellID = context.fromSpellID ?? context.spellID
       const explicitTargets = sourceCards?.filter(isAnonymous) ?? []
       const sourceTargets =
         explicitTargets.length > 0
           ? explicitTargets
-          : this.getUnknownPlayerSourceCards(
-              fromSeat,
-              fromSubZone,
-              context.fromSpellID ?? context.spellID
-            )
+          : this.getUnknownPlayerSourceCards(fromSeat, fromSubZone, markSpellID)
               .filter(isAnonymous)
               .slice(0, knownIDs.length)
       const availableTargets = [...sourceTargets]
+      // 木马等装备容器迁座后，协议 FromID 仍可能是旧座位，而暗占位已投影到目标座位。
+      // 全明快照物化时需追加目标座位 mark 匿名槽，避免 knownCards 静默短少、弱候选无法收敛。
+      const isFullKnownMarkSnapshot =
+        fromSubZone === 'mark' &&
+        context.subZone === 'mark' &&
+        context.toZone === 'player' &&
+        context.unknownCount === 0 &&
+        knownIDs.length === context.cardCount &&
+        knownIDs.length > 0
+      if (isFullKnownMarkSnapshot && availableTargets.length < knownIDs.length) {
+        const usedTargets = new Set(availableTargets)
+        context.targetSeats.forEach((targetSeat) => {
+          if (Number(targetSeat) === Number(fromSeat)) return
+          this.getUnknownPlayerSourceCards(targetSeat, fromSubZone, markSpellID)
+            .filter(isAnonymous)
+            .forEach((card) => {
+              if (usedTargets.has(card) || availableTargets.length >= knownIDs.length) return
+              usedTargets.add(card)
+              availableTargets.push(card)
+            })
+        })
+      }
 
       context.knownCards = knownIDs
         .map((cardID) => {
@@ -209,7 +229,10 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         .filter((card): card is Card => Boolean(card))
       missingIDs = knownIDs.filter((id) => !this.room.cardIndex.has(id))
 
-      if (!this.room.players.has(fromSeat) && missingIDs.length > 0) {
+      const canCreatePlayerSourceMissingCards =
+        !this.room.players.has(fromSeat) ||
+        (isFullKnownMarkSnapshot && Boolean(getEquipmentMarkContainerByMarkSpellID(markSpellID)))
+      if (canCreatePlayerSourceMissingCards && missingIDs.length > 0) {
         createdCards = this.room.createExternalCards(missingIDs, missingIDs.length)
         const cardMap = new Map(context.knownCards.map((card) => [card.id, card]))
         createdCards.forEach((card) => cardMap.set(card.id, card))
@@ -517,7 +540,13 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       targetSeats,
       toZone
     } = context
-    if (knownCards.length === 0) return
+    if (knownCards.length === 0) {
+      // 装备容器全明快照可能因来源迁座暂未物化成功；仍按协议 CardIDs 收敛弱候选。
+      if (toZone === 'player') {
+        this.resolveHiddenMarkCandidatesFromObservedMarkSnapshot(context)
+      }
+      return
+    }
 
     // 已知牌移动可能把原先的无席位暗占位揭示出来，先从空间账本摘除旧引用。
     this.removeUnassignedMarkSpaceCards(knownCards)
@@ -827,8 +856,18 @@ export class RoomMovement extends RoomMovementCandidateMethods {
           usedPublicResiduePlaceholders.add(placeholder)
           this.room.removeCardsFromConstraintGroups([placeholder])
           const placeholderWasKnown = placeholder.isKnown === true
-          placeholder.moveToPublicZone(residue.zoneID)
-          zone.replaceCard(card, placeholder)
+          // 与 swap 路径一致：确定明牌槽不能被占位污染；公共候选槽可继续承载。
+          const keepPreviousPosition = this.hasPublicCandidateAt(card, residue.zoneID)
+          if (keepPreviousPosition) {
+            placeholder.moveToPublicZone(residue.zoneID)
+            zone.replaceCard(card, placeholder)
+          } else if (residue.zoneID === 'pile') {
+            zone.removeCard(card)
+            this.insertUnknownPlaceholderIntoPile(zone, placeholder)
+          } else {
+            zone.removeCard(card)
+            zone.add(placeholder, POSITION_TOP)
+          }
           this.removeHiddenMarkPlaceholder(placeholder)
           repairedResidues.push({
             ...residue,
