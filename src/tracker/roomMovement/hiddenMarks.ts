@@ -899,11 +899,8 @@ export abstract class RoomMovementHiddenMarkMethods {
     if (!state?.records?.size) return false
 
     const snapshot = this.getObservedEquipmentMarkSnapshot(context)
-    if (
-      !snapshot ||
-      context.cardCount <= 0 ||
-      context.knownCards.length !== context.knownIDs.length
-    ) {
+    // 全明快照以协议 CardIDs 为准：即使部分身份尚未物化成功，弱候选也应按“不在可见集合”收敛回手牌。
+    if (!snapshot || context.cardCount <= 0 || context.knownIDs.length !== context.cardCount) {
       return false
     }
 
@@ -911,6 +908,7 @@ export abstract class RoomMovementHiddenMarkMethods {
 
     let changed = false
     const observedCards = new Set(context.knownCards)
+    const observedCardIDs = new Set(context.knownIDs.map(Number))
     const resolvedHandCardIDs: CardID[] = []
     const clearedPlaceholderIDs: CardID[] = []
     const records = Array.from(state.records.values())
@@ -936,7 +934,13 @@ export abstract class RoomMovementHiddenMarkMethods {
       }
 
       record.cards.forEach((card) => {
-        if (observedCards.has(card) || record.confirmedMarkCards.has(card)) return
+        if (
+          observedCards.has(card) ||
+          observedCardIDs.has(Number(card.id)) ||
+          record.confirmedMarkCards.has(card)
+        ) {
+          return
+        }
         record.confirmedHandCards.add(card)
 
         if (card.hasLocationCandidate?.(targetCandidate)) {
