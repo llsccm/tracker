@@ -532,12 +532,6 @@ export class Room {
     card.subZone = null
     this.suspendedKnownCards.delete(card)
 
-    if (this.counter) {
-      this.counter.releaseLocatedIdentityToUnknown(card, previousCardID)
-    } else {
-      this.markCounterDirty(card)
-    }
-
     this.notifyCardChanged(card, {
       type: 'card-identity-anonymized',
       previousCardID,
@@ -545,6 +539,12 @@ export class Room {
       entityID: nextEntityID,
       reason
     })
+
+    if (this.counter) {
+      this.counter.releaseLocatedIdentityToUnknown(card, previousCardID)
+    } else {
+      this.markCounterDirty(card)
+    }
 
     return previousCardID
   }

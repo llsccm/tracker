@@ -703,6 +703,14 @@ export class RoomMovement extends RoomMovementCandidateMethods {
           card,
           'moveKnownCardsForContext:resetKnownToUnknown'
         )
+        if (previousCardID === null) {
+          trackerLogger.warn('已知牌匿名化失败：card/index 不一致，继续重置槽位', {
+            reason: 'moveKnownCardsForContext:resetKnownToUnknown',
+            cardID: card.id,
+            entityID: card.entityID,
+            isKnown: card.isKnown
+          })
+        }
         card.reset()
         if (previousCardID !== null) {
           resetKnownCardIDs.push(previousCardID)
