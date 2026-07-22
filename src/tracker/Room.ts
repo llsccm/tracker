@@ -1013,7 +1013,7 @@ export class Room {
     // 例如木牛流马里的暗牌实体处于 player/mark，会被 CardCounter 归为 APPEARED，
     // 但它的牌面并未明示，仍应按 neverAppeared 身份处理。
     appearedCards.forEach((card) => {
-      addSuspendedIdentity(card, neverAppearedCards)
+      addSuspendedIdentity(card, appearedHiddenIdentityCards)
     })
     // 场上明牌
     const visibleKnownCards = appearedCards.filter((card) => card.id > 0 && card.isKnown)

@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { CARD_INSTANCE_STATUS } from '@/tracker/CardCounter'
 import { getPublicFieldCandidateCards } from '@/tracker/view/publicFieldCandidates'
+import { trackerLogger } from '@/utils/logger'
 import { createTestRoom } from './helpers/room'
 
 describe('阶段 1 匿名牌堆 spike', () => {
@@ -177,5 +178,53 @@ describe('阶段 1 匿名牌堆 spike', () => {
       expect(card.isKnown).toBe(false)
     })
     expect(room.getPlayer(1).unknownCardCount).toBe(2)
+  })
+
+  it('匿名牌堆洗牌时将 APPEARED 暗身份归入独立诊断分类', () => {
+    const { room } = createTestRoom({
+      cardIDs: [1, 2, 3, 4, 5],
+      seatIDs: [1]
+    })
+    const pile = room.zones.get('pile')!
+    const hiddenMarkCard = room.cardIndex.get(5)!
+    const visibleHandCard = room.cardIndex.get(4)!
+
+    pile.removeCard(visibleHandCard)
+    pile.removeCard(hiddenMarkCard)
+    visibleHandCard.bindCandidates([1], 'hand', null, { known: true })
+    hiddenMarkCard.bindCandidates([1], 'hand', null, { known: false })
+    room.getPlayer(1).syncObservedHandCount(2)
+    room.moveCards([0], 'player', {
+      seatID: 1,
+      fromSeatID: 1,
+      fromZone: 5,
+      fromSubZone: 'hand',
+      subZone: 'mark',
+      spellID: 700,
+      cardCount: 1,
+      sourceEvent: { type: 'stage1:appeared-hidden-before-shuffle' }
+    })
+
+    expect(room.counter.cardsByStatus[CARD_INSTANCE_STATUS.APPEARED]).toContain(hiddenMarkCard)
+    const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
+
+    try {
+      room.shufflePile({ cardCount: 3 })
+
+      expect(hiddenMarkCard.location).toBe('suspended')
+      expect(hiddenMarkCard.suspended).toBe(true)
+      expect(hiddenMarkCard.isKnown).toBe(true)
+      expect(getPublicFieldCandidateCards(room)).toContain(hiddenMarkCard)
+      expect(infoSpy).toHaveBeenCalledWith(
+        '洗牌后暂停追踪非实际牌堆内正 ID 暗身份',
+        expect.objectContaining({
+          neverAppearedCardIDs: [],
+          appearedHiddenIdentityCardIDs: [5],
+          suspendedCardIDs: [5]
+        })
+      )
+    } finally {
+      infoSpy.mockRestore()
+    }
   })
 })
