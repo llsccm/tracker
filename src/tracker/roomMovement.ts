@@ -827,8 +827,18 @@ export class RoomMovement extends RoomMovementCandidateMethods {
           usedPublicResiduePlaceholders.add(placeholder)
           this.room.removeCardsFromConstraintGroups([placeholder])
           const placeholderWasKnown = placeholder.isKnown === true
-          placeholder.moveToPublicZone(residue.zoneID)
-          zone.replaceCard(card, placeholder)
+          // 与 swap 路径一致：确定明牌槽不能被占位污染；公共候选槽可继续承载。
+          const keepPreviousPosition = this.hasPublicCandidateAt(card, residue.zoneID)
+          if (keepPreviousPosition) {
+            placeholder.moveToPublicZone(residue.zoneID)
+            zone.replaceCard(card, placeholder)
+          } else if (residue.zoneID === 'pile') {
+            zone.removeCard(card)
+            this.insertUnknownPlaceholderIntoPile(zone, placeholder)
+          } else {
+            zone.removeCard(card)
+            zone.add(placeholder, POSITION_TOP)
+          }
           this.removeHiddenMarkPlaceholder(placeholder)
           repairedResidues.push({
             ...residue,

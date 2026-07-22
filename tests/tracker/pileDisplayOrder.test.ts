@@ -671,13 +671,56 @@ describe('牌堆展示顺序', () => {
     expectConsistentPublicZones(room)
   })
 
+  it('牌顶已是连续明牌时来源占位回补插到明牌段下方', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5, 6], seatIDs: [1] })
+    const pile = getPile(room)
+    const topKnownIDs = [4, 5, 6]
+    const revealedIDs = [1, 2]
+
+    topKnownIDs.forEach((id) => room.cardIndex.get(id)!.confirmKnown())
+    // 手牌用瞬时匿名占位；真实身份 1/2 仍留在牌堆，揭开时会触发公共区占位回补。
+    const placeholders = room.createExternalCards([], 2)
+    placeholders.forEach((card) => {
+      card.bindCandidates([1], 'hand', null, { known: false })
+    })
+    room.getPlayer(1).syncObservedHandCount(2)
+
+    room.moveCards(revealedIDs, 'process', {
+      fromSeatID: 1,
+      fromSubZone: 'hand',
+      cardCount: revealedIDs.length,
+      sourceEvent: { type: 'test:reveal-hand-after-known-pile-top' }
+    })
+
+    expect(
+      getPileDisplayCards(pile.cards)
+        .slice(0, 3)
+        .map((card) => card.id)
+    ).toEqual([6, 5, 4])
+    expect(
+      getPileDisplayCards(pile.cards)
+        .slice(0, 3)
+        .every((card) => card.isKnown)
+    ).toBe(true)
+    const knownSegmentStart = pile.cards.length - topKnownIDs.length
+    expect(pile.cards.slice(knownSegmentStart - placeholders.length, knownSegmentStart)).toEqual(
+      expect.arrayContaining(placeholders)
+    )
+    placeholders.forEach((card) => {
+      expect(card.location).toBe('pile')
+      expect(pile.cards).toContain(card)
+    })
+    expect(pile.cards.slice(-3).map((card) => card.id)).toEqual([4, 5, 6])
+    expectConsistentPublicZones(room)
+  })
+
   it.each([
     {
-      name: '实体占位揭示为牌堆明牌时精确回补原牌堆槽',
+      name: '实体占位揭示为牌堆明牌时回到牌堆但不顶回明牌位置',
       sourceEvent: 'test:reveal-hidden-pile-card',
       setupCandidate: null as null | ((room: Room, candidateCard: Card) => void),
-      expectedPileIds: [1, 4, 3],
-      unexpectedPileIds: null as number[] | null
+      expectedPileIds: [1, 3, 4],
+      unexpectedPileIds: [1, 4, 3] as number[] | null
     },
     {
       name: '实体占位揭示为牌堆候选牌时继续占住候选位置',
@@ -740,6 +783,8 @@ describe('牌堆展示顺序', () => {
         expect(pile.cards).toHaveLength(pileCountBefore)
         expect(pile.cards).toContain(placeholder)
         expect(pile.cards).not.toContain(knownCard)
+        // 确定明牌 2 离开后，占位不得顶回中间槽把 [1,3] 拆开。
+        expect(pile.cards.map((card) => card.id)).toEqual([1, 3, 4, placeholder.id])
         expect(getDiscard(room).cards).toContain(knownCard)
         expect(placeholder.location).toBe('pile')
       }
@@ -760,6 +805,8 @@ describe('牌堆展示顺序', () => {
         expect(pile.cards).toHaveLength(pileCountBefore)
         expect(pile.cards).toContain(placeholder)
         expect(pile.cards).not.toContain(knownCard)
+        // 初始 [1,2,3,4] 去掉 2 后，暗占位应落在牌顶而不是 [1,暗,3,4]。
+        expect(pile.cards.map((card) => card.id)).toEqual([1, 3, 4, placeholder.id])
         expect(getDiscard(room).cards).toContain(knownCard)
         expect(placeholder.location).toBe('pile')
       }
