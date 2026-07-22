@@ -934,7 +934,6 @@ export class Room {
     const hasProtocolPileCount = Number.isFinite(normalizedCardCount) && normalizedCardCount >= 0
     const remainingPileCards = [...pile.cards]
     const recycledCards = [...discard.cards]
-    const pileCards = [...remainingPileCards, ...recycledCards]
 
     // 洗牌
     const rebuildPileAfterShuffle = () => {
@@ -953,7 +952,8 @@ export class Room {
 
     if (!hasProtocolPileCount) {
       recycledCards.forEach((card) => card.reset())
-      this.removeCardsFromConstraintGroups(pileCards)
+      this.removeCardsFromConstraintGroups(remainingPileCards)
+      this.removeCardsFromConstraintGroups(recycledCards)
 
       rebuildPileAfterShuffle()
 
@@ -962,36 +962,78 @@ export class Room {
       return
     }
 
-    const knownPileCards = [...remainingPileCards, ...recycledCards]
-    const knownPileSet = new Set(knownPileCards)
-    const preShufflePilePlaceholderCount = knownPileCards.filter(isAnonymous).length
-    const statusBuckets = this.counter?.cardsByStatus
-    const unknownStatusCards = Array.from(statusBuckets?.[CARD_INSTANCE_STATUS.UNKNOWN] ?? [])
-    const appearedCards = Array.from(statusBuckets?.[CARD_INSTANCE_STATUS.APPEARED] ?? [])
-    const identityStatusCards = Array.from(new Set([...unknownStatusCards, ...appearedCards]))
-    const nonPileIdentityStatusCards = identityStatusCards.filter(
-      (card) => card.id > 0 && !knownPileSet.has(card)
+    // 弃牌堆通常远大于剩余牌堆，且它的身份状态本就属于 DISCARD。
+    // 分类只需用剩余牌堆中的少量正 ID 排除仍有明确牌堆位置的身份。
+    const remainingPileIdentityIDs = new Set(
+      remainingPileCards.filter((card) => card.id > 0).map((card) => card.id)
     )
+    let preShufflePilePlaceholderCount = remainingPileCards.filter(isAnonymous).length
+    const statusIndex = this.counter?.statusIndex
+    const statusBuckets = this.counter?.cardsByStatus
+    const unknownStatusIdentityIDs = Array.from(statusIndex?.[CARD_INSTANCE_STATUS.UNKNOWN] ?? [])
+    const appearedCards = Array.from(statusBuckets?.[CARD_INSTANCE_STATUS.APPEARED] ?? [])
+    const candidateIdentityIDs = new Set<CardID>()
+    unknownStatusIdentityIDs.forEach((cardID) => candidateIdentityIDs.add(cardID))
+    this.unlocatedIdentities.forEach((cardID) => candidateIdentityIDs.add(cardID))
+
+    const suspendedIdentityByID = new Map<CardID, Card>()
+    const neverAppearedCards: Card[] = []
+    const appearedHiddenIdentityCards: Card[] = []
+    const addSuspendedIdentity = (card: Card, target: Card[]) => {
+      if (
+        card.id <= 0 ||
+        card.isKnown === true ||
+        remainingPileIdentityIDs.has(card.id) ||
+        suspendedIdentityByID.has(card.id)
+      ) {
+        return
+      }
+
+      suspendedIdentityByID.set(card.id, card)
+      target.push(card)
+    }
+
+    // 未定位身份没有 Card 实体。洗牌后它们仍可能来自“剩余牌堆 + 玩家未知牌”，
+    // 需要先创建脱离区域的正 ID 实体，才能沿用暂停追踪与场上候选展示链路。
+    candidateIdentityIDs.forEach((cardID) => {
+      if (!(cardID > 0) || remainingPileIdentityIDs.has(cardID)) return
+
+      const existing = this.cardIndex.get(cardID)
+      if (existing) {
+        addSuspendedIdentity(existing, neverAppearedCards)
+        return
+      }
+
+      if (!this.unlocatedIdentities.has(cardID)) return
+      const detachedIdentity = this.createExternalCards([cardID], 1)[0]
+      if (detachedIdentity) addSuspendedIdentity(detachedIdentity, neverAppearedCards)
+    })
+
     // CardCounter 的 UNKNOWN/APPEARED 是“位置状态”，不能直接表示“牌面身份是否出现过”。
     // 例如木牛流马里的暗牌实体处于 player/mark，会被 CardCounter 归为 APPEARED，
     // 但它的牌面并未明示，仍应按 neverAppeared 身份处理。
-    const neverAppearedCards = nonPileIdentityStatusCards.filter((card) => card.isKnown !== true)
+    appearedCards.forEach((card) => {
+      addSuspendedIdentity(card, appearedHiddenIdentityCards)
+    })
     // 场上明牌
     const visibleKnownCards = appearedCards.filter((card) => card.id > 0 && card.isKnown)
-    // 只有“身份曾经明示但当前位置又变成暗态”的牌才属于 appearedHidden；当前模型没有可靠历史字段，
-    // 因此洗牌分类先保持为空，避免把木马/手牌暗实体误记为已出现身份。
-    const appearedHiddenIdentityCards: Card[] = []
     // 洗牌不会把这些正 ID 迁入实际牌堆；若它们原本承载玩家区暗槽位，
     // 会按暂停前实体所在的玩家/子区/技能空间创建匿名替身，避免丢失位置数量账本。
     // 正 ID 自身暂停前会 confirmKnown()，表示身份已明确；后续协议再次出现该 ID 时恢复具体位置追踪。
     const suspendedIdentityCards = [...neverAppearedCards, ...appearedHiddenIdentityCards]
-    // 这是“协议牌堆空间”的解释集合，不是实际 pile.cards。
-    const pileSpaceRemainingCards = [...knownPileCards, ...suspendedIdentityCards]
+    const knownPileCount = remainingPileCards.length + recycledCards.length
+    // 这是“协议牌堆空间”的解释数量，不是实际 pile.cards。
+    const pileSpaceRemainingCount = knownPileCount + suspendedIdentityCards.length
 
-    recordTraversal('shufflePile:classify', nonPileIdentityStatusCards.length)
+    recordTraversal('shufflePile:classify', suspendedIdentityCards.length)
 
-    recycledCards.forEach((card) => card.reset())
-    this.removeCardsFromConstraintGroups([...knownPileCards, ...suspendedIdentityCards])
+    recycledCards.forEach((card) => {
+      if (isAnonymous(card)) preShufflePilePlaceholderCount += 1
+      card.reset()
+    })
+    this.removeCardsFromConstraintGroups(remainingPileCards)
+    this.removeCardsFromConstraintGroups(recycledCards)
+    this.removeCardsFromConstraintGroups(suspendedIdentityCards)
 
     // 实际牌堆只重建 pile + discard。协议张数仅用于判断哪些正 ID 身份应暂停，
     // 不再为了“凑长度”向 pile.cards 填入匿名占位或玩家暗手牌实体。
@@ -1058,12 +1100,15 @@ export class Room {
         cardCount: normalizedCardCount,
         actualPileCount,
         explainedPileSpaceCount,
-        knownPileCount: knownPileCards.length,
-        pileSpaceRemainingCount: pileSpaceRemainingCards.length,
+        knownPileCount,
+        pileSpaceRemainingCount,
         neverAppearedCount: neverAppearedCards.length,
         appearedHiddenIdentityCount: appearedHiddenIdentityCards.length,
         rebuiltPileCount,
-        knownPileCardIDs: knownPileCards.map((card) => card.id).filter((id) => id > 0),
+        knownPileCardIDs: [
+          ...remainingPileCards.map((card) => card.id).filter((id) => id > 0),
+          ...recycledCards.map((card) => card.id).filter((id) => id > 0)
+        ],
         neverAppearedCardIDs: neverAppearedCards.map((card) => card.id),
         appearedHiddenIdentityCardIDs: appearedHiddenIdentityCards.map((card) => card.id)
       })
