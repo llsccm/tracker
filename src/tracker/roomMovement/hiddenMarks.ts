@@ -982,7 +982,11 @@ export abstract class RoomMovementHiddenMarkMethods {
         // 被正 ID 挤出的匿名占位，是当初留在来源手牌里的真实牌 → 挤回来源手牌，
         // 供随后的 known 物化取用；绝不丢 outside（否则来源手牌凭空少一张、明牌被 createExternal）。
         const placeholder = Array.from(record.placeholderCards ?? []).find(
-          (ph) => isAnonymousCard(ph) && ph !== card
+          (ph) =>
+            isAnonymousCard(ph) &&
+            ph !== card &&
+            ph.subZone === 'mark' &&
+            Number(ph.spellID) === Number(record.spellID)
         )
         if (placeholder) {
           record.placeholderCards.delete(placeholder)

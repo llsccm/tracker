@@ -1,5 +1,6 @@
 import { trackerLogger } from '@/utils/logger'
 import type { Room } from '../Room'
+import { getCount, getRaw } from './moveEventUtils'
 
 type MoveEventDraft = any
 
@@ -12,14 +13,6 @@ interface QiaoZhiSelectionState {
   targetSeatID: number | null
 }
 
-function getRaw(event: MoveEventDraft): any {
-  return event.raw ?? event.options?.sourceEvent?.raw ?? {}
-}
-
-function getCount(event: MoveEventDraft): number {
-  return Math.max(0, Number(event.cardCount ?? event.options?.cardCount ?? 0))
-}
-
 function getPositiveIDs(cardIDs: any[] = []): number[] {
   return Array.from(new Set(cardIDs.map((id) => Number(id) || 0).filter((id) => id > 0)))
 }
@@ -30,7 +23,7 @@ function recordDisplayedCards(event: MoveEventDraft, room: Room): void {
 
   if (cardCount <= 0 || displayedCardIDs.length !== cardCount) {
     room.clearSkillState(QIAO_ZHI_SELECTION_STATE_KEY)
-    trackerLogger.info('巧织暗取牌推断跳过', {
+    trackerLogger.debug('巧织暗取牌推断跳过', {
       stage: 'display',
       reason: '展示牌 ID 不完整',
       cardCount,
@@ -72,7 +65,7 @@ function recordHiddenGain(event: MoveEventDraft, room: Room, raw: any): void {
   // 真实移动已由后续 moveCards 完成，差集推断既不需要也不应再跑。
   if (visibleSelectedIDs.length > 0) {
     room.clearSkillState(QIAO_ZHI_SELECTION_STATE_KEY)
-    trackerLogger.info('巧织暗取牌推断跳过', {
+    trackerLogger.debug('巧织暗取牌推断跳过', {
       stage: 'hiddenGain',
       reason: '协议已给出选取明牌，主视角可见，跳过差集推断',
       displayedCardIDs: state.displayedCardIDs,
@@ -89,7 +82,7 @@ function recordHiddenGain(event: MoveEventDraft, room: Room, raw: any): void {
     targetSeatID === undefined
   ) {
     room.clearSkillState(QIAO_ZHI_SELECTION_STATE_KEY)
-    trackerLogger.info('巧织暗取牌推断跳过', {
+    trackerLogger.debug('巧织暗取牌推断跳过', {
       stage: 'hiddenGain',
       reason: '暗取数量或座位不符合差集推断条件',
       displayedCardIDs: state.displayedCardIDs,
@@ -131,7 +124,7 @@ function settleHiddenGain(event: MoveEventDraft, room: Room): void {
     inferredHandCardIDs.length === state.selectedCount
 
   if (!hasExactDifference) {
-    trackerLogger.info('巧织暗取牌推断跳过', {
+    trackerLogger.debug('巧织暗取牌推断跳过', {
       stage: 'discard',
       reason: '明弃牌不能与展示牌形成完整差集',
       displayedCardIDs: state.displayedCardIDs,
@@ -156,7 +149,7 @@ function settleHiddenGain(event: MoveEventDraft, room: Room): void {
   )
 
   if (inferredCards.length !== inferredHandCardIDs.length || invalidCards.length > 0) {
-    trackerLogger.info('巧织暗取牌推断跳过', {
+    trackerLogger.debug('巧织暗取牌推断跳过', {
       stage: 'confirm',
       reason: '差集牌已不在巧织选择区或目标手牌',
       inferredHandCardIDs,

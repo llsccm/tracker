@@ -5,21 +5,12 @@ import type { Room } from '../Room'
 import decorateHandExchange from '../skill/HandExchange'
 import decorateQiaoZhi from '../skill/QiaoZhi'
 import decorateSiQi from '../skill/SiQi'
+import { getRaw, getCount, hasPositiveID } from '../skill/moveEventUtils'
 
 export type MoveEventDraft = any
 type MoveEventHandler = (event: MoveEventDraft, room: Room) => MoveEventDraft
 
-export function getRaw(event: MoveEventDraft): any {
-  return event.raw ?? event.options?.sourceEvent?.raw ?? {}
-}
-
-export function getCount(event: MoveEventDraft): number {
-  return Math.max(0, Number(event.cardCount ?? event.options?.cardCount ?? 0))
-}
-
-export function hasPositiveID(cardIDs: any[] = []): boolean {
-  return cardIDs.some((id) => id > 0)
-}
+export { getRaw, getCount, hasPositiveID }
 
 export function getPositiveIDs(cardIDs: any[] = []): number[] {
   return Array.from(new Set(cardIDs.map((id) => Number(id) || 0).filter((id) => id > 0)))

@@ -348,7 +348,7 @@ export function normalizeMoveEvent(event: RawMoveCardEvent = {}): NormalizedMove
   // 这里的 fromSeatID/seatID 是兼容 Room.moveCards() 旧 options 名称，
   // 后续移动逻辑必须结合 fromZone/fromSubZone/spellID 判断它是否真是座位。
 
-  // subZone 在观看公共区时会被设置成 hand, 我觉得不太合理,改成了 undefined
+  // 观看公共区时不应默认把 subZone 推导为 hand；公共区来源的 subZone 置为 undefined。
   return {
     type,
     cardIDs,

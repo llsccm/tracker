@@ -1,22 +1,11 @@
 import { POSITION_RANDOM } from '../candidate/cardPositions'
 import { trackerLogger } from '@/utils/logger'
 import type { Room } from '../Room'
+import { getCount, getRaw, hasPositiveID } from './moveEventUtils'
 
 type MoveEventDraft = any
 
 const SI_QI_SPELL_ID = 3543
-
-function getRaw(event: MoveEventDraft): any {
-  return event.raw ?? event.options?.sourceEvent?.raw ?? {}
-}
-
-function getCount(event: MoveEventDraft): number {
-  return Math.max(0, Number(event.cardCount ?? event.options?.cardCount ?? 0))
-}
-
-function hasPositiveID(cardIDs: any[] = []): boolean {
-  return cardIDs.some((id) => id > 0)
-}
 
 function patchEvent(event: MoveEventDraft, sourceCards: any[], combinationID: string) {
   return {
