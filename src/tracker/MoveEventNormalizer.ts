@@ -347,6 +347,8 @@ export function normalizeMoveEvent(event: RawMoveCardEvent = {}): NormalizedMove
   // FromZone=1 牌堆来源时，FromID=255 也只是牌堆/无座位占位。
   // 这里的 fromSeatID/seatID 是兼容 Room.moveCards() 旧 options 名称，
   // 后续移动逻辑必须结合 fromZone/fromSubZone/spellID 判断它是否真是座位。
+
+  // subZone 在观看公共区时会被设置成 hand, 我觉得不太合理,改成了 undefined
   return {
     type,
     cardIDs,
@@ -359,7 +361,9 @@ export function normalizeMoveEvent(event: RawMoveCardEvent = {}): NormalizedMove
       fromZone: fromPublicZone,
       subZone: targetIsPlayerZone
         ? getProtocolPlayerSubZone(event.ToZone)
-        : getProtocolPlayerSubZone(event.FromZone),
+        : sourceIsPlayerZone
+          ? getProtocolPlayerSubZone(event.FromZone)
+          : undefined,
       fromSubZone: sourceIsPlayerZone ? getProtocolPlayerSubZone(event.FromZone) : undefined,
       fromSpellID,
       spellID,

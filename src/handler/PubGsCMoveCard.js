@@ -226,6 +226,7 @@ export function handleMoveCard(msg) {
 
   handleGameFlowState(context)
 
+  // 3. 对部分技能特殊处理
   applySpellEffect(context)
 
   context.finishMove()

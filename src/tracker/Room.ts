@@ -906,6 +906,7 @@ export class Room {
   markPublicZoneDirty(zoneID: PublicZoneName | null | undefined): void {
     if (zoneID === null || zoneID === undefined) return
     this.dirtyPublicZones?.add(zoneID)
+    this.markViewDirty(`public-zone:${zoneID}`)
   }
 
   markConstraintGroupsDirty(_reason = 'constraint-groups-dirty'): void {
