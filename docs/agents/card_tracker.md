@@ -120,7 +120,11 @@
 - `GsCFirstPhaseRole` / `MsgGameShowFigure(Figure===1)` → `tracker.setTrackerFirstHand()`：写入 `firstID`，更新固定视角并刷新座位覆盖层。
 - `MsgGamePlayCardNtf -> readyTrackerGame() -> initTrackerDeck()`：初始化物理牌池并完整 `view.mount`。
 - `PubGsCMoveCard -> handleMoveCard() -> syncTrackerMove()`：预处理后同步到 `Room.moveCards()` / `shufflePile()`。
-- `MsgGameTurnNtf` / `GsCGamephaseNtf`：推进 `Game` 轮次和阶段，再 `scheduleTrackerRender`。
+- `MsgGameTurnNtf`：`handleGameTurn` 推进 `Game` 轮次，并在 handler 中处理首轮
+  座位覆盖与轮级战法 Laya 状态，再 `scheduleTrackerRender`。
+- `GsCGamephaseNtf`：`handleGamePhase` 以 `SeatRoundState` 编排玩家阶段；
+  `Game.enter` 只推进纯状态，回合结果 DOM 清理、阶段文案与战法 Laya 重置留在
+  handler。
 - `MsgGameOver` / `ClientLeavetableRep -> destroyTrackerRoom()`：先 `view.unmount()`，再销毁 `Room`。
 
 ---

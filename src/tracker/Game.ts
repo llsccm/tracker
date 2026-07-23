@@ -13,11 +13,6 @@ interface ZhanFaItem {
   n?: number
 }
 
-// 战法 ID 常量定义
-const zhanfa1 = [2100, 2101, 2108, 2109, 2110, 2312, 2313, 2317, 2319, 2320, 2321, 2322]
-const zhanfa2 = [2079, 2080, 2081, 2082, 2083, 2084]
-const TURNZHANFA = [2033, 2034, 2035, 2036, 2037, 2038, 2048, 2049, 2050, 2196, 2197, 2300, 2301]
-
 class BrowserGameState extends GameState {
   constructor() {
     super({ orderLabels: UI.ORDER_LABELS })
@@ -121,23 +116,6 @@ class BrowserGameState extends GameState {
     trackerLogger.info('GameState 游戏开始', { seatIDs, mySeatID })
   }
 
-  protected onEnter(round: number, _seat: SeatID): void {
-    const nav = document.getElementById('phrase')
-    if (nav) {
-      const lastMatch = nav.innerText.match(/\(([0-9])\)$/)
-      const last = lastMatch ? parseInt(lastMatch[1]) : NaN
-
-      if (this.phase === last) {
-        nav.innerText = nav.innerText.replace(
-          /(回合)?(.{2,3})(阶段)? ?\(([0-9])\)$/,
-          `$2>${['开始时', '准备', '判定', '摸牌', '出牌', '弃牌', '结束', '结束时', '结束后'][round]}($4)`
-        )
-      } else {
-        nav.innerText = `${['回合开始时', '准备阶段', '判定阶段', '摸牌阶段', '出牌阶段', '弃牌阶段', '结束阶段', '回合结束时', '回合结束后'][round]} (${this.phase})`
-      }
-    }
-  }
-
   protected onRecord({ use = 0, mo = 0 }: RecordOptions): void {
     const items = laya.gamescene?.SelfSeatUi?.zhanFaItems as ZhanFaItem[] | undefined
     if (!items?.length) return
@@ -158,33 +136,6 @@ class BrowserGameState extends GameState {
         ui.Value = this.spellSpace['手到擒来']
       } else if ([2082, 2083, 2084].includes(ui.PlotID)) {
         ui.Value = this.spellSpace['多多益善']
-      }
-    })
-  }
-
-  /**
-   * 重置战法
-   */
-  resetZhanFa(currentID?: SeatID): void {
-    const mySeatID = this.room ? this.room.mySeatID : undefined
-    laya.gamescene?.SelfSeatUi?.zhanFaItems?.forEach((ui: ZhanFaItem) => {
-      if (ui?.n !== undefined && zhanfa1.includes(ui.PlotID)) {
-        ui.Value = ui.n = 0
-      }
-      // 自己回合结束后清空 手到擒来 多多益善
-      if (currentID === mySeatID && zhanfa2.includes(ui.PlotID)) {
-        ui.Value = 0
-      }
-    })
-  }
-
-  /**
-   * 重置轮战法
-   */
-  resetTurnZhanFa(): void {
-    laya.gamescene?.SelfSeatUi?.zhanFaItems?.forEach((ui: ZhanFaItem) => {
-      if (ui?.n !== undefined && TURNZHANFA.includes(ui.PlotID)) {
-        ui.Value = ui.n = 0
       }
     })
   }

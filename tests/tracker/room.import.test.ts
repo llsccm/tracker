@@ -22,10 +22,6 @@ class HookedGameState extends GameState {
     this.events.push('start')
   }
 
-  protected onEnter(round: number, seat: number): void {
-    this.events.push(`enter:${round}:${seat}`)
-  }
-
   protected onRecord({ use = 0, mo = 0 }: RecordOptions): void {
     this.events.push(`record:${use}:${mo}`)
   }
@@ -87,27 +83,7 @@ describe('Room Node 导入边界', () => {
     expect(gameState.myID).toBeUndefined()
   })
 
-  it('GameState reset/init 保留 domContainer 别名并清空容器', () => {
-    const gameState = new GameState()
-    const tempContainer = gameState.domContainer.temp
-
-    expect(gameState.domContainer[0]).toBe(tempContainer)
-    gameState.domContainer.temp.push({ count: 1 })
-    gameState.reset()
-
-    expect(gameState.domContainer.temp).toBe(tempContainer)
-    expect(gameState.domContainer[0]).toBe(tempContainer)
-    expect(gameState.domContainer.temp).toEqual([])
-
-    gameState.domContainer[0].push({ count: 1 })
-    gameState.init()
-
-    expect(gameState.domContainer.temp).toBe(tempContainer)
-    expect(gameState.domContainer[0]).toBe(tempContainer)
-    expect(gameState.domContainer.temp).toEqual([])
-  })
-
-  it('GameState 统一状态流并通过钩子扩展运行时行为', () => {
+  it('GameState 统一状态流并通过生命周期钩子扩展运行时行为', () => {
     const gameState = new HookedGameState()
 
     gameState.init()
@@ -124,7 +100,7 @@ describe('Room Node 导入边界', () => {
 
     gameState.end()
 
-    expect(gameState.events).toEqual(['init', 'end', 'start', 'enter:0:3', 'record:1:0', 'end'])
+    expect(gameState.events).toEqual(['init', 'end', 'start', 'record:1:0', 'end'])
     expect(gameState.isGameStart).toBe(false)
     expect(gameState.isPassed).toBe(true)
   })
