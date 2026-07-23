@@ -46,10 +46,11 @@ export default function decorateSiQi(event: MoveEventDraft, room: Room): MoveEve
     return event
   }
 
-  const selectedCards: any[] = []
   const cardCount = getCount(event)
   const sourceCards = room.zones.get(event.options?.fromZone)?.cards ?? []
 
+  // 弃牌区按展示顺序（顶 -> 底）挑红色牌作为思泣来源实体候选。
+  const selectedCards: any[] = []
   for (
     let index = sourceCards.length - 1;
     index >= 0 && selectedCards.length < cardCount;
@@ -59,16 +60,14 @@ export default function decorateSiQi(event: MoveEventDraft, room: Room): MoveEve
     if (card.color === 1 || card.color === 2) selectedCards.push(card)
   }
 
-  const decorated =
-    selectedCards.length > 0 ? patchEvent(event, selectedCards, nextGroupID(room)) : event
-  const inferredSourceCards = decorated.options?.sourceCards ?? []
+  if (selectedCards.length === 0) return event
 
-  trackerLogger.info('思泣来源牌推断', {
+  const decorated = patchEvent(event, selectedCards, nextGroupID(room))
+
+  trackerLogger.debug('思泣来源牌推断', {
     cardCount,
-    selectedCardIDs: inferredSourceCards.map((card: any) => card.id),
-    fallbackCount: Math.max(0, cardCount - inferredSourceCards.length),
-    fromPosition: raw.FromPosition,
-    toPosition: raw.ToPosition
+    selectedCardIDs: selectedCards.map((card) => card.id),
+    fallbackCount: Math.max(0, cardCount - selectedCards.length)
   })
 
   return decorated

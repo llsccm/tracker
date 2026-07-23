@@ -683,6 +683,21 @@ export class Room {
     return this.anonymousEntitySeq--
   }
 
+  /**
+   * 从游戏外补建实体：正 ID 身份牌和/或匿名占位。
+   *
+   * 调用场景（节选）：
+   * - known 路径物化失败后的缺口补齐（process/pile 等公共区端点没有可 materialize 的匿名槽，
+   *   且 cardIndex 尚无该正 ID 时，resolveKnownMoveCards 会 createExternalCards(missingIDs)）
+   * - outside/exile 来源的新出现正 ID
+   * - 匿名手牌对账、来源占位、洗牌替身等数量守恒兜底
+   *
+   * 重要语义：
+   * - 新建 Card 默认 isKnown=false。正 ID 只表示“牌面身份实体已存在”，不等于“已对玩家公开”。
+   * - 若协议路径是 knownIDs / discardKnown，调用方必须在落区前 confirmKnown()；
+   *   RoomMovement.resolveKnownMoveCards 尾部已对 knownCards 统一确认，避免正 ID 暗实体进弃牌/处理区。
+   * - 匿名占位（id/entityID 为负）本就应保持 isKnown=false。
+   */
   createExternalCards(cardIDs: CardID[] = [], count = cardIDs.length): Card[] {
     const ids = cardIDs.filter((id) => id > 0)
     const unknownCount = Math.max(0, Number(count) || 0, cardIDs.length) - ids.length
@@ -1769,6 +1784,9 @@ export class Room {
       context.targetHandSeat,
       context.handMoveCount
     )
+    // 整手完整揭示时先把木马/标记弱候选反向收敛（并挤回被占用的手牌占位），
+    // 必须早于 resolveKnownMoveCards，否则匿名槽数量已错、明牌会被 createExternal。
+    this.movement.resolveHiddenMarkCandidatesFromFullHandReveal(context)
     this.movement.resolveKnownMoveCards(context)
     this.movement.applyMoveCandidatePropagation(context)
     this.movement.moveUnknownCardsForContext(context)

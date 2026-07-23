@@ -231,6 +231,8 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       return false
     }
 
+    // 手牌来源只认 hand；同座 mark（木马）不是 hand 来源。
+    // 若协议声明 hand 却把 mark 实体当 hand，会把木马槽误当成出牌实体。
     return (
       card.location === 'player' &&
       card.subZone === fromSubZone &&

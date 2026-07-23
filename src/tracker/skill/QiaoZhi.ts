@@ -1,4 +1,3 @@
-import { CARD_INSTANCE_STATUS } from '../CardCounter'
 import { trackerLogger } from '@/utils/logger'
 import type { Room } from '../Room'
 
@@ -11,7 +10,6 @@ interface QiaoZhiSelectionState {
   displayedCardIDs: number[]
   selectedCount: number
   targetSeatID: number | null
-  anonymousHandEntityIDsBefore: number[]
 }
 
 function getRaw(event: MoveEventDraft): any {
@@ -22,48 +20,8 @@ function getCount(event: MoveEventDraft): number {
   return Math.max(0, Number(event.cardCount ?? event.options?.cardCount ?? 0))
 }
 
-function hasPositiveID(cardIDs: any[] = []): boolean {
-  return cardIDs.some((id) => id > 0)
-}
-
 function getPositiveIDs(cardIDs: any[] = []): number[] {
   return Array.from(new Set(cardIDs.map((id) => Number(id) || 0).filter((id) => id > 0)))
-}
-
-function nextGroupID(room: Room, label: string): string {
-  return `${label}_${QIAO_ZHI_SPELL_ID}_${++room.constraintGroupSeq}`
-}
-
-function getUnknownPlayerCards(
-  room: Room,
-  seatID: unknown,
-  count: number,
-  subZone = 'hand'
-): any[] {
-  const seat = Number(seatID)
-  if (Number.isNaN(seat) || !(count > 0)) return []
-
-  const playerCards: any[] = []
-  const unknownCards = room.counter?.cardsByStatus?.[CARD_INSTANCE_STATUS.UNKNOWN] ?? room.cards
-  for (const card of unknownCards) {
-    if (
-      card.location === 'player' &&
-      card.subZone === subZone &&
-      card.seats.has(seat) &&
-      card.isKnown !== true
-    ) {
-      playerCards.push(card)
-      if (playerCards.length >= count) break
-    }
-  }
-
-  return playerCards
-}
-
-function getAnonymousHandEntityIDs(room: Room, seatID: number): number[] {
-  return getUnknownPlayerCards(room, seatID, room.cards.length)
-    .filter((card) => Number(card.entityID) < 0)
-    .map((card) => Number(card.entityID))
 }
 
 function recordDisplayedCards(event: MoveEventDraft, room: Room): void {
@@ -86,15 +44,13 @@ function recordDisplayedCards(event: MoveEventDraft, room: Room): void {
     (): QiaoZhiSelectionState => ({
       displayedCardIDs: [],
       selectedCount: 0,
-      targetSeatID: null,
-      anonymousHandEntityIDsBefore: []
+      targetSeatID: null
     })
   ) as QiaoZhiSelectionState
 
   state.displayedCardIDs = displayedCardIDs
   state.selectedCount = 0
   state.targetSeatID = null
-  state.anonymousHandEntityIDsBefore = []
 
   trackerLogger.info('巧织暗取牌候选记录', {
     cardCount,
@@ -110,8 +66,24 @@ function recordHiddenGain(event: MoveEventDraft, room: Room, raw: any): void {
 
   const selectedCount = getCount(event)
   const [targetSeatID] = room.normalizeSeats(Number(raw.ToID))
+  const visibleSelectedIDs = getPositiveIDs(event.cardIDs)
+
+  // 主视角（或其它能看到选取结果的视角）：协议直接给出正 CardIDs。
+  // 真实移动已由后续 moveCards 完成，差集推断既不需要也不应再跑。
+  if (visibleSelectedIDs.length > 0) {
+    room.clearSkillState(QIAO_ZHI_SELECTION_STATE_KEY)
+    trackerLogger.info('巧织暗取牌推断跳过', {
+      stage: 'hiddenGain',
+      reason: '协议已给出选取明牌，主视角可见，跳过差集推断',
+      displayedCardIDs: state.displayedCardIDs,
+      visibleSelectedIDs,
+      selectedCount,
+      targetSeatID: targetSeatID ?? null
+    })
+    return
+  }
+
   if (
-    hasPositiveID(event.cardIDs) ||
     !(selectedCount > 0) ||
     selectedCount >= state.displayedCardIDs.length ||
     targetSeatID === undefined
@@ -119,7 +91,7 @@ function recordHiddenGain(event: MoveEventDraft, room: Room, raw: any): void {
     room.clearSkillState(QIAO_ZHI_SELECTION_STATE_KEY)
     trackerLogger.info('巧织暗取牌推断跳过', {
       stage: 'hiddenGain',
-      reason: '暗取数量、座位或 CardIDs 不符合差集推断条件',
+      reason: '暗取数量或座位不符合差集推断条件',
       displayedCardIDs: state.displayedCardIDs,
       selectedCount,
       targetSeatID: targetSeatID ?? null,
@@ -130,13 +102,11 @@ function recordHiddenGain(event: MoveEventDraft, room: Room, raw: any): void {
 
   state.selectedCount = selectedCount
   state.targetSeatID = targetSeatID
-  state.anonymousHandEntityIDsBefore = getAnonymousHandEntityIDs(room, targetSeatID)
 
   trackerLogger.info('巧织暗取牌等待差集', {
     displayedCardIDs: state.displayedCardIDs,
     selectedCount,
-    targetSeatID,
-    anonymousHandEntityIDsBefore: state.anonymousHandEntityIDsBefore
+    targetSeatID
   })
 }
 
@@ -199,11 +169,10 @@ function settleHiddenGain(event: MoveEventDraft, room: Room): void {
   const cardsToMove = inferredCards.filter(
     (card) => card.subZone !== 'hand' || !card.seats.has(state.targetSeatID!)
   )
-  const anonymousHandEntityIDsBeforeConfirmation = getAnonymousHandEntityIDs(
-    room,
-    state.targetSeatID
-  )
 
+  // 差集确认的是「目标手牌里的物理身份」，不是巧织标记区牌。
+  // spellID 必须为 null：若写成 3544，后续进木马/其它标记时描述仍会显示「标记(巧织)」。
+  // 也不挂 combinationID：单座确定手牌不需要再留模糊组合，避免 AmbiguousKnown 残留 hand/巧织。
   if (cardsToMove.length > 0) {
     room.moveCards(
       cardsToMove.map((card) => card.id),
@@ -211,10 +180,10 @@ function settleHiddenGain(event: MoveEventDraft, room: Room): void {
       {
         seatID: state.targetSeatID,
         subZone: 'hand',
-        spellID: QIAO_ZHI_SPELL_ID,
-        combinationID: nextGroupID(room, 'qiaozhi_inferred_hand'),
+        spellID: null,
         fromZone: null,
         cardCount: cardsToMove.length,
+        // 暗取阶段已 +1 手牌额度，此处只交换身份，不再增加 observedHandCount
         handMoveCount: 0,
         sourceEvent: {
           type: 'qiaozhi:inferred-hidden-gain',
@@ -225,15 +194,22 @@ function settleHiddenGain(event: MoveEventDraft, room: Room): void {
     )
   }
 
+  // 无论是否发生了实体移动，都把推断到手牌的牌收成「确定手牌」：
+  // 清约束组 / 清位置候选 / spellID=null，避免后续暗置木马时仍显示 hand/(标记)巧织。
+  inferredCards.forEach((card) => {
+    room.removeCardsFromConstraintGroups([card])
+    room.clearCardsFromPublicZones([card])
+    card.bindTo(state.targetSeatID!, 'hand', null)
+    card.combinationID = null
+  })
+  room.resolveConstraints()
+
   trackerLogger.info('巧织暗取牌差集确认', {
     displayedCardIDs: state.displayedCardIDs,
     discardedCardIDs,
     inferredHandCardIDs,
     targetSeatID: state.targetSeatID,
-    selectedCount: state.selectedCount,
-    anonymousHandEntityIDsBeforeSelection: state.anonymousHandEntityIDsBefore,
-    anonymousHandEntityIDsBeforeConfirmation,
-    anonymousHandEntityIDsAfterConfirmation: getAnonymousHandEntityIDs(room, state.targetSeatID)
+    selectedCount: state.selectedCount
   })
 }
 
