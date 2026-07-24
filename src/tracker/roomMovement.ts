@@ -35,7 +35,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       subZone = 'hand',
       spellID,
       combinationID,
-      fromZone = 'pile',
+      fromZone: requestedFromZone,
       fromSeatID,
       fromSpellID,
       cardCount = normalizedCardIDs.length,
@@ -52,16 +52,20 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     const normalizedFromSpellID =
       fromSpellID === undefined ? undefined : normalizeSpellID(fromSpellID)
     const targetSeats = this.room.normalizeSeats(seatID ?? [])
+    // 显式 fromSeatID 表示玩家区来源（与 MoveEventNormalizer 一致 fromZone=null）；
+    // 不能默认 pile，否则会抢先走公共区 known 解析，跳过手牌/mark 匿名物化。
+    const hasExplicitFromSeat = fromSeatID !== undefined && fromSeatID !== null
+    const fromZone =
+      requestedFromZone !== undefined ? requestedFromZone : hasExplicitFromSeat ? null : 'pile'
     const fromZoneNumber = Number(fromZone)
-    const fromSeat =
-      fromSeatID !== undefined && fromSeatID !== null
-        ? Number(fromSeatID)
-        : fromZone !== null &&
-            fromZone !== undefined &&
-            fromZone !== '' &&
-            Number.isFinite(fromZoneNumber)
-          ? parseInt(String(fromZone))
-          : null
+    const fromSeat = hasExplicitFromSeat
+      ? Number(fromSeatID)
+      : fromZone !== null &&
+          fromZone !== undefined &&
+          fromZone !== '' &&
+          Number.isFinite(fromZoneNumber)
+        ? parseInt(String(fromZone))
+        : null
     const fromSubZone = opt.fromSubZone ?? subZone ?? 'hand'
     // 候选身份可由逻辑账本迁移而不移动实体；此时手牌总数变化量与实体移动数不同。
     const handMoveCount = Math.max(
@@ -163,19 +167,67 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         fromPosition
       )
       const availableTargets = endpointCards.filter(isAnonymous)
+      const anonymousTargetCountBefore = availableTargets.length
+      const resolveAttempts: Record<string, unknown>[] = []
 
       context.knownCards = knownIDs
         .map((cardID) => {
           const existing = this.room.cardIndex.get(cardID)
-          const existingInSource = existing && sourceZone?.cards.includes(existing)
+          const existingInSource = Boolean(existing && sourceZone?.cards.includes(existing))
+          const hadAnonymousTarget = !existingInSource && availableTargets.length > 0
           const target = existingInSource ? existing : availableTargets.shift()
-          return this.room.materialize(cardID, target ?? null) ?? existing
+          const ledgerBefore = {
+            inCardIndex: this.room.cardIndex.has(cardID),
+            inUnlocated: this.room.unlocatedIdentities.has(cardID),
+            inDeckIdentities: this.room.deckIdentities.has(cardID),
+            existingLocation: existing?.location ?? null,
+            existingIsKnown: existing?.isKnown === true,
+            existingInSource,
+            tookAnonymousTarget: Boolean(target && isAnonymous(target)),
+            remainingAnonymousTargets: availableTargets.length
+          }
+          const resolved = this.room.materialize(cardID, target ?? null) ?? existing
+          resolveAttempts.push({
+            cardID,
+            ...ledgerBefore,
+            hadAnonymousTarget,
+            materializeOk: Boolean(resolved),
+            afterInCardIndex: this.room.cardIndex.has(cardID)
+          })
+          return resolved
         })
         .filter((card): card is Card => Boolean(card))
       missingIDs = knownIDs.filter((id) => !this.room.cardIndex.has(id))
 
       // 端点无匿名槽可物化时，与 outside/exile 一致：按协议正 ID 补建外部实体，避免 knownCards 静默短少。
       if (missingIDs.length > 0) {
+        trackerLogger.info('known 路径实体缺口，将 createExternal', {
+          knownIDs,
+          missingIDs,
+          fromZone,
+          fromPosition,
+          anonymousTargetCountBefore,
+          anonymousTargetCountAfter: availableTargets.length,
+          sourceZoneCards: (sourceZone?.cards ?? []).map((card) => ({
+            id: card.id,
+            entityID: card.entityID,
+            isKnown: card.isKnown === true,
+            isAnonymous: isAnonymous(card)
+          })),
+          endpointCards: endpointCards.map((card) => ({
+            id: card.id,
+            entityID: card.entityID,
+            isKnown: card.isKnown === true,
+            isAnonymous: isAnonymous(card)
+          })),
+          resolveAttempts,
+          knownIDLedgers: knownIDs.map((cardID) => ({
+            cardID,
+            inCardIndex: this.room.cardIndex.has(cardID),
+            inUnlocated: this.room.unlocatedIdentities.has(cardID),
+            inDeckIdentities: this.room.deckIdentities.has(cardID)
+          }))
+        })
         createdCards = this.room.createExternalCards(missingIDs, missingIDs.length)
         const cardMap = new Map(context.knownCards.map((card) => [card.id, card]))
         createdCards.forEach((card) => cardMap.set(card.id, card))
@@ -186,30 +238,97 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       }
     } else if (fromSeat !== null && !Number.isNaN(fromSeat) && fromSubZone) {
       // 阶段 1 的玩家区既可能是匿名槽，也可能仍沿用真 ID 暗牌，两者统一由 materialize 收口。
+      // 手牌 known 禁止消费 mark:700 等占位；木马身份只在 mark 收敛/快照路径 materialize。
+      const markSpellID = context.fromSpellID ?? context.spellID
+
       const explicitTargets = sourceCards?.filter(isAnonymous) ?? []
-      const sourceTargets =
+      let sourceTargets =
         explicitTargets.length > 0
           ? explicitTargets
-          : this.getUnknownPlayerSourceCards(
-              fromSeat,
-              fromSubZone,
-              context.fromSpellID ?? context.spellID
-            )
+          : this.getUnknownPlayerSourceCards(fromSeat, fromSubZone, markSpellID)
               .filter(isAnonymous)
               .slice(0, knownIDs.length)
-      const availableTargets = [...sourceTargets]
 
+      // 手牌路径只保留 hand 匿名，绝不纳入 mark 占位。
+      if (fromSubZone === 'hand') {
+        sourceTargets = sourceTargets.filter((card) => card.subZone === 'hand')
+      }
+
+      const availableTargets = [...sourceTargets]
+      const sourceAnonymousCountBefore = availableTargets.length
+
+      // 木马等装备容器迁座后，协议 FromID 仍可能是旧座位，而暗占位已投影到目标座位。
+      // 全明快照物化时需追加目标座位 mark 匿名槽，避免 knownCards 静默短少、弱候选无法收敛。
+      const isFullKnownMarkSnapshot =
+        fromSubZone === 'mark' &&
+        context.subZone === 'mark' &&
+        context.toZone === 'player' &&
+        context.unknownCount === 0 &&
+        knownIDs.length === context.cardCount &&
+        knownIDs.length > 0
+      if (isFullKnownMarkSnapshot && availableTargets.length < knownIDs.length) {
+        const usedTargets = new Set(availableTargets)
+        context.targetSeats.forEach((targetSeat) => {
+          if (Number(targetSeat) === Number(fromSeat)) return
+          this.getUnknownPlayerSourceCards(targetSeat, fromSubZone, markSpellID)
+            .filter(isAnonymous)
+            .forEach((card) => {
+              if (usedTargets.has(card) || availableTargets.length >= knownIDs.length) return
+              usedTargets.add(card)
+              availableTargets.push(card)
+            })
+        })
+      }
+
+      const resolveAttempts: Record<string, unknown>[] = []
       context.knownCards = knownIDs
         .map((cardID) => {
           const existing = this.room.cardIndex.get(cardID)
-          const existingInSource = existing && this.isCardInPlayerSource(existing, context)
+          const existingInSource = Boolean(existing && this.isCardInPlayerSource(existing, context))
           const target = existingInSource ? existing : availableTargets.shift()
-          return this.room.materialize(cardID, target ?? null) ?? existing
+          const ledgerBefore = {
+            inCardIndex: this.room.cardIndex.has(cardID),
+            inUnlocated: this.room.unlocatedIdentities.has(cardID),
+            inDeckIdentities: this.room.deckIdentities.has(cardID),
+            existingLocation: existing?.location ?? null,
+            existingSubZone: existing?.subZone ?? null,
+            existingIsKnown: existing?.isKnown === true,
+            existingInSource,
+            tookAnonymousTarget: Boolean(target && isAnonymous(target)),
+            targetSubZone: target?.subZone ?? null,
+            remainingAnonymousTargets: availableTargets.length
+          }
+          const resolved = this.room.materialize(cardID, target ?? null) ?? existing
+          resolveAttempts.push({
+            cardID,
+            ...ledgerBefore,
+            materializeOk: Boolean(resolved),
+            afterInCardIndex: this.room.cardIndex.has(cardID)
+          })
+          return resolved
         })
         .filter((card): card is Card => Boolean(card))
       missingIDs = knownIDs.filter((id) => !this.room.cardIndex.has(id))
 
-      if (!this.room.players.has(fromSeat) && missingIDs.length > 0) {
+      // 协议 known 声明的正 ID 必须落地实体：座位存在时也不能再静默丢牌。
+      // 手牌缺口只 createExternal，绝不消费木马/标记匿名占位。
+      if (missingIDs.length > 0) {
+        trackerLogger.warn('玩家来源 known 路径实体缺口，将 createExternal', {
+          knownIDs,
+          missingIDs,
+          fromSeat,
+          fromSubZone,
+          markSpellID,
+          sourceAnonymousCountBefore,
+          remainingAnonymousTargets: availableTargets.length,
+          resolveAttempts,
+          knownIDLedgers: knownIDs.map((cardID) => ({
+            cardID,
+            inCardIndex: this.room.cardIndex.has(cardID),
+            inUnlocated: this.room.unlocatedIdentities.has(cardID),
+            inDeckIdentities: this.room.deckIdentities.has(cardID)
+          }))
+        })
         createdCards = this.room.createExternalCards(missingIDs, missingIDs.length)
         const cardMap = new Map(context.knownCards.map((card) => [card.id, card]))
         createdCards.forEach((card) => cardMap.set(card.id, card))
@@ -224,18 +343,46 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     }
 
     const resumedCardIDs: CardID[] = []
+    const confirmedFromUnknownIDs: CardID[] = []
     context.knownCards.forEach((card) => {
       const wasSuspended = card.suspended === true || this.room.suspendedKnownCards.has(card)
       this.room.resumeSuspendedKnownCard(card)
       if (wasSuspended) resumedCardIDs.push(card.id)
+
+      // knownIDs 路径的语义是“协议声明这些正 ID 已公开”。
+      // materialize() 会对已有实体 confirmKnown，但 createExternalCards 补建的正 ID
+      // 默认 isKnown=false，若不在此统一确认，会以“正 ID 暗实体”进入弃牌/处理区。
+      if (card.id > 0 && card.isKnown !== true) {
+        confirmedFromUnknownIDs.push(card.id)
+      }
+      if (card.id > 0) card.confirmKnown()
     })
+
+    if (confirmedFromUnknownIDs.length > 0) {
+      trackerLogger.info('已知牌解析后补确认明牌', {
+        knownIDs,
+        confirmedFromUnknownIDs,
+        createdCardIDs: createdCards.map((card) => card.id),
+        missingIDs,
+        fromZone,
+        fromSeat,
+        sourceIsOutside
+      })
+    }
 
     trackerLogger.debug('已知牌解析完成', {
       knownIDs,
       resolvedCardIDs: context.knownCards.map((card) => card.id),
+      knownCardStates: context.knownCards.map((card) => ({
+        id: card.id,
+        entityID: card.entityID,
+        isKnown: card.isKnown === true,
+        location: card.location
+      })),
       missingIDs,
       createdCardIDs: createdCards.map((card) => card.id),
       resumedCardIDs,
+      confirmedFromUnknownIDs,
       canCreateMissingCards,
       sourceIsOutside
     })
@@ -517,7 +664,13 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       targetSeats,
       toZone
     } = context
-    if (knownCards.length === 0) return
+    if (knownCards.length === 0) {
+      // 装备容器全明快照可能因来源迁座暂未物化成功；仍按协议 CardIDs 收敛弱候选。
+      if (toZone === 'player') {
+        this.resolveHiddenMarkCandidatesFromObservedMarkSnapshot(context)
+      }
+      return
+    }
 
     // 已知牌移动可能把原先的无席位暗占位揭示出来，先从空间账本摘除旧引用。
     this.removeUnassignedMarkSpaceCards(knownCards)
@@ -827,8 +980,18 @@ export class RoomMovement extends RoomMovementCandidateMethods {
           usedPublicResiduePlaceholders.add(placeholder)
           this.room.removeCardsFromConstraintGroups([placeholder])
           const placeholderWasKnown = placeholder.isKnown === true
-          placeholder.moveToPublicZone(residue.zoneID)
-          zone.replaceCard(card, placeholder)
+          // 与 swap 路径一致：确定明牌槽不能被占位污染；公共候选槽可继续承载。
+          const keepPreviousPosition = this.hasPublicCandidateAt(card, residue.zoneID)
+          if (keepPreviousPosition) {
+            placeholder.moveToPublicZone(residue.zoneID)
+            zone.replaceCard(card, placeholder)
+          } else if (residue.zoneID === 'pile') {
+            zone.removeCard(card)
+            this.insertUnknownPlaceholderIntoPile(zone, placeholder)
+          } else {
+            zone.removeCard(card)
+            zone.add(placeholder, POSITION_TOP)
+          }
           this.removeHiddenMarkPlaceholder(placeholder)
           repairedResidues.push({
             ...residue,

@@ -27,7 +27,7 @@ describe('MoveEventNormalizer 当前行为', () => {
     expect(event.options.sourceEvent.raw).toBe(event.raw)
   })
 
-  it('未知区域编号当前降级为 process 与默认手牌子区', () => {
+  it('未知区域编号当前降级为 process 且不伪造手牌子区', () => {
     const raw = {
       CardIDs: [1],
       CardCount: 1,
@@ -39,7 +39,7 @@ describe('MoveEventNormalizer 当前行为', () => {
 
     expect(event.toZone).toBe('process')
     expect(event.options.fromZone).toBeNull()
-    expect(event.options.subZone).toBe('hand')
+    expect(event.options.subZone).toBeUndefined()
     expect(event.options.fromSubZone).toBeUndefined()
     expect(validateMoveEvent(raw)).toEqual(
       expect.arrayContaining([
@@ -55,6 +55,29 @@ describe('MoveEventNormalizer 当前行为', () => {
         })
       ])
     )
+  })
+
+  it('公共区到公共区不填充手牌子区', () => {
+    const event = normalizeMoveEvent({
+      CardCount: 5,
+      CardIDs: [],
+      FromID: 255,
+      FromZone: 1,
+      FromZoneParam: 0,
+      MoveType: 11,
+      SpellID: 987,
+      ToID: 6,
+      ToZone: 10,
+      ToZoneParam: 0
+    })
+
+    expect(event.type).toBe('moveUnknown')
+    expect(event.toZone).toBe('exchange')
+    expect(event.options.fromZone).toBe('pile')
+    expect(event.options.seatID).toBeUndefined()
+    expect(event.options.fromSeatID).toBeUndefined()
+    expect(event.options.subZone).toBeUndefined()
+    expect(event.options.fromSubZone).toBeUndefined()
   })
 
   it('CardIDs 为空时按 CardCount 保留暗牌数量', () => {

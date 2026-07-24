@@ -128,10 +128,10 @@ sequenceDiagram
 
 当前代码中的协议入口：
 
-| 协议 | 处理 | 说明 |
-| --- | --- | --- |
-| `decodeGsClientUserSeatFlagNtf` | [`handleRecordStartGame()`](../../src/handler/StartGame.js) | **当前主动路径**（录像/座位旗标）；`initTrackerRoom` → `Game.init` → `registerTrackerPlayers` |
-| `GsCModifyUserseatNtf` | `handleStartGame()` 已导出但在 [`logic.js`](../../src/logic.js) 中**注释未调用** | 历史开局入口；`IsGameStart` 时同样走 `initTrackerRoom` + 玩家注册。恢复时需重新接通分发 |
+| 协议                            | 处理                                                                             | 说明                                                                                          |
+| ------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `decodeGsClientUserSeatFlagNtf` | [`handleRecordStartGame()`](../../src/handler/StartGame.js)                      | **当前主动路径**（录像/座位旗标）；`initTrackerRoom` → `Game.init` → `registerTrackerPlayers` |
+| `GsCModifyUserseatNtf`          | `handleStartGame()` 已导出但在 [`logic.js`](../../src/logic.js) 中**注释未调用** | 历史开局入口；`IsGameStart` 时同样走 `initTrackerRoom` + 玩家注册。恢复时需重新接通分发       |
 
 执行顺序（以 `handleRecordStartGame` / `handleStartGame` 为准）：
 
@@ -170,8 +170,11 @@ sequenceDiagram
 ### 6. 对局运行
 
 - `PubGsCMoveCard`：[`handleMoveCard()`](../../src/handler/PubGsCMoveCard.js) 做预处理、特殊区域（`specialZones`）、局流状态（`gameFlowState`）、技能辅助（`spellEffects` / `skills/*`），再 `tracker.syncTrackerMove()` → `Room.moveCards()` / `shufflePile()`。
-- `MsgGameTurnNtf`：`handleGameTurn` → `Game.setTurn` → `scheduleTrackerRender`。
-- `GsCGamephaseNtf`：`handleGamePhase` → `Game.enter` → `scheduleTrackerRender`。
+- `MsgGameTurnNtf`：`handleGameTurn` 先处理首轮座位覆盖，再调用纯状态
+  `Game.setTurn`，重置轮级战法 Laya 状态，最后 `scheduleTrackerRender`。
+- `GsCGamephaseNtf`：`handleGamePhase` 按 `SeatRoundState` 编排阶段消息，调用纯状态
+  `Game.enter`，再处理阶段 DOM、回合结果清理与战法 Laya 状态，最后
+  `scheduleTrackerRender`。
 - 看牌/展示：`revealTrackerCardsInZone` 等把协议区映射为 Room 明牌输入。
 
 ### 7. 单局结束
@@ -189,15 +192,20 @@ sequenceDiagram
 ### 1. 轮次 (Turn)
 
 - `MsgGameTurnNtf` → `handleGameTurn` → `Game.setTurn(turn)`
-- 清理轮级临时标志/战法（如部分 `spellSpace` 键），`scheduleTrackerRender`
+- `Game.setTurn` 只更新轮次状态；handler 清理首轮座位覆盖并重置轮级战法
+  Laya 状态，最后调用 `scheduleTrackerRender`
 
 ### 2. 回合与阶段 (Round & Phase)
 
 - `GsCGamephaseNtf` → `handleGamePhase` → `Game.enter(round, seat)`
-- `round === 0`：推进行动角色、回合计数、重置部分技能状态与 DOM 提示
-- `round > 0`：阶段推进，更新顶部阶段指示
+- `round === 0`：`Game.enter` 只推进动作角色、回合计数与技能状态；handler
+  负责重置上一行动玩家的战法、清理回合结果 DOM 并更新阶段标签
+- `round > 0`：`Game.enter` 推进阶段计数；handler 根据 `SeatRoundState`
+  更新顶部阶段指示
 
-状态机主体在 [`gameState.ts`](../../src/tracker/gameState.ts)；浏览器 DOM/Laya 副作用在 [`Game.ts`](../../src/tracker/Game.ts) 的 `onInit` / `onEnter` / `onRecord` 等钩子中。
+状态机主体在 [`gameState.ts`](../../src/tracker/gameState.ts)；初始化、记录等通用浏览器钩子仍在
+[`Game.ts`](../../src/tracker/Game.ts)，玩家阶段消息的 DOM/Laya 副作用集中在
+[`GsCGamephaseNtf.js`](../../src/handler/GsCGamephaseNtf.js)。
 
 ### 3. 卡牌移动
 
@@ -215,22 +223,22 @@ graph LR
 
 ## 四、核心入口索引（无行号）
 
-| 生命周期阶段 | 核心符号 | 源码位置 | 职责 |
-| --- | --- | --- | --- |
-| 应用装载 | `main('INIT')` | [`src/index.js`](../../src/index.js) | 脚本入口与消息订阅 |
-| 库就绪轮询 | `waitForLegacyFrameReady` | [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js) | 等待宿主依赖 |
-| DOM 注入 | `initFrame` | [`src/dom.js`](../../src/dom.js) | 注入 UI 骨架与配置加载 |
-| 配置解析 | `loadAndParseConfigs` | [`src/config/ConfigManager.js`](../../src/config/ConfigManager.js) | 解析 `Config_w.sgs` |
-| 单局 Room | `tracker.initTrackerRoom` | [`trackerController.ts`](../../src/tracker/runtime/trackerController.ts) | 创建 Room 与移动装饰器 |
-| 玩家注册 | `tracker.registerTrackerPlayers` | 同上 | 座位、主视角、早期 mount |
-| 录像开局 | `handleRecordStartGame` | [`StartGame.js`](../../src/handler/StartGame.js) | 当前座位旗标开局路径 |
-| 历史开局 | `handleStartGame` | 同上 | 导出保留；`logic` 中暂未调用 |
-| 模式预识别 | `logic` | [`src/logic.js`](../../src/logic.js) | `decodeGameRecordInitInfo` |
-| 先手补齐 | `setTrackerFirstHand` | `trackerController` / `Room` | 固定视角与座位 UI |
-| 牌堆就绪 | `readyTrackerGame` | [`src/logic.js`](../../src/logic.js) | 模式确认 + `initTrackerDeck` |
-| 物理牌堆 | `initDeck` | [`Room.ts`](../../src/tracker/Room.ts) | 牌实例与 counter |
-| 视图挂载 | `mount` / `scheduleRender` | [`view/index.ts`](../../src/tracker/view/index.ts) | 两段式挂载与脏渲染 |
-| 可见性 | `applyTrackerVisibility` | [`trackerVisibility.ts`](../../src/ui/trackerVisibility.ts) | 快捷键显隐 |
-| 回合轮次 | `setTurn` / `enter` | [`Game.ts`](../../src/tracker/Game.ts) / [`gameState.ts`](../../src/tracker/gameState.ts) | 局内阶段状态 |
-| 脚本卸载 | `cleanupLifecycle` | [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js) | 移除监听与 DOM |
-| Room 销毁 | `destroyTrackerRoom` | `trackerController` | unmount + destroy |
+| 生命周期阶段 | 核心符号                                                   | 源码位置                                                                                                                                                                     | 职责                                  |
+| ------------ | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| 应用装载     | `main('INIT')`                                             | [`src/index.js`](../../src/index.js)                                                                                                                                         | 脚本入口与消息订阅                    |
+| 库就绪轮询   | `waitForLegacyFrameReady`                                  | [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js)                                                                                                                           | 等待宿主依赖                          |
+| DOM 注入     | `initFrame`                                                | [`src/dom.js`](../../src/dom.js)                                                                                                                                             | 注入 UI 骨架与配置加载                |
+| 配置解析     | `loadAndParseConfigs`                                      | [`src/config/ConfigManager.js`](../../src/config/ConfigManager.js)                                                                                                           | 解析 `Config_w.sgs`                   |
+| 单局 Room    | `tracker.initTrackerRoom`                                  | [`trackerController.ts`](../../src/tracker/runtime/trackerController.ts)                                                                                                     | 创建 Room 与移动装饰器                |
+| 玩家注册     | `tracker.registerTrackerPlayers`                           | 同上                                                                                                                                                                         | 座位、主视角、早期 mount              |
+| 录像开局     | `handleRecordStartGame`                                    | [`StartGame.js`](../../src/handler/StartGame.js)                                                                                                                             | 当前座位旗标开局路径                  |
+| 历史开局     | `handleStartGame`                                          | 同上                                                                                                                                                                         | 导出保留；`logic` 中暂未调用          |
+| 模式预识别   | `logic`                                                    | [`src/logic.js`](../../src/logic.js)                                                                                                                                         | `decodeGameRecordInitInfo`            |
+| 先手补齐     | `setTrackerFirstHand`                                      | `trackerController` / `Room`                                                                                                                                                 | 固定视角与座位 UI                     |
+| 牌堆就绪     | `readyTrackerGame`                                         | [`src/logic.js`](../../src/logic.js)                                                                                                                                         | 模式确认 + `initTrackerDeck`          |
+| 物理牌堆     | `initDeck`                                                 | [`Room.ts`](../../src/tracker/Room.ts)                                                                                                                                       | 牌实例与 counter                      |
+| 视图挂载     | `mount` / `scheduleRender`                                 | [`view/index.ts`](../../src/tracker/view/index.ts)                                                                                                                           | 两段式挂载与脏渲染                    |
+| 可见性       | `applyTrackerVisibility`                                   | [`trackerVisibility.ts`](../../src/ui/trackerVisibility.ts)                                                                                                                  | 快捷键显隐                            |
+| 回合轮次     | `setTurn` / `handleGameTurn` / `enter` / `handleGamePhase` | [`gameState.ts`](../../src/tracker/gameState.ts) / [`MsgGameTurnNtf.js`](../../src/handler/MsgGameTurnNtf.js) / [`GsCGamephaseNtf.js`](../../src/handler/GsCGamephaseNtf.js) | 局内状态推进与回合/阶段 DOM/Laya 编排 |
+| 脚本卸载     | `cleanupLifecycle`                                         | [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js)                                                                                                                           | 移除监听与 DOM                        |
+| Room 销毁    | `destroyTrackerRoom`                                       | `trackerController`                                                                                                                                                          | unmount + destroy                     |

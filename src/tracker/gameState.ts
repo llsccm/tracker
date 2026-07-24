@@ -12,17 +12,6 @@ interface SeatUIRuntime {
   [key: string]: unknown
 }
 
-interface DomContainerItem {
-  SpellID?: unknown
-  SeatID?: unknown
-  count: number
-  element?: {
-    remove?: () => void
-  }
-}
-
-type DomContainerMap = Record<string, DomContainerItem[]>
-
 export interface RecordOptions {
   use?: number
   mo?: number
@@ -62,7 +51,6 @@ export class GameState {
   declare configHandCardsMode: string
   declare configHandCardsRejected: boolean
   declare room: Room | null
-  declare domContainer: DomContainerMap
   declare seatIDs: SeatID[]
   declare orderIDs: SeatID[]
   /** 己方座位 比如22 队友明牌 */
@@ -86,16 +74,6 @@ export class GameState {
     this.room = null
     this.resetSessionState()
     this.resetRoomState()
-
-    this.domContainer = ['temp', 'phase', 'round', 'turn', 'game', 'long'].reduce<DomContainerMap>(
-      (acc, key, i) => {
-        const list: DomContainerItem[] = []
-        acc[key] = list
-        acc[i] = list
-        return acc
-      },
-      {}
-    )
   }
 
   /** 子类只通过这些钩子接入运行时副作用，公共状态转换保持在基类。 */
@@ -104,8 +82,6 @@ export class GameState {
   protected onEnd(): void {}
 
   protected onStart(): void {}
-
-  protected onEnter(_round: number, _seat: SeatID): void {}
 
   protected onRecord(_options: RecordOptions): void {}
 
@@ -119,12 +95,6 @@ export class GameState {
     this.isPassed = true
     this.spellSpace = {}
     this.resetConfigHandCards()
-  }
-
-  private clearDomContainers(): void {
-    new Set(Object.values(this.domContainer)).forEach((list) => {
-      list.length = 0
-    })
   }
 
   bindRoom(room: Room | null): void {
@@ -195,7 +165,6 @@ export class GameState {
   init(): void {
     this.resetSessionState()
     this.resetRoomState()
-    this.clearDomContainers()
     this.isGameStart = true
     this.isPassed = false
     this.onInit()
@@ -231,21 +200,14 @@ export class GameState {
         this.spellSpace['手到擒来'] = this.spellSpace['多多益善'] = 0
       }
 
-      this.resetZhanFa(this.currentID)
-
       this.currentID = seat
       this.round++
       this.phase = 0
       // 此处应该补注释
       ;[2143, 3271, 3659].forEach((id) => delete this.spellSpace[id])
-
-      this.clear('round')
     } else {
       this.phase++
     }
-
-    this.clear('phase')
-    this.onEnter(round, seat)
   }
 
   /** 每轮 */
@@ -254,8 +216,6 @@ export class GameState {
     if (turn > 0) {
       this.turn = turn
       this.round = 0
-      this.clear('turn')
-      this.resetTurnZhanFa()
 
       // 第一轮开始时 检测开始状态
       // if (turn === 1) this.start()
@@ -269,30 +229,8 @@ export class GameState {
     this.onRecord(options)
   }
 
-  clear(type: string, SpellID?: unknown, SeatID?: unknown): void {
-    const arr = this.domContainer[type]
-    if (!arr) return
-
-    for (let i = arr.length - 1; i >= 0; i--) {
-      if (SeatID === undefined && SpellID !== arr[i].SpellID) {
-        arr[i].count--
-      }
-      if (!(arr[i].count > 0) || (SpellID === arr[i].SpellID && SeatID === arr[i].SeatID)) {
-        if (arr[i].element && typeof arr[i].element.remove === 'function') {
-          arr[i].element.remove()
-        }
-        arr.splice(i, 1)
-      }
-    }
-  }
-
-  resetZhanFa(_seatID?: SeatID): void {}
-
-  resetTurnZhanFa(): void {}
-
   reset(): void {
     this.resetSessionState()
     this.resetRoomState()
-    this.clearDomContainers()
   }
 }

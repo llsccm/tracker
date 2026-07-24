@@ -2,6 +2,7 @@ import { trackerLogger } from '@/utils/logger'
 import { POSITION_TOP } from '../candidate/cardPositions'
 import { getCompatibleMarkSpellIDs, type SpellIDInput } from '../candidate/markSpellID'
 import { isAnonymous, type Card } from '../Card'
+import type { Zone } from '../Zone'
 import type {
   PlayerLocationCandidate,
   PublicPosition,
@@ -230,6 +231,8 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       return false
     }
 
+    // 手牌来源只认 hand；同座 mark（木马）不是 hand 来源。
+    // 若协议声明 hand 却把 mark 实体当 hand，会把木马槽误当成出牌实体。
     return (
       card.location === 'player' &&
       card.subZone === fromSubZone &&
@@ -477,12 +480,12 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
         return
       }
 
+      zone.removeCard(card)
+      // 确定明牌槽不能被占位污染；若牌堆顶已是连续明牌（如观虚刚展示的牌顶），
+      // 占位必须插到该明牌段下方，否则会盖住端点明牌并制造“N 暗 + 牌顶明牌”的假象。
       if (oldLocation === 'pile') {
-        // 匿名槽接管真实牌原位置，精确替换可保持牌顶/牌底已确认片段不变。
-        placeholder.moveToPublicZone(oldLocation)
-        zone.replaceCard(card, placeholder)
+        this.insertUnknownPlaceholderIntoPile(zone, placeholder)
       } else {
-        zone.removeCard(card)
         zone.add(placeholder, POSITION_TOP)
       }
       return
@@ -513,6 +516,30 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
         .getLocationCandidates()
         .some((candidate) => candidate.type === 'public' && candidate.zone === zoneID)
     )
+  }
+
+  /**
+   * 把无公共候选的暗占位放回牌堆时，避免盖住已确认的牌堆顶明牌段。
+   * 全是明牌时保持旧语义：占位落到牌顶。
+   */
+  insertUnknownPlaceholderIntoPile(zone: Zone, placeholder: Card): void {
+    const pileCards = zone.cards
+    let knownTopCount = 0
+    for (let i = pileCards.length - 1; i >= 0; i -= 1) {
+      if (pileCards[i]?.isKnown === true) knownTopCount += 1
+      else break
+    }
+
+    // 没有牌顶明牌段，或整堆都是明牌时，沿用牌顶回补，兼容既有单牌置换回归。
+    if (knownTopCount === 0 || knownTopCount === pileCards.length) {
+      zone.add(placeholder, POSITION_TOP)
+      return
+    }
+
+    // remove(TOP) 返回顶 -> 内；add(TOP) 按数组顺序 push，末张成为新牌顶。
+    const knownTopCards = zone.remove(knownTopCount, POSITION_TOP)
+    zone.add(placeholder, POSITION_TOP)
+    zone.add([...knownTopCards].reverse(), POSITION_TOP)
   }
 
   /**

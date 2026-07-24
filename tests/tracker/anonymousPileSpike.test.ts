@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { CARD_INSTANCE_STATUS } from '@/tracker/CardCounter'
+import { getPublicFieldCandidateCards } from '@/tracker/view/publicFieldCandidates'
+import { trackerLogger } from '@/utils/logger'
 import { createTestRoom } from './helpers/room'
 
 describe('阶段 1 匿名牌堆 spike', () => {
@@ -118,5 +120,118 @@ describe('阶段 1 匿名牌堆 spike', () => {
     expect(card?.isKnown).toBe(true)
     expect(room.deckIdentities.has(77)).toBe(true)
     expect(room.unlocatedIdentities.has(77)).toBe(false)
+  })
+
+  it('匿名牌堆洗牌时恢复未定位身份的暂停追踪并保留玩家槽位', () => {
+    const { room } = createTestRoom({
+      cardIDs: [1, 2, 3, 4, 5, 6],
+      seatIDs: [1],
+      materializeDeckIdentities: false
+    })
+    const pile = room.zones.get('pile')!
+    const discard = room.zones.get('discard')!
+
+    room.moveCards([], 'player', {
+      seatID: 1,
+      fromZone: 'pile',
+      cardCount: 2,
+      sourceEvent: { type: 'stage1:draw-unknown-before-shuffle' }
+    })
+    room.getPlayer(1).syncObservedHandCount(2)
+    room.moveCards([1, 2, 3], 'discard', {
+      fromZone: 'pile',
+      cardCount: 3,
+      sourceEvent: { type: 'stage1:discard-before-shuffle' }
+    })
+
+    const playerSlots = room.cards.filter((card) => isAnonymous(card) && card.location === 'player')
+    const remainingPileSlot = pile.cards[0]
+    const playerSlotEntityIDs = playerSlots.map((card) => card.entityID)
+
+    expect(playerSlots).toHaveLength(2)
+    expect(pile.cards).toEqual([remainingPileSlot])
+    expect(discard.cards).toHaveLength(3)
+    expect(room.unlocatedIdentities).toEqual(new Set([4, 5, 6]))
+
+    room.shufflePile({ cardCount: 4 })
+
+    const suspendedIdentities = Array.from(room.suspendedKnownCards).sort(
+      (left, right) => left.id - right.id
+    )
+    expect(suspendedIdentities.map((card) => card.id)).toEqual([4, 5, 6])
+    suspendedIdentities.forEach((card) => {
+      expect(card.location).toBe('suspended')
+      expect(card.suspended).toBe(true)
+      expect(card.isKnown).toBe(true)
+      expect(room.counter.cardInstances[card.id].status).toBe(CARD_INSTANCE_STATUS.APPEARED)
+    })
+    expect(getPublicFieldCandidateCards(room)).toEqual(expect.arrayContaining(suspendedIdentities))
+    expect(room.unlocatedIdentities).toEqual(new Set())
+    expect(discard.cards).toEqual([])
+    expect(pile.cards).toHaveLength(4)
+    expect(pile.cards).toContain(remainingPileSlot)
+    expect(remainingPileSlot).toSatisfy(isAnonymous)
+    expect(playerSlots.map((card) => card.entityID)).toEqual(playerSlotEntityIDs)
+    playerSlots.forEach((card) => {
+      expect(card.location).toBe('player')
+      expect(card.subZone).toBe('hand')
+      expect(card.isKnown).toBe(false)
+    })
+    expect(room.getPlayer(1).unknownCardCount).toBe(2)
+  })
+
+  it('匿名牌堆洗牌时将 APPEARED 暗身份归入独立诊断分类', () => {
+    const { room } = createTestRoom({
+      cardIDs: [1, 2, 3, 4, 5],
+      seatIDs: [1]
+    })
+    const pile = room.zones.get('pile')!
+    const discard = room.zones.get('discard')!
+    const hiddenMarkCard = room.cardIndex.get(5)!
+    const visibleHandCard = room.cardIndex.get(4)!
+
+    room.moveCards([1], 'discard', {
+      fromZone: 'pile',
+      cardCount: 1,
+      sourceEvent: { type: 'stage1:discard-before-appeared-shuffle' }
+    })
+    pile.removeCard(visibleHandCard)
+    pile.removeCard(hiddenMarkCard)
+    visibleHandCard.bindCandidates([1], 'hand', null, { known: true })
+    hiddenMarkCard.bindCandidates([1], 'hand', null, { known: false })
+    room.getPlayer(1).syncObservedHandCount(2)
+    room.moveCards([0], 'player', {
+      seatID: 1,
+      fromSeatID: 1,
+      fromZone: 5,
+      fromSubZone: 'hand',
+      subZone: 'mark',
+      spellID: 700,
+      cardCount: 1,
+      sourceEvent: { type: 'stage1:appeared-hidden-before-shuffle' }
+    })
+
+    expect(room.counter.cardsByStatus[CARD_INSTANCE_STATUS.APPEARED]).toContain(hiddenMarkCard)
+    const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
+
+    try {
+      room.shufflePile({ cardCount: 3 })
+
+      expect(hiddenMarkCard.location).toBe('suspended')
+      expect(hiddenMarkCard.suspended).toBe(true)
+      expect(hiddenMarkCard.isKnown).toBe(true)
+      expect(getPublicFieldCandidateCards(room)).toContain(hiddenMarkCard)
+      expect(discard.cards).toEqual([])
+      expect(infoSpy).toHaveBeenCalledWith(
+        '洗牌后暂停追踪非实际牌堆内正 ID 暗身份',
+        expect.objectContaining({
+          neverAppearedCardIDs: [],
+          appearedHiddenIdentityCardIDs: [5],
+          suspendedCardIDs: [5]
+        })
+      )
+    } finally {
+      infoSpy.mockRestore()
+    }
   })
 })

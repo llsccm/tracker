@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { POSITION_BOTTOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { isAnonymous, type Card } from '@/tracker/Card'
+import { CARD_INSTANCE_STATUS } from '@/tracker/CardCounter'
 import type { Room } from '@/tracker/Room'
 import { getPileDisplayCards } from '@/tracker/helper/pileOrder'
 import { getPublicFieldCandidateCards } from '@/tracker/view/publicFieldCandidates'
@@ -214,6 +215,7 @@ describe('牌堆展示顺序', () => {
     }
   ])('$name', ({ cardCount, expectWarnAboutZeroPlaceholder }) => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5], seatIDs: [1] })
+    recycleIdsToDiscard(room, [1])
     const hiddenHandCards = bindHiddenHands(room, [4, 5], 1, false)
     room.getPlayer(1).syncObservedHandCount(2)
 
@@ -254,6 +256,7 @@ describe('牌堆展示顺序', () => {
   it('协议牌堆空间数量偏大但无正 ID 可解释时只提示不补匿名占位', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3] })
     const pile = getPile(room)
+    recycleIdsToDiscard(room, [1])
 
     withWarnSpy((warnSpy) => {
       room.shufflePile({ cardCount: 5 })
@@ -274,12 +277,33 @@ describe('牌堆展示顺序', () => {
     })
   })
 
+  it('首次空弃牌堆洗牌不暂停场上暗身份', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4], seatIDs: [1] })
+    const [hiddenHandCard] = bindHiddenHands(room, [4], 1, false)
+    room.getPlayer(1).syncObservedHandCount(1)
+
+    withWarnSpy((warnSpy) => {
+      room.shufflePile({ cardCount: 3 })
+
+      expect(warnSpy).not.toHaveBeenCalled()
+    })
+
+    expect(hiddenHandCard.location).toBe('player')
+    expect(hiddenHandCard.isKnown).toBe(false)
+    expect(hiddenHandCard.suspended).toBe(false)
+    expect(room.suspendedKnownCards.size).toBe(0)
+    expect(getPublicFieldCandidateCards(room)).not.toContain(hiddenHandCard)
+    expect(room.counter.cardInstances[hiddenHandCard.id].status).toBe(CARD_INSTANCE_STATUS.UNKNOWN)
+    expectConsistentPublicZones(room)
+  })
+
   it('暂停正 ID 原座位不匹配时按实体位置补位并发出校验警告', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 113, 137], seatIDs: [0, 4] })
     const pile = getPile(room)
     const knownHandCard = room.cardIndex.get(113)!
     const suspendedHandIdentity = room.cardIndex.get(137)!
 
+    recycleIdsToDiscard(room, [1])
     pile.removeCard(knownHandCard)
     pile.removeCard(suspendedHandIdentity)
     knownHandCard.bindCandidates([4], 'hand', null, { known: true })
@@ -361,6 +385,7 @@ describe('牌堆展示顺序', () => {
     const knownHandCard = room.cardIndex.get(113)!
     const suspendedHandIdentity = room.cardIndex.get(137)!
 
+    recycleIdsToDiscard(room, [1])
     pile.removeCard(knownHandCard)
     pile.removeCard(suspendedHandIdentity)
     knownHandCard.bindCandidates([4], 'hand', null, { known: true })
@@ -553,6 +578,7 @@ describe('牌堆展示顺序', () => {
     const visibleMarkCards = getCards(room, [11, 12])
     const hiddenMarkCards = getCards(room, [73, 105])
 
+    recycleIdsToDiscard(room, [2])
     pile.removeCard(visibleHandCard)
     visibleHandCard.bindCandidates([7], 'hand', null, { known: true })
     hiddenMarkCards.forEach((card) => {
@@ -671,13 +697,56 @@ describe('牌堆展示顺序', () => {
     expectConsistentPublicZones(room)
   })
 
+  it('牌顶已是连续明牌时来源占位回补插到明牌段下方', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5, 6], seatIDs: [1] })
+    const pile = getPile(room)
+    const topKnownIDs = [4, 5, 6]
+    const revealedIDs = [1, 2]
+
+    topKnownIDs.forEach((id) => room.cardIndex.get(id)!.confirmKnown())
+    // 手牌用瞬时匿名占位；真实身份 1/2 仍留在牌堆，揭开时会触发公共区占位回补。
+    const placeholders = room.createExternalCards([], 2)
+    placeholders.forEach((card) => {
+      card.bindCandidates([1], 'hand', null, { known: false })
+    })
+    room.getPlayer(1).syncObservedHandCount(2)
+
+    room.moveCards(revealedIDs, 'process', {
+      fromSeatID: 1,
+      fromSubZone: 'hand',
+      cardCount: revealedIDs.length,
+      sourceEvent: { type: 'test:reveal-hand-after-known-pile-top' }
+    })
+
+    expect(
+      getPileDisplayCards(pile.cards)
+        .slice(0, 3)
+        .map((card) => card.id)
+    ).toEqual([6, 5, 4])
+    expect(
+      getPileDisplayCards(pile.cards)
+        .slice(0, 3)
+        .every((card) => card.isKnown)
+    ).toBe(true)
+    const knownSegmentStart = pile.cards.length - topKnownIDs.length
+    expect(pile.cards.slice(knownSegmentStart - placeholders.length, knownSegmentStart)).toEqual(
+      expect.arrayContaining(placeholders)
+    )
+    placeholders.forEach((card) => {
+      expect(card.location).toBe('pile')
+      expect(pile.cards).toContain(card)
+    })
+    expect(pile.cards.slice(-3).map((card) => card.id)).toEqual([4, 5, 6])
+    expectConsistentPublicZones(room)
+  })
+
   it.each([
     {
-      name: '实体占位揭示为牌堆明牌时精确回补原牌堆槽',
+      name: '实体占位揭示为牌堆明牌时回到牌堆但不顶回明牌位置',
       sourceEvent: 'test:reveal-hidden-pile-card',
       setupCandidate: null as null | ((room: Room, candidateCard: Card) => void),
-      expectedPileIds: [1, 4, 3],
-      unexpectedPileIds: null as number[] | null
+      expectedPileIds: [1, 3, 4],
+      unexpectedPileIds: [1, 4, 3] as number[] | null
     },
     {
       name: '实体占位揭示为牌堆候选牌时继续占住候选位置',
@@ -740,6 +809,8 @@ describe('牌堆展示顺序', () => {
         expect(pile.cards).toHaveLength(pileCountBefore)
         expect(pile.cards).toContain(placeholder)
         expect(pile.cards).not.toContain(knownCard)
+        // 确定明牌 2 离开后，占位不得顶回中间槽把 [1,3] 拆开。
+        expect(pile.cards.map((card) => card.id)).toEqual([1, 3, 4, placeholder.id])
         expect(getDiscard(room).cards).toContain(knownCard)
         expect(placeholder.location).toBe('pile')
       }
@@ -760,6 +831,8 @@ describe('牌堆展示顺序', () => {
         expect(pile.cards).toHaveLength(pileCountBefore)
         expect(pile.cards).toContain(placeholder)
         expect(pile.cards).not.toContain(knownCard)
+        // 初始 [1,2,3,4] 去掉 2 后，暗占位应落在牌顶而不是 [1,暗,3,4]。
+        expect(pile.cards.map((card) => card.id)).toEqual([1, 3, 4, placeholder.id])
         expect(getDiscard(room).cards).toContain(knownCard)
         expect(placeholder.location).toBe('pile')
       }
