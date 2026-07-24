@@ -3,21 +3,14 @@ import { POSITION_RANDOM } from '../candidate/cardPositions'
 import { trackerLogger } from '@/utils/logger'
 import type { Room } from '../Room'
 import decorateHandExchange from '../skill/HandExchange'
+import decorateQiaoZhi from '../skill/QiaoZhi'
+import decorateSiQi from '../skill/SiQi'
+import { getRaw, getCount, hasPositiveID } from '../skill/moveEventUtils'
 
 export type MoveEventDraft = any
 type MoveEventHandler = (event: MoveEventDraft, room: Room) => MoveEventDraft
 
-export function getRaw(event: MoveEventDraft): any {
-  return event.raw ?? event.options?.sourceEvent?.raw ?? {}
-}
-
-export function getCount(event: MoveEventDraft): number {
-  return Math.max(0, Number(event.cardCount ?? event.options?.cardCount ?? 0))
-}
-
-export function hasPositiveID(cardIDs: any[] = []): boolean {
-  return cardIDs.some((id) => id > 0)
-}
+export { getRaw, getCount, hasPositiveID }
 
 export function getPositiveIDs(cardIDs: any[] = []): number[] {
   return Array.from(new Set(cardIDs.map((id) => Number(id) || 0).filter((id) => id > 0)))
@@ -415,6 +408,10 @@ function createFilteredPublicMoveHandler(
 
 export function registerDefaultMoveEventHandlers(room: Room): void {
   room.registerMoveEventHandler('*', decorateGenericMove)
+  //【巧织】：记录两张展示牌，在另一张明置进弃牌堆时用差集确认暗取牌。
+  room.registerMoveEventHandler(3544, decorateQiaoZhi)
+  //【思泣】：协议不公开返回牌 ID，按弃牌堆顺序筛选红牌实体作为明确来源。
+  room.registerMoveEventHandler(3543, decorateSiQi)
   // 马承【骋烈】
   // room.registerMoveEventHandler(3208, decorateChengLie)
   // 族钟繇【诫厉】

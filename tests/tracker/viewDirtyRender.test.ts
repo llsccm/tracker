@@ -86,7 +86,10 @@ describe('视图 dirty 渲染状态', () => {
       prepare(room: Room, card: Card) {
         card.bindTo([1, 2, 3], 'hand')
         finishDirtyRender(room, collectDirtyRenderState(room))
-        card.resolveLocationCandidate({ type: 'player', seatID: 2, subZone: 'hand' }, 'test-resolve')
+        card.resolveLocationCandidate(
+          { type: 'player', seatID: 2, subZone: 'hand' },
+          'test-resolve'
+        )
       },
       assert(state: ReturnType<typeof collectDirtyRenderState>) {
         expect(state.shouldRenderAllPlayers).toBe(false)
@@ -159,6 +162,27 @@ describe('视图 dirty 渲染状态', () => {
     expect(state.shouldRenderPanels).toBe(true)
     expect(state.shouldRenderAllPlayers).toBe(false)
     expect(state.affectedSeatIDs.size).toBe(0)
+  })
+
+  it('公共区回牌堆后即使索引已消费脏区也会刷新面板', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1] })
+    const pile = room.zones.get('pile')!
+    const discard = room.zones.get('discard')!
+    const card = pile.cards.at(-1)!
+
+    discard.add(card)
+    room.resolveConstraints()
+    finishDirtyRender(room)
+
+    pile.add(card)
+    room.resolveConstraints()
+
+    expect(room.dirtyPublicZones.size).toBe(0)
+    expect(collectDirtyRenderState(room)).toMatchObject({
+      shouldRenderPanels: true,
+      shouldRenderAllPlayers: false,
+      consumedEventCount: 0
+    })
   })
 
   it('显式全量标记会刷新全部玩家手牌', () => {

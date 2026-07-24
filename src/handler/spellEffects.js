@@ -7,10 +7,6 @@ export function getTrackedPileCardIDs() {
   return tracker.getReadyTrackerRoom()?.publicZones.getPileCardIDs() ?? []
 }
 
-function getTrackedDiscardCardIDs() {
-  return tracker.getReadyTrackerRoom()?.publicZones.getPublicZoneCardIDs('discard') ?? []
-}
-
 function handleChengXiang(context) {
   if (context.ToZone == 8 && context.MoveType == 6) {
     const arr = context.CardIDs.map((id) => CardConfig.GetInstance().getCardNumber(id))
@@ -152,23 +148,6 @@ function handleQingYiLianJu(context) {
   }
 }
 
-function handleSiQi(context) {
-  if (
-    context.FromZone == 2 &&
-    context.ToZone == 1 &&
-    context.CardIDs.filter((id) => id > 0).length == 0
-  ) {
-    context.CardIDs.splice(
-      0,
-      Infinity,
-      ...getTrackedDiscardCardIDs()
-        .filter((id) => [1, 2].includes(CardConfig.GetInstance().getCard(id)?.color))
-        .reverse()
-        .slice(0, context.CardCount)
-    )
-  }
-}
-
 function handleJiaoYu(context) {
   if (
     context.FromZone == 8 &&
@@ -208,7 +187,6 @@ export const spellEffectHandlers = new Map([
   [3488, handleZuoLian],
   [3157, handleQingYiLianJu],
   [3511, handleQingYiLianJu],
-  [3543, handleSiQi],
   [3571, handleJiaoYu],
   [3750, handleQianFu]
   // [7016, handleYanXi],

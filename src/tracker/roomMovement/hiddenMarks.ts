@@ -1,4 +1,5 @@
 import { trackerLogger } from '@/utils/logger'
+import { isAnonymous as isAnonymousCard } from '../Card'
 import {
   createEquipmentContainerLocationCandidate,
   getEquipmentMarkContainerByMarkSpellID,
@@ -679,6 +680,129 @@ export abstract class RoomMovementHiddenMarkMethods {
     return clearedPlaceholderIDs
   }
 
+  /**
+   * 将仍在 unlocated 的协议正 ID 物化到本记录的 mark 匿名占位上。
+   * 解决“账本/协议已认定身份，占位仍匿名、cardIndex 无实体”的核心脱钩。
+   */
+  materializeUnlocatedIdentitiesOntoMarkPlaceholders(
+    record: HiddenMarkRecord,
+    identityIDs: CardID[],
+    reason: string
+  ): { cardID: CardID; placeholderEntityID: number }[] {
+    const materialized: { cardID: CardID; placeholderEntityID: number }[] = []
+    const pendingIDs = identityIDs
+      .map((id) => Number(id))
+      .filter(
+        (id) => id > 0 && !this.room.cardIndex.has(id) && this.room.unlocatedIdentities.has(id)
+      )
+    if (pendingIDs.length === 0) return materialized
+
+    const placeholders = Array.from(record.placeholderCards ?? []).filter(
+      (card) =>
+        isAnonymousCard(card) &&
+        card.location === 'player' &&
+        card.subZone === 'mark' &&
+        Number(card.spellID) === Number(record.spellID)
+    )
+
+    pendingIDs.forEach((cardID) => {
+      const placeholder = placeholders.shift()
+      if (!placeholder) return
+
+      const previousEntityID = Number(placeholder.entityID)
+      const resolved = this.room.materialize(cardID, placeholder)
+      if (!resolved) return
+
+      record.placeholderCards.delete(placeholder)
+      this.removeHiddenMarkPlaceholder(placeholder)
+      record.cards.add(resolved)
+      // 只物化身份到占位，不在此 confirmedMark：
+      // 调用方（木马快照）再确认 mark；hand 出牌路径禁止把“从手牌离开的牌”记成 mark。
+      record.confirmedHandCards.delete(resolved)
+      materialized.push({ cardID, placeholderEntityID: previousEntityID })
+    })
+
+    if (materialized.length > 0) {
+      trackerLogger.info('暗置标记占位物化未定位身份', {
+        reason,
+        spellID: record.spellID,
+        sourceSeat: record.sourceSeat,
+        targetSeat: record.targetSeat,
+        materialized,
+        remainingPlaceholderCount: record.placeholderCards.size,
+        remainingPendingIDs: pendingIDs.filter((id) => !this.room.cardIndex.has(id))
+      })
+    }
+
+    return materialized
+  }
+
+  /**
+   * 标记确认后：正 ID 实体落在 mark/container，并从占位账本摘掉对应匿名。
+   */
+  bindConfirmedMarkCardToMarkSpace(record: HiddenMarkRecord, card: Card, reason: string): boolean {
+    if (!(card.id > 0)) return false
+
+    const candidate = this.getHiddenMarkTargetLocationCandidate(record)
+    let changed = false
+
+    card.confirmKnown()
+
+    if (candidate.type === 'container') {
+      // 容器候选：身份确认后挂 container 候选；展示座位由装备当前位置投影。
+      if (card.location === 'player' && !card.hasLocationCandidate?.(candidate)) {
+        const next = [...(card.getLocationCandidates?.() ?? []), candidate]
+        changed = card.setLocationCandidates(next, reason) || changed
+      }
+    } else if (candidate.type === 'player') {
+      if (card.subZone !== 'mark' || Number(card.spellID) !== Number(record.spellID)) {
+        changed = card.resolveLocationCandidate(candidate, reason) || changed
+      }
+    }
+
+    // 确认后 mark 名额由正 ID 承担：回收仍挂在账本上的多余匿名占位（非本实体）。
+    const sparePlaceholders = Array.from(record.placeholderCards ?? []).filter(
+      (placeholder) =>
+        isAnonymousCard(placeholder) &&
+        placeholder !== card &&
+        placeholder.entityID !== card.entityID &&
+        placeholder.location === 'player' &&
+        placeholder.subZone === 'mark' &&
+        Number(placeholder.spellID) === Number(record.spellID)
+    )
+    if (
+      sparePlaceholders.length > 0 &&
+      (card.subZone === 'mark' || candidate.type === 'container')
+    ) {
+      const placeholder = sparePlaceholders[0]
+      record.placeholderCards.delete(placeholder)
+      this.removeHiddenMarkPlaceholder(placeholder)
+      this.room.removeCardsFromConstraintGroups([placeholder])
+      // 玩家 mark（木马等）占位取自来源手牌，是真实物理牌：当正 ID 确认占住 mark 名额、
+      // 把该占位挤出时，被挤出的其实是当初留在手牌里的那张，应挤回来源手牌，
+      // 而不是丢进 outside——否则来源手牌凭空少一张，后续 known 物化找不到匿名槽会 createExternal。
+      // 容器投影占位无手牌物理背书，维持回收到 outside。
+      const recycleToHand = card.subZone === 'mark' && candidate.type !== 'container'
+      if (recycleToHand) {
+        placeholder.bindCandidates([record.sourceSeat], 'hand', null, { known: false })
+      } else {
+        placeholder.moveToPublicZone('outside')
+      }
+      trackerLogger.info('暗置标记确认后回收匿名占位', {
+        reason,
+        spellID: record.spellID,
+        confirmedCardID: card.id,
+        recycledPlaceholderEntityID: placeholder.entityID,
+        recycledTo: recycleToHand ? 'sourceHand' : 'outside',
+        sourceSeat: record.sourceSeat,
+        targetSeat: record.targetSeat
+      })
+      changed = true
+    }
+
+    return changed
+  }
+
   /** 实体 ID 被公共来源替换时，隐藏标记账本要继续指向新的暗占位实体 */
   replaceHiddenMarkPlaceholder(previousCard: Card, nextCard: Card): void {
     const state = this.room.skillState.get(HIDDEN_MARK_STATE_KEY) as HiddenMarkState | undefined
@@ -789,6 +913,109 @@ export abstract class RoomMovementHiddenMarkMethods {
    * 当候选明牌后续以明确来源移动时，反向确认它原先属于手牌或标记区。
    * 例如从标记区明置进弃牌，则确认该牌占用标记区名额。
    */
+  /**
+   * 整手完整揭示时，对来源手牌的木马/标记弱候选做局部反向收敛。
+   *
+   * 触发：一次移动来源是座位 S 手牌，且本次离场的都是明牌、数量等于 S 已观测手牌总数
+   * （= 完整揭示了当前手牌全部内容）。此时任一「仍把 hand 作为候选、却不在揭示 ID 里」的
+   * 候选明牌（如木马候选 141），逻辑上必在标记区 → 确认进 mark，并把被挤出的匿名占位
+   * 挤回来源手牌（物理守恒），使随后的 known 物化能拿到正确数量的手牌匿名槽。
+   *
+   * 必须在 resolveKnownMoveCards 之前调用：否则匿名槽数量在物化时已错、明牌会被 createExternal。
+   */
+  resolveHiddenMarkCandidatesFromFullHandReveal(context: RoomMoveContext): boolean {
+    const state = this.room.skillState.get(HIDDEN_MARK_STATE_KEY) as HiddenMarkState | undefined
+    if (!state?.records?.size) return false
+
+    const seat = context.sourceHandSeat
+    if (seat === null || context.fromSubZone !== 'hand') return false
+
+    // 完整揭示：全为明牌 && 数量 == 该座位已观测手牌总数
+    const isFullHandReveal =
+      context.sourceHandTotalObserved &&
+      context.unknownCount === 0 &&
+      context.knownIDs.length > 0 &&
+      context.knownIDs.length === context.cardCount &&
+      context.cardCount === context.sourceHandTotalBefore
+    if (!isFullHandReveal) return false
+
+    const revealedIDs = new Set(context.knownIDs.map((id) => Number(id)))
+    let changed = false
+    const records: HiddenMarkRecord[] = []
+    state.records.forEach((record) => records.push(record))
+
+    records.forEach((record) => {
+      if (state.records.get(record.id) !== record) return
+      if (Number(record.sourceSeat) !== Number(seat)) return
+      if (record.confirmedMarkCards.size >= record.knownMarkMax) return
+
+      const strandedCandidates = Array.from(record.cards).filter((card) => {
+        if (!(card.id > 0)) return false
+        if (revealedIDs.has(Number(card.id))) return false
+        if (record.confirmedMarkCards.has(card)) return false
+        if (card.location !== 'player' || !card.seats.has(Number(seat))) return false
+        // 仍把 hand 作为可能位置的候选，才需要反向收敛到 mark。
+        const handCandidates = this.getCardPlayerLocationCandidates(card)
+        return (
+          card.subZone === 'hand' ||
+          handCandidates.some(
+            (candidate) => Number(candidate.seatID) === Number(seat) && candidate.subZone === 'hand'
+          )
+        )
+      })
+
+      strandedCandidates.forEach((card) => {
+        if (record.confirmedMarkCards.size >= record.knownMarkMax) return
+
+        const candidate = this.getHiddenMarkTargetLocationCandidate(record)
+        card.confirmKnown()
+        // 解到标记区并移除 hand 分支：容器（木马 700）collapse 成单一容器候选，
+        // player mark 直接 resolve 成 mark。此处已由完整揭示证明该牌不在手牌，可强收敛。
+        if (candidate.type === 'container') {
+          card.setLocationCandidates([candidate], 'hiddenMark:fullHandReveal')
+        } else {
+          card.resolveLocationCandidate(candidate, 'hiddenMark:fullHandReveal')
+        }
+        record.confirmedHandCards.delete(card)
+        record.confirmedMarkCards.add(card)
+
+        // 被正 ID 挤出的匿名占位，是当初留在来源手牌里的真实牌 → 挤回来源手牌，
+        // 供随后的 known 物化取用；绝不丢 outside（否则来源手牌凭空少一张、明牌被 createExternal）。
+        const placeholder = Array.from(record.placeholderCards ?? []).find(
+          (ph) =>
+            isAnonymousCard(ph) &&
+            ph !== card &&
+            ph.subZone === 'mark' &&
+            Number(ph.spellID) === Number(record.spellID)
+        )
+        if (placeholder) {
+          record.placeholderCards.delete(placeholder)
+          this.removeHiddenMarkPlaceholder(placeholder)
+          this.room.removeCardsFromConstraintGroups([placeholder])
+          placeholder.bindCandidates([record.sourceSeat], 'hand', null, { known: false })
+        }
+        changed = true
+
+        trackerLogger.info('整手完整揭示反向收敛木马候选', {
+          spellID: record.spellID,
+          sourceSeat: record.sourceSeat,
+          targetSeat: record.targetSeat,
+          cardID: card.id,
+          revealedIDs: context.knownIDs,
+          recycledPlaceholderEntityID: placeholder?.entityID ?? null,
+          confirmedMarkCount: record.confirmedMarkCards.size,
+          placeholderCount: record.placeholderCards.size
+        })
+      })
+
+      if (record.confirmedHandCards.size + record.confirmedMarkCards.size >= record.cards.size) {
+        state.records.delete(record.id)
+      }
+    })
+
+    return changed
+  }
+
   resolveHiddenMarkCandidateFromMove(card: Card, context: RoomMoveContext): boolean {
     const state = this.room.skillState.get(HIDDEN_MARK_STATE_KEY) as HiddenMarkState | undefined
     if (!state?.records?.size) return false
@@ -823,7 +1050,11 @@ export abstract class RoomMovementHiddenMarkMethods {
 
         const candidate = this.getHiddenMarkTargetLocationCandidate(record)
 
+        // hand/mark 确认互斥
+        record.confirmedHandCards.delete(card)
         record.confirmedMarkCards.add(card)
+        changed =
+          this.bindConfirmedMarkCardToMarkSpace(record, card, 'hiddenMark:confirmedMark') || changed
         if (candidate.type === 'container' && card.hasLocationCandidate?.(candidate)) {
           // 明确来自装备容器时只锁成容器候选；真正显示在哪个座位由装备当前位置决定。
           changed = card.setLocationCandidates([candidate], 'hiddenMark:confirmedMark') || changed
@@ -836,6 +1067,17 @@ export abstract class RoomMovementHiddenMarkMethods {
               card.resolveSubZoneCandidate(subZoneCandidate, 'hiddenMark:confirmedMark') || changed
           }
         }
+        trackerLogger.info('手牌暗置标记区候选确认进标记', {
+          spellID: record.spellID,
+          sourceSeat: record.sourceSeat,
+          targetSeat: record.targetSeat,
+          cardID: card.id,
+          fromSubZone: context.fromSubZone,
+          fromSpellID: context.fromSpellID ?? context.spellID ?? null,
+          confirmedMarkCount: record.confirmedMarkCards.size,
+          confirmedHandCount: record.confirmedHandCards.size,
+          placeholderCount: record.placeholderCards.size
+        })
       } else if (context.fromSubZone === 'hand') {
         const moveHandSeat = Number.isFinite(context.fromSeat)
           ? context.fromSeat
@@ -849,6 +1091,8 @@ export abstract class RoomMovementHiddenMarkMethods {
           spellID: null
         }
 
+        // 从手牌离开 = 占用 hand 名额，不能同时算 mark
+        record.confirmedMarkCards.delete(card)
         record.confirmedHandCards.add(card)
 
         if (card.hasLocationCandidate?.(candidate)) {
@@ -856,9 +1100,27 @@ export abstract class RoomMovementHiddenMarkMethods {
         } else if (card.hasSubZoneCandidate?.(candidate)) {
           changed = card.resolveSubZoneCandidate(candidate, 'hiddenMark:confirmedHand') || changed
         }
+        trackerLogger.info('手牌暗置标记区候选确认回手牌', {
+          spellID: record.spellID,
+          sourceSeat: record.sourceSeat,
+          targetSeat: record.targetSeat,
+          cardID: card.id,
+          fromSubZone: context.fromSubZone,
+          confirmedMarkCount: record.confirmedMarkCards.size,
+          confirmedHandCount: record.confirmedHandCards.size,
+          placeholderCount: record.placeholderCards.size
+        })
       }
 
       if (record.confirmedHandCards.size + record.confirmedMarkCards.size >= record.cards.size) {
+        trackerLogger.info('手牌暗置标记区候选账本结清', {
+          spellID: record.spellID,
+          sourceSeat: record.sourceSeat,
+          targetSeat: record.targetSeat,
+          confirmedMarkCardIDs: Array.from(record.confirmedMarkCards, (c) => c.id),
+          confirmedHandCardIDs: Array.from(record.confirmedHandCards, (c) => c.id),
+          remainingPlaceholderCount: record.placeholderCards.size
+        })
         state.records.delete(record.id)
       }
     })
@@ -925,6 +1187,22 @@ export abstract class RoomMovementHiddenMarkMethods {
         changed = this.retargetHiddenMarkRecord(record, observedSeat) || changed
       }
 
+      const materialized = this.materializeUnlocatedIdentitiesOntoMarkPlaceholders(
+        record,
+        context.knownIDs,
+        'hiddenMark:observedContainerSnapshot'
+      )
+      if (materialized.length > 0) {
+        materialized.forEach(({ cardID }) => {
+          const card = this.room.cardIndex.get(cardID)
+          if (card) {
+            observedCards.add(card)
+            record.cards.add(card)
+          }
+        })
+        changed = true
+      }
+
       const clearedRecordPlaceholderIDs = this.clearHiddenMarkPlaceholdersForObservedSnapshot(
         record,
         observedCards
@@ -933,6 +1211,27 @@ export abstract class RoomMovementHiddenMarkMethods {
         clearedPlaceholderIDs.push(...clearedRecordPlaceholderIDs)
         changed = true
       }
+
+      context.knownIDs.forEach((cardID) => {
+        const card = this.room.cardIndex.get(Number(cardID))
+        if (!card) return
+        if (
+          !record.cards.has(card) &&
+          !materialized.some((item) => item.cardID === Number(cardID))
+        ) {
+          return
+        }
+        record.cards.add(card)
+        if (record.confirmedMarkCards.has(card)) return
+        record.confirmedMarkCards.add(card)
+        record.confirmedHandCards.delete(card)
+        changed =
+          this.bindConfirmedMarkCardToMarkSpace(
+            record,
+            card,
+            'hiddenMark:observedContainerSnapshot:mark'
+          ) || changed
+      })
 
       record.cards.forEach((card) => {
         if (
@@ -956,19 +1255,28 @@ export abstract class RoomMovementHiddenMarkMethods {
       changed = this.applyHiddenMarkProjection(record) || changed
 
       if (record.confirmedHandCards.size + record.confirmedMarkCards.size >= record.cards.size) {
+        trackerLogger.info('手牌暗置标记区候选账本结清', {
+          spellID: record.spellID,
+          sourceSeat: record.sourceSeat,
+          targetSeat: record.targetSeat,
+          reason: 'observedContainerSnapshot',
+          confirmedMarkCardIDs: Array.from(record.confirmedMarkCards, (c) => c.id),
+          confirmedHandCardIDs: Array.from(record.confirmedHandCards, (c) => c.id),
+          remainingPlaceholderCount: record.placeholderCards.size
+        })
         state.records.delete(record.id)
       }
     })
 
-    if (resolvedHandCardIDs.length > 0 || clearedPlaceholderIDs.length > 0) {
-      trackerLogger.info('手牌暗置标记区候选按可见装备容器快照收敛', {
-        spellID: markSpellID,
-        targetSeat: observedSeat,
-        visibleCardIDs: context.knownIDs,
-        resolvedHandCardIDs,
-        clearedPlaceholderIDs
-      })
-    }
+    trackerLogger.info('手牌暗置标记区候选按可见装备容器快照收敛', {
+      spellID: markSpellID,
+      targetSeat: observedSeat,
+      visibleCardIDs: context.knownIDs,
+      resolvedHandCardIDs,
+      clearedPlaceholderIDs,
+      knownCardCount: context.knownCards.length,
+      knownIDs: context.knownIDs
+    })
 
     return changed
   }
