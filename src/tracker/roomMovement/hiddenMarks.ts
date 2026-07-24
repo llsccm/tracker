@@ -760,47 +760,97 @@ export abstract class RoomMovementHiddenMarkMethods {
       }
     }
 
-    // 确认后 mark 名额由正 ID 承担：回收仍挂在账本上的多余匿名占位（非本实体）。
-    const sparePlaceholders = Array.from(record.placeholderCards ?? []).filter(
-      (placeholder) =>
-        isAnonymousCard(placeholder) &&
-        placeholder !== card &&
-        placeholder.entityID !== card.entityID &&
-        placeholder.location === 'player' &&
-        placeholder.subZone === 'mark' &&
-        Number(placeholder.spellID) === Number(record.spellID)
+    // 确认后 mark 名额由正 ID 承担：溢出的匿名占位统一经守恒原语挤回来源手牌。
+    changed = this.reconcileMarkSpace(record, reason) || changed
+
+    return changed
+  }
+
+  /**
+   * 判断账本引用是否仍是本记录的“存活匿名 mark 占位”。
+   * 与 bindConfirmedMarkCardToMarkSpace / materialize / full-hand-reveal 的筛选谓词一致，
+   * 避免误回收已回手、已物化或其它 spell 的实体。
+   */
+  private isLiveHiddenMarkPlaceholder(card: Card, record: HiddenMarkRecord): boolean {
+    return (
+      isAnonymousCard(card) &&
+      card.location === 'player' &&
+      card.subZone === 'mark' &&
+      Number(card.spellID) === Number(record.spellID)
     )
-    if (
-      sparePlaceholders.length > 0 &&
-      (card.subZone === 'mark' || candidate.type === 'container')
-    ) {
-      const placeholder = sparePlaceholders[0]
+  }
+
+  /**
+   * 中心化 mark 空间守恒原语。
+   *
+   * 不变量（在任一改变 confirmedMark / placeholder / hiddenCount 语义的操作之后）：
+   *   |存活匿名占位| + |confirmedMarkCards 中仍占 mark 名额的正 ID| == record.hiddenCount
+   *
+   * 当正 ID 确认占住 mark 名额、令占位溢出时，把多余匿名占位挤回 **来源手牌**：
+   * 这些占位经 moveHiddenMarkPlaceholders 从 sourceSeat 手牌取得，是真实物理牌；
+   * 被挤出的其实是当初留在手牌里的那张，回收判据是“是否有来源手牌物理背书”，
+   * 与目标是 player mark 还是 container（如木马 700）无关——绝不丢 outside，
+   * 否则来源手牌凭空少一张、随后 known 物化找不到匿名槽会 createExternal。
+   *
+   * 注：纯容器投影 / 观察快照孤儿占位（无手牌背书）的 outside 回收由
+   * clearHiddenMarkPlaceholdersForObservedSnapshot 单独负责，不走本原语。
+   *
+   * @returns 是否发生实体位置或账本变更
+   */
+  reconcileMarkSpace(record: HiddenMarkRecord, reason: string): boolean {
+    const livePlaceholders = Array.from(record.placeholderCards ?? []).filter((card) =>
+      this.isLiveHiddenMarkPlaceholder(card, record)
+    )
+
+    // confirmedMarkCards 中仍占物理 mark 名额的正 ID：每张占用一个 hiddenCount 名额。
+    const confirmedMarkSlotUsers = Array.from(record.confirmedMarkCards).filter((card) =>
+      this.occupiesHiddenMarkSlot(card, record)
+    ).length
+
+    const overflow = livePlaceholders.length + confirmedMarkSlotUsers - record.hiddenCount
+    if (overflow <= 0) return false
+
+    const recycledPlaceholderEntityIDs: number[] = []
+    const evictCount = Math.min(overflow, livePlaceholders.length)
+    for (let index = 0; index < evictCount; index += 1) {
+      const placeholder = livePlaceholders[index]
       record.placeholderCards.delete(placeholder)
       this.removeHiddenMarkPlaceholder(placeholder)
       this.room.removeCardsFromConstraintGroups([placeholder])
-      // 玩家 mark（木马等）占位取自来源手牌，是真实物理牌：当正 ID 确认占住 mark 名额、
-      // 把该占位挤出时，被挤出的其实是当初留在手牌里的那张，应挤回来源手牌，
-      // 而不是丢进 outside——否则来源手牌凭空少一张，后续 known 物化找不到匿名槽会 createExternal。
-      // 容器投影占位无手牌物理背书，维持回收到 outside。
-      const recycleToHand = card.subZone === 'mark' && candidate.type !== 'container'
-      if (recycleToHand) {
-        placeholder.bindCandidates([record.sourceSeat], 'hand', null, { known: false })
-      } else {
-        placeholder.moveToPublicZone('outside')
-      }
-      trackerLogger.info('暗置标记确认后回收匿名占位', {
-        reason,
-        spellID: record.spellID,
-        confirmedCardID: card.id,
-        recycledPlaceholderEntityID: placeholder.entityID,
-        recycledTo: recycleToHand ? 'sourceHand' : 'outside',
-        sourceSeat: record.sourceSeat,
-        targetSeat: record.targetSeat
-      })
-      changed = true
+      placeholder.bindCandidates([record.sourceSeat], 'hand', null, { known: false })
+      recycledPlaceholderEntityIDs.push(placeholder.entityID)
     }
 
-    return changed
+    trackerLogger.debug('mark 空间守恒回收溢出匿名占位', {
+      reason,
+      spellID: record.spellID,
+      sourceSeat: record.sourceSeat,
+      targetSeat: record.targetSeat,
+      hiddenCount: record.hiddenCount,
+      confirmedMarkSlotUsers,
+      overflow,
+      recycledPlaceholderEntityIDs,
+      remainingPlaceholderCount: record.placeholderCards.size
+    })
+
+    return true
+  }
+
+  /**
+   * 判断已确认正 ID 是否仍占用本记录的 mark 物理名额。
+   * player mark 直接看 subZone/spellID；container（木马等）看容器候选或落在 mark 空间。
+   */
+  private occupiesHiddenMarkSlot(card: Card, record: HiddenMarkRecord): boolean {
+    if (!(card.id > 0)) return false
+
+    const inMarkSpace =
+      card.location === 'player' &&
+      card.subZone === 'mark' &&
+      Number(card.spellID) === Number(record.spellID)
+    if (inMarkSpace) return true
+
+    const candidate = this.getHiddenMarkTargetLocationCandidate(record)
+    return candidate.type === 'container' && card.hasLocationCandidate?.(candidate) === true
   }
 
   /** 实体 ID 被公共来源替换时，隐藏标记账本要继续指向新的暗占位实体 */
@@ -978,22 +1028,6 @@ export abstract class RoomMovementHiddenMarkMethods {
         }
         record.confirmedHandCards.delete(card)
         record.confirmedMarkCards.add(card)
-
-        // 被正 ID 挤出的匿名占位，是当初留在来源手牌里的真实牌 → 挤回来源手牌，
-        // 供随后的 known 物化取用；绝不丢 outside（否则来源手牌凭空少一张、明牌被 createExternal）。
-        const placeholder = Array.from(record.placeholderCards ?? []).find(
-          (ph) =>
-            isAnonymousCard(ph) &&
-            ph !== card &&
-            ph.subZone === 'mark' &&
-            Number(ph.spellID) === Number(record.spellID)
-        )
-        if (placeholder) {
-          record.placeholderCards.delete(placeholder)
-          this.removeHiddenMarkPlaceholder(placeholder)
-          this.room.removeCardsFromConstraintGroups([placeholder])
-          placeholder.bindCandidates([record.sourceSeat], 'hand', null, { known: false })
-        }
         changed = true
 
         trackerLogger.info('整手完整揭示反向收敛木马候选', {
@@ -1002,11 +1036,16 @@ export abstract class RoomMovementHiddenMarkMethods {
           targetSeat: record.targetSeat,
           cardID: card.id,
           revealedIDs: context.knownIDs,
-          recycledPlaceholderEntityID: placeholder?.entityID ?? null,
           confirmedMarkCount: record.confirmedMarkCards.size,
           placeholderCount: record.placeholderCards.size
         })
       })
+
+      // 被正 ID 挤出的匿名占位由守恒原语统一挤回来源手牌，供随后 known 物化取用；
+      // 绝不丢 outside（否则来源手牌凭空少一张、明牌被 createExternal）。
+      if (strandedCandidates.length > 0) {
+        changed = this.reconcileMarkSpace(record, 'hiddenMark:fullHandReveal') || changed
+      }
 
       if (record.confirmedHandCards.size + record.confirmedMarkCards.size >= record.cards.size) {
         state.records.delete(record.id)

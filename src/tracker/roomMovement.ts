@@ -56,11 +56,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     // 不能默认 pile，否则会抢先走公共区 known 解析，跳过手牌/mark 匿名物化。
     const hasExplicitFromSeat = fromSeatID !== undefined && fromSeatID !== null
     const fromZone =
-      requestedFromZone !== undefined
-        ? requestedFromZone
-        : hasExplicitFromSeat
-          ? null
-          : 'pile'
+      requestedFromZone !== undefined ? requestedFromZone : hasExplicitFromSeat ? null : 'pile'
     const fromZoneNumber = Number(fromZone)
     const fromSeat = hasExplicitFromSeat
       ? Number(fromSeatID)
@@ -288,9 +284,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       context.knownCards = knownIDs
         .map((cardID) => {
           const existing = this.room.cardIndex.get(cardID)
-          const existingInSource = Boolean(
-            existing && this.isCardInPlayerSource(existing, context)
-          )
+          const existingInSource = Boolean(existing && this.isCardInPlayerSource(existing, context))
           const target = existingInSource ? existing : availableTargets.shift()
           const ledgerBefore = {
             inCardIndex: this.room.cardIndex.has(cardID),
