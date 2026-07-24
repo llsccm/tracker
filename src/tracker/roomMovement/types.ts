@@ -19,6 +19,12 @@ export type SeatInput = SeatID | SeatID[]
 export type SourceZoneInput = PublicZoneName | number | null | undefined
 export type MoveTargetZone = PublicZoneName | 'player'
 
+/**
+ * known 移动中补建正 ID 的语义来源。
+ * external-source 表示协议从 outside/exile 带来新牌，known-fallback 表示原有实体无法物化后的兜底。
+ */
+export type KnownCardCreationReason = 'external-source' | 'known-fallback'
+
 export interface RoomMovementOptions {
   seatID?: SeatInput
   subZone?: SubZone
