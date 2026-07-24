@@ -1,17 +1,81 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
+import { trackerLogger } from '@/utils/logger'
 import { createTestRoom, getCard } from './helpers/room'
 
 describe('known 路径落弃明牌确认', () => {
+  it('12区补建的已知牌正常点亮且不计入既有暗实体诊断', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0] })
+    const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
+
+    try {
+      room.moveCards([61036], 'player', {
+        fromZone: 'exile',
+        seatID: 0,
+        subZone: 'hand',
+        cardCount: 1
+      })
+
+      const card = room.cardIndex.get(61036)
+      expect(card?.location).toBe('player')
+      expect(card?.subZone).toBe('hand')
+      expect(card?.isKnown).toBe(true)
+      expect(infoSpy).not.toHaveBeenCalledWith('已知牌解析后补确认明牌', expect.anything())
+    } finally {
+      infoSpy.mockRestore()
+    }
+  })
+
+  it('12区既有正 ID 暗实体仍触发兜底诊断', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0] })
+    const existingCard = room.createExternalCards([61037], 1)[0]
+    room.zones.get('exile')!.add(existingCard)
+    const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
+
+    try {
+      room.moveCards([61037], 'player', {
+        fromZone: 'exile',
+        seatID: 0,
+        subZone: 'hand',
+        cardCount: 1
+      })
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        '已知牌解析后补确认明牌',
+        expect.objectContaining({
+          confirmedFromUnknownIDs: [61037],
+          createdCardIDs: [],
+          knownCardCreationReason: 'external-source'
+        })
+      )
+    } finally {
+      infoSpy.mockRestore()
+    }
+  })
+
   it('createExternal 补建的正 ID 进入弃牌堆时应 confirmKnown', () => {
     // 处理区无匿名槽 + 正 ID 50 不在 cardIndex：
     // materialize(50, null) 失败 → missingIDs → createExternalCards([50])。
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1] })
+    const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
 
-    room.moveCards([50], 'discard', {
-      fromZone: 'process',
-      cardCount: 1
-    })
+    try {
+      room.moveCards([50], 'discard', {
+        fromZone: 'process',
+        cardCount: 1
+      })
+      expect(infoSpy).toHaveBeenCalledWith(
+        '已知牌解析后补确认明牌',
+        expect.objectContaining({
+          confirmedFromUnknownIDs: [50],
+          createdCardIDs: [50],
+          fromZone: 'process',
+          knownCardCreationReason: 'known-fallback'
+        })
+      )
+    } finally {
+      infoSpy.mockRestore()
+    }
 
     const card = room.cardIndex.get(50)
     expect(card).toBeTruthy()
@@ -36,7 +100,6 @@ describe('known 路径落弃明牌确认', () => {
       fromZone: 'process',
       cardCount: 3
     })
-
     ;[29, 50, 113].forEach((id) => {
       const card = room.cardIndex.get(id)!
       expect(card.location).toBe('discard')
@@ -74,9 +137,12 @@ describe('known 路径落弃明牌确认', () => {
       spellID: 423
     })
 
-    expect(room.zones.get('process')!.cards.map((card) => card.id).sort((a, b) => a - b)).toEqual([
-      29, 50, 113
-    ])
+    expect(
+      room.zones
+        .get('process')!
+        .cards.map((card) => card.id)
+        .sort((a, b) => a - b)
+    ).toEqual([29, 50, 113])
     expect(room.cardIndex.get(50)!.isKnown).toBe(true)
     // 700 匿名占位不得被 hand known 出牌偷走
     const stillMark = room.cards.find(
