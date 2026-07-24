@@ -812,6 +812,20 @@ export abstract class RoomMovementHiddenMarkMethods {
 
     const recycledPlaceholderEntityIDs: number[] = []
     const evictCount = Math.min(overflow, livePlaceholders.length)
+    if (evictCount <= 0) {
+      // confirmedMarkSlotUsers 已超过 hiddenCount，但没有存活占位可回收——
+      // 说明账本配额被上游突破，需要显式告警而不是假装发生了变更。
+      trackerLogger.warn('mark 空间守恒溢出但无可回收占位', {
+        reason,
+        spellID: record.spellID,
+        sourceSeat: record.sourceSeat,
+        targetSeat: record.targetSeat,
+        hiddenCount: record.hiddenCount,
+        confirmedMarkSlotUsers,
+        overflow
+      })
+      return false
+    }
     for (let index = 0; index < evictCount; index += 1) {
       const placeholder = livePlaceholders[index]
       record.placeholderCards.delete(placeholder)
