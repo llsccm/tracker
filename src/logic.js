@@ -181,21 +181,31 @@ export function logic(msg) {
       case 'decodeGameRecordInitInfo':
         // 用于判断模式
         // console.info(msg)
+        Game.init()
 
         if (ProtoObj?.matchName === '斗地主') {
           Game.isDouDiZhu = true
+          Game.needShowName = true
+          return
+        }
+
+        if (ProtoObj?.matchName === '新欢乐排位') {
+          Game.needShowName = true
+          return
         }
 
         if (ProtoObj?.matchName === '单骑无双') {
           Game.isRoguelike1v1 = true
+          return
         }
 
         // 长安行[20610702]
         if (ProtoObj?.matchName && ShanHeTu_regex.test(ProtoObj.matchName)) {
           Game.isShanHeTu = true
+          return
         }
 
-        // 新欢乐排位 身份演武军争
+        // 身份演武军争
 
         break
 
@@ -207,6 +217,7 @@ export function logic(msg) {
       case 'decodeGsClientUserSeatFlagNtf':
         // 新录像两个消息都有 旧录像只有这个消息
         handleRecordStartGame(msg)
+        if (Game.needShowName) laya.showName()
         break
 
       case 'GsCUpdateRoleDataNtf':

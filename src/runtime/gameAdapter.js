@@ -475,6 +475,15 @@ export const gameRuntime = {
         // 炁标记源码已经处理好 不需额外处理重复添加label的问题
         uis.forEach((ui) => ui?.AddCardTag?.(label))
       })
+  },
+  showName() {
+    this.gamescene?.seatContainer?.seatUIs?.forEach(({ seat, otherTopManager }) => {
+      otherTopManager?.createPlayerNameBg()
+      otherTopManager?.createPlayerName()
+      otherTopManager?.UpdatePlayerName(seat.playerInfo)
+      otherTopManager?.SetPlayNameVisible(seat?.playerInfo?.ClientId < 4e9)
+      otherTopManager?.layout()
+    })
   }
 }
 

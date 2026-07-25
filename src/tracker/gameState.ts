@@ -64,6 +64,9 @@ export class GameState {
   declare size: number | undefined
   declare isDuanXian: boolean
 
+  /** 排位赛斗地主展示名字 */
+  needShowName = false
+
   declare currentID: SeatID | undefined
   myGenerals: number[] = []
   /** 阵营 统率占位 替代mySeats */
@@ -135,6 +138,7 @@ export class GameState {
 
     this.size = undefined
     this.isDuanXian = false
+    this.needShowName = false
   }
 
   getSeatUI(seatID: SeatID): SeatUIRuntime {
