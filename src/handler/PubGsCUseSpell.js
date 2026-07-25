@@ -8,7 +8,7 @@ import { setSuitRecord } from '@/utils'
  * @param {object} msg - PubGsCUseSpell
  */
 export function handleUseSpell(msg) {
-  const { SeatID, SrcSeatID, SpellID, CardIDs } = msg
+  const { SeatID, SrcSeatID, SpellID, CardIDs = [] } = msg
 
   if (Game.myID === SeatID && CardIDs.length === 1) {
     drawCard(CardIDs)
@@ -32,6 +32,7 @@ export function handleUseSpell(msg) {
 
       const instance = CardConfig.GetInstance()
       for (const id of CardIDs) {
+        if (id <= 0) continue
         Game.spellSpace[2143].add(instance.getCard(id).c)
       }
 
@@ -62,7 +63,7 @@ export function handleUseSpell(msg) {
 
     // 谋许攸 迁附 控顶
     case 3750:
-      if (msg.EffectIndex === 2 && !msg.DestSeatIDs.length) {
+      if (msg.EffectIndex === 2 && !msg.DestSeatIDs?.length) {
         Game.setSpellState(3750, CardIDs)
       }
       break
