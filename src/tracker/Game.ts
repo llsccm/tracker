@@ -102,7 +102,6 @@ class BrowserGameState extends GameState {
     UI.friendGeneral = 0
 
     laya.reset()
-    // retry(() => laya.init())
     laya.init()
   }
 
