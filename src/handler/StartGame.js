@@ -17,7 +17,6 @@ export function handleStartGame(msg) {
 /** 通用座位信息 */
 export function handleRecordStartGame(msg) {
   tracker.initTrackerRoom()
-  Game.init()
   if (!user.userID) addTooltip('没有识别到uuid, 主视角数据可能会出错', 'acTooltip', 1000)
   const { seatinfo } = msg.data.protoObj
 
