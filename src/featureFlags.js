@@ -21,6 +21,8 @@ const retainedLogicMessages = new Set([
   'ClientActivitysetDataRep',
   'decodeRougeBaseInfoRep',
 
+  'ClientTableinfoRep',
+
   // 牌局与座位状态：维护记牌器座位、轮次、牌堆初始化与游戏结束清理。
   'MsgGameShowFigure',
   'decodeGsClientUserSeatFlagNtf',

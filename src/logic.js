@@ -25,7 +25,7 @@ import {
   getRenderedMainHandCardIDs,
   subscribeRenderedMainHandCardIDs
 } from './tracker/view/PlayerHandView'
-import { setSuitRecord } from './utils'
+import { setSuitRecord, wait } from './utils'
 import { addTooltip } from './utils/notification'
 import { handleBroadMsg } from './handler/chat'
 import { parsePeiXiuRoleData, solvePeiXiuRoleData } from './utils/peixiuRouteFeature'
@@ -496,6 +496,10 @@ export function logic(msg) {
           })
         }
 
+        break
+
+      case 'ClientTableinfoRep':
+        wait(() => laya.blockPowerSlogan())
         break
 
       default:
