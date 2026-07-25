@@ -1,5 +1,6 @@
 import { Game, user } from '@/tracker'
 import { tracker } from '@/tracker/runtime/browser'
+import { addTooltip } from '@/utils/notification'
 
 /** 旧录像可能没有该消息 GsCModifyUserseatNtf */
 export function handleStartGame(msg) {
@@ -17,6 +18,7 @@ export function handleStartGame(msg) {
 export function handleRecordStartGame(msg) {
   tracker.initTrackerRoom()
   Game.init()
+  if (!user.userID) addTooltip('没有识别到uuid, 主视角数据可能会出错', 'acTooltip', 1000)
   const { seatinfo } = msg.data.protoObj
 
   // 看录像时不一定有当前用户

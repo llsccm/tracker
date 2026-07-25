@@ -496,9 +496,8 @@ function createYanJiaoButton(left, right, _remain, _allot) {
  * 张昌蒲【严教】小抄：寻找两组点数和相等的分牌方案。
  * counts[0] 保存总张数，后续下标保存对应点数张数，便于快速做多重集合扣减。
  * @param {number[]} array
- * @param {boolean} allot
  */
-export function drawYanJiao(array, allot = false) {
+export function drawYanJiao(array) {
   const counts = countCardNumbers(normalizeCardNumbers(array))
   const half = Math.floor(getCountedNumbersTotal(counts) / 2)
   const subsetsBySum = new Map([[0, [Array(14).fill(0)]]])
@@ -552,7 +551,7 @@ export function drawYanJiao(array, allot = false) {
   for (const remainCount of Array.from(pairs.keys()).sort((a, b) => a - b)) {
     const pairsByRemain = pairs.get(remainCount).sort((a, b) => a[0][0] - b[0][0])
     for (const [left, right, remain] of pairsByRemain) {
-      fragment.appendChild(createYanJiaoButton(left, right, remain, allot))
+      fragment.appendChild(createYanJiaoButton(left, right, remain, false))
       rendered += 1
       if (rendered >= 5) break
     }
