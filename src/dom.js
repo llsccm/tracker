@@ -1,6 +1,6 @@
 import { CardConfig } from './config'
 import { ConfigManager } from './config/ConfigManager'
-import { drawMiZhu, drawSeatUIs } from './draw'
+import { clearZoneMirrors, drawMiZhu, drawSeatUIs } from './draw'
 import { Game, globalConfig, globalState, UI } from './tracker'
 import { setTrackerSeatUIReader, tracker } from './tracker/runtime/browser'
 import { drawCitiesUI } from './ui/CitiesUI'
@@ -109,7 +109,7 @@ function setGameSize() {
 
   if (UI.seatUIs?.length > 0) {
     getSeatUiPos()
-    drawSeatUIs()
+    if (UI.firstUpdateSeatUI) drawSeatUIs()
   }
 
   const app = {
@@ -163,7 +163,6 @@ function setGameSize() {
   seatUI.style.left = window.innerWidth / 2 + 'px'
   seatUI.style.top = top + 'px'
   // drawDeckEdgeUI()
-  window.dispatchEvent(new CustomEvent('dxc-seat-overlay-layout'))
   rogueUI.style.width = `${app.width}px`
   rogueUI.style.height = `${app.height}px`
   rogueUI.style.left = window.innerWidth / 2 + 'px'
@@ -335,13 +334,12 @@ function setSeatPosition(seatUI, displayLocation, x, y, dpr) {
   seatUI.posY = (y >> 0) / dpr
 }
 
-/**
- * 重绘座位覆盖层明牌框。
- */
+/** 重置座位覆盖层状态并清理区域镜像。 */
 export function resetSeatUIs() {
   UI.seatUIs = []
+  UI.firstUpdateSeatUI = false
   UI.friendGeneral = 0
-  drawSeatUIs()
+  clearZoneMirrors()
 }
 
 export function getSeatUIs() {
@@ -361,9 +359,9 @@ export function getSeatUIs() {
     }
   })
 
+  // 先手和主视角都确定后才计算位置，容器仍保持 hidden，首轮开始时再显示。
   getSeatUiPos()
-  drawSeatUIs()
-  window.dispatchEvent(new CustomEvent('dxc-seat-overlay-layout'))
+  if (trackerRoom.firstID !== undefined) drawSeatUIs()
 }
 
 setTrackerSeatUIReader(getSeatUIs)

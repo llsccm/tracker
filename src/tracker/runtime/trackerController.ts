@@ -226,7 +226,7 @@ export class TrackerController {
 
   /**
    * 先手协议到达后补齐固定视角座位顺序。
-   * Seat UI 依赖固定视角，必须在这里主动刷新宿主座位覆盖层。
+   * Seat UI 依赖固定视角，这里只同步座位数据，实际 DOM 布局由首轮回合统一提交。
    */
   setTrackerMySeatID(seatID: SeatID): void {
     if (!this.trackerRoom || this.trackerRoom.mySeatID !== undefined) return
