@@ -80,6 +80,23 @@ describe('MoveEventNormalizer 当前行为', () => {
     expect(event.options.fromSubZone).toBeUndefined()
   })
 
+  it('天候牌堆同区单牌展示直接归一为 noop', () => {
+    const event = normalizeMoveEvent({
+      CardCount: 1,
+      CardIDs: [18],
+      FromID: 255,
+      FromZone: 1,
+      FromZoneParam: 0,
+      MoveType: 21,
+      SpellID: 3903,
+      ToID: 255,
+      ToZone: 1,
+      ToZoneParam: 0
+    })
+
+    expect(event.type).toBe('noop')
+  })
+
   it('CardIDs 为空时按 CardCount 保留暗牌数量', () => {
     const raw = {
       CardIDs: [],

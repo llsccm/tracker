@@ -98,6 +98,56 @@ describe('GsCRoleOptTargetNtf', () => {
     )
   })
 
+  it('天候 Type 28 仅同步计数声明的牌堆顶', () => {
+    handleRoleOptTargetNtf({
+      Param: 0,
+      Params: [3, 5, 88, 146, 106, 38, 8, 54, 99, 51],
+      SeatID: 5,
+      SpellID: 3903,
+      SrcSeatID: 5,
+      targetSeatID: 255,
+      Timeout: 30,
+      Type: 28,
+      className: 'GsCRoleOptTargetNtf'
+    })
+
+    expect(revealTrackerCards).toHaveBeenCalledOnce()
+    expect(revealTrackerCards).toHaveBeenCalledWith(
+      {
+        type: 'public',
+        zoneName: 'pile',
+        reposition: true,
+        cardIDsTopFirst: true
+      },
+      [88, 146, 106]
+    )
+  })
+
+  it('天候 Type 29 跳过首位座位号并同步发动者私有牌堆顶', () => {
+    handleRoleOptTargetNtf({
+      Param: 0,
+      Params: [5, 8, 99, 146],
+      SeatID: 5,
+      SpellID: 3903,
+      SrcSeatID: 5,
+      targetSeatID: 255,
+      Timeout: 30,
+      Type: 29,
+      className: 'GsCRoleOptTargetNtf'
+    })
+
+    expect(revealTrackerCards).toHaveBeenCalledOnce()
+    expect(revealTrackerCards).toHaveBeenCalledWith(
+      {
+        type: 'public',
+        zoneName: 'pile',
+        reposition: true,
+        cardIDsTopFirst: true
+      },
+      [8, 99, 146]
+    )
+  })
+
   it('诫厉同时公开牌堆顶与目标部分手牌，并记录 expectedPileCount', () => {
     const skillState: Record<string, any> = {}
     const getSkillState = vi.fn(() => skillState)

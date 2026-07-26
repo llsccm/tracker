@@ -201,6 +201,44 @@ describe('TrackerController', () => {
     ).toHaveLength(0)
   })
 
+  it('天候同区展示未定位身份时直接丢弃且不物化', () => {
+    const { controller } = createTrackerControllerHarness()
+    const shownID = 18
+    // 内部底->顶：filler + 匿名槽；shownID 仍在 unlocatedIdentities。
+    const deckIDs = [200, 201, 202, shownID, 88, 146, 106]
+
+    controller.initTrackerRoom()
+    controller.initTrackerDeck(deckIDs)
+
+    const room = controller.getTrackerRoom()
+    const pile = room.zones.get('pile')
+    const topBefore = pile.cards.map((card) => card.id)
+
+    expect(room.cardIndex.has(shownID)).toBe(false)
+    expect(room.unlocatedIdentities.has(shownID)).toBe(true)
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardCount: 1,
+        CardIDs: [shownID],
+        FromID: 255,
+        FromZone: 1,
+        FromZoneParam: 0,
+        FromPosition: undefined,
+        MoveType: 21,
+        SpellID: 3903,
+        ToID: 255,
+        ToZone: 1,
+        ToZoneParam: 0,
+        ToPosition: undefined
+      })
+    )
+
+    expect(pile.cards.map((card) => card.id)).toEqual(topBefore)
+    expect(room.cardIndex.has(shownID)).toBe(false)
+    expect(room.unlocatedIdentities.has(shownID)).toBe(true)
+  })
+
   it('牌堆展示回收玩家区占用身份并保留匿名手牌占位', () => {
     const { controller } = createTrackerControllerHarness()
     // 67 被 seat3 暗手牌实体占用，协议却声明它是牌堆顶之一。

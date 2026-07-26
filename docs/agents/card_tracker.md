@@ -210,6 +210,22 @@
 - `PILE_SAME_ZONE_SHOW_SPELL_IDS` **不需要**仅为 `3483` 扩展；该白名单只修正权变/观虚的 RANDOM 端点。诫厉应先判断消息本身是否已明确为同区展示。
 - 不走整手交换账本：`HandExchange` 识别门槛会排除诫厉的非整手、回牌堆路径。
 
+## 天候私有观看与单牌展示（SpellID=3903）
+
+- 协议文档：`docs/protocols/GsCRoleOptTargetNtf-3903.md`。
+- `Type=28` 的 `Params` 为
+  `[pileCount, handCount, ...pileTopCardIDs, ...mainViewHandCardIDs]`；只按 `pileCount`
+  同步牌堆顶，主视角手牌片段不重复写入记牌器。
+- `Type=29` 的 `Params` 为 `[seatID, ...pileTopCardIDs]`；首项是展示者座位号，不是卡牌
+  ID，后续三项按 top-first 同步为发动者可见的牌堆顶。
+- 两种消息均只下发给发动者，并要求 `Param=0`、`targetSeatID=255`。
+- 配对的 `PubGsCMoveCard` 同区展示（`MoveType=21`、牌堆两端 `255`）只亮牌顶三张中的一张，
+  **不能**确定是第几张；当前直接归一为 `noop`，不确认牌面，也不物化或重排牌堆。不要把
+  `3903` 并入 `PILE_SAME_ZONE_SHOW_SPELL_IDS` 或 `PILE_RANDOM_AS_TOP_SPELL_IDS`；后续有需要再补
+  “牌顶前三之一”的候选模型。
+- 回归：`tests/tracker/roleOptTargetNtf.test.ts`、`tests/tracker/pubGsCMoveCard.test.ts`、
+  `tests/tracker/moveEventNormalizer.test.ts`、`tests/tracker/trackerController.test.ts`。
+
 ## 已知未完成项
 
 - 尚未完整恢复旧版 `cardManager.pack()` 链表推理承载的所有不确定性语义；宴戏、权变、诫厉等技能仍需要用新版 `ConstraintGroup` 做进一步精细化。
