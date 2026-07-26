@@ -78,10 +78,10 @@ sequenceDiagram
     Note over Engine,View: 单局开始（录像当前主路径）
     Engine ->> Logic: decodeGsClientUserSeatFlagNtf
     Logic ->> Handler: handleRecordStartGame(msg)
+    Handler ->> Handler: resetSeatUIs()
     Handler ->> Bridge: tracker.initTrackerRoom()
     Bridge ->> Room: new Room()
     Bridge ->> Room: registerDefaultMoveEventHandlers(room)
-    Handler ->> Handler: Game.init()
     Handler ->> Bridge: tracker.registerTrackerPlayers(seatinfo, user.userID)
     Bridge ->> View: mount(room)
     View ->> View: 初始化固定手牌容器 / 同步可见性
