@@ -396,7 +396,11 @@ export async function addFrame() {
 }
 
 function buttonClick() {
-  const detailBlockSwitchIds = ['blockKillEffectSwitch', 'blockSkinStateSwitch']
+  const detailBlockSwitchIds = [
+    'blockKillEffectSwitch',
+    'blockSkinStateSwitch',
+    'blockMvpSettlementSwitch'
+  ]
   const getSwitchElement = (configKey) => document.getElementById(configKey)
   const setSwitchChecked = (configKey, value) => {
     const element = getSwitchElement(configKey)
@@ -436,6 +440,9 @@ function buttonClick() {
       syncEffectBlockSwitchFromDetails()
     },
     blockSkinStateSwitch() {
+      syncEffectBlockSwitchFromDetails()
+    },
+    blockMvpSettlementSwitch() {
       syncEffectBlockSwitchFromDetails()
     }
   }

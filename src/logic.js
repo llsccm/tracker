@@ -8,6 +8,7 @@ import {
   handleGameOver,
   handleGamePhase,
   handleGameTurn,
+  handleLeaveTable,
   handleMoveCard,
   handleRogueLike,
   handleRoleSpellOptRep,
@@ -179,7 +180,7 @@ export function logic(msg) {
         break
 
       case 'decodeGameRecordInitInfo':
-        // 用于判断模式
+        // 用于判断模式 此消息会触发两次
         // console.info(msg)
         Game.init()
 
@@ -210,6 +211,8 @@ export function logic(msg) {
         break
 
       case 'GsCModifyUserseatNtf': // 游戏开始标志 / 游戏结束标志
+        // 最佳的初始化位置 但是旧录像没有这个消息
+        // 第二个 decodeGameRecordInitInfo 消息在此之后
         // handleStartGame(msg)
         break
 
@@ -269,13 +272,17 @@ export function logic(msg) {
         break
 
       case 'MsgGameOver':
-      case 'ClientLeavetableRep':
+        // 此消息会触发两次
         handleGameOver()
+        break
+
+      case 'ClientLeavetableRep':
+        handleLeaveTable()
         break
 
       case 'ClientRecommendShopItemRep':
         // 退出录像时清理? 可能还有更好的方法
-        if (Game.isGameStart && msg?.userID === user.userID) handleGameOver()
+        if (Game.isGameStart && msg?.userID === user.userID) handleLeaveTable()
         break
 
       case 'decodeRougeBaseInfoRep':

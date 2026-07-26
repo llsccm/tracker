@@ -3,6 +3,8 @@ import { CardConfig } from '../config'
 import { drawYanJiao, drawYiCheng } from '../draw'
 import { Game } from '../tracker'
 import { tracker } from '../tracker/runtime/browser'
+import { laya } from '@/runtime/gameAdapter'
+import { wait } from '@/utils'
 // import handleYanXi from './handleYanXi'
 
 function getPlayerHandCardIDs(seatID) {
@@ -260,6 +262,16 @@ export function handleRoleOptTargetNtf(msg) {
         destroyPeiXiuMapWindow()
         Game.deleteSpellState(4022)
       }
+      break
+
+    case 3641:
+      // 关闭其他视角的天书窗口
+      if (Type == 67 && SeatID !== Game.myID) {
+        wait(() => laya.closeTianShu()).catch((err) => {
+          console.error(err)
+        })
+      }
+
       break
 
     default:
