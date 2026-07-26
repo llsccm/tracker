@@ -78,10 +78,10 @@ sequenceDiagram
     Note over Engine,View: 单局开始（录像当前主路径）
     Engine ->> Logic: decodeGsClientUserSeatFlagNtf
     Logic ->> Handler: handleRecordStartGame(msg)
+    Handler ->> Handler: resetSeatUIs()
     Handler ->> Bridge: tracker.initTrackerRoom()
     Bridge ->> Room: new Room()
     Bridge ->> Room: registerDefaultMoveEventHandlers(room)
-    Handler ->> Handler: Game.init()
     Handler ->> Bridge: tracker.registerTrackerPlayers(seatinfo, user.userID)
     Bridge ->> View: mount(room)
     View ->> View: 初始化固定手牌容器 / 同步可见性
@@ -128,25 +128,25 @@ sequenceDiagram
 
 当前代码中的协议入口：
 
-| 协议                            | 处理                                                                             | 说明                                                                                          |
-| ------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `decodeGsClientUserSeatFlagNtf` | [`handleRecordStartGame()`](../../src/handler/StartGame.js)                      | **当前主动路径**（录像/座位旗标）；`initTrackerRoom` → `Game.init` → `registerTrackerPlayers` |
-| `GsCModifyUserseatNtf`          | `handleStartGame()` 已导出但在 [`logic.js`](../../src/logic.js) 中**注释未调用** | 历史开局入口；`IsGameStart` 时同样走 `initTrackerRoom` + 玩家注册。恢复时需重新接通分发       |
+| 协议                            | 处理                                                                             | 说明                                                                                                                   |
+| ------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `decodeGsClientUserSeatFlagNtf` | [`handleRecordStartGame()`](../../src/handler/StartGame.js)                      | **当前主动路径**（录像/座位旗标）；`resetSeatUIs` → `initTrackerRoom` → `registerTrackerPlayers` → 重置/裁剪覆盖层容器 |
+| `GsCModifyUserseatNtf`          | `handleStartGame()` 已导出但在 [`logic.js`](../../src/logic.js) 中**注释未调用** | 历史开局入口；`IsGameStart` 时同样走 `initTrackerRoom` + 玩家注册。恢复时需重新接通分发                                |
 
 执行顺序（以 `handleRecordStartGame` / `handleStartGame` 为准）：
 
-1. `tracker.initTrackerRoom()`（[`TrackerController`](../../src/tracker/runtime/trackerController.ts)）：销毁旧 Room，创建新 Room，注册默认移动事件处理器。
-2. `Game.init()`：重置对局状态；浏览器侧钩子在 [`src/tracker/Game.ts`](../../src/tracker/Game.ts)（`BrowserGameState`），纯状态逻辑在 [`src/tracker/gameState.ts`](../../src/tracker/gameState.ts)。
+1. `resetSeatUIs()`：清理上一局的座位数据与镜像，重置布局提交状态。
+2. `tracker.initTrackerRoom()`（[`TrackerController`](../../src/tracker/runtime/trackerController.ts)）：销毁旧 Room，创建新 Room，注册默认移动事件处理器。
 3. `tracker.registerTrackerPlayers(infos, user.userID)`：
    - `Room.registerPlayers()` 兼容 `SeatID`/`seat_id`、`ClientID`/`user_temp_id`；
    - 按 `user.userID` 匹配主视角；匹配不到则 `Game.isRecord = true`；
    - `size` / `seatIDs` 由 Room 写入，再 `syncRoomSeats` 到 Game；
    - 早期 `view.mount(trackerRoom)`（牌堆未就绪时只建固定手牌容器）。
-4. `decodeGameRecordInitInfo` 可根据 `matchName` 预置 `isDouDiZhu` / `isRoguelike1v1` / `isShanHeTu`（不触发布局）。
+4. 注册完成后重置并裁剪 `.sorderContainer`；`decodeGameRecordInitInfo` 可根据 `matchName` 预置 `isDouDiZhu` / `isRoguelike1v1` / `isShanHeTu`（不触发布局）。
 
 ### 3. 先手与固定视角
 
-- `GsCFirstPhaseRole` → `tracker.setTrackerFirstHand(SeatID)`：写入 `firstID`，`updateFixedViewIds()`，刷新座位覆盖层。
+- `GsCFirstPhaseRole` → `tracker.setTrackerFirstHand(SeatID)`：写入 `firstID` 并执行 `updateFixedViewIds()`；主视角与先手都确定后计算 `.sorderContainer` 位置，但容器保持隐藏，首轮开始时再显示。
 - `MsgGameShowFigure` 且 `Type == 1 && Figure === 1` 时也会 `setTrackerFirstHand`（身份/地主等）。
 - 录像主视角还可由 `GsCUpdateRoleDataNtf`（StateID 58）、斗地主 `SmsgGameSetCharacter`、以及摸牌路径中的明牌首摸等兜底设置（见 `setTrackerMySeatID` / `gameFlowState`）。
 
@@ -170,8 +170,8 @@ sequenceDiagram
 ### 6. 对局运行
 
 - `PubGsCMoveCard`：[`handleMoveCard()`](../../src/handler/PubGsCMoveCard.js) 做预处理、特殊区域（`specialZones`）、局流状态（`gameFlowState`）、技能辅助（`spellEffects` / `skills/*`），再 `tracker.syncTrackerMove()` → `Room.moveCards()` / `shufflePile()`。
-- `MsgGameTurnNtf`：`handleGameTurn` 先处理首轮座位覆盖，再调用纯状态
-  `Game.setTurn`，重置轮级战法 Laya 状态，最后 `scheduleTrackerRender`。
+- `MsgGameTurnNtf`：`handleGameTurn` 在首轮先隐藏主视角，再显示已完成定位的 `.sorderContainer`。随后调用纯状态
+  `Game.setTurn`，重置轮级战法 Laya 状态，最后 `scheduleTrackerRender`；容器重置与超出人数的容器隐藏在开局注册后完成。
 - `GsCGamephaseNtf`：`handleGamePhase` 按 `SeatRoundState` 编排阶段消息，调用纯状态
   `Game.enter`，再处理阶段 DOM、回合结果清理与战法 Laya 状态，最后
   `scheduleTrackerRender`。

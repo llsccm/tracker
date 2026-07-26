@@ -7,6 +7,7 @@ import { getPublicFieldCandidateCards } from './publicFieldCandidates'
 import type { Card } from '../Card'
 import type { Player } from '../Player'
 import type { Room } from '../Room'
+import { checkEllipsisOverflow, invalidateEllipsisOverflow } from '@/ui/overflowEllipsis'
 
 let renderedMainHandCardIDs: number[] | null = null
 const renderedMainHandListeners = new Set<() => void>()
@@ -186,12 +187,18 @@ function syncSeatOverlayHand(doc: Document, displayID: number, body: HTMLElement
   const target = doc.querySelector<HTMLElement>('#seatUI #s' + displayID)
   if (!target) return
 
-  target.querySelectorAll(':scope > .shoupai, :scope > .markedCard').forEach((e) => e.remove())
+  clearSeatOverlayCards(target)
 
   body.querySelectorAll(':scope > .shoupai, :scope > .markedCard').forEach((node) => {
     target.appendChild(cloneRenderedNode(node))
   })
   checkSeatOverlayOverflow(target)
+}
+
+/** 清空座位镜像内容，并同步清掉可能残留的省略号标记。 */
+export function clearSeatOverlayCards(orderBody: HTMLElement): void {
+  invalidateEllipsisOverflow(orderBody)
+  orderBody.querySelectorAll(':scope > .shoupai, :scope > .markedCard').forEach((e) => e.remove())
 }
 
 function cloneRenderedNode(node: Element): Element {
@@ -201,14 +208,7 @@ function cloneRenderedNode(node: Element): Element {
   return clone
 }
 
-function checkSeatOverlayOverflow(orderBody: Element): void {
-  if (!(orderBody instanceof HTMLElement)) return
-
-  requestAnimationFrame(() => {
-    if (orderBody.scrollHeight > orderBody.clientHeight) {
-      orderBody.classList.add('show-ellipsis')
-    } else {
-      orderBody.classList.remove('show-ellipsis')
-    }
-  })
+/** 按当前布局刷新座位镜像省略号；清理/重绘会使未执行的测量失效。 */
+export function checkSeatOverlayOverflow(orderBody: Element): void {
+  checkEllipsisOverflow(orderBody)
 }

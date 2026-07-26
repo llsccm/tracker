@@ -1,4 +1,5 @@
 import { CardConfig } from './config'
+import { checkEllipsisOverflow, invalidateEllipsisOverflow } from './ui/overflowEllipsis'
 import { UI } from './tracker'
 import { laya } from './runtime/gameAdapter'
 import { getCardFaceHtml, n2N } from './utils'
@@ -88,19 +89,6 @@ export function drawCard(shoupai) {
   toBeAdd.appendChild(fragment)
 }
 
-function checkOverflow(orderBody) {
-  if (orderBody && orderBody instanceof HTMLElement) {
-    // 确保元素可见后再检查高度
-    requestAnimationFrame(() => {
-      if (orderBody.scrollHeight > 40) {
-        orderBody.classList.add('show-ellipsis')
-      } else {
-        orderBody.classList.remove('show-ellipsis')
-      }
-    })
-  }
-}
-
 function clearElement(element) {
   while (element?.firstChild) element.removeChild(element.firstChild)
 }
@@ -117,7 +105,9 @@ function cloneCardButton(button) {
 }
 
 function clearDirectCards(element) {
-  element?.querySelectorAll(':scope>.shoupai').forEach((e) => e.remove())
+  if (!(element instanceof HTMLElement)) return
+  invalidateEllipsisOverflow(element)
+  element.querySelectorAll(':scope > .shoupai, :scope > .markedCard').forEach((e) => e.remove())
 }
 
 /**
@@ -137,7 +127,7 @@ function renderDeckEdgeCards() {
 
   const existing = document.getElementById('deckBottomEdge')
   if (existing && deckEdgeRenderedSignature === deckEdgeSignature) {
-    checkOverflow(existing)
+    checkEllipsisOverflow(existing, 40)
     deck.style.display = 'block'
     return
   }
@@ -155,7 +145,7 @@ function renderDeckEdgeCards() {
   edge.appendChild(fragment)
   deck.appendChild(edge)
   deckEdgeRenderedSignature = deckEdgeSignature
-  checkOverflow(edge)
+  checkEllipsisOverflow(edge, 40)
   deck.style.display = 'block'
 }
 
@@ -255,7 +245,7 @@ const optimizedResizeHandler = debounce(() => {
   requestAnimationFrame(() => {
     const orderBodies = document.querySelectorAll('.sorder-body')
     orderBodies.forEach((orderBody) => {
-      checkOverflow(orderBody)
+      checkEllipsisOverflow(orderBody, 40)
     })
   })
 }, 500) // 500ms 的延迟
@@ -267,14 +257,13 @@ window.addEventListener('resize', optimizedResizeHandler)
  * 根据宿主座位矩形重排每个座位旁的手牌/标记镜像容器。
  * 宿主未提供座位坐标时回退到主面板宽度，避免镜像节点漂移到页面外。
  */
+/** 只计算并写入座位位置；容器可见性由首轮流程控制。 */
 export function drawSeatUIs() {
   const seatUI = document.getElementById('seatUI')
-  if (!seatUI) return
+  if (!seatUI) return false
 
-  if (UI.seatUIs.length === 0) {
-    clearZoneMirrors()
-    return
-  }
+  const seats = UI.seatUIs.slice(1)
+  if (seats.length === 0 || seats.some((seat) => !hasSeatPosition(seat))) return false
 
   // 此处计算 手牌框宽度 存在一个问题 某些情况下缩放比例不太正确
   // 假设游戏缩放 那应该变大吗? 假设系统缩放呢?
@@ -284,18 +273,21 @@ export function drawSeatUIs() {
   // * UI.scale / window.devicePixelRatio
   const defaultWidth = UI.unscaledWidth + UI.paddingRight
 
-  for (const seat of UI.seatUIs) {
-    if (!hasSeatPosition(seat)) continue
-
+  const layouts = seats.map((seat) => {
     const displayID = seat.fixedViewId
-    const orderContainer = document.getElementById('or' + displayID)
-    if (!orderContainer) continue
+    const orderContainer = seatUI.querySelector('#or' + displayID)
+    return { displayID, orderContainer, seat }
+  })
+  if (layouts.some(({ orderContainer }) => !orderContainer)) return false
 
+  for (const { displayID, orderContainer, seat } of layouts) {
     applySeatContainerLayout(orderContainer, seat, defaultWidth)
     ensureSeatOrderBody(orderContainer, displayID).className = `sorder-body sNo${displayID}`
   }
 
-  // drawDeckEdgeUI()
+  UI.firstUpdateSeatUI = true
+  window.dispatchEvent(new CustomEvent('dxc-seat-overlay-layout'))
+  return true
 }
 
 function hasSeatPosition(seat) {

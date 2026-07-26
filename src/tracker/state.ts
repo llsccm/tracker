@@ -19,6 +19,7 @@ interface RogueMapState {
 
 interface UIState {
   seatWidthPercent: number
+  /** 座位覆盖层是否已经完成首轮位置计算 */
   firstUpdateSeatUI: boolean
   scoreFrameTotal: number
   scoreFrameIndex: number

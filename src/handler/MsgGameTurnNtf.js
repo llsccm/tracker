@@ -1,7 +1,7 @@
-import { Game } from '@/tracker'
+import { Game, UI } from '@/tracker'
 import { tracker } from '@/tracker/runtime/browser'
-import { hideOrderContainer, hideSelfOrderContainer, resetOrderContainer } from '@/ui/seatOverlay'
 import { laya } from '@/runtime/gameAdapter'
+import { hideSelfOrderContainer, showOrderContainers } from '@/ui/seatOverlay'
 
 const TURN_ZHAN_FA_IDS = new Set([
   2033, 2034, 2035, 2036, 2037, 2038, 2048, 2049, 2050, 2196, 2197, 2300, 2301
@@ -12,10 +12,9 @@ export function handleGameTurn(msg) {
   if (typeof TurnCnt !== 'number' || !Number.isFinite(TurnCnt)) return
 
   if (TurnCnt === 1) {
-    // 或许应该在其他地方重置
-    resetOrderContainer()
-    hideOrderContainer(Game.size)
+    // 此时已具备座位信息
     hideSelfOrderContainer(Game.room?.getMyDisplayID())
+    if (UI.firstUpdateSeatUI) showOrderContainers()
   }
 
   Game.setTurn(TurnCnt)

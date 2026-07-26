@@ -225,8 +225,9 @@ export class TrackerController {
   }
 
   /**
-   * 先手协议到达后补齐固定视角座位顺序。
-   * Seat UI 依赖固定视角，必须在这里主动刷新宿主座位覆盖层。
+   * 主视角和先手协议到达后补齐固定视角座位顺序。
+   * Seat UI 依赖固定视角；setTrackerFirstHand() 调用 getSeatUIs() 后，
+   * 由 drawSeatUIs() 提交实际 DOM 布局，首轮回合只显示已经布局的容器。
    */
   setTrackerMySeatID(seatID: SeatID): void {
     if (!this.trackerRoom || this.trackerRoom.mySeatID !== undefined) return

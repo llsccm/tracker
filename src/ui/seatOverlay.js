@@ -56,7 +56,13 @@ export function resetOrderContainer() {
   for (let i = 0; i <= 7; i++) {
     const o = 'or' + (i + 1)
     const orderContainer = document.querySelector('#seatUI #' + o)
-    if (orderContainer) orderContainer.style.display = 'flex'
+    if (!orderContainer) continue
+
+    orderContainer.style.display = 'flex'
+    orderContainer.style.visibility = 'hidden'
+    orderContainer.style.removeProperty('top')
+    orderContainer.style.removeProperty('left')
+    orderContainer.style.removeProperty('width')
   }
 }
 
@@ -64,13 +70,29 @@ export function hideOrderContainer(size) {
   for (let i = 7; i >= size; i--) {
     const o = 'or' + (i + 1)
     const orderContainer = document.querySelector('#seatUI #' + o)
-    if (orderContainer) orderContainer.style.display = 'none'
+    if (!orderContainer) continue
+
+    orderContainer.style.display = 'none'
+    orderContainer.style.visibility = 'hidden'
   }
 }
 
 /** 隐藏主视角的明牌框 */
 export function hideSelfOrderContainer(displayID) {
-  if (!displayID) return
+  if (!displayID) return false
   const orderContainer = document.querySelector('#seatUI #or' + displayID)
-  if (orderContainer) orderContainer.style.display = 'none'
+  if (!orderContainer) return false
+
+  orderContainer.style.display = 'none'
+  orderContainer.style.visibility = 'hidden'
+  return true
+}
+
+/** 第一轮开始时显示已经定位的有效座位，主视角因 display:none 保持隐藏。 */
+export function showOrderContainers() {
+  for (let i = 1; i <= 8; i++) {
+    const orderContainer = document.querySelector('#seatUI #or' + i)
+    if (!orderContainer || orderContainer.style.display === 'none') continue
+    orderContainer.style.visibility = 'visible'
+  }
 }

@@ -115,13 +115,12 @@
 
 > 应用级 INIT/EXIT 与时序图见 [`lifecycle.md`](lifecycle.md)。此处只列记牌器关键协议。
 
-- `decodeGsClientUserSeatFlagNtf -> handleRecordStartGame()`：**当前主动开局路径**。`initTrackerRoom()` → `Game.init()` → `registerTrackerPlayers(seatinfo, user.userID)`，早期 `view.mount`。
+- `decodeGsClientUserSeatFlagNtf -> handleRecordStartGame()`：**当前主动开局路径**。注册新局前先执行 `resetSeatUIs()` 清理上一局，再 `initTrackerRoom()` → `registerTrackerPlayers(seatinfo, user.userID)`，并重置、裁剪座位覆盖层容器。
 - `GsCModifyUserseatNtf -> handleStartGame()`：函数仍导出，但 `logic.js` 中分发**当前注释未调用**；恢复时同样走 Room 创建与玩家注册。
-- `GsCFirstPhaseRole` / `MsgGameShowFigure(Figure===1)` → `tracker.setTrackerFirstHand()`：写入 `firstID`，更新固定视角并刷新座位覆盖层。
+- `GsCFirstPhaseRole` / `MsgGameShowFigure(Figure===1)` → `tracker.setTrackerFirstHand()`：写入 `firstID` 并更新固定视角；主视角与先手都确定后计算座位位置，但容器保持隐藏，首轮开始时再显示。
 - `MsgGamePlayCardNtf -> readyTrackerGame() -> initTrackerDeck()`：初始化物理牌池并完整 `view.mount`。
 - `PubGsCMoveCard -> handleMoveCard() -> syncTrackerMove()`：预处理后同步到 `Room.moveCards()` / `shufflePile()`。
-- `MsgGameTurnNtf`：`handleGameTurn` 推进 `Game` 轮次，并在 handler 中处理首轮
-  座位覆盖与轮级战法 Laya 状态，再 `scheduleTrackerRender`。
+- `MsgGameTurnNtf`：`handleGameTurn` 在首轮先隐藏主视角，再显示已完成定位的其他座位，之后推进 `Game` 轮次并处理轮级战法 Laya 状态，最后 `scheduleTrackerRender`。容器重置与人数裁剪在玩家注册后完成。
 - `GsCGamephaseNtf`：`handleGamePhase` 以 `SeatRoundState` 编排玩家阶段；
   `Game.enter` 只推进纯状态，回合结果 DOM 清理、阶段文案与战法 Laya 重置留在
   handler。
