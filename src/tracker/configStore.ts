@@ -24,7 +24,8 @@ export const ACTIVE_CONFIG_ENTRIES: readonly ConfigEntry[] = [
   ['peiXiuMapSwitch', 'PEIXIU_MAP_SWITCH', true],
   ['effectBlockSwitch', 'EFFECT_BLOCK_SWITCH', false],
   ['blockKillEffectSwitch', 'BLOCK_KILL_EFFECT_SWITCH', false],
-  ['blockSkinStateSwitch', 'BLOCK_SKIN_STATE_SWITCH', false]
+  ['blockSkinStateSwitch', 'BLOCK_SKIN_STATE_SWITCH', false],
+  ['blockMvpSettlementSwitch', 'BLOCK_MVP_SETTLEMENT_SWITCH', false]
 ]
 
 export function createMemoryStorageAdapter(seed: Record<string, unknown> = {}): StorageAdapter {

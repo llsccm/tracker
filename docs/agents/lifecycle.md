@@ -111,8 +111,10 @@ sequenceDiagram
     Bridge ->> View: scheduleRender() / dirtyRenderState
 
     Note over Engine,View: 单局结束
-    Engine ->> Logic: MsgGameOver / ClientLeavetableRep
+    Engine ->> Logic: MsgGameOver
     Logic ->> Handler: handleGameOver()
+    Engine ->> Logic: ClientLeavetableRep / ClientRecommendShopItemRep
+    Logic ->> Handler: handleLeaveTable()
     Handler ->> Bridge: tracker.destroyTrackerRoom()
     Bridge ->> View: unmount()
     Bridge ->> Room: destroy()
@@ -179,11 +181,15 @@ sequenceDiagram
 
 ### 7. 单局结束
 
-- **协议**：`MsgGameOver`、`ClientLeavetableRep`（以及部分 `ClientRecommendShopItemRep` 退出录像兜底）。
-- **入口**：[`handleGameOver()`](../../src/handler/MsgGameOver.js)
-  1. 隐藏 `.mizhu`，`Game.end()`，销毁裴秀地图窗口；
-  2. `resetSeatUIs()`；
-  3. `tracker.destroyTrackerRoom()`：先 `view.unmount()`，再 `Room.destroy()`，清空控制器中的 `trackerRoom`。
+| 协议                         | 入口                                                     | 专属行为                                                  |
+| ---------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
+| `MsgGameOver`                | [`handleGameOver()`](../../src/handler/MsgGameOver.js)   | “屏蔽MVP结算”开启时，合并重复消息并依次关闭结果、MVP 窗口 |
+| `ClientLeavetableRep`        | [`handleLeaveTable()`](../../src/handler/MsgGameOver.js) | 只清理对局                                                |
+| `ClientRecommendShopItemRep` | `handleLeaveTable()`                                     | 当前用户退出录像时的清理兜底                              |
+
+两个入口最终复用 `cleanupGame()` 完成通用清理：隐藏 `.mizhu`、`Game.end()`、销毁裴秀地图窗口、
+`resetSeatUIs()`，并由 `tracker.destroyTrackerRoom()` 依次卸载视图、销毁 Room、清空控制器中的
+`trackerRoom`。
 
 ---
 
