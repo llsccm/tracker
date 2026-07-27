@@ -14,7 +14,7 @@ import type { Card } from '../Card'
 import { POSITION_RANDOM, POSITION_TOP } from '../candidate/cardPositions'
 import { createLocationCandidateKey } from '../candidate/locationCandidate'
 import { createPublicCandidate } from '../candidate/publicCandidate'
-import { MOVE_TYPE } from '../MoveEventNormalizer'
+import { isPileSingleCardShow, MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Room } from '../Room'
 import { recordTraversal } from '../traversalStats'
 import type { PlayerLocationCandidate, SeatID } from '../types'
@@ -370,21 +370,10 @@ function decorateFinalReveal(event: MoveEventDraft, room: Room): MoveEventDraft 
   })
 }
 
-function isTianHouFinalReveal(raw: any): boolean {
-  return (
-    Number(raw.MoveType) === MOVE_TYPE.SHOW &&
-    Number(raw.CardCount) === 1 &&
-    Number(raw.FromID) === 255 &&
-    Number(raw.FromZone) === 1 &&
-    Number(raw.ToID) === 255 &&
-    Number(raw.ToZone) === 1
-  )
-}
-
 export default function decorateTianHou(event: MoveEventDraft, room: Room): MoveEventDraft {
   const raw = getRaw(event)
   if (Number(raw.SpellID ?? event.options?.spellID) !== TIAN_HOU_SPELL_ID) return event
-  if (isTianHouFinalReveal(raw)) return decorateFinalReveal(event, room)
+  if (isPileSingleCardShow(raw)) return decorateFinalReveal(event, room)
   if (Number(raw.MoveType ?? event.moveType ?? event.options?.moveType) !== MOVE_TYPE.EXCHANGE) {
     return event
   }

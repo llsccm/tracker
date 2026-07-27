@@ -367,6 +367,11 @@ export class TrackerController {
   /**
    * 记录公共区范围揭示。
    * 与普通 showCards 不同，这里只确认身份属于某个端点范围，不占用或重排具体公共区槽位。
+   *
+   * 实体与身份处理原则（与 resolveKnownCards 缺失身份处理保持一致）：
+   * - 仅复用已物化的实体（`cardIndex`）或通过 `materialize` 将尚在 `unlocatedIdentities` 中的正 ID 挂载到外部占位上。
+   * - 不为不存在于 `cardIndex` 且不在 `unlocatedIdentities` 中的 ID 强制创建游戏外实体；
+   *   若身份物化失败，直接跳过该 ID 并保留警告日志。
    */
   private revealPublicCandidateCards(event: NormalizedMoveEvent): void {
     const readyRoom = this.getReadyTrackerRoom()
@@ -388,8 +393,19 @@ export class TrackerController {
         }
 
         // 场外实体只承载已公开身份；原匿名牌堆槽继续承担牌堆数量和顺序。
+        // 若 id 不在 unlocatedIdentities 中，materialize 会返回 null 并保持警告可观测。
         const [target] = readyRoom.createExternalCards([], 1)
-        return readyRoom.materialize(id, target)
+        const materialized = readyRoom.materialize(id, target)
+
+        if (!materialized) {
+          this.controllerLogger.warn('公共区范围揭示身份无法物化，已跳过', {
+            id,
+            zone: reveal.zone,
+            position: locationCandidate.position
+          })
+        }
+
+        return materialized
       })
       .filter((card): card is Card => Boolean(card))
 

@@ -238,9 +238,12 @@ function isSameZoneShowEvent(event: RawMoveCardEvent): boolean {
   )
 }
 
-function isTianhouAmbiguousPileShow(event: RawMoveCardEvent): boolean {
+/**
+ * 判断是否为牌堆两端均为 255 的单牌同区展示。
+ * 这类消息只公开一张牌面，不携带它在牌堆中的序号，具体语义由 SpellID 决定。
+ */
+export function isPileSingleCardShow(event: RawMoveCardEvent): boolean {
   return (
-    Number(event.SpellID) === 3903 &&
     Number(event.MoveType) === MOVE_TYPE.SHOW &&
     Number(event.CardCount) === 1 &&
     Number(event.FromID) === 255 &&
@@ -248,6 +251,10 @@ function isTianhouAmbiguousPileShow(event: RawMoveCardEvent): boolean {
     Number(event.ToID) === 255 &&
     Number(event.ToZone) === 1
   )
+}
+
+function isTianhouAmbiguousPileShow(event: RawMoveCardEvent): boolean {
+  return Number(event.SpellID) === 3903 && isPileSingleCardShow(event)
 }
 
 /**

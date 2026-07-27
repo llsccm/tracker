@@ -506,7 +506,9 @@ export function logic(msg) {
         break
 
       case 'ClientTableinfoRep':
-        wait(() => laya.blockPowerSlogan())
+        wait(() => laya.blockPowerSlogan()).catch((err) => {
+          console.error(err)
+        })
         break
 
       default:

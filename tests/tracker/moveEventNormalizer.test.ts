@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { normalizeMoveEvent, validateMoveEvent } from '@/tracker/MoveEventNormalizer'
+import {
+  isPileSingleCardShow,
+  normalizeMoveEvent,
+  validateMoveEvent
+} from '@/tracker/MoveEventNormalizer'
 
 describe('MoveEventNormalizer 当前行为', () => {
   it('归一化标准 PubGsCMoveCard 消息', () => {
@@ -220,5 +224,29 @@ describe('MoveEventNormalizer 当前行为', () => {
         actual: 1
       })
     )
+  })
+
+  it('正确识别牌堆两端均为 255 的单牌同区展示谓词 isPileSingleCardShow', () => {
+    expect(
+      isPileSingleCardShow({
+        MoveType: 21,
+        CardCount: 1,
+        FromID: 255,
+        FromZone: 1,
+        ToID: 255,
+        ToZone: 1
+      })
+    ).toBe(true)
+
+    expect(
+      isPileSingleCardShow({
+        MoveType: 21,
+        CardCount: 2,
+        FromID: 255,
+        FromZone: 1,
+        ToID: 255,
+        ToZone: 1
+      })
+    ).toBe(false)
   })
 })
