@@ -695,7 +695,9 @@ export class Room {
    * 重要语义：
    * - 新建 Card 默认 isKnown=false。正 ID 只表示“牌面身份实体已存在”，不等于“已对玩家公开”。
    * - 若协议路径是 knownIDs / discardKnown，调用方必须在落区前 confirmKnown()；
-   *   RoomMovement.resolveKnownMoveCards 尾部已对 knownCards 统一确认，避免正 ID 暗实体进弃牌/处理区。
+   *   RoomMovement.resolveKnownMoveCards 尾部已对 knownCards 统一确认，避免正 ID 暗实体进弃牌/处理区；
+   *   其中 outside/exile 来源的新正 ID 初始暗状态属于正常过渡；
+   *   其它来源的缺口补建虽复用本方法，仍需由 known-fallback 语义单独诊断。
    * - 匿名占位（id/entityID 为负）本就应保持 isKnown=false。
    */
   createExternalCards(cardIDs: CardID[] = [], count = cardIDs.length): Card[] {

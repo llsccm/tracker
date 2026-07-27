@@ -4,6 +4,7 @@ import { buildCardTypeButtons, renderStatistics } from './StatisticsView'
 import { renderQueryPanel } from './QueryPanelView'
 import {
   clearRenderedMainHandCardIDs,
+  clearSeatOverlayCards,
   initPlayerHandContainers,
   renderPlayerHand,
   renderPublicZones
@@ -151,7 +152,7 @@ function clearRenderedContent(targetDoc: Document): void {
   }
 
   targetDoc.querySelectorAll('#seatUI .sorder-body').forEach((element) => {
-    element.querySelectorAll(':scope > .shoupai, :scope > .markedCard').forEach((e) => e.remove())
+    if (element instanceof HTMLElement) clearSeatOverlayCards(element)
   })
 }
 

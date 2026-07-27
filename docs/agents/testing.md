@@ -14,7 +14,7 @@
 - 覆盖率配置：默认关注 `src/tracker/**/*.{js,ts}`，排除 `src/tracker/view/**`
 - 现状：
   - 已有较完整的记牌器单元/回归：`tests/tracker/`
-  - 已有少量外围工具测试：`tests/utils/peixiuRouteFeature.test.js`
+  - 已有少量运行时与外围工具测试：`tests/runtime/`、`tests/utils/peixiuRouteFeature.test.js`
   - **没有**通用 `pnpm test` 脚本；记牌器专用脚本是 `pnpm test:tracker`（只跑 `tests/tracker`）
   - **没有**浏览器 E2E / 用户脚本注入自动化
 
@@ -24,6 +24,7 @@
 | ------------------------ | ----------------------------------------------------- |
 | `tests/tracker/`         | Room 移动、候选、收敛、Controller、脏渲染、遍历基线等 |
 | `tests/tracker/helpers/` | 测试夹具与 noop runtime/view                          |
+| `tests/runtime/`         | 宿主运行时适配、窗口关闭与对局结束 UI 生命周期        |
 | `tests/utils/`           | 非 tracker 工具逻辑，如裴秀路线                       |
 
 ### 现有 tracker 回归主题（按文件名归类）

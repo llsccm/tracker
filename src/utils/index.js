@@ -28,24 +28,27 @@ export function sleep(time, value) {
   return new Promise((resolve) => setTimeout(() => resolve(value), time))
 }
 
-export async function retry(callback, times = 20, interval = 500, resolve = () => {}) {
-  const result = await Promise.resolve(callback())
-  if (result) {
-    resolve(result)
-    return result
-  }
-  if (times > 0) {
-    setTimeout(() => retry(callback, times - 1, interval, resolve), interval)
-    return undefined
-  }
-  resolve(result)
-  return result
-}
+/**
+ * 轮询等待 callback 返回真值。
+ * times 为实际执行次数；每次执行前都会先延迟 interval，因此首次也不会立即执行。
+ *
+ * @template T
+ * @param {() => T | Promise<T>} callback
+ * @param {number} [times=10]
+ * @param {number} [interval=500]
+ * @returns {Promise<T | undefined>}
+ */
+export async function wait(callback, times = 10, interval = 500) {
+  const total = Math.max(0, Math.floor(Number(times) || 0))
+  let result
 
-export function wait(callback, times = 20, interval = 500) {
-  return new Promise((resolve) => {
-    retry(callback, times, interval, resolve)
-  })
+  for (let i = 0; i < total; i++) {
+    await sleep(interval)
+    result = await Promise.resolve(callback())
+    if (result) return result
+  }
+
+  return result
 }
 
 /**

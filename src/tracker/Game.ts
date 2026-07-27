@@ -100,10 +100,6 @@ class BrowserGameState extends GameState {
 
     UI.seatUIs = []
     UI.friendGeneral = 0
-
-    laya.reset()
-    // retry(() => laya.init())
-    laya.init()
   }
 
   protected onEnd(): void {

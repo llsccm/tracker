@@ -115,13 +115,12 @@
 
 > 应用级 INIT/EXIT 与时序图见 [`lifecycle.md`](lifecycle.md)。此处只列记牌器关键协议。
 
-- `decodeGsClientUserSeatFlagNtf -> handleRecordStartGame()`：**当前主动开局路径**。`initTrackerRoom()` → `Game.init()` → `registerTrackerPlayers(seatinfo, user.userID)`，早期 `view.mount`。
+- `decodeGsClientUserSeatFlagNtf -> handleRecordStartGame()`：**当前主动开局路径**。注册新局前先执行 `resetSeatUIs()` 清理上一局，再 `initTrackerRoom()` → `registerTrackerPlayers(seatinfo, user.userID)`，并重置、裁剪座位覆盖层容器。
 - `GsCModifyUserseatNtf -> handleStartGame()`：函数仍导出，但 `logic.js` 中分发**当前注释未调用**；恢复时同样走 Room 创建与玩家注册。
-- `GsCFirstPhaseRole` / `MsgGameShowFigure(Figure===1)` → `tracker.setTrackerFirstHand()`：写入 `firstID`，更新固定视角并刷新座位覆盖层。
+- `GsCFirstPhaseRole` / `MsgGameShowFigure(Figure===1)` → `tracker.setTrackerFirstHand()`：写入 `firstID` 并更新固定视角；主视角与先手都确定后计算座位位置，但容器保持隐藏，首轮开始时再显示。
 - `MsgGamePlayCardNtf -> readyTrackerGame() -> initTrackerDeck()`：初始化物理牌池并完整 `view.mount`。
 - `PubGsCMoveCard -> handleMoveCard() -> syncTrackerMove()`：预处理后同步到 `Room.moveCards()` / `shufflePile()`。
-- `MsgGameTurnNtf`：`handleGameTurn` 推进 `Game` 轮次，并在 handler 中处理首轮
-  座位覆盖与轮级战法 Laya 状态，再 `scheduleTrackerRender`。
+- `MsgGameTurnNtf`：`handleGameTurn` 在首轮先隐藏主视角，再显示已完成定位的其他座位，之后推进 `Game` 轮次并处理轮级战法 Laya 状态，最后 `scheduleTrackerRender`。容器重置与人数裁剪在玩家注册后完成。
 - `GsCGamephaseNtf`：`handleGamePhase` 以 `SeatRoundState` 编排玩家阶段；
   `Game.enter` 只推进纯状态，回合结果 DOM 清理、阶段文案与战法 Laya 重置留在
   handler。
@@ -210,6 +209,30 @@
 - 后续交换序列已文档化：`1->10`（牌堆）+ `5->10`（部分手牌）后拆回 `10->1` / `10->5`；旧 `decorateJieLi` **暂不挂上**，默认走通用移动路径。
 - `PILE_SAME_ZONE_SHOW_SPELL_IDS` **不需要**仅为 `3483` 扩展；该白名单只修正权变/观虚的 RANDOM 端点。诫厉应先判断消息本身是否已明确为同区展示。
 - 不走整手交换账本：`HandExchange` 识别门槛会排除诫厉的非整手、回牌堆路径。
+
+## 天候私有观看与单牌展示（SpellID=3903）
+
+- 协议文档：`docs/protocols/GsCRoleOptTargetNtf-3903.md`。
+- `Type=28` 的 `Params` 为
+  `[pileCount, handCount, ...pileTopCardIDs, ...mainViewHandCardIDs]`；只按 `pileCount`
+  同步牌堆顶，主视角手牌片段不重复写入记牌器。
+- `Type=29` 的 `Params` 为 `[seatID, ...pileTopCardIDs]`；首项是展示者座位号，不是卡牌
+  ID，后续三项按 top-first 同步为发动者可见的牌堆顶。
+- 两种消息的有效牌面参数只下发给发动者，并要求 `Param=0`、`targetSeatID=255`；
+  其他角色可能收到空 `Params`。
+- 其他视角的交换消息 `CardIDs` 全空，序列为 `1->10`、`5->10`、两次 `10->10`、
+  `10->5`、`10->1`。`src/tracker/skill/TianHou.ts` 按批次区分原牌顶与原手牌匿名实体，
+  两条 `10->10` 只视为动画消息。
+- 原手牌确定明牌建立“发动者手牌 / 牌堆顶前 x 张”候选。明牌换出数量范围为
+  `knownOutMin=max(0,x-(N-K))`、`knownOutMax=min(x,K)`；仅上下界相等时建立精确完整位置约束。
+- 配对的 `PubGsCMoveCard` 同区展示（`MoveType=21`、牌堆两端 `255`）只亮牌顶三张中的一张，
+  **不能**确定是第几张。基础归一保持 `noop`，再由天候装饰器转换为公共区范围揭示：
+  命中原手牌候选时收紧到牌顶前 `x` 张，否则建立牌顶前三候选；`x=1` 时即确定牌顶。
+  范围揭示不绑定具体匿名牌堆槽，也不重排牌堆。不要把 `3903` 并入
+  `PILE_SAME_ZONE_SHOW_SPELL_IDS` 或 `PILE_RANDOM_AS_TOP_SPELL_IDS`。
+- 回归：`tests/tracker/roleOptTargetNtf.test.ts`、`tests/tracker/pubGsCMoveCard.test.ts`、
+  `tests/tracker/moveEventNormalizer.test.ts`、`tests/tracker/trackerController.test.ts`、
+  `tests/tracker/tianHouExchange.test.ts`。
 
 ## 已知未完成项
 

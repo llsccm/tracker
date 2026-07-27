@@ -8,11 +8,13 @@ import {
   handleGameOver,
   handleGamePhase,
   handleGameTurn,
+  handleLeaveTable,
   handleMoveCard,
   handleRogueLike,
   handleRoleSpellOptRep,
   handleRoleOptTargetNtf,
   handleTriggerSpellNew,
+  handleUseSpell,
   hasRuntime,
   showShanHeTuSponsorPrompt
 } from './handler'
@@ -24,7 +26,7 @@ import {
   getRenderedMainHandCardIDs,
   subscribeRenderedMainHandCardIDs
 } from './tracker/view/PlayerHandView'
-import { setSuitRecord } from './utils'
+import { setSuitRecord, wait } from './utils'
 import { addTooltip } from './utils/notification'
 import { handleBroadMsg } from './handler/chat'
 import { parsePeiXiuRoleData, solvePeiXiuRoleData } from './utils/peixiuRouteFeature'
@@ -117,10 +119,8 @@ export function logic(msg) {
     if (msg.startsWith?.('socket连接关闭')) return
     if (msg.className === undefined && msg.ClassName === undefined) return
 
-    let { ClassName: className } = msg
-    const { ProtoObj, SeatID, SrcSeatID, SpellID, Datas, CardIDs } = msg
-
-    if (!className) className = msg.className || msg.toString()
+    const className = msg.ClassName || msg.className || msg.toString()
+    const { ProtoObj, SeatID, Datas } = msg
 
     if (!isRetainedLogicMessage(className)) return
 
@@ -180,34 +180,47 @@ export function logic(msg) {
         break
 
       case 'decodeGameRecordInitInfo':
-        // 用于判断模式
+        // 用于判断模式 此消息会触发两次
         // console.info(msg)
+        Game.init()
 
         if (ProtoObj?.matchName === '斗地主') {
           Game.isDouDiZhu = true
+          Game.needShowName = true
+          return
+        }
+
+        if (ProtoObj?.matchName === '新欢乐排位') {
+          Game.needShowName = true
+          return
         }
 
         if (ProtoObj?.matchName === '单骑无双') {
           Game.isRoguelike1v1 = true
+          return
         }
 
         // 长安行[20610702]
         if (ProtoObj?.matchName && ShanHeTu_regex.test(ProtoObj.matchName)) {
           Game.isShanHeTu = true
+          return
         }
 
-        // 新欢乐排位 身份演武军争
+        // 身份演武军争
 
         break
 
       case 'GsCModifyUserseatNtf': // 游戏开始标志 / 游戏结束标志
+        // 最佳的初始化位置 但是旧录像没有这个消息
+        // 第二个 decodeGameRecordInitInfo 消息在此之后
         // handleStartGame(msg)
         break
 
-      // 播放录像时座位信息
+      // 座位信息
       case 'decodeGsClientUserSeatFlagNtf':
         // 新录像两个消息都有 旧录像只有这个消息
         handleRecordStartGame(msg)
+        if (Game.needShowName) laya.showName()
         break
 
       case 'GsCUpdateRoleDataNtf':
@@ -259,13 +272,17 @@ export function logic(msg) {
         break
 
       case 'MsgGameOver':
-      case 'ClientLeavetableRep':
+        // 此消息会触发两次
         handleGameOver()
+        break
+
+      case 'ClientLeavetableRep':
+        handleLeaveTable()
         break
 
       case 'ClientRecommendShopItemRep':
         // 退出录像时清理? 可能还有更好的方法
-        if (Game.isGameStart && msg?.userID === user.userID) handleGameOver()
+        if (Game.isGameStart && msg?.userID === user.userID) handleLeaveTable()
         break
 
       case 'decodeRougeBaseInfoRep':
@@ -446,74 +463,9 @@ export function logic(msg) {
 
         break
 
-      case 'PubGsCUseSpell': {
-        // 使用技能
-        if (Game.myID === SeatID && CardIDs.length === 1) {
-          drawCard(CardIDs)
-        }
-
-        switch (SpellID) {
-          case 3090:
-            // 博图计数器
-            if (SeatID === Game.currentID && msg.EffectIndex === 1) {
-              const prev = Number(Game.spellSpace[3090]) || 0
-              Game.spellSpace[3090] = prev + 1
-              laya.ged?.event('SET_SEAT_STATE')
-            }
-            break
-
-          // TODO
-          // 国战乱击
-          case 2143: {
-            if (!Game.spellSpace[2143]) {
-              Game.spellSpace[2143] = new Set()
-            }
-
-            // 提取单例引用，避免循环内高频调用
-            const instance = CardConfig.GetInstance()
-            for (const id of CardIDs) {
-              Game.spellSpace[2143].add(instance.getCard(id).c)
-            }
-
-            setSuitRecord(Array.from(Game.spellSpace[2143]).join(''))
-            break
-          }
-
-          // TODO
-          case 3157: // 夏侯玄-清议
-          case 3511: // 李婉-联句
-            // 改用 some 替换 filter，实现 O(1) 提前终止与零内存分配
-            if ((SrcSeatID === Game.myID || import.meta.env.DEV) && CardIDs.some((id) => id > 0)) {
-              Game.setSpellState(SpellID, CardIDs)
-            }
-            break
-
-          // TODO
-          case 3193: // 贵相
-          case 3185: // 持纲
-          case 3138: // 持纲(旧)
-          case 3161: // 醇醪(界)
-            Game.phase--
-            break
-
-          case 3571:
-            // 郭照 椒遇
-            if (msg.EffectIndex === 1) {
-              Game.setSpellState(3571, new Set())
-            }
-            break
-
-          // TODO
-          // 谋许攸 迁附 控顶
-          case 3750:
-            if (msg.EffectIndex === 2 && !msg.DestSeatIDs.length) {
-              Game.setSpellState(3750, CardIDs)
-            }
-            break
-        }
-
+      case 'PubGsCUseSpell':
+        handleUseSpell(msg)
         break
-      }
 
       // 询问操作 严教 界强识等
       case 'GsCRoleOptTargetNtf':
@@ -551,6 +503,12 @@ export function logic(msg) {
           })
         }
 
+        break
+
+      case 'ClientTableinfoRep':
+        wait(() => laya.blockPowerSlogan()).catch((err) => {
+          console.error(err)
+        })
         break
 
       default:

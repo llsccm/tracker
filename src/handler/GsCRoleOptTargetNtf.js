@@ -1,11 +1,13 @@
 import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
 import { CardConfig } from '../config'
 import { drawYanJiao, drawYiCheng } from '../draw'
-import { Game, globalConfig } from '../tracker'
+import { Game } from '../tracker'
 import { tracker } from '../tracker/runtime/browser'
+import { laya } from '@/runtime/gameAdapter'
+import { wait } from '@/utils'
 // import handleYanXi from './handleYanXi'
 
-function getTrackedPlayerHandCardIDs(seatID) {
+function getPlayerHandCardIDs(seatID) {
   return tracker.getReadyTrackerRoom()?.getPlayerHandCardIDs(seatID) ?? []
 }
 
@@ -24,14 +26,6 @@ function revealPileCards(cardIDs) {
     },
     cardIDs
   )
-}
-
-function revealTargetCards(seatID, cardIDs) {
-  if (Number(seatID) === 255) {
-    revealPileCards(cardIDs)
-  } else {
-    revealPlayerHandCards(seatID, cardIDs)
-  }
 }
 
 // 部分手牌协议在 handCount 恰好等于目标整手数时，应按 fullHand 同步。
@@ -62,37 +56,44 @@ function shouldRevealAsFullHand(seatID, handCount) {
   return false
 }
 
-export function handleRoleOptTargetNtf(arg) {
-  const { SpellID, Param, Params, SeatID, SrcSeatID, targetSeatID, Type } = arg
+function getCardNumbers(ids) {
+  const config = CardConfig.GetInstance()
+  return ids.map((id) => config.getCardNumber(id))
+}
+
+// GsCRoleOptTargetNtf
+export function handleRoleOptTargetNtf(msg) {
+  const { SpellID, Param, Params, SeatID, SrcSeatID, targetSeatID, Type } = msg
 
   switch (SpellID) {
     // 张菖蒲 严教
     case 945:
       if (Param == 0 && Params?.length > 0) {
-        const arr = Params.map((id) => CardConfig.GetInstance().getCardNumber(id))
-        drawYanJiao(arr, SeatID == Game.myID)
+        drawYanJiao(getCardNumbers(Params))
       }
       break
 
     // 刘辟 易城
     case 3440:
       // 更改为 不再计算队友刘辟的易城 Game.mySeats.includes(SeatID)
-      if (Game.myID !== undefined && Game.myID === SeatID && Param == 0 && Params?.length > 0) {
+      if (Param == 0 && Params?.length > 0 && Game.myID !== undefined && Game.myID === SeatID) {
+        // Params: (5) [96, 123, 128, 64, 129]
         if (Type == 28) {
-          const paiduiNumbers = Params.map((id) => CardConfig.GetInstance().getCardNumber(id))
-          const shoupaiNumbers = getTrackedPlayerHandCardIDs(SeatID).map((id) =>
-            CardConfig.GetInstance().getCardNumber(id)
-          )
+          const paiduiNumbers = getCardNumbers(Params)
+          const shoupaiNumbers = getCardNumbers(getPlayerHandCardIDs(SeatID))
           drawYiCheng(paiduiNumbers, shoupaiNumbers)
-        } else {
-          drawYiCheng()
         }
+
+        // 易城结束
+        // if (Type == 29) {
+        // }
       }
+
       break
 
     // 蒲元 锻造
     case 11003:
-      if (Param == 0 && Params?.length > 0 && SrcSeatID != Game.myID && globalConfig.v) {
+      if (Param == 0 && Params?.length > 0 && SrcSeatID != Game.myID) {
         document.getElementById('result').innerHTML =
           '<span class="textRes"> 【锻造】<br>' +
           Params.map((id) => CardConfig.GetInstance().getCard(id).ncn).join('<br>') +
@@ -121,10 +122,8 @@ export function handleRoleOptTargetNtf(arg) {
     case 501:
     case 3437:
     case 3876:
-      if (Params?.length > 0) {
-        if (targetSeatID !== undefined && targetSeatID !== 255) {
-          revealPlayerHandCards(targetSeatID, Params, { fullHand: true })
-        }
+      if (Params?.length > 0 && targetSeatID !== undefined) {
+        if (targetSeatID !== 255) revealPlayerHandCards(targetSeatID, Params, { fullHand: true })
       }
       break
 
@@ -133,10 +132,8 @@ export function handleRoleOptTargetNtf(arg) {
     case 361:
     case 774:
     case 3310:
-      if (Param == 0 && Params?.length > 0) {
-        if (targetSeatID !== undefined && targetSeatID !== 255) {
-          revealPlayerHandCards(targetSeatID, Params)
-        }
+      if (Param == 0 && Params?.length > 0 && targetSeatID !== undefined) {
+        if (targetSeatID !== 255) revealPlayerHandCards(targetSeatID, Params)
       }
       break
 
@@ -149,64 +146,75 @@ export function handleRoleOptTargetNtf(arg) {
 
     // 王粲 散文
     case 898:
-      if (Param == 0 && Params?.length > 2) {
-        if (SrcSeatID !== undefined && SrcSeatID !== 255) {
-          revealPlayerHandCards(SrcSeatID, Params.slice(1, Params[0] + 1))
-        }
+      if (Param == 0 && Params?.length > 2 && SrcSeatID !== undefined) {
+        if (SrcSeatID !== 255) revealPlayerHandCards(SrcSeatID, Params.slice(1, Params[0] + 1))
       }
       break
 
     // 黄承彦 观虚
     case 987:
     case 988:
-      if (Param == 1 && Params?.length > 2) {
-        if (SrcSeatID == Game.myID || import.meta.env.DEV) {
-          const pileCount = Number(Params[0]) || 0
-          const handCount = Number(Params[1]) || 0
-          if (pileCount > 0) {
-            // Params: [牌堆张数, 手牌张数, ...牌堆顶, ...目标手牌]
-            revealPileCards(Params.slice(2, 2 + pileCount))
-          }
-          if (handCount > 0 && targetSeatID !== undefined && targetSeatID !== 255) {
-            revealPlayerHandCards(
-              targetSeatID,
-              Params.slice(2 + pileCount, 2 + pileCount + handCount)
-            )
-          }
+      // 观虚牌堆全局可知游卡已修复 无需再判断主视角
+      // 与观骨的差异 只展示牌堆 无目标角色手牌消息 所以需要在这里同步目标手牌
+      if (Param == 1 && Params?.length > 2 && targetSeatID !== undefined) {
+        // Params: [牌堆张数, 手牌张数, ...牌堆顶, ...目标手牌]
+        const pileCount = Number(Params[0]) || 0
+        const handCount = Number(Params[1]) || 0
+
+        if (pileCount > 0) {
+          revealPileCards(Params.slice(2, 2 + pileCount))
+        }
+
+        if (handCount > 0 && targetSeatID !== 255) {
+          revealPlayerHandCards(
+            targetSeatID,
+            Params.slice(2 + pileCount, 2 + pileCount + handCount)
+          )
         }
       }
+
       break
 
     // 周群 天候
     case 3903:
-      if (Param == 0 && Params?.length > 2) {
-        if (
-          targetSeatID !== undefined &&
-          targetSeatID == 255 &&
-          (SrcSeatID == Game.myID || import.meta.env.DEV)
-        ) {
-          revealPileCards(Params.slice(2, 2 + Params[0]))
-        }
+      // Type 28/29 的有效牌面只下发给发动者；其他角色只会收到 Params 为空数组的消息。
+      if (targetSeatID != 255 || Param != 0) {
+        break
       }
+
+      // Params: [牌堆观看数, 手牌数, ...牌堆顶, ...主视角手牌]
+      if (Type == 28 && Params?.length > 2) {
+        const pileCount = Number(Params[0]) || 0
+        const pileCardIDs = Params.slice(2, 2 + pileCount)
+        if (pileCount > 0 && pileCardIDs.length == pileCount) revealPileCards(pileCardIDs)
+        break
+      }
+
+      // 发动者私有消息，Params: [展示者座位号, ...牌堆顶三牌]
+      if (Type == 29 && Params?.length == 4) revealPileCards(Params.slice(1))
+
+      // OPT_SKILL_FLAG3 可能用于选择角色获得技能 此处占位
+      // if (Type == 30)
       break
 
-    // 族钟琰
+    // 观骨
     case 3266:
-      if (Param == 0 && Params?.length > 0) {
-        if (targetSeatID !== undefined && (SrcSeatID == Game.myID || import.meta.env.DEV)) {
-          revealTargetCards(
-            targetSeatID,
-            Params.filter((_, index) => index % 3 == 1)
-          )
-        }
-      }
+      // 观骨全局可知游卡已修复
+      // if (Param == 0 && Params?.length > 0 && targetSeatID !== undefined) {
+      //   // 这里需补充数据格式
+      //   const cardIDs = Params.filter((_, index) => index % 3 == 0)
+
+      //   if (targetSeatID !== 255) revealPlayerHandCards(targetSeatID, cardIDs)
+      // }
+
       break
 
     // 族钟繇 诫厉
-    // Params: [pileCount, handCount, ...pileTopCardIDs, ...handCardIDs]
-    // 手牌片段是目标部分手牌，不一定等于全部手牌
     case 3483:
-      if (Param == 1 && Params?.length > 0) {
+      // 目前全局不可知
+      // 同样只展示牌堆 目标角色手牌需要在这里同步
+      // Params: [pileCount, handCount, ...pileTopCardIDs, ...handCardIDs]
+      if (Param == 1 && Params?.length > 0 && targetSeatID !== undefined) {
         const pileCount = Number(Params[0]) || 0
         const handCount = Number(Params[1]) || 0
 
@@ -218,10 +226,11 @@ export function handleRoleOptTargetNtf(arg) {
         }
 
         if (Params.length > 2) {
-          if (pileCount > 0) {
-            revealPileCards(Params.slice(2, 2 + pileCount))
-          }
-          if (handCount > 0 && targetSeatID !== undefined && targetSeatID !== 255) {
+          // 牌堆
+          if (pileCount > 0) revealPileCards(Params.slice(2, 2 + pileCount))
+
+          // 手牌
+          if (handCount > 0 && targetSeatID !== 255) {
             const handCardIDs = Params.slice(2 + pileCount, 2 + pileCount + handCount)
             revealPlayerHandCards(
               targetSeatID,
@@ -231,6 +240,7 @@ export function handleRoleOptTargetNtf(arg) {
           }
         }
       }
+
       break
 
     // 郭照 椒遇
@@ -243,11 +253,13 @@ export function handleRoleOptTargetNtf(arg) {
     // 晋司马懿 雄志 权变
     case 7010:
     case 7011:
-      if (Params?.length > 0 && targetSeatID == 255) {
-        if (SrcSeatID == Game.myID || import.meta.env.DEV) {
-          revealPileCards(Params)
-        }
-      }
+      // 全局可知已被修复
+      // 权变能看到牌堆顶 同时有卡牌消息 此处不需要同步
+      // if (Params?.length > 0 && targetSeatID == 255) {
+      //   if (SrcSeatID == Game.myID) {
+      //     revealPileCards(Params)
+      //   }
+      // }
       break
 
     // 国战先驱
@@ -263,6 +275,16 @@ export function handleRoleOptTargetNtf(arg) {
         destroyPeiXiuMapWindow()
         Game.deleteSpellState(4022)
       }
+      break
+
+    case 3641:
+      // 关闭其他视角的天书窗口
+      if (Type == 67 && SeatID !== Game.myID) {
+        wait(() => laya.closeTianShu()).catch((err) => {
+          console.error(err)
+        })
+      }
+
       break
 
     default:

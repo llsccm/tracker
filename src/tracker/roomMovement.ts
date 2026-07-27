@@ -5,7 +5,12 @@ import { normalizeSpellID } from './candidate/markSpellID'
 import { summarizeMoveContext } from './helper/moveSummary'
 import type { Room } from './Room'
 import { RoomMovementCandidateMethods } from './roomMovement/candidates'
-import type { MoveTargetZone, RoomMoveContext, RoomMovementOptions } from './roomMovement/types'
+import type {
+  KnownCardCreationReason,
+  MoveTargetZone,
+  RoomMoveContext,
+  RoomMovementOptions
+} from './roomMovement/types'
 import type { CardID, PublicZoneName, SeatID } from './types'
 
 /**
@@ -145,15 +150,19 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     } = context
     let missingIDs: CardID[]
     let createdCards: Card[] = []
-    // 12 区会暂存未进入初始牌池的技能生成牌，获得时需要按协议正 ID 补建实体。
-    const canCreateMissingCards = sourceIsOutside || context.fromZone === 'exile'
+    // 12 区会暂存未进入初始牌池的技能生成牌；它和普通 known 缺口都要建实体，
+    // 但前者是协议事实，后者是解析失败后的兜底，诊断语义不同。
+    const isExternalSource = sourceIsOutside || context.fromZone === 'exile'
+    let knownCardCreationReason: KnownCardCreationReason | null = null
 
-    if (canCreateMissingCards) {
+    if (isExternalSource) {
+      knownCardCreationReason = 'external-source'
       const existingCards = this.room.findCardsByIDs(knownIDs)
       const existingIDs = new Set(existingCards.map((card) => card.id))
       missingIDs = knownIDs.filter((id) => !existingIDs.has(id))
-      createdCards =
-        missingIDs.length > 0 ? this.room.createExternalCards(missingIDs, missingIDs.length) : []
+      if (missingIDs.length > 0) {
+        createdCards = this.room.createExternalCards(missingIDs, missingIDs.length)
+      }
       const cardMap = new Map<CardID, Card>()
       existingCards.forEach((card) => cardMap.set(card.id, card))
       createdCards.forEach((card) => cardMap.set(card.id, card))
@@ -228,6 +237,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
             inDeckIdentities: this.room.deckIdentities.has(cardID)
           }))
         })
+        knownCardCreationReason = 'known-fallback'
         createdCards = this.room.createExternalCards(missingIDs, missingIDs.length)
         const cardMap = new Map(context.knownCards.map((card) => [card.id, card]))
         createdCards.forEach((card) => cardMap.set(card.id, card))
@@ -329,6 +339,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
             inDeckIdentities: this.room.deckIdentities.has(cardID)
           }))
         })
+        knownCardCreationReason = 'known-fallback'
         createdCards = this.room.createExternalCards(missingIDs, missingIDs.length)
         const cardMap = new Map(context.knownCards.map((card) => [card.id, card]))
         createdCards.forEach((card) => cardMap.set(card.id, card))
@@ -342,6 +353,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       missingIDs = knownIDs.filter((id) => !this.room.cardIndex.has(id))
     }
 
+    const createdCardSet = new Set(createdCards)
     const resumedCardIDs: CardID[] = []
     const confirmedFromUnknownIDs: CardID[] = []
     context.knownCards.forEach((card) => {
@@ -350,9 +362,11 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       if (wasSuspended) resumedCardIDs.push(card.id)
 
       // knownIDs 路径的语义是“协议声明这些正 ID 已公开”。
-      // materialize() 会对已有实体 confirmKnown，但 createExternalCards 补建的正 ID
-      // 默认 isKnown=false，若不在此统一确认，会以“正 ID 暗实体”进入弃牌/处理区。
-      if (card.id > 0 && card.isKnown !== true) {
+      // 只有协议明确来自 outside/exile 时，补建正 ID 的暗态才是正常过渡；
+      // known-fallback 即使调用同一个工厂，也必须保留缺失实体诊断。
+      const isExpectedExternalCreation =
+        knownCardCreationReason === 'external-source' && createdCardSet.has(card)
+      if (card.id > 0 && card.isKnown !== true && !isExpectedExternalCreation) {
         confirmedFromUnknownIDs.push(card.id)
       }
       if (card.id > 0) card.confirmKnown()
@@ -366,7 +380,9 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         missingIDs,
         fromZone,
         fromSeat,
-        sourceIsOutside
+        sourceIsOutside,
+        isExternalSource,
+        knownCardCreationReason
       })
     }
 
@@ -383,8 +399,9 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       createdCardIDs: createdCards.map((card) => card.id),
       resumedCardIDs,
       confirmedFromUnknownIDs,
-      canCreateMissingCards,
-      sourceIsOutside
+      sourceIsOutside,
+      isExternalSource,
+      knownCardCreationReason
     })
   }
 

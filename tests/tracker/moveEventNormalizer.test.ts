@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { normalizeMoveEvent, validateMoveEvent } from '@/tracker/MoveEventNormalizer'
+import {
+  isPileSingleCardShow,
+  normalizeMoveEvent,
+  validateMoveEvent
+} from '@/tracker/MoveEventNormalizer'
 
 describe('MoveEventNormalizer 当前行为', () => {
   it('归一化标准 PubGsCMoveCard 消息', () => {
@@ -78,6 +82,23 @@ describe('MoveEventNormalizer 当前行为', () => {
     expect(event.options.fromSeatID).toBeUndefined()
     expect(event.options.subZone).toBeUndefined()
     expect(event.options.fromSubZone).toBeUndefined()
+  })
+
+  it('天候牌堆同区单牌展示基础归一为 noop，留给技能装饰器建立范围候选', () => {
+    const event = normalizeMoveEvent({
+      CardCount: 1,
+      CardIDs: [18],
+      FromID: 255,
+      FromZone: 1,
+      FromZoneParam: 0,
+      MoveType: 21,
+      SpellID: 3903,
+      ToID: 255,
+      ToZone: 1,
+      ToZoneParam: 0
+    })
+
+    expect(event.type).toBe('noop')
   })
 
   it('CardIDs 为空时按 CardCount 保留暗牌数量', () => {
@@ -203,5 +224,29 @@ describe('MoveEventNormalizer 当前行为', () => {
         actual: 1
       })
     )
+  })
+
+  it('正确识别牌堆两端均为 255 的单牌同区展示谓词 isPileSingleCardShow', () => {
+    expect(
+      isPileSingleCardShow({
+        MoveType: 21,
+        CardCount: 1,
+        FromID: 255,
+        FromZone: 1,
+        ToID: 255,
+        ToZone: 1
+      })
+    ).toBe(true)
+
+    expect(
+      isPileSingleCardShow({
+        MoveType: 21,
+        CardCount: 2,
+        FromID: 255,
+        FromZone: 1,
+        ToID: 255,
+        ToZone: 1
+      })
+    ).toBe(false)
   })
 })

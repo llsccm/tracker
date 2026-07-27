@@ -67,32 +67,6 @@ describe('GsCRoleOptTargetNtf', () => {
     expect(Game.getSpellState(4022)).toBeUndefined()
   })
 
-  it('权变将 Params 作为牌堆顶明牌且不借用鹰视状态', () => {
-    handleRoleOptTargetNtf({
-      Param: 1,
-      Params: [158, 2, 63, 125],
-      SeatID: 2,
-      SpellID: 7011,
-      SrcSeatID: 2,
-      Timeout: 30,
-      Type: 28,
-      targetSeatID: 255,
-      className: 'GsCRoleOptTargetNtf'
-    })
-
-    expect(revealTrackerCards).toHaveBeenCalledOnce()
-    expect(revealTrackerCards).toHaveBeenCalledWith(
-      {
-        type: 'public',
-        zoneName: 'pile',
-        reposition: true,
-        cardIDsTopFirst: true
-      },
-      [158, 2, 63, 125]
-    )
-    expect(Game.getSpellState(7009)).toBeUndefined()
-  })
-
   it('观虚同时公开牌堆顶与目标手牌', () => {
     handleRoleOptTargetNtf({
       Param: 1,
@@ -121,6 +95,56 @@ describe('GsCRoleOptTargetNtf', () => {
       2,
       { type: 'player', seatID: 1 },
       [16, 160, 79, 106]
+    )
+  })
+
+  it('天候 Type 28 仅同步计数声明的牌堆顶', () => {
+    handleRoleOptTargetNtf({
+      Param: 0,
+      Params: [3, 5, 88, 146, 106, 38, 8, 54, 99, 51],
+      SeatID: 5,
+      SpellID: 3903,
+      SrcSeatID: 5,
+      targetSeatID: 255,
+      Timeout: 30,
+      Type: 28,
+      className: 'GsCRoleOptTargetNtf'
+    })
+
+    expect(revealTrackerCards).toHaveBeenCalledOnce()
+    expect(revealTrackerCards).toHaveBeenCalledWith(
+      {
+        type: 'public',
+        zoneName: 'pile',
+        reposition: true,
+        cardIDsTopFirst: true
+      },
+      [88, 146, 106]
+    )
+  })
+
+  it('天候 Type 29 跳过首位座位号并同步发动者私有牌堆顶', () => {
+    handleRoleOptTargetNtf({
+      Param: 0,
+      Params: [5, 8, 99, 146],
+      SeatID: 5,
+      SpellID: 3903,
+      SrcSeatID: 5,
+      targetSeatID: 255,
+      Timeout: 30,
+      Type: 29,
+      className: 'GsCRoleOptTargetNtf'
+    })
+
+    expect(revealTrackerCards).toHaveBeenCalledOnce()
+    expect(revealTrackerCards).toHaveBeenCalledWith(
+      {
+        type: 'public',
+        zoneName: 'pile',
+        reposition: true,
+        cardIDsTopFirst: true
+      },
+      [8, 99, 146]
     )
   })
 

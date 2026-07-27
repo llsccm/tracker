@@ -1,9 +1,6 @@
 import { Game } from '@/tracker/Game'
 import { addTooltip } from '@/utils/notification'
 
-const classCache = {}
-const instanceCache = {}
-
 /**
  * 方法重定义/热替换工具
  * 将对象上的原有方法备份为 __prop，并使用新描述符定义该属性
@@ -13,14 +10,24 @@ const instanceCache = {}
  * @param {PropertyDescriptor} value 新的方法描述符配置
  * @returns {boolean} 是否重定义成功
  */
+export function redefine(obj, prop, value) {
+  if (typeof obj?.[prop] != 'function') return false
+  if (Object.prototype.hasOwnProperty.call(obj, `__${prop}`)) return false
+  Object.defineProperty(obj, `__${prop}`, Object.getOwnPropertyDescriptor(obj, prop))
+  Object.defineProperty(obj, prop, { ...value, configurable: true })
+  return true
+}
 
 /**
- * 内置的类解析器注册表
- * 当 class(name) 找不到已缓存的类且未传入 value 时，
- * 会查找此注册表中是否有对应 name 的解析函数来自动获取
+ * 获取当前页面的 window 对象（兼容 GM/Tampermonkey 脚本环境下的 unsafeWindow）
  *
- * @type {Object<string, (runtime: typeof gameRuntime) => any>}
+ * @returns {Window & typeof globalThis}
  */
+function getPageWindow() {
+  if (typeof unsafeWindow == 'object') return unsafeWindow
+  return window
+}
+
 /**
  * 辅助工具函数：根据事件名称在监听者列表中检索对应的 caller 对象
  *
@@ -43,64 +50,6 @@ function getCallerFromEvent(emitter, eventName, propKey = null) {
         (caller.constructor && Object.prototype.hasOwnProperty.call(caller.constructor, propKey)) ||
         propKey in caller
     )
-}
-
-const classResolvers = {
-  GameContext(_runtime) {
-    const page = getPageWindow()
-    const ctx = page?.GameContext || window.Laya?.Browser?.window?.GameContext || window.GameContext
-    if (ctx && typeof ctx.GetModeType == 'function' && typeof ctx.GetGroupID == 'function') {
-      return ctx
-    }
-  },
-  GetGoodsByID(runtime) {
-    return runtime.get('SgxFPreviewWindow', null, 0)?.getGoodConfig
-  },
-  SgsText(runtime) {
-    return runtime.scene?.topMenu?.timeLabel?.constructor
-  },
-  SgsSpriteFilterBtn(runtime) {
-    return runtime.scene?.topMenu?.backBtn?.constructor
-  },
-  GameEventDispatcher(runtime) {
-    return runtime.get('PopUpWindow', null, 0)?.ged
-  },
-  WindowManager(runtime) {
-    const ged = runtime.class('GameEventDispatcher')
-    if (!ged) return undefined
-    return getCallerFromEvent(ged, 'HIDE_WINDOW', 'WindowInstanceDict')
-  },
-  ServerProxy(runtime) {
-    return runtime.class('WindowManager')?.proxy
-  },
-  SceneManager(runtime) {
-    const ged = runtime.class('GameEventDispatcher')
-    if (!ged) return undefined
-    return getCallerFromEvent(ged, 'SWITCH_SCENE', 'CurrentScene')
-  },
-  RogueLikePveManager(runtime) {
-    const proxy = runtime.class('ServerProxy')
-    if (!proxy) return undefined
-    return getCallerFromEvent(proxy, 'decodeRogueLikeDataSync')
-  }
-}
-
-export function redefine(obj, prop, value) {
-  if (typeof obj?.[prop] != 'function') return false
-  if (Object.prototype.hasOwnProperty.call(obj, `__${prop}`)) return false
-  Object.defineProperty(obj, `__${prop}`, Object.getOwnPropertyDescriptor(obj, prop))
-  Object.defineProperty(obj, prop, { ...value, configurable: true })
-  return true
-}
-
-/**
- * 获取当前页面的 window 对象（兼容 GM/Tampermonkey 脚本环境下的 unsafeWindow）
- *
- * @returns {Window & typeof globalThis}
- */
-function getPageWindow() {
-  if (typeof unsafeWindow == 'object') return unsafeWindow
-  return window
 }
 
 /**
@@ -150,62 +99,115 @@ function findInStage(stage, key) {
 }
 
 /**
+ * 内置的类解析器注册表
+ * 当 class(name) 找不到已缓存的类且未传入 value 时，
+ * 会查找此注册表中是否有对应 name 的解析函数来自动获取
+ *
+ * @type {Object<string, (runtime: GameRuntime) => any>}
+ */
+const classResolvers = {
+  GameContext(_runtime) {
+    const page = getPageWindow()
+    const ctx = page?.GameContext || window.Laya?.Browser?.window?.GameContext || window.GameContext
+    if (ctx && typeof ctx.GetModeType == 'function' && typeof ctx.GetGroupID == 'function') {
+      return ctx
+    }
+  },
+  GetGoodsByID(runtime) {
+    return runtime.get('SgxFPreviewWindow', null, 0)?.getGoodConfig
+  },
+  SgsText(runtime) {
+    return runtime.scene?.topMenu?.timeLabel?.constructor
+  },
+  SgsSpriteFilterBtn(runtime) {
+    return runtime.scene?.topMenu?.backBtn?.constructor
+  },
+  GameEventDispatcher(runtime) {
+    return runtime.get('PopUpWindow', null, 0)?.ged
+  },
+  WindowManager(runtime) {
+    const ged = runtime.class('GameEventDispatcher')
+    if (!ged) return undefined
+    return getCallerFromEvent(ged, 'HIDE_WINDOW', 'WindowInstanceDict')
+  },
+  ServerProxy(runtime) {
+    return runtime.class('WindowManager')?.proxy
+  },
+  SceneManager(runtime) {
+    const ged = runtime.class('GameEventDispatcher')
+    if (!ged) return undefined
+    return getCallerFromEvent(ged, 'SWITCH_SCENE', 'CurrentScene')
+  },
+  RogueLikePveManager(runtime) {
+    const proxy = runtime.class('ServerProxy')
+    if (!proxy) return undefined
+    return getCallerFromEvent(proxy, 'decodeRogueLikeDataSync')
+  }
+}
+
+/**
  * 游戏运行时适配层，用于安全获取 Laya 引擎以及三国杀游戏内部的对象、类和场景信息
  */
-export const gameRuntime = {
+export class GameRuntime {
   /**
    * 单例/实例缓存
    * @type {Object<string, any>}
    */
-  instance: instanceCache,
+  instance = {}
 
   /**
    * 类/构造函数缓存
    * @type {Object<string, any>}
    */
-  classes: classCache,
+  classes = {}
 
   /**
    * 斗地主等环境动态加载的外部运行时代码段 (动态属性，由外部写入)
    * @type {string|null}
    */
-  __RUNTIME__: null,
+  __RUNTIME__ = null
 
   /**
    * 标记标志位
    * @type {any}
    */
-  flag: null,
+  flag = null
 
   /**
    * 限制大小/数目限制
    * @type {number}
    */
-  limit: 300,
+  limit = 300
 
   /**
    * 顺序序列，用于排序等状态记录
    * @type {any[]}
    */
-  order: [],
+  order = []
 
   /**
    * 卡牌等标记方法的占位函数，由运行时或外部代码动态注入/重写
    * @type {Function}
    */
-  mark: () => null,
+  mark = () => null
 
   /**
    * 调试追踪日志方法的占位函数
    * @type {Function}
    */
-  trace: () => null,
+  trace = () => null
 
   /**
    * 严教等技能辅助的占位函数
    * @type {Function}
    */
-  yanJiao: () => null,
+  yanJiao = () => null
+
+  /**
+   * 是否已拦截势力口号发送
+   * @type {boolean}
+   */
+  _powerSloganBlocked = false
 
   /**
    * 重置运行时状态标志和排序数组
@@ -213,7 +215,7 @@ export const gameRuntime = {
   reset() {
     this.flag = null
     this.order = []
-  },
+  }
 
   /**
    * 初始化运行时
@@ -221,7 +223,7 @@ export const gameRuntime = {
    */
   init() {
     return true
-  },
+  }
 
   /**
    * 获取或注册一个类
@@ -229,25 +231,24 @@ export const gameRuntime = {
    * 若无 value，则根据预设规则（如 GameContext 等）在页面 window 或 Laya 下自动寻找并注册。
    *
    * @param {string} name 类的唯一命名（如 'GameContext', 'SgsText' 等）
-   * @param {boolean} [anew] 是否强制重新解析/注册
+   * @param {boolean} [anew=false] 是否强制重新解析/注册
    * @param {any} [value] 注册的类定义或生成类的函数
    * @returns {any} 返回注册成功的类（构造函数）
    */
-  class(name, anew, value) {
-    if (anew || !this.classes[name]) {
-      if (typeof value == 'function') this.classes[name] = value()
-      else if (value) this.classes[name] = value
-      else if (name in classResolvers) {
-        const resolved = classResolvers[name](this)
-        if (resolved) this.classes[name] = resolved
-      }
-    }
+  class(name, anew = false, value = undefined) {
+    if (!anew && this.classes[name]) return this.classes[name]
+
+    const resolver = Object.prototype.hasOwnProperty.call(classResolvers, name)
+      ? classResolvers[name]
+      : undefined
+    const resolved = typeof value == 'function' ? value() : value || resolver?.(this)
+    if (resolved) this.classes[name] = resolved
 
     return this.classes[name]
-  },
+  }
 
   /**
-   * 获取（并可能实例化）指定名称 of Laya 单例或实例
+   * 获取（并可能实例化）指定名称的 Laya 单例或实例
    *
    * @param {string} name 类名或实例名
    * @param {any} [args] 构造函数参数。若不为 null 且实例有 Init 方法，将自动调用 Init()
@@ -283,7 +284,7 @@ export const gameRuntime = {
     if (dt !== false) this.del(name, dt)
 
     return this.instance[name]
-  },
+  }
 
   /**
    * 删除/清理已缓存的实例，支持延迟销毁
@@ -317,7 +318,7 @@ export const gameRuntime = {
 
     if (time === true) delNow()
     else item.timeoutId = setTimeout(delNow, time)
-  },
+  }
 
   /**
    * 在 Laya 舞台（stage）上链式过滤查找特定节点
@@ -348,7 +349,7 @@ export const gameRuntime = {
     }, start)
 
     return result?.length == 0 ? null : result
-  },
+  }
 
   /**
    * 获取全局事件派发器 GameEventDispatcher
@@ -356,7 +357,7 @@ export const gameRuntime = {
    */
   get ged() {
     return this.class('GameEventDispatcher')
-  },
+  }
 
   /**
    * 获取当前场景对象
@@ -364,7 +365,7 @@ export const gameRuntime = {
    */
   get scene() {
     return this.class('SceneManager')?.CurrentScene || this.find('SceneLayer', null)
-  },
+  }
 
   /**
    * 获取当前游戏局内场景对象（如果是游戏场景）
@@ -372,7 +373,7 @@ export const gameRuntime = {
    */
   get gamescene() {
     return this.class('SceneManager')?.IsGameScene ? this.scene : null
-  },
+  }
 
   /**
    * 聊天输入控制与消息发送
@@ -412,10 +413,11 @@ export const gameRuntime = {
       return manager.SendCampChatMsg(chatmsg)
     if (typeof manager.SendBaseChatMsg == 'function')
       return manager.SendBaseChatMsg(chatmsg, channel, '', 0)
-  },
+  }
+
   /**
    * 座位 UI 重新绘制
-   * @type {Function}
+   * @returns {any}
    */
   seatUIs() {
     this.init(true)
@@ -439,13 +441,6 @@ export const gameRuntime = {
         : seat.Country == seats[0].Country || -!!seat.Country,
       ai: seat?.playerInfo?.ClientId < 4e9 ? 0 : seat.playerInfo?.IsNormalRobot ? 2 : 1
     }))
-
-    // 无需laya设置座位
-    // if (
-    //   Game.seatUIs.map((ui) => ui.order).join(',') != SeatUIs.map((ui) => ui.order).join(',')
-    // ) {
-    //   Game.fromUI(SeatUIs)
-    // }
 
     if (verbose === true && SeatUIs.some(({ ai }) => ai) && !Game.isShanHeTu) {
       addTooltip('对战AI小杀！')
@@ -476,10 +471,64 @@ export const gameRuntime = {
         uis.forEach((ui) => ui?.AddCardTag?.(label))
       })
   }
+
+  showName() {
+    this.gamescene?.seatContainer?.seatUIs?.forEach(({ seat, otherTopManager }) => {
+      otherTopManager?.createPlayerNameBg()
+      otherTopManager?.createPlayerName()
+      otherTopManager?.UpdatePlayerName(seat.playerInfo)
+      otherTopManager?.SetPlayNameVisible(seat?.playerInfo?.ClientId < 4e9)
+      otherTopManager?.layout()
+    })
+  }
+
+  /**
+   * 阻止座位 UI 自动发送势力口号（幂等）
+   * 挂在座位原型上，改一次后所有座位共用，无需逐个座位重复修改
+   * @returns {boolean} 是否已成功挂上拦截
+   */
+  blockPowerSlogan() {
+    if (this._powerSloganBlocked) return true
+
+    const seatList = this.scene?.seatListView?.seatList
+    if (!Array.isArray(seatList) || !seatList.length) return false
+
+    const proto = seatList.find(
+      (seat) => seat?.__proto__ && typeof seat.__proto__.showPowerSlogan == 'function'
+    )?.__proto__
+    if (!proto) return false
+
+    redefine(proto, 'showPowerSlogan', {
+      value() {
+        return
+      }
+    })
+
+    if (!proto.__showPowerSlogan) return false
+
+    this._powerSloganBlocked = true
+    return true
+  }
+
+  /**
+   * 通过游戏窗口管理器获取并关闭窗口
+   * @param {string} name 窗口类名
+   * @returns {boolean} 是否已找到并关闭窗口
+   */
+  closeWindow(name) {
+    const gameWindow = this.class('WindowManager')?.GetWindow?.(name)
+    if (typeof gameWindow?.Close != 'function') return false
+
+    gameWindow.Close()
+    return true
+  }
+
+  closeTianShu() {
+    return this.closeWindow('TianShuWindow')
+  }
 }
 
 /**
- * gameRuntime 的全局别名，全项目广泛引用的主入口
- * @type {typeof gameRuntime}
+ * @type {GameRuntime}
  */
-export const laya = gameRuntime
+export const laya = new GameRuntime()
