@@ -201,7 +201,7 @@ describe('TrackerController', () => {
     ).toHaveLength(0)
   })
 
-  it('天候同区展示未定位身份时直接丢弃且不物化', () => {
+  it('天候同区展示未定位身份时建立牌顶前三候选且不重排牌堆', () => {
     const { controller } = createTrackerControllerHarness()
     const shownID = 18
     // 内部底->顶：filler + 匿名槽；shownID 仍在 unlocatedIdentities。
@@ -235,8 +235,17 @@ describe('TrackerController', () => {
     )
 
     expect(pile.cards.map((card) => card.id)).toEqual(topBefore)
-    expect(room.cardIndex.has(shownID)).toBe(false)
-    expect(room.unlocatedIdentities.has(shownID)).toBe(true)
+    const shownCard = room.cardIndex.get(shownID)
+    expect(shownCard?.publicCandidates).toEqual([
+      expect.objectContaining({
+        zone: 'pile',
+        position: 'top',
+        count: 3,
+        label: '牌堆顶前3张'
+      })
+    ])
+    expect(pile.cards).not.toContain(shownCard)
+    expect(room.unlocatedIdentities.has(shownID)).toBe(false)
   })
 
   it('牌堆展示回收玩家区占用身份并保留匿名手牌占位', () => {

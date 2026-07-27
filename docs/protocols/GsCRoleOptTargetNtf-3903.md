@@ -9,8 +9,9 @@
 2. `Type = 29` 向发动者展示牌堆顶三张牌。
 
 两种消息的 `Params` 布局不同，不能使用同一偏移量解析。牌堆顶卡牌均按
-**top-first** 排列，即卡牌数组第一项是最顶牌。这两种消息不会下发给其他角色；
-其他角色只能收到后文所述的单牌 `PubGsCMoveCard` 展示消息。
+**top-first** 排列，即卡牌数组第一项是最顶牌。有效牌面参数只下发给发动者；
+其他角色可能收到 `Params=[]` 的同类通知，并通过后文的匿名交换移动和单牌
+`PubGsCMoveCard` 展示消息获得公开信息。
 
 ## `Type = 28`：主视角观看
 
@@ -75,6 +76,44 @@ Params: [5, 8, 99, 146]
 当前适配要求 `Params` 恰好包含一个座位号和三张卡牌，再将 `Params.slice(1)`
 同步为牌堆顶。
 
+## 其他视角的匿名交换序列
+
+发动者主视角的交换移动携带明确 `CardIDs`，按默认路径精确同步，不建立候选。其他视角中，
+交换相关消息的 `CardIDs` 全为 `[]`。交换 `x` 张时（`1 <= x <= 3`）顺序如下：
+
+| 顺序 | `FromZone -> ToZone` | 张数 | 语义                                        |
+| ---: | -------------------- | ---: | ------------------------------------------- |
+|    1 | `1 -> 10`            |  `x` | 从观看的牌顶三张中选择 `x` 张进入交换区     |
+|    2 | `5 -> 10`            |  `x` | 发动者选择 `x` 张原手牌进入交换区           |
+| 3、4 | `10 -> 10`           |  `x` | 客户端交换动画；空 `CardIDs` 不提供实体顺序 |
+|    5 | `10 -> 5`            |  `x` | 选中的原牌顶牌进入发动者手牌                |
+|    6 | `10 -> 1`            |  `x` | 换出的原手牌回到牌堆顶                      |
+
+最终牌堆顶结构为：
+
+```text
+[换出的 x 张原手牌, 未被选择的原牌顶牌]
+```
+
+因此原手牌中的每张确定明牌都形成以下位置候选：
+
+```text
+发动者手牌 | 牌堆顶前 x 张
+```
+
+设交换前手牌总数为 `N`、其中确定明牌数为 `K`，则确定明牌换出数量范围为：
+
+```text
+min = max(0, x - (N - K))
+max = min(x, K)
+```
+
+- `min != max` 时只保留逐牌弱候选，不断言具体有几张明牌被换出。
+- `min == max` 时建立完整位置数量约束。
+- 两条 `10 -> 10` 直接忽略；后续按批次中记录的牌堆实体和手牌匿名占位拆回，不能依赖
+  交换区当前顺序。
+- 新一轮只接管其他视角的全暗协议，主视角明确 `CardIDs` 不进入该账本。
+
 ## 配对的 `PubGsCMoveCard` 同区展示
 
 天候还会发出牌堆同区展示移动（`MoveType = 21`，`From/To` 均为牌堆 `255`），样例：
@@ -101,9 +140,15 @@ ToZoneParam: 0
 - 对非发动者而言，这条消息也不能提供完整的有序牌顶
 - 不要把 `3903` 并入 `PILE_SAME_ZONE_SHOW_SPELL_IDS` 或 `PILE_RANDOM_AS_TOP_SPELL_IDS`
 
-当前实现暂不建立“该牌位于牌顶三张之一”的候选约束，而是在
-`MoveEventNormalizer` 中将这类消息归一为 `noop`。因此它既不会确认牌面，也不会修改、
-物化或重排牌堆；后续确有展示需求时，再单独补充牌顶前三候选模型。
+基础归一仍将该消息标为 `noop`，避免复用普通 `showCards` 后把身份放到具体牌顶；
+天候技能装饰器随后将它转换成公共区范围揭示：
+
+- 展示牌命中本轮原手牌候选时，确认该牌已经换出，并收紧为“牌堆顶前 `x` 张”。
+- `x = 1` 时，“牌堆顶前 1 张”即确定牌顶；其余原手牌候选可据唯一换出名额排除。
+- 展示牌未命中原手牌候选时，只建立“牌堆顶前 3 张”候选。
+- 单牌展示只提供正面证据，不能据此排除其他候选牌。
+
+范围揭示只确认身份和候选区间，不把身份绑定到某个具体匿名牌堆槽，也不修改牌堆顺序。
 
 ## 私有处理条件
 
@@ -134,7 +179,11 @@ ToZoneParam: 0
 
 - 目标通知：`src/handler/GsCRoleOptTargetNtf.js` 的 `handleRoleOptTargetNtf`
 - 牌堆顶明牌入口：同文件的 `revealPileCards`
-- 同区展示丢弃：`src/tracker/MoveEventNormalizer.ts` 的 `inferEventType`
+- 匿名交换候选：`src/tracker/skill/TianHou.ts`
+- 同区展示基础归一：`src/tracker/MoveEventNormalizer.ts` 的 `inferEventType`
+- 公共区范围揭示：`src/tracker/runtime/trackerController.ts` 的
+  `revealPublicCandidateCards`
 - 位置归一化：`src/handler/PubGsCMoveCard.js`（`3903` 不进 RANDOM-as-top 白名单）
 - 回归测试：`tests/tracker/roleOptTargetNtf.test.ts`、`tests/tracker/pubGsCMoveCard.test.ts`、
-  `tests/tracker/moveEventNormalizer.test.ts`、`tests/tracker/trackerController.test.ts`
+  `tests/tracker/moveEventNormalizer.test.ts`、`tests/tracker/trackerController.test.ts`、
+  `tests/tracker/tianHouExchange.test.ts`

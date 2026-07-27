@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
+import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { registerDefaultMoveEventHandlers } from '@/tracker/runtime/moveEventHandlers'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import type { TraversalStats } from '@/tracker/traversalStats'
 import { createTestRoom, getCard } from './helpers/room'
@@ -192,6 +194,59 @@ describe('Room.cards 遍历基线', () => {
         "resolveConstraints:constraint1": "calls=2 visited=9",
         "resolveConstraints:playerSnapshotIncremental": "calls=2 visited=6",
         "total": "visited=57",
+      }
+    `)
+  })
+
+  it('天候候选：进交换区时只扫描增量玩家快照', () => {
+    const { room } = createTestRoom({ cardIDs: DECK_IDS, seatIDs: [1, 2] })
+    const knownCards = [getCard(room, 1), getCard(room, 2)]
+    const hiddenCards = [getCard(room, 3), getCard(room, 4)]
+
+    room.clearCardsFromPublicZones([...knownCards, ...hiddenCards])
+    knownCards.forEach((card) => card.bindCandidates([2], 'hand', null, { known: true }))
+    hiddenCards.forEach((card) => {
+      card.bindCandidates([2], 'hand', null, { known: false })
+      card.isKnown = false
+    })
+    room.getPlayer(2).syncObservedHandCount(4)
+    room.resolveConstraints()
+    registerDefaultMoveEventHandlers(room)
+
+    const pileStage = room.decorateMoveEvent(
+      normalizeMoveEvent({
+        CardCount: 2,
+        CardIDs: [],
+        FromID: 255,
+        FromZone: 1,
+        MoveType: 11,
+        SpellID: 3903,
+        ToID: 2,
+        ToZone: 10
+      })
+    )
+    room.moveCards(pileStage.cardIDs, pileStage.toZone, pileStage.options)
+
+    const { stats } = collectTraversalStats(() => {
+      room.decorateMoveEvent(
+        normalizeMoveEvent({
+          CardCount: 2,
+          CardIDs: [],
+          FromID: 2,
+          FromZone: 5,
+          MoveType: 11,
+          SpellID: 3903,
+          ToID: 2,
+          ToZone: 10
+        })
+      )
+    })
+
+    expect(summarize(stats)).toMatchInlineSnapshot(`
+      {
+        "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=0",
+        "tianHou:playerHand": "calls=1 visited=4",
+        "total": "visited=4",
       }
     `)
   })

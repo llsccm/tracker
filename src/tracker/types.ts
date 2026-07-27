@@ -31,6 +31,13 @@ export interface PublicCandidate {
   label: string | null
 }
 
+/** 只公开公共区端点范围、不足以绑定具体卡牌槽位的展示事实。 */
+export interface PublicCandidateReveal {
+  zone: PublicZoneName
+  position: PublicPosition
+  count: number
+}
+
 export interface PlayerLocationCandidate extends SubZoneCandidate {
   type: 'player'
 }
@@ -116,6 +123,7 @@ export interface MoveOptions {
   fromPosition?: PublicPosition
   resetKnownToUnknown?: boolean
   sourceCards?: Card[]
+  publicCandidateReveal?: PublicCandidateReveal
   sourceEvent?: MoveSourceEvent
   [key: string]: unknown
 }

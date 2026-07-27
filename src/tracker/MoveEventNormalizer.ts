@@ -278,7 +278,8 @@ function inferEventType(event: RawMoveCardEvent, cardIDs: CardID[]): RawMoveEven
   // 弃牌堆洗回牌堆会重置公共牌堆状态，必须优先从普通回牌堆事件中识别出来。
   if (fromZone === 2 && toZone === 9) return 'shuffleDiscardIntoPile'
 
-  // 天候只公开牌顶三张中的一张，无法确定具体位置；候选模型补齐前不采信该消息。
+  // 天候只公开牌顶三张中的一张，基础归一不按端点展示处理；
+  // SpellID 装饰器会结合本轮交换批次将其转换为公共区范围候选。
   if (isTianhouAmbiguousPileShow(event)) return 'noop'
 
   // 同区域消息只有在携带可见牌且不属于噪声场景时，才作为展示事件下发。

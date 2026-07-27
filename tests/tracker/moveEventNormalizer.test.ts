@@ -80,7 +80,7 @@ describe('MoveEventNormalizer 当前行为', () => {
     expect(event.options.fromSubZone).toBeUndefined()
   })
 
-  it('天候牌堆同区单牌展示直接归一为 noop', () => {
+  it('天候牌堆同区单牌展示基础归一为 noop，留给技能装饰器建立范围候选', () => {
     const event = normalizeMoveEvent({
       CardCount: 1,
       CardIDs: [18],

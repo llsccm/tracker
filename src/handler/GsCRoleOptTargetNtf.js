@@ -177,7 +177,7 @@ export function handleRoleOptTargetNtf(msg) {
 
     // 周群 天候
     case 3903:
-      // Type 28/29 只下发给发动者，避免在录像或异常转发中向其他视角泄露牌顶顺序。
+      // Type 28/29 的有效牌面只下发给发动者；其他角色只会收到 Params 为空数组的消息。
       if (targetSeatID != 255 || Param != 0) {
         break
       }
