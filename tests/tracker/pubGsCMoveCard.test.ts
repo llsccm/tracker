@@ -105,4 +105,30 @@ describe('PubGsCMoveCard', () => {
       ToPosition: POSITION_TOP
     })
   })
+
+  it('天候同区展示不把 RANDOM 来源强行归一为牌顶', () => {
+    const msg = {
+      CardCount: 1,
+      CardIDs: [18],
+      FromID: 255,
+      FromPosition: POSITION_RANDOM,
+      FromZone: 1,
+      FromZoneParam: 0,
+      MoveType: 21,
+      SpellID: 3903,
+      ToID: 255,
+      ToPosition: POSITION_RANDOM,
+      ToZone: 1,
+      ToZoneParam: 0
+    }
+
+    handleMoveCard(msg)
+
+    expect(syncTrackerMove).toHaveBeenCalledOnce()
+    expect(syncTrackerMove).toHaveBeenCalledWith(msg, {
+      CardIDs: [18],
+      FromPosition: POSITION_RANDOM,
+      ToPosition: POSITION_RANDOM
+    })
+  })
 })

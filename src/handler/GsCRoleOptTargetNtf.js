@@ -177,11 +177,24 @@ export function handleRoleOptTargetNtf(msg) {
 
     // 周群 天候
     case 3903:
-      if (targetSeatID !== undefined && Param == 0 && Params?.length > 2) {
-        if (targetSeatID == 255 && (SrcSeatID == Game.myID || import.meta.env.DEV)) {
-          revealPileCards(Params.slice(2, 2 + Params[0]))
-        }
+      // Type 28/29 的有效牌面只下发给发动者；其他角色只会收到 Params 为空数组的消息。
+      if (targetSeatID != 255 || Param != 0) {
+        break
       }
+
+      // Params: [牌堆观看数, 手牌数, ...牌堆顶, ...主视角手牌]
+      if (Type == 28 && Params?.length > 2) {
+        const pileCount = Number(Params[0]) || 0
+        const pileCardIDs = Params.slice(2, 2 + pileCount)
+        if (pileCount > 0 && pileCardIDs.length == pileCount) revealPileCards(pileCardIDs)
+        break
+      }
+
+      // 发动者私有消息，Params: [展示者座位号, ...牌堆顶三牌]
+      if (Type == 29 && Params?.length == 4) revealPileCards(Params.slice(1))
+
+      // OPT_SKILL_FLAG3 可能用于选择角色获得技能 此处占位
+      // if (Type == 30)
       break
 
     // 观骨

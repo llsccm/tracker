@@ -5,6 +5,7 @@ import type { Room } from '../Room'
 import decorateHandExchange from '../skill/HandExchange'
 import decorateQiaoZhi from '../skill/QiaoZhi'
 import decorateSiQi from '../skill/SiQi'
+import decorateTianHou from '../skill/TianHou'
 import { getRaw, getCount, hasPositiveID } from '../skill/moveEventUtils'
 
 export type MoveEventDraft = any
@@ -135,6 +136,9 @@ function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEventDraft 
   }
 
   observePendingChengLieFinalDiscard(event, room)
+
+  // 天候的部分手牌交换需要同时区分牌堆批次与手牌批次，不能落入整手交换账本。
+  if (spellID === 3903) return event
 
   // 整手牌经交换区互易：按协议模式处理，不绑定单一 SpellID。
   return decorateHandExchange(event, room)
@@ -408,6 +412,8 @@ function createFilteredPublicMoveHandler(
 
 export function registerDefaultMoveEventHandlers(room: Room): void {
   room.registerMoveEventHandler('*', decorateGenericMove)
+  // 周群【天候】：其他视角的匿名换牌批次及最终单牌范围揭示。
+  room.registerMoveEventHandler(3903, decorateTianHou)
   //【巧织】：记录两张展示牌，在另一张明置进弃牌堆时用差集确认暗取牌。
   room.registerMoveEventHandler(3544, decorateQiaoZhi)
   //【思泣】：协议不公开返回牌 ID，按弃牌堆顺序筛选红牌实体作为明确来源。

@@ -1,4 +1,6 @@
 import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
+import { fromPublicCandidate } from '../candidate/locationCandidate'
+import { createPublicCandidate } from '../candidate/publicCandidate'
 import type { Card } from '../Card'
 import { summarizeMoveEvent } from '../helper/moveSummary'
 import { getProtocolMoveSpecialLabel, normalizeMoveEvent } from '../MoveEventNormalizer'
@@ -320,7 +322,13 @@ export class TrackerController {
         })
       }
 
-      if (event.type === 'noop') {
+      if (event.type === 'revealPublicCandidate') {
+        this.controllerLogger.info(
+          '移动事件分支: revealPublicCandidate',
+          summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
+        )
+        this.revealPublicCandidateCards(event)
+      } else if (event.type === 'noop') {
         this.controllerLogger.info(
           '移动事件跳过',
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
@@ -354,6 +362,49 @@ export class TrackerController {
       })
       this.onError('[Refactor] 移动同步失败:', e, msg)
     }
+  }
+
+  /**
+   * 记录公共区范围揭示。
+   * 与普通 showCards 不同，这里只确认身份属于某个端点范围，不占用或重排具体公共区槽位。
+   */
+  private revealPublicCandidateCards(event: NormalizedMoveEvent): void {
+    const readyRoom = this.getReadyTrackerRoom()
+    const reveal = event.options.publicCandidateReveal
+    if (!readyRoom || !reveal || !(Number(reveal.count) > 0)) return
+
+    const ids = this.normalizeIDs(event.cardIDs).filter((id) => id > 0)
+    const locationCandidate = fromPublicCandidate(
+      createPublicCandidate(reveal.zone, reveal.position, Number(reveal.count))
+    )
+    if (ids.length === 0 || !locationCandidate) return
+
+    const cards = ids
+      .map((id) => {
+        const existing = readyRoom.cardIndex.get(id)
+        if (existing) {
+          existing.confirmKnown()
+          return existing
+        }
+
+        // 场外实体只承载已公开身份；原匿名牌堆槽继续承担牌堆数量和顺序。
+        const [target] = readyRoom.createExternalCards([], 1)
+        return readyRoom.materialize(id, target)
+      })
+      .filter((card): card is Card => Boolean(card))
+
+    cards.forEach((card) => {
+      card.setLocationCandidates([locationCandidate], 'revealPublicCandidate')
+    })
+    readyRoom.resolveConstraints()
+
+    this.controllerLogger.info('公共区范围揭示完成', {
+      ids,
+      zone: reveal.zone,
+      position: locationCandidate.position,
+      count: reveal.count,
+      resolvedCount: cards.length
+    })
   }
 
   /**

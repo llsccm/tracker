@@ -9,8 +9,9 @@ import { applySpellEffect } from './spellEffects'
 
 // 牌堆同区展示（权变/观虚）：From/To 都是牌堆且 MoveType=21 时，两端点都归一为牌顶
 const PILE_SAME_ZONE_SHOW_SPELL_IDS = [7011, 987, 988]
-// 牌堆来源标记为 RANDOM 但实际是牌顶（骋烈/天候）。
-const PILE_RANDOM_AS_TOP_SPELL_IDS = [3208, 3903]
+// 牌堆来源标记为 RANDOM 但实际是牌顶（骋烈）。
+// 天候 3903 的同区展示是“牌顶三张中亮一张”，位置不确定，不能并入此名单。
+const PILE_RANDOM_AS_TOP_SPELL_IDS = [3208]
 // 王元姬 宴戏 拿牌
 const YANXI_DRAW_SPELL_IDS = [7016, 7017]
 
@@ -79,7 +80,7 @@ function normalizeMovePosition({
     ToPosition = POSITION_TOP
   }
 
-  //骋烈 天候
+  // 骋烈：协议标 RANDOM，实际从牌顶取
   if (
     FromZone == 1 &&
     FromPosition == POSITION_RANDOM &&
