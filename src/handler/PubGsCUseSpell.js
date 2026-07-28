@@ -1,5 +1,6 @@
 import { CardConfig } from '@/config'
 import { drawCard } from '@/draw'
+import { laya } from '@/runtime/gameAdapter'
 import { Game } from '@/tracker'
 // import { laya } from '@/runtime/gameAdapter'
 import { setSuitRecord } from '@/utils'
@@ -66,6 +67,33 @@ export function handleUseSpell(msg) {
       if (msg.EffectIndex === 2 && !msg.DestSeatIDs?.length) {
         Game.setSpellState(3750, CardIDs)
       }
+      break
+
+    case 13027:
+    case 13028:
+    case 13029: // 当头一棒
+    case 13039:
+    case 13040:
+    case 13041: // 淬血
+    case 13087:
+    case 13088:
+    case 13089: // 雷火势
+    case 13184:
+    case 13185: // 厚实
+    case 13293:
+    case 13294: // 削命 谋命
+      if (SeatID === Game.myID) {
+        const zhanfa = laya.gamescene?.SelfSeatUi?.zhanFaItems.find(
+          (item) => item.SkillId === SpellID
+        )
+
+        if (zhanfa.n === undefined) zhanfa.n = 0
+        zhanfa.Value = ++zhanfa.n
+      }
+
+      break
+
+    default:
       break
   }
 }

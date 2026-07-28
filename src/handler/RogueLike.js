@@ -1,5 +1,5 @@
 import { CharacterConfig, RoguelikeConfig } from '@/config'
-import { globalConfig, globalState, rogueMap, UI } from '@/tracker'
+import { globalConfig, rogueMap, UI } from '@/tracker'
 import { laya } from '@/runtime/gameAdapter'
 import { drawCitiesUI, drawStore } from '@/ui/CitiesUI'
 import { addTooltip } from '@/utils/notification'
@@ -13,30 +13,26 @@ export async function showShanHeTuSponsorPrompt(ProtoObj) {
 }
 
 export async function handleRogueLike(ProtoObj) {
-  // console.info('drawRogueLike', ProtoObj);
   if (!ProtoObj?.allData) return
 
   const allData = ProtoObj.allData
+  // 00111111
   const dataMark = ProtoObj.dataMark
-  const marks = Array.from(Number(dataMark).toString(2), Number).reverse()
-
-  if (marks[4]) {
-    //console.info('drawRogueLike: 需要处理商店数据, marks[4]=true');
-    if (!allData.shopData) {
-      //console.info('drawRogueLike: allData中无商店数据');
-      return req()
-    } else {
-      //console.info('drawRogueLike: allData已有商店数据，重置req状态');
-      req(0)
-    }
-
-    globalState.rogueShopBShow = allData.shopData.bShow === true
-    allData.shopData.bShow = true
-  }
-
   const shopData = allData.shopData
   const chapterData = allData.chapterData
   const generalpool = allData.generalpool
+
+  // RougueLikeShopType 商店数据
+  if ((dataMark & 16) !== 0) {
+    if (!shopData) {
+      return req()
+    } else {
+      shopData.bShow = true
+      req(0)
+    }
+  }
+
+  // 结局倾向
   renderRogueAttrInfo(allData.gameData?.attrInfo)
 
   if (shopData) {
@@ -121,7 +117,7 @@ const req = (() => {
     if (!dm) return (ok = false)
 
     if (ok) {
-      console.info('req: 已请求过，跳过重复请求, dm=', dm)
+      console.warn('req: 已请求过，跳过重复请求, dm=', dm)
       return true // 如果已请求过，返回true但不再请求
     }
 
