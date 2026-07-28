@@ -47,7 +47,7 @@ export function drawCitiesUI(cities, _display) {
   }
 
   // 更新场景显示
-  wait(() => laya.find('SceneLayer', 'RogueSmallMapScene')).then((rogueScene) => {
+  wait(() => laya.find('SceneLayer', 'RogueSmallMapScene'), 20, 200).then((rogueScene) => {
     // 清理旧内容
     for (let i = rogueScene?.cityView.numChildren - 1; i >= 0; i--) {
       const child = rogueScene.cityView.getChildAt(i)
@@ -263,7 +263,7 @@ const spellList = [
 
 function highlightedSkill(generalInfo, difficulty) {
   const difficultySpells = [
-    generalInfo.getspell_PT,
+    generalInfo.getspell,
     generalInfo.getspell_ZD,
     generalInfo.getspell_KN,
     generalInfo.getspell_EM,

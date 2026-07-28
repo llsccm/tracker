@@ -1,3 +1,25 @@
+import { toClipboard } from '../utils/clipboard'
+
+const USER_INFO_SELECTORS = ['#uuid', '#nickName']
+
+function getUserInfoCopyValue(element) {
+  const text = element.textContent ?? ''
+  const separatorIndex = text.indexOf('：')
+  return separatorIndex === -1 ? text : text.slice(separatorIndex + 1)
+}
+
+function copyUserInfo(value) {
+  return toClipboard(value, false)
+}
+
+function getDefaultRoot() {
+  return typeof document === 'undefined' ? null : document
+}
+
+function getDefaultTimer() {
+  return typeof setTimeout === 'undefined' ? null : setTimeout
+}
+
 export function executeEmbeddedScripts(container) {
   // 查找并执行 contentDiv 中的所有 <script> 标签
   const scripts = container.querySelectorAll('script')
@@ -51,9 +73,49 @@ export function bindPanelHeaders() {
   })
 }
 
+export function bindTabBar() {
+  const tabBtns = document.querySelectorAll('.tab-btn')
+  const tabPanels = document.querySelectorAll('.tab-panel')
+
+  tabBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      tabBtns.forEach((b) => b.classList.remove('active'))
+      tabPanels.forEach((p) => p.classList.remove('active'))
+
+      btn.classList.add('active')
+      const target = document.getElementById(btn.dataset.tab)
+      if (target) target.classList.add('active')
+    })
+  })
+}
+
+export function bindUserInfoCopyActions({
+  root = getDefaultRoot(),
+  copy = copyUserInfo,
+  setTimer = getDefaultTimer()
+} = {}) {
+  if (!root) return
+
+  USER_INFO_SELECTORS.forEach((selector) => {
+    const element = root.querySelector(selector)
+    if (!element) return
+
+    element.onclick = async () => {
+      const originalText = element.textContent ?? ''
+      await copy(getUserInfoCopyValue(element))
+      element.textContent = '复制成功'
+      setTimer?.(() => {
+        if (element.textContent === '复制成功') element.textContent = originalText
+      }, 500)
+    }
+  })
+}
+
 export function initInjectedInterface({ container, expandJiePanel, bindDelegatedTooltips }) {
   executeEmbeddedScripts(container)
   bindPanelHeaders()
+  bindTabBar()
+  bindUserInfoCopyActions({ root: container })
   expandJiePanel()
   bindDelegatedTooltips()
 }
