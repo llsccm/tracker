@@ -3,6 +3,7 @@ import { isAnonymous } from '@/tracker/Card'
 import { CARD_INSTANCE_STATUS } from '@/tracker/CardCounter'
 import { getPublicFieldCandidateCards } from '@/tracker/view/publicFieldCandidates'
 import { trackerLogger } from '@/utils/logger'
+import { expectLocationIndexMatchesRebuild } from './helpers/locationIndex'
 import { createTestRoom } from './helpers/room'
 
 describe('阶段 1 匿名牌堆 spike', () => {
@@ -69,6 +70,47 @@ describe('阶段 1 匿名牌堆 spike', () => {
     expect(card?.isKnown).toBe(true)
     expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3]))
     expect(pile.cards).toHaveLength(3)
+  })
+
+  it('未定位身份命中正 ID 暗牌顶时复用槽位并释放被挤身份', () => {
+    const { room } = createTestRoom({
+      cardIDs: [1, 2, 3, 4],
+      seatIDs: [1],
+      materializeDeckIdentities: false
+    })
+    const pile = room.zones.get('pile')!
+    const hiddenTopCard = room.materialize(1, pile.cards.at(-1)!)!
+    const displacedIdentityID = hiddenTopCard.id
+    hiddenTopCard.reset()
+    const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
+
+    try {
+      // 4 尚未建立实体，而牌顶已经是洗牌后隐藏的正 ID 1。明摸 4 应消费这个
+      // 物理牌堆槽，并把仅由本地随机牌序绑定的身份 1 退回未定位池。
+      room.moveCards([4], 'player', {
+        seatID: 1,
+        fromZone: 'pile',
+        cardCount: 1,
+        sourceEvent: { type: 'stage1:draw-unlocated-from-positive-hidden-top' }
+      })
+
+      expect(infoSpy).not.toHaveBeenCalledWith(
+        'known 路径实体缺口，将 createExternal',
+        expect.anything()
+      )
+    } finally {
+      infoSpy.mockRestore()
+    }
+
+    const materializedCard = room.cardIndex.get(4)
+    expect(materializedCard).toBeTruthy()
+    expect(materializedCard).toBe(hiddenTopCard)
+    expect(materializedCard?.location).toBe('player')
+    expect(materializedCard?.isKnown).toBe(true)
+    expect(pile.cards).toHaveLength(3)
+    expect(room.cardIndex.has(displacedIdentityID)).toBe(false)
+    expect(room.suspendedKnownCards.size).toBe(0)
+    expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3]))
   })
 
   it('游戏外匿名手牌首次揭示时扩展并物化身份全集', () => {
@@ -178,6 +220,206 @@ describe('阶段 1 匿名牌堆 spike', () => {
       expect(card.isKnown).toBe(false)
     })
     expect(room.getPlayer(1).unknownCardCount).toBe(2)
+  })
+
+  it('洗牌后明摸暂停身份遇到正 ID 暗牌顶时仍消耗牌堆槽', () => {
+    const { room } = createTestRoom({
+      cardIDs: [1, 2, 3, 4, 5, 6],
+      seatIDs: [1],
+      materializeDeckIdentities: false
+    })
+    const pile = room.zones.get('pile')!
+
+    room.moveCards([], 'player', {
+      seatID: 1,
+      fromZone: 'pile',
+      cardCount: 2,
+      sourceEvent: { type: 'stage1:draw-unknown-before-shuffle' }
+    })
+    room.moveCards([1, 2, 3], 'discard', {
+      fromZone: 'pile',
+      cardCount: 3,
+      sourceEvent: { type: 'stage1:discard-before-shuffle' }
+    })
+    room.shufflePile({ cardCount: 4 })
+
+    room.moveCards([4], 'player', {
+      seatID: 1,
+      fromZone: 'pile',
+      cardCount: 1,
+      sourceEvent: { type: 'stage1:draw-suspended-from-anonymous-top' }
+    })
+    expect(pile.cards).toHaveLength(3)
+
+    const suspendedCountBeforePositiveHiddenDraw = room.suspendedKnownCards.size
+    const displacedPileIdentityID = pile.cards.at(-1)!.id
+    expect(displacedPileIdentityID).toBeGreaterThan(0)
+
+    room.moveCards([5], 'player', {
+      seatID: 1,
+      fromZone: 'pile',
+      cardCount: 1,
+      sourceEvent: { type: 'stage1:draw-suspended-from-positive-hidden-top' }
+    })
+
+    expect(pile.cards).toHaveLength(2)
+    expect(room.counter.statusIndex[CARD_INSTANCE_STATUS.UNKNOWN].size).toBe(2)
+    // 5 原本占用一个场外 suspended 名额。它从正 ID 暗牌顶出现后，该名额应转交给
+    // 被挤出的牌堆身份，而不是像普通 unlocated 物化一样只释放到未定位池。
+    expect(room.suspendedKnownCards.size).toBe(suspendedCountBeforePositiveHiddenDraw)
+    expect(room.suspendedKnownCards.has(room.cardIndex.get(displacedPileIdentityID)!)).toBe(true)
+    expect(room.suspendedKnownCards.has(room.cardIndex.get(5)!)).toBe(false)
+  })
+
+  it('洗牌新建的暂停身份逆序进入手牌并二次洗牌时保持增量索引顺序', () => {
+    const { room } = createTestRoom({
+      cardIDs: [1, 2, 3, 4, 5, 6],
+      seatIDs: [1],
+      materializeDeckIdentities: false
+    })
+
+    room.moveCards([], 'player', {
+      seatID: 1,
+      fromZone: 'pile',
+      cardCount: 2,
+      sourceEvent: { type: 'stage1:draw-unknown-before-shuffle' }
+    })
+    room.moveCards([1, 2, 3], 'discard', {
+      fromZone: 'pile',
+      cardCount: 3,
+      sourceEvent: { type: 'stage1:discard-before-shuffle' }
+    })
+    room.shufflePile({ cardCount: 4 })
+    ;[6, 5].forEach((cardID) => {
+      room.moveCards([cardID], 'player', {
+        seatID: 1,
+        fromZone: 'pile',
+        cardCount: 1,
+        sourceEvent: { type: 'stage1:draw-suspended-out-of-creation-order' }
+      })
+    })
+    room.moveCards([6], 'discard', {
+      fromSeatID: 1,
+      fromSubZone: 'hand',
+      cardCount: 1,
+      sourceEvent: { type: 'stage1:discard-before-second-shuffle' }
+    })
+    room.shufflePile({ cardCount: 3 })
+
+    expectLocationIndexMatchesRebuild(room)
+  })
+
+  it('二次洗牌日志合并沿用与本轮新增的暂停身份', () => {
+    const { room } = createTestRoom({
+      cardIDs: [1, 2, 3, 4, 5, 6],
+      seatIDs: [1],
+      materializeDeckIdentities: false
+    })
+    const pile = room.zones.get('pile')!
+    const discard = room.zones.get('discard')!
+
+    room.moveCards([], 'player', {
+      seatID: 1,
+      fromZone: 'pile',
+      cardCount: 2,
+      sourceEvent: { type: 'stage1:draw-unknown-before-first-shuffle' }
+    })
+    room.moveCards([1, 2, 3], 'discard', {
+      fromZone: 'pile',
+      cardCount: 3,
+      sourceEvent: { type: 'stage1:discard-before-first-shuffle' }
+    })
+    room.shufflePile({ cardCount: 4 })
+
+    const carriedSuspendedCardIDs = Array.from(room.suspendedKnownCards, (card) => card.id)
+    const hiddenPileCard = pile.cards.find((card) => card.id > 0 && card.isKnown !== true)!
+    room.moveCards([], 'player', {
+      seatID: 1,
+      fromZone: 'pile',
+      sourceCards: [hiddenPileCard],
+      cardCount: 1,
+      sourceEvent: { type: 'stage1:draw-positive-hidden-before-second-shuffle' }
+    })
+
+    const recycledCard = pile.cards.find((card) => card.id > 0 && card.isKnown !== true)!
+    room.moveCards([recycledCard.id], 'discard', {
+      fromZone: 'pile',
+      cardCount: 1,
+      sourceEvent: { type: 'stage1:discard-before-second-shuffle-summary' }
+    })
+
+    const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
+    try {
+      room.shufflePile({ cardCount: pile.cards.length + discard.cards.length })
+
+      const activeSuspendedCardIDs = Array.from(room.suspendedKnownCards, (card) => card.id)
+      expect(activeSuspendedCardIDs).toEqual([...carriedSuspendedCardIDs, hiddenPileCard.id])
+      expect(infoSpy).toHaveBeenCalledWith(
+        '洗牌后暂停追踪非实际牌堆内正 ID 暗身份',
+        expect.objectContaining({
+          suspendedCardIDs: activeSuspendedCardIDs,
+          carriedSuspendedCardIDs,
+          newlySuspendedCardIDs: [hiddenPileCard.id],
+          visibleKnownCardIDs: expect.not.arrayContaining(carriedSuspendedCardIDs),
+          preservedPlayerPlaceholders: expect.arrayContaining([
+            expect.objectContaining({ sourceCardID: hiddenPileCard.id })
+          ])
+        })
+      )
+    } finally {
+      infoSpy.mockRestore()
+    }
+  })
+
+  it('玩家来源揭示暂停身份时保留被替换的正 ID 暗身份', () => {
+    const { room } = createTestRoom({
+      cardIDs: [1, 2, 3, 4],
+      seatIDs: [1],
+      materializeDeckIdentities: false
+    })
+    const pile = room.zones.get('pile')!
+    const discard = room.zones.get('discard')!
+
+    room.moveCards([1, 2, 3], 'discard', {
+      fromZone: 'pile',
+      cardCount: 3,
+      sourceEvent: { type: 'stage1:discard-before-hidden-identity-shuffle' }
+    })
+    room.shufflePile({ cardCount: 4 })
+
+    const suspendedCard = room.cardIndex.get(4)!
+    const hiddenPileCard = pile.cards.find((card) => card.id > 0 && card.isKnown !== true)!
+    const hiddenIdentityID = hiddenPileCard.id
+    expect(suspendedCard.suspended).toBe(true)
+
+    // 暗摸把一个 reset() 后的正 ID 牌堆槽带入手牌；随后协议从同一手牌明示暂停身份 4。
+    // 置换后该正 ID 暗槽不再承担手牌数量，但它的身份仍必须留在完整牌组中。
+    room.moveCards([], 'player', {
+      seatID: 1,
+      fromZone: 'pile',
+      sourceCards: [hiddenPileCard],
+      cardCount: 1,
+      sourceEvent: { type: 'stage1:draw-positive-hidden-player-placeholder' }
+    })
+    room.moveCards([suspendedCard.id], 'discard', {
+      fromSeatID: 1,
+      fromSubZone: 'hand',
+      cardCount: 1,
+      sourceEvent: { type: 'stage1:reveal-suspended-from-positive-hidden-placeholder' }
+    })
+
+    expect(room.cardIndex.has(hiddenIdentityID)).toBe(false)
+    expect(room.unlocatedIdentities.has(hiddenIdentityID)).toBe(true)
+
+    room.shufflePile({ cardCount: pile.cards.length + discard.cards.length })
+
+    expect(Array.from(room.suspendedKnownCards, (card) => card.id)).toContain(hiddenIdentityID)
+    const remainingIdentityIDs = new Set([
+      ...pile.cards.map((card) => card.id).filter((cardID) => cardID > 0),
+      ...Array.from(room.suspendedKnownCards, (card) => card.id)
+    ])
+    expect(remainingIdentityIDs).toEqual(room.deckIdentities)
+    expect(room.deckIdentities.size).toBe(4)
   })
 
   it('匿名牌堆洗牌时将 APPEARED 暗身份归入独立诊断分类', () => {
