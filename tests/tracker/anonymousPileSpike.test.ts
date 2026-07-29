@@ -263,7 +263,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
     })
 
     expect(pile.cards).toHaveLength(2)
-    expect(room.counter.statusIndex[CARD_INSTANCE_STATUS.UNKNOWN]).toHaveLength(2)
+    expect(room.counter.statusIndex[CARD_INSTANCE_STATUS.UNKNOWN].size).toBe(2)
     // 5 原本占用一个场外 suspended 名额。它从正 ID 暗牌顶出现后，该名额应转交给
     // 被挤出的牌堆身份，而不是像普通 unlocated 物化一样只释放到未定位池。
     expect(room.suspendedKnownCards.size).toBe(suspendedCountBeforePositiveHiddenDraw)

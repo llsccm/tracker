@@ -830,7 +830,16 @@ describe('TrackerController', () => {
     controller.syncTrackerMove(protocolMove({ CardIDs: [5], CardCount: 1, ToID: 0 }))
 
     const room = controller.getTrackerRoom()
+    const expectedIdentityIDs = new Set([1, 2, 3, 4, 5, 6, 60461])
+    const locatedIdentityIDs = new Set(room.cardIndex.keys())
     expect(room.zones.get('pile').cards).toHaveLength(3)
+    expect(room.deckIdentities).toEqual(expectedIdentityIDs)
+    expect(
+      [...locatedIdentityIDs].filter((cardID) => room.unlocatedIdentities.has(cardID))
+    ).toEqual([])
+    expect(new Set([...locatedIdentityIDs, ...room.unlocatedIdentities])).toEqual(
+      expectedIdentityIDs
+    )
   })
 
   it('技能3571从牌堆揭示陈旧已知手牌时置换实体并保持牌堆数量', () => {

@@ -171,6 +171,52 @@ describe('身份账本守恒', () => {
     expectConservationClean(room, 'test:release-placeholder')
   })
 
+  it('已知正 ID 不按暗占位移出追踪区', () => {
+    const { room } = createTestRoom({
+      cardIDs: [1, 2, 3, 4],
+      seatIDs: [1],
+      materializeDeckIdentities: false
+    })
+    const pile = room.zones.get('pile')!
+    const card = room.materialize(1, pile.cards.find(isAnonymous)!)!
+    const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
+
+    try {
+      expect(room.releaseUnknownPlaceholderToOutside(card, 'test:known-guard')).toBeNull()
+      expect(card.location).toBe('pile')
+      expect(card.isKnown).toBe(true)
+      expect(room.cardIndex.get(1)).toBe(card)
+      expect(room.unlocatedIdentities.has(1)).toBe(false)
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('暗占位解绑失败时返回 null 并保持暂停身份', () => {
+    const { room } = createTestRoom({
+      cardIDs: [1, 2, 3, 4],
+      seatIDs: [1],
+      materializeDeckIdentities: false
+    })
+    const pile = room.zones.get('pile')!
+    const card = room.materialize(1, pile.cards.find(isAnonymous)!)!
+    card.isKnown = false
+    const anonymizeSpy = vi.spyOn(room, 'anonymizeLocatedIdentity').mockReturnValue(null)
+    const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
+
+    try {
+      expect(room.releaseUnknownPlaceholderToOutside(card, 'test:release-failed')).toBeNull()
+      expect(card.location).toBe('suspended')
+      expect(card.isKnown).toBe(true)
+      expect(room.suspendedKnownCards.has(card)).toBe(true)
+      expect(room.cardIndex.get(1)).toBe(card)
+      expect(room.unlocatedIdentities.has(1)).toBe(false)
+    } finally {
+      anonymizeSpy.mockRestore()
+      warnSpy.mockRestore()
+    }
+  })
+
   it('anonymizeLocatedIdentity 是唯一解绑原语，成功时保证分区守恒', () => {
     const { room } = createTestRoom({
       cardIDs: [1, 2, 3, 4],
@@ -180,23 +226,26 @@ describe('身份账本守恒', () => {
     const pile = room.zones.get('pile')!
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
 
-    const target = pile.cards.find(isAnonymous)!
-    const card = room.materialize(1, target)!
+    try {
+      const target = pile.cards.find(isAnonymous)!
+      const card = room.materialize(1, target)!
 
-    const released = room.anonymizeLocatedIdentity(card, 'test:primitive')
+      const released = room.anonymizeLocatedIdentity(card, 'test:primitive')
 
-    expect(released).toBe(1)
-    // 原语内置的分区守恒断言不应告警。
-    expect(
-      warnSpy.mock.calls.filter(([message]) => message === '身份解绑后分区守恒被破坏')
-    ).toEqual([])
-    expect(room.cardIndex.has(1)).toBe(false)
-    expect(room.unlocatedIdentities.has(1)).toBe(true)
-    expect(room.deckIdentities.has(1)).toBe(true)
-    expect(card).toSatisfy(isAnonymous)
+      expect(released).toBe(1)
+      // 原语内置的分区守恒断言不应告警。
+      expect(
+        warnSpy.mock.calls.filter(([message]) => message === '身份解绑后分区守恒被破坏')
+      ).toEqual([])
+      expect(room.cardIndex.has(1)).toBe(false)
+      expect(room.unlocatedIdentities.has(1)).toBe(true)
+      expect(room.deckIdentities.has(1)).toBe(true)
+      expect(card).toSatisfy(isAnonymous)
 
-    warnSpy.mockRestore()
-    expectIdentityLedgerIntact(room, [1, 2, 3, 4])
+      expectIdentityLedgerIntact(room, [1, 2, 3, 4])
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 
   it('anonymizeLocatedIdentity 前置条件不满足时返回 null 且不改变任何状态', () => {

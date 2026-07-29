@@ -593,6 +593,16 @@ export class Room {
    */
   releaseUnknownPlaceholderToOutside(card: Card, reason: string): CardID | null {
     const previousCardID = card.id
+    if (previousCardID > 0 && card.isKnown === true) {
+      trackerLogger.warn('拒绝将已知正 ID 卡牌按暗占位移出追踪区', {
+        reason,
+        cardID: previousCardID,
+        entityID: card.entityID,
+        location: card.location
+      })
+      return null
+    }
+
     const shouldReleaseIdentity = previousCardID > 0 && card.isKnown !== true
     const releasedIdentityID = shouldReleaseIdentity
       ? this.anonymizeLocatedIdentity(card, `${reason}:releaseIdentity`)
@@ -608,7 +618,7 @@ export class Room {
       })
       card.confirmKnown()
       this.constraints.suspendKnownCard(card, `${reason}:releaseIdentityFailed`)
-      return previousCardID
+      return null
     }
 
     card.moveToPublicZone('outside')
@@ -620,6 +630,13 @@ export class Room {
       })
     }
     return releasedIdentityID
+  }
+
+  private findPublicZoneEntry(card: Card): [PublicZoneName, Zone] | null {
+    const zoneID = card.location
+    const zone = this.zones.get(zoneID)
+    if (!zone || !zone.cards.includes(card)) return null
+    return [zoneID, zone]
   }
 
   /**
@@ -664,10 +681,7 @@ export class Room {
       // 当另一个 unlocated 身份被协议明确揭示在这里时，两者应交换“已定位/未定位”状态：
       // 旧身份退回 unlocated，新身份复用同一个物理实体。若把旧身份转为 suspended，
       // 每次明摸都会凭本地随机牌序制造新的场上候选（例如 160 挤出 146）。
-      const targetIsInPublicZone = Array.from(this.zones.values()).some((zone) =>
-        zone.cards.includes(target)
-      )
-      if (!targetIsInPublicZone) return null
+      if (!this.findPublicZoneEntry(target)) return null
 
       this.removeCardsFromConstraintGroups([target])
       const displacedIdentityID = this.anonymizeLocatedIdentity(
@@ -736,9 +750,7 @@ export class Room {
       const oldSpellID = existing.spellID
       const oldCombinationID = existing.combinationID
       const oldLocationCandidates = existing.getLocationCandidates()
-      const targetZoneEntry = Array.from(this.zones.entries()).find(([, zone]) =>
-        zone.cards.includes(target)
-      )
+      const targetZoneEntry = this.findPublicZoneEntry(target)
 
       if (!targetZoneEntry) return
 
@@ -779,9 +791,7 @@ export class Room {
     // 该匿名槽会被“浪费”一格；若下游出现匿名目标提前耗尽，应从这里的空操作路径排查。
     if (existing.location !== 'outside' && existing.location !== 'suspended') return
 
-    const targetZoneEntry = Array.from(this.zones.entries()).find(([, zone]) =>
-      zone.cards.includes(target)
-    )
+    const targetZoneEntry = this.findPublicZoneEntry(target)
     if (!targetZoneEntry) return
 
     const [targetZoneID, targetZone] = targetZoneEntry
