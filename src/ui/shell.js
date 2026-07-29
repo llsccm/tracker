@@ -23,7 +23,7 @@ function ensureStyle() {
       background: rgb(35, 32, 29);
       user-select: none;
       text-align: left;
-      transition: height 200ms, width 200ms, opacity 200ms;
+      transition: width 200ms, opacity 200ms;
       border-radius: 8px;
       transform-origin: top right;
       transform: translate(0px, 0px);
@@ -70,8 +70,7 @@ function ensureStyle() {
       width: 230px;
       height: 100%;
       margin: 0px;
-      overflow-y: auto;
-      overflow-x: hidden;
+      overflow: hidden;
     }
     .createIframe.collapsed #iframe-source {
       display: none !important;

@@ -1,3 +1,21 @@
+import { toClipboard } from '../utils/clipboard'
+
+const USER_INFO_SELECTORS = ['#uuid', '#nickName']
+
+function getUserInfoCopyValue(element) {
+  const text = element.textContent ?? ''
+  const separatorIndex = text.indexOf('：')
+  return separatorIndex === -1 ? text : text.slice(separatorIndex + 1)
+}
+
+function copyUserInfo(value) {
+  return toClipboard(value, false)
+}
+
+function getDefaultRoot() {
+  return typeof document === 'undefined' ? null : document
+}
+
 export function executeEmbeddedScripts(container) {
   // 查找并执行 contentDiv 中的所有 <script> 标签
   const scripts = container.querySelectorAll('script')
@@ -51,9 +69,51 @@ export function bindPanelHeaders() {
   })
 }
 
+export function bindTabBar({ root = getDefaultRoot() } = {}) {
+  if (!root) return
+
+  const tabBtns = root.querySelectorAll('.tab-btn')
+  const tabPanels = root.querySelectorAll('.tab-panel')
+
+  tabBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      tabBtns.forEach((b) => b.classList.remove('active'))
+      tabPanels.forEach((p) => p.classList.remove('active'))
+
+      btn.classList.add('active')
+      const targetId = btn.dataset.tab
+      const target = targetId ? root.querySelector(`#${targetId}`) : null
+      if (target) target.classList.add('active')
+    })
+  })
+}
+
+export function bindUserInfoCopyActions({ root = getDefaultRoot(), copy = copyUserInfo } = {}) {
+  if (!root) return
+
+  USER_INFO_SELECTORS.forEach((selector) => {
+    const element = root.querySelector(selector)
+    if (!element) return
+
+    const handleCopy = () => {
+      copy(getUserInfoCopyValue(element))
+    }
+
+    element.onclick = handleCopy
+    element.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        handleCopy()
+      }
+    }
+  })
+}
+
 export function initInjectedInterface({ container, expandJiePanel, bindDelegatedTooltips }) {
   executeEmbeddedScripts(container)
   bindPanelHeaders()
+  bindTabBar({ root: container })
+  bindUserInfoCopyActions({ root: container })
   expandJiePanel()
   bindDelegatedTooltips()
 }
