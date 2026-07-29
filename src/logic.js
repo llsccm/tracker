@@ -126,9 +126,20 @@ export function logic(msg) {
 
     if (ALLOWED_CLASSES.has(className) && msg?.userID != user.userID) {
       //渠道服没有localStorage.SGS_LASTLOGIN_ACCOUNT，而是localStorage.LastUserName
+      const frameReady = initFrame()
       user.userID = msg.userID
       console.info('[logic] userID: %s', msg.userID)
-      initFrame()
+      frameReady
+        .then(() => {
+          const uuidElement = document.getElementById('uuid')
+          if (uuidElement) uuidElement.textContent = 'id：' + user.userID
+
+          const nicknameElement = document.getElementById('nickName')
+          if (nicknameElement) nicknameElement.textContent = '昵称：' + user.nickname
+        })
+        .catch((error) => {
+          console.error('[logic] initFrame failed:', error)
+        })
     }
 
     if (typeof PUERTS_JS_RESOURCES !== 'undefined') {
@@ -138,8 +149,20 @@ export function logic(msg) {
     }
 
     switch (className) {
-      case 'ClientLoginRep':
+      case 'ClientLoginRep': {
         user.nickname = msg.Nickname || user.nickname || ''
+        const nicknameElement = document.getElementById('nickName')
+        if (nicknameElement) nicknameElement.textContent = '昵称：' + user.nickname
+        break
+      }
+
+      case 'ClientBindKeyRep':
+        console.info(msg)
+        break
+
+      // 收到此消息后会请求公告 可以尝试在此关闭 AdPushWindow
+      case 'decodeSyncGameDataEvent':
+        console.info(msg)
         break
 
       // 断线重连
@@ -224,9 +247,10 @@ export function logic(msg) {
         break
 
       case 'GsCUpdateRoleDataNtf':
-        if (msg.StateID === 47) {
-          // console.info(msg)
-        }
+        // DATA_MARK_SWJG_RANK 抓鬼等有此消息?
+        // if (msg.StateID === 47) {
+        //   console.info(msg)
+        // }
 
         // 22排位有58消息 DATA_CAMP_ID 阵营语音 SeatID: 0 Value: 402476507
         // 可以用来确认22主视角
@@ -325,73 +349,72 @@ export function logic(msg) {
         handleGamePhase(msg)
         break
 
-      // TODO
-      //出杀次数
+      // TODO 战法注册
+
       case 'GsCUpdateRoleDataExNtf':
-        {
-          switch (msg.DataID) {
-            case 1:
-              if (Game.currentID == SeatID && Array.isArray(Datas)) {
-                document.getElementById('sha').innerText =
-                  '剩余：' + Math.max(0, Datas[2] - Datas[1])
-              }
-              break
+        switch (msg.DataID) {
+          //出杀次数
+          case 1:
+            if (Game.currentID == SeatID && Array.isArray(Datas)) {
+              document.getElementById('sha').innerText = '剩余：' + Math.max(0, Datas[2] - Datas[1])
+            }
+            break
 
-            case 3571:
-              if (Array.isArray(Datas)) {
-                // 郭照 椒遇 Datas:[x] 1红2黑
-                const colors = Datas[0] == 1 ? [1, 2] : [3, 4]
+          case 3571:
+            if (Array.isArray(Datas)) {
+              // 郭照 椒遇 Datas:[x] 1红2黑
+              const colors = Datas[0] == 1 ? [1, 2] : [3, 4]
 
-                const jiaoYuCards = Game.getSpellState(3571)
-                Game.setSpellState(
-                  3571,
-                  new Set(
-                    Array.from(jiaoYuCards || []).filter((id) =>
-                      colors.includes(CardConfig.GetInstance().getCard(id)?.color)
-                    )
+              const jiaoYuCards = Game.getSpellState(3571)
+              Game.setSpellState(
+                3571,
+                new Set(
+                  Array.from(jiaoYuCards || []).filter((id) =>
+                    colors.includes(CardConfig.GetInstance().getCard(id)?.color)
                   )
                 )
+              )
+            }
+            break
+
+          // 尽览
+          case 4022:
+            if (Array.isArray(Datas)) {
+              const roleData = parsePeiXiuRoleData(Datas)
+              if (!roleData) break
+
+              const spellExtendConfig = SpellExtendConfig.GetInstance()
+              const mapConfig = spellExtendConfig.PeiXiuCellDic.get(roleData.mapId)
+              const solvedState = mapConfig ? solvePeiXiuRoleData(mapConfig, Datas) : null
+              const presetRoutes = spellExtendConfig.PeiXiuPresetRoutes.get(roleData.mapId) || []
+              const usesMainHandMirror =
+                Game.myID != null && SeatID != null && Number(Game.myID) === Number(SeatID)
+              const handSuitColors = usesMainHandMirror ? getRenderedHandSuitColors() : null
+
+              const state = solvedState
+                ? { ...solvedState, presetRoutes, handSuitColors, usesMainHandMirror }
+                : {
+                    ...roleData,
+                    result: null,
+                    presetRoutes,
+                    handSuitColors,
+                    usesMainHandMirror
+                  }
+
+              Game.setSpellState(4022, state)
+
+              if (state.result) {
+                renderPeiXiuMapWindow(state, spellExtendConfig.PeiXiuBonus)
+                setPeiXiuMapWindowVisible(Boolean(globalConfig.peiXiuMapSwitch))
               }
-              break
+            }
 
-            // 尽览
-            case 4022:
-              if (Array.isArray(Datas)) {
-                const roleData = parsePeiXiuRoleData(Datas)
-                if (!roleData) break
+            break
 
-                const spellExtendConfig = SpellExtendConfig.GetInstance()
-                const mapConfig = spellExtendConfig.PeiXiuCellDic.get(roleData.mapId)
-                const solvedState = mapConfig ? solvePeiXiuRoleData(mapConfig, Datas) : null
-                const presetRoutes = spellExtendConfig.PeiXiuPresetRoutes.get(roleData.mapId) || []
-                const usesMainHandMirror =
-                  Game.myID != null && SeatID != null && Number(Game.myID) === Number(SeatID)
-                const handSuitColors = usesMainHandMirror ? getRenderedHandSuitColors() : null
-
-                const state = solvedState
-                  ? { ...solvedState, presetRoutes, handSuitColors, usesMainHandMirror }
-                  : {
-                      ...roleData,
-                      result: null,
-                      presetRoutes,
-                      handSuitColors,
-                      usesMainHandMirror
-                    }
-
-                Game.setSpellState(4022, state)
-
-                if (state.result) {
-                  renderPeiXiuMapWindow(state, spellExtendConfig.PeiXiuBonus)
-                  setPeiXiuMapWindowVisible(Boolean(globalConfig.peiXiuMapSwitch))
-                }
-              }
-
-              break
-
-            default:
-              break
-          }
+          default:
+            break
         }
+
         break
 
       // TODO
@@ -509,6 +532,10 @@ export function logic(msg) {
         wait(() => laya.blockPowerSlogan()).catch((err) => {
           console.error(err)
         })
+        break
+
+      // 武将包开启后消息 用于关闭 GeneralOpenResultWindow
+      case 'ClientChestOpenReplaceInfoNtf':
         break
 
       default:

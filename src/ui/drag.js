@@ -76,8 +76,8 @@ export function initDragElement(globalConfig, globalState) {
   const startDrag = (e) => {
     draggable.style.cursor = 'grabbing'
     isDragging = true
-    startX = e.clientX || e.touches[0].clientX // 支持触摸
-    startY = e.clientY || e.touches[0].clientY // 支持触摸
+    startX = e.clientX ?? e.touches?.[0]?.clientX ?? 0 // 支持触摸
+    startY = e.clientY ?? e.touches?.[0]?.clientY ?? 0 // 支持触摸
 
     container.style.userSelect = 'none' // 应用到整个容器
     container.style.willChange = 'transform' // 硬件加速应用到容器
@@ -95,14 +95,27 @@ export function initDragElement(globalConfig, globalState) {
     if (!isDragging) return
     sidebarHint.style.display = 'flex'
 
-    const clientX = e.clientX || e.touches[0].clientX // 支持触摸
-    const clientY = e.clientY || e.touches[0].clientY // 支持触摸
+    const clientX = e.clientX ?? e.touches?.[0]?.clientX ?? startX // 支持触摸
+    const clientY = e.clientY ?? e.touches?.[0]?.clientY ?? startY // 支持触摸
 
     const deltaX = clientX - startX
     const deltaY = clientY - startY
 
+    const rect = container.getBoundingClientRect()
+    const left0 = rect.left - translateX
+    const top0 = rect.top - translateY
+    const width = rect.width || 230
+
     translateX += deltaX
     translateY += deltaY
+
+    const minX = -left0
+    const maxX = window.innerWidth - width - left0
+    const minY = -top0
+    const maxY = window.innerHeight - 30 - top0
+
+    translateX = Math.max(minX, Math.min(maxX, translateX))
+    translateY = Math.max(minY, Math.min(maxY, translateY))
 
     if (globalConfig.padding) {
       globalConfig.padding = 0
@@ -140,7 +153,8 @@ export function initDragElement(globalConfig, globalState) {
 
     container.style.willChange = 'auto'
 
-    if (window.innerWidth - (e.clientX || e.touches[0].clientX) < 25 && draggable.id === 'header') {
+    const finalClientX = e.clientX ?? e.changedTouches?.[0]?.clientX ?? e.touches?.[0]?.clientX ?? startX
+    if (window.innerWidth - finalClientX < 25 && draggable.id === 'header') {
       if (!globalConfig.padding) {
         if (globalState.closeIframe) {
           const toggle = document.getElementById('toggle-me')

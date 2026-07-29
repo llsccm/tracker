@@ -108,7 +108,7 @@ export function handleGameFlowState(context) {
     }
 
     // 正常摸牌时，仅累计主视角的战法摸牌计数。
-    if (game.myID !== undefined && context.ToID === game.myID) {
+    if (game.myID !== undefined && context.ToID === game.myID && game.turn > 0) {
       game.record({ mo: context.CardCount })
     }
   }

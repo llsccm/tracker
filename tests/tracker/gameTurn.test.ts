@@ -66,7 +66,7 @@ describe('MsgGameTurnNtf', () => {
 
   it('首轮消息隐藏主视角并显示已定位座位，同时重置轮战法状态', () => {
     zhanFaItems.push(
-      { PlotID: 2033, Value: 2, n: 2 },
+      { PlotID: 2036, Value: 2, n: 2 },
       { PlotID: 2301, Value: 4, n: 4 },
       { PlotID: 9999, Value: 6, n: 6 }
     )
@@ -78,7 +78,7 @@ describe('MsgGameTurnNtf', () => {
     expect(showOrderContainers).toHaveBeenCalledOnce()
     expect(Game.setTurn).toHaveBeenCalledWith(1)
     expect(zhanFaItems).toEqual([
-      { PlotID: 2033, Value: 0, n: 0 },
+      { PlotID: 2036, Value: 0, n: 0 },
       { PlotID: 2301, Value: 0, n: 0 },
       { PlotID: 9999, Value: 6, n: 6 }
     ])
@@ -86,14 +86,14 @@ describe('MsgGameTurnNtf', () => {
   })
 
   it('普通轮次不重复清理首轮座位覆盖，但仍重置轮战法状态', () => {
-    zhanFaItems.push({ PlotID: 2034, Value: 2, n: 2 })
+    zhanFaItems.push({ PlotID: 2036, Value: 2, n: 2 })
 
     handleGameTurn({ TurnCnt: 2 })
 
     expect(hideSelfOrderContainer).not.toHaveBeenCalled()
     expect(showOrderContainers).not.toHaveBeenCalled()
     expect(Game.setTurn).toHaveBeenCalledWith(2)
-    expect(zhanFaItems).toEqual([{ PlotID: 2034, Value: 0, n: 0 }])
+    expect(zhanFaItems).toEqual([{ PlotID: 2036, Value: 0, n: 0 }])
     expect(scheduleTrackerRender).toHaveBeenCalledOnce()
   })
 
