@@ -506,6 +506,15 @@ export class Room {
   /**
    * 把手气卡回牌堆等路径上的已定位正 ID 槽真正匿名化：
    * 实体保留在牌堆位置，身份回到 unlocatedIdentities，供后续揭示时再物化。
+   *
+   * 这是「解绑身份」的唯一原语。materialize、materializeExistingIdentityAtTarget、
+   * releaseUnknownPlaceholderToOutside 与洗牌路径全部经由此处，因此身份分区守恒
+   * （一个 deckIdentity 必须恰好处于 cardIndex 或 unlocatedIdentities 之一）
+   * 只需在这里断言一次。
+   *
+   * 返回 `null` 表示**未发生任何变更**：入参不是已定位的正 ID 实体，或 cardIndex
+   * 与实体不一致。调用方必须处理该情况，不能假定身份已被释放——否则会出现
+   * “实体已移出、身份仍被 cardIndex 认为已定位”的漏出（历史上 147 号身份即由此丢失）。
    */
   anonymizeLocatedIdentity(card: Card, reason = 'anonymizeLocatedIdentity'): CardID | null {
     if (!card || !hasRealIdentity(card) || card.id <= 0) return null
@@ -546,7 +555,32 @@ export class Room {
       this.markCounterDirty(card)
     }
 
+    this.assertIdentityReleased(previousCardID, reason)
+
     return previousCardID
+  }
+
+  /**
+   * 身份解绑后的分区守恒断言（开发期，生产零成本）。
+   *
+   * 解绑完成时该身份必须恰好处于「未定位」一侧：既不能仍被 cardIndex 认为已定位，
+   * 也不能从 deckIdentities 中消失。这两种漏出都会让后续洗牌再也找不到该身份。
+   */
+  private assertIdentityReleased(cardID: CardID, reason: string): void {
+    if (!import.meta.env.DEV) return
+
+    const issues: string[] = []
+    if (this.cardIndex.has(cardID)) issues.push('still-in-card-index')
+    if (!this.unlocatedIdentities.has(cardID)) issues.push('missing-from-unlocated')
+    if (!this.deckIdentities.has(cardID)) issues.push('missing-from-deck-identities')
+
+    if (issues.length > 0) {
+      trackerLogger.warn('身份解绑后分区守恒被破坏', {
+        reason,
+        cardID,
+        issues
+      })
+    }
   }
 
   /**
