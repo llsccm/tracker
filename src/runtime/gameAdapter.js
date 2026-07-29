@@ -473,9 +473,18 @@ export class GameRuntime {
   }
 
   GetWindow(name) {
-    return (
-      this.class('WindowManager')?.WindowInstanceDict?.get(name) ?? this.find('WindowLayer', name)
-    )
+    const manager = this.class('WindowManager')
+    const managedWindow = manager?.GetWindow?.(name)
+    if (managedWindow) return managedWindow
+
+    const instances = manager?.WindowInstanceDict
+    const cachedWindow =
+      typeof instances?.get == 'function' ? instances.get(name) : instances?.[name]
+    if (cachedWindow) return cachedWindow
+
+    const foundWindow = this.find('WindowLayer', name)
+    if (Array.isArray(foundWindow)) return foundWindow.find(Boolean) ?? null
+    return foundWindow ?? null
   }
 
   showName() {

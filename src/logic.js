@@ -152,7 +152,7 @@ export function logic(msg) {
     switch (className) {
       // 绑定码
       case 'ClientBindKeyRep':
-        console.info(msg)
+        // console.info(msg)
         break
 
       // 收到此消息后会请求公告 可以尝试在此关闭 AdPushWindow
@@ -373,15 +373,18 @@ export function logic(msg) {
           case 15:
             if (SeatID !== undefined && SeatID == Game.myID && import.meta.env.DEV) {
               // isReverse
-              const speicalData = []
+              const isSpecial = msg.Datas[3] > 0
+              // const speicalData = isSpecial ? [msg.Datas[3]] : []
 
-              if (msg.Datas[3] > 0) {
-                speicalData.concat(msg.Datas.splice(3, 1))
-              }
+              const generalId = msg.Datas[0]
+              const skillCnt = msg.Datas[1]
 
-              const generalId = msg.Datas.shift()
-              const skillCnt = msg.Datas.shift()
-              const skillIds = msg.Datas.splice(0, skillCnt)
+              // 截取索引 2 开始的数据；若 isSpecial 为 true，则排除原索引 3 的元素
+              const remaining = isSpecial
+                ? [...msg.Datas.slice(2, 3), ...msg.Datas.slice(4)]
+                : msg.Datas.slice(2)
+
+              const skillIds = remaining.slice(0, skillCnt)
 
               if (generalId === 0) {
                 console.info('战法技能id: ', skillIds)

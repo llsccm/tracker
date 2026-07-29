@@ -47,24 +47,33 @@ export function drawCitiesUI(cities, _display) {
   }
 
   // 更新场景显示
-  wait(() => laya.find('SceneLayer', 'RogueSmallMapScene'), 10, 500, { immediate: true }).then(
-    (rogueScene) => {
-      // 清理旧内容
-      for (let i = rogueScene?.cityView.numChildren - 1; i >= 0; i--) {
-        const child = rogueScene.cityView.getChildAt(i)
-        if (child.name === 'city' && rogueScene.cityView) {
-          rogueScene.cityView.removeChild(child)
-        }
-      }
+  wait(
+    () => {
+      const rogueScene = laya.find('SceneLayer', 'RogueSmallMapScene')
+      return rogueScene?.cityView ? rogueScene : undefined
+    },
+    10,
+    500,
+    { immediate: true }
+  ).then((rogueScene) => {
+    const cityView = rogueScene?.cityView
+    if (!cityView) return
 
-      // 添加新内容
-      if (rogueScene?.cityView && cities) {
-        rogueMap.res.forEach(({ city }) => {
-          rogueScene.cityView.addChild(city)
-        })
+    // 清理旧内容
+    for (let i = cityView.numChildren - 1; i >= 0; i--) {
+      const child = cityView.getChildAt(i)
+      if (child.name === 'city') {
+        cityView.removeChild(child)
       }
     }
-  )
+
+    // 添加新内容
+    if (cities) {
+      rogueMap.res.forEach(({ city }) => {
+        cityView.addChild(city)
+      })
+    }
+  })
 }
 
 // 样式常量
