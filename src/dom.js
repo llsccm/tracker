@@ -399,6 +399,8 @@ function buttonClick() {
   const detailBlockSwitchIds = [
     'blockKillEffectSwitch',
     'blockSkinStateSwitch',
+    'skipAdWindowSwitch',
+    'skipPackageWindowSwitch',
     'blockMvpSettlementSwitch'
   ]
   const getSwitchElement = (configKey) => document.getElementById(configKey)
@@ -440,6 +442,12 @@ function buttonClick() {
       syncEffectBlockSwitchFromDetails()
     },
     blockSkinStateSwitch() {
+      syncEffectBlockSwitchFromDetails()
+    },
+    skipAdWindowSwitch() {
+      syncEffectBlockSwitchFromDetails()
+    },
+    skipPackageWindowSwitch() {
       syncEffectBlockSwitchFromDetails()
     },
     blockMvpSettlementSwitch() {
