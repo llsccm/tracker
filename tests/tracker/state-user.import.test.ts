@@ -19,8 +19,14 @@ describe('state/user Node 导入边界', () => {
     const config = createConfigStore({ storage })
 
     expect(config.padding).toBe(8)
+    expect(config.skipAdWindowSwitch).toBe(true)
+    expect(config.skipPackageWindowSwitch).toBe(true)
     config.padding = 16
+    config.skipAdWindowSwitch = false
+    config.skipPackageWindowSwitch = false
     expect(JSON.parse(storage.getItem('PADDING'))).toBe(16)
+    expect(JSON.parse(storage.getItem('SKIP_AD_WINDOW_SWITCH'))).toBe(false)
+    expect(JSON.parse(storage.getItem('SKIP_PACKAGE_WINDOW_SWITCH'))).toBe(false)
   })
 
   it('配置 storage 写入失败时拒绝更新内存态', () => {

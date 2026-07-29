@@ -153,7 +153,8 @@ export function initDragElement(globalConfig, globalState) {
 
     container.style.willChange = 'auto'
 
-    const finalClientX = e.clientX ?? e.changedTouches?.[0]?.clientX ?? e.touches?.[0]?.clientX ?? startX
+    const finalClientX =
+      e.clientX ?? e.changedTouches?.[0]?.clientX ?? e.touches?.[0]?.clientX ?? startX
     if (window.innerWidth - finalClientX < 25 && draggable.id === 'header') {
       if (!globalConfig.padding) {
         if (globalState.closeIframe) {
