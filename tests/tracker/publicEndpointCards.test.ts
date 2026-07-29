@@ -39,6 +39,31 @@ describe('getPublicEndpointCards 位置归一化', () => {
     expect(materialized.map((card) => card.id)).toEqual([21, 22])
     expect(materialized[0]).toBe(bottomTargets[0])
     expect(materialized[1]).toBe(bottomTargets[1])
-    expect(room.zones.get('pile')!.cards.slice(0, 2).map((card) => card.id)).toEqual([21, 22])
+    expect(
+      room.zones
+        .get('pile')!
+        .cards.slice(0, 2)
+        .map((card) => card.id)
+    ).toEqual([21, 22])
+  })
+
+  it('materializeAtPublicEndpoint 复用正 ID 暗端点并释放原身份', () => {
+    const { room } = createTestRoom({
+      cardIDs: [31, 32],
+      materializeDeckIdentities: false
+    })
+    const pile = room.zones.get('pile')!
+    const hiddenEndpoint = room.materialize(31, pile.cards.at(-1)!)!
+    const displacedIdentityID = hiddenEndpoint.id
+    hiddenEndpoint.reset()
+
+    const materialized = room.materializeAtPublicEndpoint([32], 'pile', POSITION_TOP)
+
+    expect(materialized.map((card) => card.id)).toEqual([32])
+    expect(pile.cards.at(-1)).toBe(materialized[0])
+    expect(materialized[0]).toBe(hiddenEndpoint)
+    expect(room.cardIndex.has(displacedIdentityID)).toBe(false)
+    expect(room.suspendedKnownCards.size).toBe(0)
+    expect(room.unlocatedIdentities).toEqual(new Set([31]))
   })
 })

@@ -550,8 +550,48 @@ export class Room {
   }
 
   /**
-   * 将真实身份绑定到匿名目标槽，并同步身份守恒账本与查询索引。
-   * 已定位身份命中匿名目标时，仅允许阶段 1 的旧式暗手牌 interop 纠正槽位。
+   * 移除不再承担位置数量的暗占位，同时保住它携带的真实身份。
+   *
+   * 洗牌后的正 ID 暗实体只表示一次本地身份绑定，并不表示牌面已经公开。
+   * 若直接把它移到 outside，cardIndex 仍会认为该身份已定位，但 CardCounter 会把它归为
+   * REMOVED，下一次洗牌便无法从“未定位身份”或“暗位置身份”中重新找到它。
+   * 因此先把身份退回 unlocatedIdentities，再移出已经多余的匿名物理槽。
+   */
+  releaseUnknownPlaceholderToOutside(card: Card, reason: string): CardID | null {
+    const previousCardID = card.id
+    const shouldReleaseIdentity = previousCardID > 0 && card.isKnown !== true
+    const releasedIdentityID = shouldReleaseIdentity
+      ? this.anonymizeLocatedIdentity(card, `${reason}:releaseIdentity`)
+      : null
+
+    if (shouldReleaseIdentity && releasedIdentityID === null) {
+      // 索引已经异常时宁可保留一个 suspended 身份，也不能继续移出并永久漏掉该 ID。
+      trackerLogger.warn('正 ID 暗占位移出追踪区前释放身份失败，改为暂停身份', {
+        reason,
+        cardID: previousCardID,
+        entityID: card.entityID,
+        indexedCardID: this.cardIndex.get(previousCardID)?.id ?? null
+      })
+      card.confirmKnown()
+      this.constraints.suspendKnownCard(card, `${reason}:releaseIdentityFailed`)
+      return previousCardID
+    }
+
+    card.moveToPublicZone('outside')
+    if (releasedIdentityID !== null) {
+      trackerLogger.info('正 ID 暗占位移出追踪区前已释放身份', {
+        reason,
+        releasedIdentityID,
+        replacementEntityID: card.entityID
+      })
+    }
+    return releasedIdentityID
+  }
+
+  /**
+   * 将真实身份绑定到匿名槽或正 ID 暗槽，并同步身份守恒账本与查询索引。
+   * 已定位身份命中玩家暗槽时，仅允许阶段 1 的旧式暗手牌 interop 纠正槽位；
+   * 未定位身份命中公共区正 ID 暗槽时，会在同一物理实体上释放旧身份并物化新身份。
    */
   materialize(cardID: CardID, target: Card | null = null): Card | null {
     const normalizedCardID = Number(cardID)
@@ -559,7 +599,9 @@ export class Room {
 
     const existing = this.cardIndex.get(normalizedCardID)
     if (existing) {
-      if (target && target !== existing && isAnonymous(target)) {
+      // 洗牌后牌顶可能是 reset() 过的正 ID 暗槽。它与匿名槽一样代表一个可消费的
+      // 物理牌堆位置；明摸已有暂停身份时必须占据该槽，不能只移动身份而保留牌堆张数。
+      if (target && target !== existing && target.isKnown !== true) {
         this.materializeExistingIdentityAtTarget(existing, target)
       }
 
@@ -567,15 +609,46 @@ export class Room {
       return existing
     }
 
-    if (!target || !isAnonymous(target)) return null
+    if (!target || target.isKnown === true) return null
+
+    const wasDeckIdentity = this.deckIdentities.has(normalizedCardID)
+    // 只有初始牌组中尚未定位的身份才能占用洗牌后的正 ID 暗槽。
+    // 牌组外首次出现的技能生成牌仍走 createExternal 兜底，不能凭一个 pile 来源字段
+    // 挤走已有牌组身份；部分技能/测试会用 pile 作为动画来源但并不消耗真实牌堆槽。
+    if (!isAnonymous(target) && !wasDeckIdentity) return null
 
     // 游戏外首次出现的合法正 ID 不在初始牌组中，发现时扩展身份全集。
-    if (!this.deckIdentities.has(normalizedCardID)) {
+    if (!wasDeckIdentity) {
       this.deckIdentities.add(normalizedCardID)
       this.unlocatedIdentities.add(normalizedCardID)
     }
 
     if (!this.unlocatedIdentities.has(normalizedCardID)) return null
+
+    if (!isAnonymous(target)) {
+      // 正 ID 暗槽上的身份只是本地洗牌后随机保留的内部绑定，不代表该身份确定处于此槽。
+      // 当另一个 unlocated 身份被协议明确揭示在这里时，两者应交换“已定位/未定位”状态：
+      // 旧身份退回 unlocated，新身份复用同一个物理实体。若把旧身份转为 suspended，
+      // 每次明摸都会凭本地随机牌序制造新的场上候选（例如 160 挤出 146）。
+      const targetIsInPublicZone = Array.from(this.zones.values()).some((zone) =>
+        zone.cards.includes(target)
+      )
+      if (!targetIsInPublicZone) return null
+
+      this.removeCardsFromConstraintGroups([target])
+      const displacedIdentityID = this.anonymizeLocatedIdentity(
+        target,
+        'materialize:replaceHiddenPublicIdentity'
+      )
+      if (displacedIdentityID === null) return null
+
+      trackerLogger.debug('未定位身份复用正 ID 暗公共槽', {
+        cardID: normalizedCardID,
+        displacedIdentityID,
+        targetEntityID: target.entityID,
+        targetLocation: target.location
+      })
+    }
 
     target.materializeIdentity(normalizedCardID)
     target.confirmKnown()
@@ -600,7 +673,14 @@ export class Room {
     position: PublicPosition
   ): Card[] {
     const targets = this.getPublicEndpointCards(zoneID, cardIDs.length, position)
-    const availableTargets = targets.filter(isAnonymous)
+    const cardIDSet = new Set(cardIDs.map(Number))
+    // 与 moveCards 的公共来源解析保持一致：洗牌后的正 ID 暗槽同样是可消费端点，
+    // 但不能让本批明确身份互相充当目标，否则会把同批后一张错误转为 suspended。
+    const availableTargets = targets.filter(
+      (card) =>
+        isAnonymous(card) ||
+        (card.id > 0 && card.isKnown !== true && !cardIDSet.has(Number(card.id)))
+    )
 
     return cardIDs
       .map((cardID) => {
@@ -671,8 +751,29 @@ export class Room {
     if (!targetZoneEntry) return
 
     const [targetZoneID, targetZone] = targetZoneEntry
+    const transfersSuspendedRole =
+      existing.location === 'suspended' ||
+      existing.suspended === true ||
+      this.suspendedKnownCards.has(existing)
+    const displacedHiddenIdentity = target.id > 0 && target.isKnown !== true
     existing.moveToPublicZone(targetZoneID)
     targetZone.replaceCard(target, existing)
+    if (displacedHiddenIdentity && transfersSuspendedRole) {
+      // suspended 身份从牌堆再次出现，说明原先分配给它的“场外暗身份名额”仍需由
+      // 被挤出的牌堆暗身份承接。这里转移 suspended 角色，随后调用方会恢复 existing，
+      // 因而活动 suspended 总数保持不变。
+      target.confirmKnown()
+      this.constraints.suspendKnownCard(target, 'materialize:displacedHiddenPublicIdentity')
+      return
+    }
+
+    if (displacedHiddenIdentity) {
+      // outside 的已有身份没有 suspended 名额需要转移。被挤身份只需回到 unlocated；
+      // 直接以正 ID 移出会让 cardIndex 继续宣称它已定位，并在下次洗牌永久漏掉该身份。
+      this.releaseUnknownPlaceholderToOutside(target, 'materialize:displacedHiddenPublicIdentity')
+      return
+    }
+
     target.moveToPublicZone('outside')
   }
 
@@ -720,6 +821,9 @@ export class Room {
       })
     ]
 
+    // 增量索引必须按 room.cards 的创建顺序登记新实体；否则实体首次进入手牌的事件顺序
+    // 会成为排序依据，第二次洗牌后的增量桶顺序便可能与全量 rebuild 不同。
+    cards.forEach((card) => this.locationIndex.registerCard(card))
     cards.forEach((card) => card.moveToPublicZone('outside'))
     cards.forEach((card) => this.counter?.addCard(card))
     return cards
@@ -983,6 +1087,12 @@ export class Room {
       return
     }
 
+    // suspendedKnownCards 会跨洗牌保留。后续诊断必须把这些沿用身份和本轮新增身份合并，
+    // 不能只报告本轮重新分类出来的卡牌。
+    const carriedSuspendedCards = Array.from(this.suspendedKnownCards).filter(
+      (card) => card.id > 0 && card.suspended === true
+    )
+
     // 弃牌堆通常远大于剩余牌堆，且它的身份状态本就属于 DISCARD。
     // 分类只需用剩余牌堆中的少量正 ID 排除仍有明确牌堆位置的身份。
     const remainingPileIdentityIDs = new Set(
@@ -1036,15 +1146,20 @@ export class Room {
     appearedCards.forEach((card) => {
       addSuspendedIdentity(card, appearedHiddenIdentityCards)
     })
-    // 场上明牌
-    const visibleKnownCards = appearedCards.filter((card) => card.id > 0 && card.isKnown)
+    // suspended 身份在第一次洗牌时会 confirmKnown()，但这只为候选视图提供牌面，
+    // 并不代表它已经出现在场上；第二次洗牌不能把这类身份误列为 visible。
+    const visibleKnownCards = appearedCards.filter(
+      (card) =>
+        card.id > 0 &&
+        card.isKnown &&
+        card.suspended !== true &&
+        !this.suspendedKnownCards.has(card)
+    )
     // 洗牌不会把这些正 ID 迁入实际牌堆；若它们原本承载玩家区暗槽位，
     // 会按暂停前实体所在的玩家/子区/技能空间创建匿名替身，避免丢失位置数量账本。
     // 正 ID 自身暂停前会 confirmKnown()，表示身份已明确；后续协议再次出现该 ID 时恢复具体位置追踪。
     const suspendedIdentityCards = [...neverAppearedCards, ...appearedHiddenIdentityCards]
     const knownPileCount = remainingPileCards.length + recycledCards.length
-    // 这是“协议牌堆空间”的解释数量，不是实际 pile.cards。
-    const pileSpaceRemainingCount = knownPileCount + suspendedIdentityCards.length
 
     recordTraversal('shufflePile:classify', suspendedIdentityCards.length)
 
@@ -1060,7 +1175,7 @@ export class Room {
     // 不再为了“凑长度”向 pile.cards 填入匿名占位或玩家暗手牌实体。
     const rebuiltPileCards = rebuildPileAfterShuffle()
 
-    const suspendedCardIDs: CardID[] = []
+    const newlySuspendedCardIDs: CardID[] = []
     const preservedPlayerPlaceholders: PreservedPlayerPlaceholderSummary[] = []
     let preservedPlayerHandPlaceholderCount = 0
     suspendedIdentityCards.forEach((card) => {
@@ -1082,8 +1197,19 @@ export class Room {
       // 暂停追踪的对象是明确的正 ID 身份；设置为已知，方便计数器与场上候选视图展示牌面。
       card.confirmKnown()
       this.constraints.suspendKnownCard(card, 'shufflePile:remainingIdentity')
-      suspendedCardIDs.push(card.id)
+      newlySuspendedCardIDs.push(card.id)
     })
+
+    // newlySuspendedCardIDs 只描述本轮新分类结果；面板与数量守恒需要使用
+    // “上一轮仍未恢复 + 本轮新增”的完整活动集合。
+    const activeSuspendedCards = Array.from(this.suspendedKnownCards).filter(
+      (card) => card.id > 0 && card.suspended === true
+    )
+    const activeSuspendedCardIDs = activeSuspendedCards.map((card) => card.id)
+    const activeSuspendedCardSet = new Set(activeSuspendedCards)
+    const carriedSuspendedCardIDs = carriedSuspendedCards
+      .filter((card) => activeSuspendedCardSet.has(card))
+      .map((card) => card.id)
 
     const playerHandPlaceholderValidationIssues =
       preservedPlayerHandPlaceholderCount > 0
@@ -1094,7 +1220,10 @@ export class Room {
     const rebuiltPileCount = rebuiltPileCards.length
     const discardCountAfterShuffle = discard.cards.length
     const actualPilePlaceholderCount = rebuiltPileCards.filter(isAnonymous).length
-    const explainedPileSpaceCount = actualPileCount + suspendedIdentityCards.length
+    // 这是“协议牌堆空间”的解释数量，不是实际 pile.cards。第二次及后续洗牌必须包含
+    // 上一轮仍未恢复的暂停身份，否则日志会把完整活动集合误报成本轮新增子集。
+    const pileSpaceRemainingCount = knownPileCount + activeSuspendedCards.length
+    const explainedPileSpaceCount = actualPileCount + activeSuspendedCards.length
 
     // 校验点 1：实际牌堆一致性。
     // rebuiltPileCards 是本次写入 pile.replaceAll() 的实体列表；写入后它应与 pile.cards 长度一致，
@@ -1126,6 +1255,9 @@ export class Room {
         neverAppearedCount: neverAppearedCards.length,
         appearedHiddenIdentityCount: appearedHiddenIdentityCards.length,
         rebuiltPileCount,
+        carriedSuspendedCardIDs,
+        newlySuspendedCardIDs,
+        activeSuspendedCardIDs,
         knownPileCardIDs: [
           ...remainingPileCards.map((card) => card.id).filter((id) => id > 0),
           ...recycledCards.map((card) => card.id).filter((id) => id > 0)
@@ -1147,14 +1279,17 @@ export class Room {
       })
     }
 
-    if (suspendedCardIDs.length > 0) {
+    if (activeSuspendedCardIDs.length > 0) {
+      // suspendedCardIDs 保持“当前完整集合”的直观语义，另外两个字段只负责解释其来源。
       trackerLogger.info('洗牌后暂停追踪非实际牌堆内正 ID 暗身份', {
         cardCount: normalizedCardCount,
         actualPileCardIDs: rebuiltPileCards.map((card) => card.id).filter((id) => id > 0),
         neverAppearedCardIDs: neverAppearedCards.map((card) => card.id),
         appearedHiddenIdentityCardIDs: appearedHiddenIdentityCards.map((card) => card.id),
         visibleKnownCardIDs: visibleKnownCards.map((card) => card.id),
-        suspendedCardIDs,
+        suspendedCardIDs: activeSuspendedCardIDs,
+        carriedSuspendedCardIDs,
+        newlySuspendedCardIDs,
         preservedPlayerPlaceholders,
         playerHandPlaceholderValidationIssues
       })

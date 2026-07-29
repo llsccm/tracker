@@ -462,10 +462,17 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     const oldZoneHasKnownCard = zone?.cards.includes(card) ?? false
 
     if (oldLocation === 'suspended') {
-      placeholder.moveToPublicZone('outside')
+      // suspended 身份没有可回填的物理区域，因此来源占位必须退出玩家区。
+      // 但正 ID 暗占位的身份仍可能对应牌堆/其它暗手牌，需先退回未定位身份池。
+      const placeholderCardID = placeholder.id
+      const releasedIdentityID = this.room.releaseUnknownPlaceholderToOutside(
+        placeholder,
+        'restoreUnknownPlaceholderToPreviousPublicLocation:suspended'
+      )
       trackerLogger.debug('暂停追踪来源占位置换后移出占位', {
         knownCardID: card.id,
-        placeholderCardID: placeholder.id,
+        placeholderCardID,
+        releasedIdentityID,
         oldLocation,
         keepPreviousPosition
       })
@@ -492,10 +499,17 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     }
 
     zone?.removeCard(card)
-    placeholder.moveToPublicZone('outside')
+    // 找不到旧公共区同样意味着占位失去位置职责；统一走身份释放入口，
+    // 避免正 ID 暗占位变成 cardIndex 中永久不可见的 outside 身份。
+    const placeholderCardID = placeholder.id
+    const releasedIdentityID = this.room.releaseUnknownPlaceholderToOutside(
+      placeholder,
+      'restoreUnknownPlaceholderToPreviousPublicLocation:missingZone'
+    )
     trackerLogger.warn('占位置换未回补公共区，已将占位移出追踪区', {
       knownCardID: card.id,
-      placeholderCardID: placeholder.id,
+      placeholderCardID,
+      releasedIdentityID,
       oldLocation,
       keepPreviousPosition,
       oldZoneCardCount,

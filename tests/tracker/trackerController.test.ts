@@ -764,6 +764,75 @@ describe('TrackerController', () => {
     ).toEqual([])
   })
 
+  it('从12区获得60461并洗入弃牌后连续明摸保持牌堆张数', () => {
+    const { controller } = createTrackerControllerHarness()
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2, 3, 4, 5, 6])
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [60461],
+        CardCount: 1,
+        FromID: 255,
+        FromZone: 12,
+        MoveType: 19,
+        ToID: 0,
+        ToZone: 5
+      })
+    )
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [60461],
+        CardCount: 1,
+        FromID: 0,
+        FromZone: 5,
+        MoveType: 4,
+        ToID: 255,
+        ToZone: 2
+      })
+    )
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 2,
+        FromID: 255,
+        FromZone: 1,
+        MoveType: 1,
+        ToID: 0,
+        ToZone: 5
+      })
+    )
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [1, 2, 3],
+        CardCount: 3,
+        FromID: 255,
+        FromZone: 1,
+        MoveType: 4,
+        ToID: 255,
+        ToZone: 2
+      })
+    )
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 5,
+        FromID: 255,
+        FromZone: 2,
+        MoveType: 255,
+        ToID: 255,
+        ToZone: 9
+      })
+    )
+
+    controller.syncTrackerMove(protocolMove({ CardIDs: [4], CardCount: 1, ToID: 0 }))
+    controller.syncTrackerMove(protocolMove({ CardIDs: [5], CardCount: 1, ToID: 0 }))
+
+    const room = controller.getTrackerRoom()
+    expect(room.zones.get('pile').cards).toHaveLength(3)
+  })
+
   it('技能3571从牌堆揭示陈旧已知手牌时置换实体并保持牌堆数量', () => {
     const { controller } = createTrackerControllerHarness()
 
