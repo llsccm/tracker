@@ -472,6 +472,12 @@ export class GameRuntime {
       })
   }
 
+  GetWindow(name) {
+    return (
+      this.class('WindowManager')?.WindowInstanceDict?.get(name) ?? this.find('WindowLayer', name)
+    )
+  }
+
   showName() {
     this.gamescene?.seatContainer?.seatUIs?.forEach(({ seat, otherTopManager }) => {
       otherTopManager?.createPlayerNameBg()
@@ -516,7 +522,7 @@ export class GameRuntime {
    * @returns {boolean} 是否已找到并关闭窗口
    */
   closeWindow(name) {
-    const gameWindow = this.class('WindowManager')?.GetWindow?.(name)
+    const gameWindow = this.GetWindow(name)
     if (typeof gameWindow?.Close != 'function') return false
 
     gameWindow.Close()

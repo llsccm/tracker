@@ -128,6 +128,7 @@ export function logic(msg) {
       //渠道服没有localStorage.SGS_LASTLOGIN_ACCOUNT，而是localStorage.LastUserName
       const frameReady = initFrame()
       user.userID = msg.userID
+      user.nickname = msg.Nickname || user.nickname || ''
       console.info('[logic] userID: %s', msg.userID)
       frameReady
         .then(() => {
@@ -149,20 +150,18 @@ export function logic(msg) {
     }
 
     switch (className) {
-      case 'ClientLoginRep': {
-        user.nickname = msg.Nickname || user.nickname || ''
-        const nicknameElement = document.getElementById('nickName')
-        if (nicknameElement) nicknameElement.textContent = '昵称：' + user.nickname
-        break
-      }
-
+      // 绑定码
       case 'ClientBindKeyRep':
         console.info(msg)
         break
 
       // 收到此消息后会请求公告 可以尝试在此关闭 AdPushWindow
       case 'decodeSyncGameDataEvent':
-        console.info(msg)
+        // 充值也会有此消息 但是暂无更好方案
+        if (!globalConfig.skipAdWindowSwitch) break
+        wait(() => laya.closeWindow('AdPushWindow'), 2).catch((err) => {
+          console.error(err)
+        })
         break
 
       // 断线重连
@@ -225,6 +224,11 @@ export function logic(msg) {
 
         // 长安行[20610702]
         if (ProtoObj?.matchName && ShanHeTu_regex.test(ProtoObj.matchName)) {
+          Game.isShanHeTu = true
+          return
+        }
+
+        if (ProtoObj?.matchName && ProtoObj?.matchName.includes('山河图')) {
           Game.isShanHeTu = true
           return
         }
@@ -322,7 +326,12 @@ export function logic(msg) {
       // 选择武将
       case 'SmsgGameSetCharacter':
         // 斗地主是同步选择武将 播放录像时可以用这个方式来判断主视角
-        if (Game.isRecord && Game.myID === undefined && Game.isDouDiZhu && msg.Infos.length == 1) {
+        if (
+          Game.isRecord &&
+          Game.myID === undefined &&
+          msg.Infos.length == 1 &&
+          (Game.isDouDiZhu || Game.isShanHeTu)
+        ) {
           tracker.setTrackerMySeatID(msg.Infos[0].SeatID)
         }
 
@@ -358,6 +367,27 @@ export function logic(msg) {
             if (Game.currentID == SeatID && Array.isArray(Datas)) {
               document.getElementById('sha').innerText = '剩余：' + Math.max(0, Datas[2] - Datas[1])
             }
+            break
+
+          // OPT_DATA_ADD_NEW_SPELL 可用于注册战法
+          case 15:
+            if (SeatID !== undefined && SeatID == Game.myID && import.meta.env.DEV) {
+              // isReverse
+              const speicalData = []
+
+              if (msg.Datas[3] > 0) {
+                speicalData.concat(msg.Datas.splice(3, 1))
+              }
+
+              const generalId = msg.Datas.shift()
+              const skillCnt = msg.Datas.shift()
+              const skillIds = msg.Datas.splice(0, skillCnt)
+
+              if (generalId === 0) {
+                console.info('战法技能id: ', skillIds)
+              }
+            }
+
             break
 
           case 3571:
@@ -536,6 +566,12 @@ export function logic(msg) {
 
       // 武将包开启后消息 用于关闭 GeneralOpenResultWindow
       case 'ClientChestOpenReplaceInfoNtf':
+        if (!globalConfig.skipPackageWindowSwitch) break
+        wait(() => laya.GetWindow('GeneralOpenResultWindow'))
+          .then((win) => win?.Close())
+          .catch((err) => {
+            console.error(err)
+          })
         break
 
       default:
