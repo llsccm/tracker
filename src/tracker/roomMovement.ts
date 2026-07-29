@@ -175,15 +175,21 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         sourceZone?.cards.length ?? knownIDs.length,
         fromPosition
       )
-      const availableTargets = endpointCards.filter(isAnonymous)
-      const anonymousTargetCountBefore = availableTargets.length
+      // 牌堆端点在洗牌后可能同时包含匿名槽和 reset() 后的正 ID 暗槽，两者都能被
+      // 本批明牌消费。同批 known ID 必须排除，否则前一张会把后一张的明确身份挤成 suspended。
+      const knownIDSet = new Set(knownIDs)
+      const availableTargets = endpointCards.filter(
+        (card) =>
+          isAnonymous(card) || (card.id > 0 && card.isKnown !== true && !knownIDSet.has(card.id))
+      )
+      const hiddenTargetCountBefore = availableTargets.length
       const resolveAttempts: Record<string, unknown>[] = []
 
       context.knownCards = knownIDs
         .map((cardID) => {
           const existing = this.room.cardIndex.get(cardID)
           const existingInSource = Boolean(existing && sourceZone?.cards.includes(existing))
-          const hadAnonymousTarget = !existingInSource && availableTargets.length > 0
+          const hadHiddenTarget = !existingInSource && availableTargets.length > 0
           const target = existingInSource ? existing : availableTargets.shift()
           const ledgerBefore = {
             inCardIndex: this.room.cardIndex.has(cardID),
@@ -192,14 +198,21 @@ export class RoomMovement extends RoomMovementCandidateMethods {
             existingLocation: existing?.location ?? null,
             existingIsKnown: existing?.isKnown === true,
             existingInSource,
-            tookAnonymousTarget: Boolean(target && isAnonymous(target)),
-            remainingAnonymousTargets: availableTargets.length
+            tookHiddenTarget: Boolean(target && target !== existing),
+            hiddenTargetID: target?.id ?? null,
+            remainingHiddenTargets: availableTargets.length
           }
-          const resolved = this.room.materialize(cardID, target ?? null) ?? existing
+          const materialized = this.room.materialize(cardID, target ?? null)
+          // 牌组外首次出现的身份不会消费正 ID 暗槽。此时把预取目标放回队首，
+          // 让同批后续的真实牌组身份仍能使用正确端点。
+          if (!materialized && !existing && target) {
+            availableTargets.unshift(target)
+          }
+          const resolved = materialized ?? existing
           resolveAttempts.push({
             cardID,
             ...ledgerBefore,
-            hadAnonymousTarget,
+            hadHiddenTarget,
             materializeOk: Boolean(resolved),
             afterInCardIndex: this.room.cardIndex.has(cardID)
           })
@@ -215,8 +228,8 @@ export class RoomMovement extends RoomMovementCandidateMethods {
           missingIDs,
           fromZone,
           fromPosition,
-          anonymousTargetCountBefore,
-          anonymousTargetCountAfter: availableTargets.length,
+          hiddenTargetCountBefore,
+          hiddenTargetCountAfter: availableTargets.length,
           sourceZoneCards: (sourceZone?.cards ?? []).map((card) => ({
             id: card.id,
             entityID: card.entityID,
