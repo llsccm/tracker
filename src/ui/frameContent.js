@@ -16,10 +16,6 @@ function getDefaultRoot() {
   return typeof document === 'undefined' ? null : document
 }
 
-function getDefaultTimer() {
-  return typeof setTimeout === 'undefined' ? null : setTimeout
-}
-
 export function executeEmbeddedScripts(container) {
   // 查找并执行 contentDiv 中的所有 <script> 标签
   const scripts = container.querySelectorAll('script')
@@ -73,9 +69,11 @@ export function bindPanelHeaders() {
   })
 }
 
-export function bindTabBar() {
-  const tabBtns = document.querySelectorAll('.tab-btn')
-  const tabPanels = document.querySelectorAll('.tab-panel')
+export function bindTabBar({ root = getDefaultRoot() } = {}) {
+  if (!root) return
+
+  const tabBtns = root.querySelectorAll('.tab-btn')
+  const tabPanels = root.querySelectorAll('.tab-panel')
 
   tabBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -83,30 +81,30 @@ export function bindTabBar() {
       tabPanels.forEach((p) => p.classList.remove('active'))
 
       btn.classList.add('active')
-      const target = document.getElementById(btn.dataset.tab)
+      const targetId = btn.dataset.tab
+      const target = targetId ? root.querySelector(`#${targetId}`) : null
       if (target) target.classList.add('active')
     })
   })
 }
 
-export function bindUserInfoCopyActions({
-  root = getDefaultRoot(),
-  copy = copyUserInfo,
-  setTimer = getDefaultTimer()
-} = {}) {
+export function bindUserInfoCopyActions({ root = getDefaultRoot(), copy = copyUserInfo } = {}) {
   if (!root) return
 
   USER_INFO_SELECTORS.forEach((selector) => {
     const element = root.querySelector(selector)
     if (!element) return
 
-    element.onclick = async () => {
-      const originalText = element.textContent ?? ''
-      await copy(getUserInfoCopyValue(element))
-      element.textContent = '复制成功'
-      setTimer?.(() => {
-        if (element.textContent === '复制成功') element.textContent = originalText
-      }, 500)
+    const handleCopy = () => {
+      copy(getUserInfoCopyValue(element))
+    }
+
+    element.onclick = handleCopy
+    element.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        handleCopy()
+      }
     }
   })
 }
@@ -114,7 +112,7 @@ export function bindUserInfoCopyActions({
 export function initInjectedInterface({ container, expandJiePanel, bindDelegatedTooltips }) {
   executeEmbeddedScripts(container)
   bindPanelHeaders()
-  bindTabBar()
+  bindTabBar({ root: container })
   bindUserInfoCopyActions({ root: container })
   expandJiePanel()
   bindDelegatedTooltips()

@@ -1464,10 +1464,14 @@
     }
 
     .tab-btn:focus,
-    .tab-btn:focus-visible,
     .tab-btn:active {
       outline: none;
       box-shadow: none;
+    }
+
+    .tab-btn:focus-visible {
+      outline: 1px solid var(--text-gold);
+      outline-offset: -2px;
     }
 
     .tab-btn.active {
@@ -1791,9 +1795,9 @@
       <div class="width"></div>
       <div style="text-align: center">
         <div class="width"></div>
-        <div class="uuid id" id="uuid">id：</div>
+        <div class="uuid id" id="uuid" role="button" tabindex="0" data-tooltip="点击复制">id：</div>
         <div class="width"></div>
-        <div class="uuid nickName" id="nickName">昵称：</div>
+        <div class="uuid nickName" id="nickName" role="button" tabindex="0" data-tooltip="点击复制">昵称：</div>
         <div class="width"></div>
       </div>
     </div>

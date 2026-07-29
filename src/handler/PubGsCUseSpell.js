@@ -83,10 +83,11 @@ export function handleUseSpell(msg) {
     case 13293:
     case 13294: // 削命 谋命
       if (SeatID === Game.myID) {
-        const zhanfa = laya.gamescene?.SelfSeatUi?.zhanFaItems.find(
+        const zhanfa = laya.gamescene?.SelfSeatUi?.zhanFaItems?.find(
           (item) => item.SkillId === SpellID
         )
 
+        if (!zhanfa) break
         if (zhanfa.n === undefined) zhanfa.n = 0
         zhanfa.Value = ++zhanfa.n
       }
