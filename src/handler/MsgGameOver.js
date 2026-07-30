@@ -7,20 +7,39 @@ import { wait } from '@/utils'
 
 let closeGameOverWindowsTimer = null
 
+// 应该存在一个更好的方法
 function scheduleCloseGameOverWindows() {
   if (closeGameOverWindowsTimer !== null) clearTimeout(closeGameOverWindowsTimer)
   closeGameOverWindowsTimer = null
   if (!globalConfig.blockMvpSettlementSwitch) return
 
-  closeGameOverWindowsTimer = setTimeout(() => {
+  closeGameOverWindowsTimer = setTimeout(async () => {
     closeGameOverWindowsTimer = null
-    wait(() => laya.GetWindow('GameResultWindow')).then((win) => {
-      win.laterClose?.()
-      wait(() => laya.GetWindow('GameMvpWindow')).then((win) => {
-        win.laterClose?.()
-      })
-    })
-  }, 500)
+
+    const getWindow = (name) => {
+      const win = laya.GetWindow(name)
+      return win && !win.destroyed ? win : null
+    }
+
+    const resultWin = await wait(() => getWindow('GameResultWindow'))
+    if (!resultWin) return
+
+    // 此时关闭战绩会导致山河图结算窗口没有数据
+    if (getWindow('RogueZhanJiWindow')) return
+
+    const zhanJiWin = await wait(() => getWindow('RogueZhanJiWindow'), 4, 250)
+    if (zhanJiWin) return
+
+    if (!resultWin.destroyed) {
+      resultWin.laterClose?.()
+    }
+
+    // mvp窗口在战绩后出现
+    const mvpWin = await wait(() => getWindow('GameMvpWindow'))
+    if (mvpWin && !mvpWin.destroyed) {
+      mvpWin.laterClose?.()
+    }
+  }, 1000)
 }
 
 export function handleGameOver() {
