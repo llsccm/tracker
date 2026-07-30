@@ -3,6 +3,7 @@ import { laya } from '@/runtime/gameAdapter'
 import { Game, globalConfig } from '@/tracker'
 import { tracker } from '@/tracker/runtime/browser'
 import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
+import { wait } from '@/utils'
 
 let closeGameOverWindowsTimer = null
 
@@ -13,9 +14,12 @@ function scheduleCloseGameOverWindows() {
 
   closeGameOverWindowsTimer = setTimeout(() => {
     closeGameOverWindowsTimer = null
-    if (laya.closeWindow('GameResultWindow')) {
-      laya.closeWindow('GameMvpWindow')
-    }
+    wait(() => laya.GetWindow('GameResultWindow')).then((win) => {
+      win.laterClose?.()
+      wait(() => laya.GetWindow('GameMvpWindow')).then((win) => {
+        win.laterClose?.()
+      })
+    })
   }, 500)
 }
 

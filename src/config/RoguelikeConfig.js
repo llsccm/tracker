@@ -127,7 +127,7 @@ export class RoguelikeConfig extends ConfigBase {
 
   initDifficulties(difficulties) {
     for (const data of difficulties || []) {
-      if (!data || data.isopen != 1) continue
+      if (!data) continue
 
       const info = Object.assign(new RoguelikeDifficultyVo(), data)
       const sessionId = info.seasonID
