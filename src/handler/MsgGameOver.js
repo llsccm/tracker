@@ -6,6 +6,7 @@ import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
 import { wait } from '@/utils'
 
 let closeGameOverWindowsTimer = null
+let isPveRoguelike = false
 
 // 应该存在一个更好的方法
 function scheduleCloseGameOverWindows() {
@@ -21,12 +22,11 @@ function scheduleCloseGameOverWindows() {
       return win && win.visible ? win : null
     }
 
+    // 此时关闭战绩 山河图结算数据还不存在导致窗口空白
     const resultWin = await wait(() => getWindow('GameResultWindow'))
     if (!resultWin) return
-
-    // 此时关闭战绩 山河图结算数据还不存在导致窗口空白
-
-    // const zhanJiWin = await wait(() => getWindow('RogueZhanJiWindow'), 4, 250)
+    // 等山河图结算窗口初始化
+    if (isPveRoguelike) await wait(() => getWindow('RogueZhanJiWindow'))
     // if (zhanJiWin) return
     resultWin.laterClose?.()
 
@@ -36,12 +36,14 @@ function scheduleCloseGameOverWindows() {
     if (mvpWin) {
       mvpWin.laterClose?.()
     }
-  }, 2000)
+
+    cleanupGame()
+  }, 500)
 }
 
 export function handleGameOver() {
+  isPveRoguelike = Game.isShanHeTu
   scheduleCloseGameOverWindows()
-  cleanupGame()
 }
 
 export function handleLeaveTable() {
