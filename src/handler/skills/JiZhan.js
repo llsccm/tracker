@@ -1,6 +1,6 @@
 import { CardConfig } from '@/config'
-import { getTrackedPileCardIDs } from '../spellEffects'
 import { updateResult } from '@/utils'
+import { getTrackedPileCardIDs } from './utils'
 
 export function handleJiZhan(context) {
   if (
