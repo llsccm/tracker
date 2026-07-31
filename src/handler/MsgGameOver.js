@@ -32,9 +32,11 @@ function scheduleCloseGameOverWindows() {
 
     // 山河图没有mvp窗口
     // mvp窗口在战绩后出现
-    const mvpWin = await wait(() => getWindow('GameMvpWindow'))
-    if (mvpWin) {
-      mvpWin.laterClose?.()
+    if (!isPveRoguelike) {
+      const mvpWin = await wait(() => getWindow('GameMvpWindow'))
+      if (mvpWin) {
+        mvpWin.laterClose?.()
+      }
     }
 
     cleanupGame()
