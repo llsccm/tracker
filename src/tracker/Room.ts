@@ -5,6 +5,7 @@ import { CardCounter, CARD_INSTANCE_STATUS } from './CardCounter'
 import { GameState } from './gameState'
 import { AmbiguousKnownIndex } from './AmbiguousKnownIndex'
 import { CardLocationIndex } from './CardLocationIndex'
+import { PileIdentityLedger, type PileIdentityLedgerMove } from './PileIdentityLedger'
 import { normalizePublicPosition } from './candidate/publicCandidate'
 import { summarizeMoveContext, summarizeMoveEvent } from './helper/moveSummary'
 import { RoomConstraints } from './roomConstraints'
@@ -32,6 +33,7 @@ const CONVERGENCE_ROUNDS_WARN = 8
 
 interface RoomOptions {
   gameState?: GameState
+  pileIdentityLedgerEnabled?: boolean
 }
 
 interface HandSlotCountSummary {
@@ -140,6 +142,7 @@ export class Room {
   declare publicZones: RoomPublicZones
   declare constraints: RoomConstraints
   declare movement: RoomMovement
+  declare pileIdentityLedger: PileIdentityLedger
   declare game: GameState
   /** 计数器 */
   declare counter: CardCounter
@@ -147,7 +150,7 @@ export class Room {
   /**
    * @param cardIDs - 卡牌的物理 ID 列表，用以初始化卡牌池
    */
-  constructor({ gameState = new GameState() }: RoomOptions = {}) {
+  constructor({ gameState = new GameState(), pileIdentityLedgerEnabled = true }: RoomOptions = {}) {
     // 2. 初始化逻辑分区与公共区域
     this.players = new Map() // seatID -> Player
     this.zones = new Map([
@@ -189,6 +192,12 @@ export class Room {
     this.publicZones = new RoomPublicZones(this)
     this.constraints = new RoomConstraints(this)
     this.movement = new RoomMovement(this)
+    this.pileIdentityLedger = new PileIdentityLedger({
+      enabled: pileIdentityLedgerEnabled,
+      onWarning(message, detail) {
+        trackerLogger.warn(message, detail)
+      }
+    })
 
     // 8. 绑定当前房间的对局状态；浏览器入口会注入真实 Game，测试可注入纯状态对象。
     this.game = gameState
@@ -223,6 +232,7 @@ export class Room {
     }
 
     pile.replaceAll(deckCards)
+    this.pileIdentityLedger.initialize(cardIDs)
 
     this.locationIndex.rebuild(this)
     this.ambiguousKnownIndex.rebuild(Array.from(this.constraintGroups.values()))
@@ -236,6 +246,33 @@ export class Room {
     this.counter = new CardCounter(this)
     this.isDeckReady = true
     this.publicZones.assertPublicZoneConsistency('initDeck')
+  }
+
+  applyPileIdentityMove(
+    move: Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'>
+  ): void {
+    try {
+      this.pileIdentityLedger.applyMove({
+        ...move,
+        pileCountAfter: this.zones.get('pile')?.cards.length ?? 0,
+        discardCountAfter: this.zones.get('discard')?.cards.length ?? 0
+      })
+    } catch (error) {
+      trackerLogger.warn('牌堆身份账本移动双写失败', { error, move })
+    }
+  }
+
+  applyPileIdentityReveal(cardIDs: readonly CardID[], location: 'pile' | 'outside'): void {
+    try {
+      this.pileIdentityLedger.applyReveal({
+        cardIDs,
+        location,
+        pileCountAfter: this.zones.get('pile')?.cards.length ?? 0,
+        discardCountAfter: this.zones.get('discard')?.cards.length ?? 0
+      })
+    } catch (error) {
+      trackerLogger.warn('牌堆身份账本揭示双写失败', { error, cardIDs, location })
+    }
   }
 
   /**

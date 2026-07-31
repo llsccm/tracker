@@ -1,4 +1,4 @@
-import { POSITION_BOTTOM, POSITION_RANDOM } from '../candidate/cardPositions'
+import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '../candidate/cardPositions'
 import type { CardID, PublicPosition } from '../types'
 
 export type PileIdentityComparisonModel = 'baseline' | 'generation' | 'cohort'
@@ -243,7 +243,14 @@ export class PileIdentityModelComparison {
     if (move.fromZone === 1) {
       cardIDs.forEach((cardID) => this.revealIdentityFromPile(cardID))
       if (unknownCount > 0) {
-        this.consumeUnknownPileSlots(unknownCount, move.fromPosition)
+        const isTopRangeGain =
+          Number(move.moveType) === 18 &&
+          Number(move.spellID) === 7011 &&
+          move.fromPosition !== POSITION_RANDOM
+        if (isTopRangeGain) this.consumeUnknownPileTopRange(unknownCount)
+        else if (Number(move.moveType) === 18) {
+          this.consumeUnknownPileSlots(unknownCount, POSITION_RANDOM)
+        } else this.consumeUnknownPileSlots(unknownCount, move.fromPosition)
         this.generationDefinitelyInPileIDs.clear()
       }
     } else if (move.toZone === 1) {
@@ -333,6 +340,17 @@ export class PileIdentityModelComparison {
     return new Set(this.projectCohorts().definitelyInPileIDs)
   }
 
+  getCohortSnapshot(): PileIdentityComparisonSnapshot['cohort'] {
+    const projection = this.projectCohorts()
+    return {
+      generation: this.cohortGeneration,
+      groups: projection.groups,
+      definitelyInPileIDs: normalizeIDs(Array.from(projection.definitelyInPileIDs)),
+      definitelyOutsidePileIDs: normalizeIDs(Array.from(projection.definitelyOutsidePileIDs)),
+      flatCandidateWidth: projection.flatCandidateWidth
+    }
+  }
+
   getReport(): PileIdentityComparisonReport {
     const projection = this.projectCohorts()
     const currentCandidateIDs = normalizeIDs(Array.from(this.currentCandidateIDs))
@@ -364,13 +382,7 @@ export class PileIdentityModelComparison {
           suspendedIdentityIDs: generationCandidateIDs,
           definitelyInPileIDs: normalizeIDs(Array.from(this.getGenerationDefinitelyInPileIDs()))
         },
-        cohort: {
-          generation: this.cohortGeneration,
-          groups: projection.groups,
-          definitelyInPileIDs: normalizeIDs(Array.from(projection.definitelyInPileIDs)),
-          definitelyOutsidePileIDs: normalizeIDs(Array.from(projection.definitelyOutsidePileIDs)),
-          flatCandidateWidth: projection.flatCandidateWidth
-        }
+        cohort: this.getCohortSnapshot()
       },
       degradations: this.degradations.map((item) => ({
         ...item,
@@ -455,6 +467,14 @@ export class PileIdentityModelComparison {
       )
       this.unsupportedEventCount += 1
     }
+  }
+
+  private consumeUnknownPileTopRange(count: number): void {
+    const activeCohortCount = this.cohorts.filter((cohort) => cohort.remainingPileCount > 0).length
+    if (activeCohortCount > 1) {
+      this.degradeToSingleCohort(this.getAccountedPileCount(), 'anonymous-top-range-gain', true)
+    }
+    this.consumeUnknownPileSlots(count, POSITION_TOP)
   }
 
   private revealIdentityFromPile(cardID: CardID): void {

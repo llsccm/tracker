@@ -149,6 +149,7 @@ export interface BeliefEpochObserver {
   applyReveal(room: Room, event: BeliefRevealInput): void
   getMetrics(): ObserverMetrics
   getEpochs(): ObserverBeliefEpoch[]
+  getPileIdentityCohortSnapshot(): PileIdentityComparisonReport['snapshot']['cohort']
   /** 导出可直接粘贴的采集报告（对局验证用）。 */
   getReport(): BeliefEpochReport
 }
@@ -607,6 +608,10 @@ class ReadOnlyBeliefEpochObserver implements BeliefEpochObserver {
       room.getPublicZone('discard')?.cards.length ?? 0
     )
     this.observe(room)
+  }
+
+  getPileIdentityCohortSnapshot(): PileIdentityComparisonReport['snapshot']['cohort'] {
+    return this.modelComparison.getCohortSnapshot()
   }
 
   getReport(): BeliefEpochReport {

@@ -1,10 +1,10 @@
 # 牌堆身份批次模型当前计划
 
-> 状态：**Phase 0/0.5 完成；Phase 1 保留机会性观测；Phase 2 已完成并判定 GO；Phase 3 待启动；Phase 4–6 冻结**
+> 状态：**Phase 0/0.5 完成；Phase 1 保留机会性观测；Phase 2 已完成并判定 GO；Phase 3 首个双写切片完成；Phase 4–6 冻结**
 > 日期：2026-08-01
 > 文档角色：当前有效的设计契约与实施入口
-> 适用范围：`tests/tracker/` 纯模型 + `src/tracker/observer/` 只读 observer（DEV 限定）；
-> `src/tracker/` 生产身份状态尚未迁移；Phase 3 首个双写切片已完成设计
+> 适用范围：`tests/tracker/` 纯模型 + `src/tracker/observer/` 只读 observer（DEV 限定）+
+> `src/tracker/PileIdentityLedger.ts` 生产影子账本；现有移动、洗牌与 UI 仍是权威状态
 > 讨论归档：[`pile-generation-identity-pool-plan.md`](pile-generation-identity-pool-plan.md)
 
 ---
@@ -19,14 +19,14 @@ active pool = 确定仍在牌堆：NO-GO，语义错误
 三模型只读 observer：已实现并保留（DEV 限定），后续按机会采样
 匿名任意位置牌堆获取：按普通暗摸处理，只减少暗槽并使身份进入全局未决
 匿名获取导致的批次合并：正常身份失效，不计批次风险或模型降级
-生产身份账本迁移：GO，Phase 3 可启动
+生产身份账本迁移：Phase 3 首个双写切片已完成
 cohort 用户界面：首个迁移切片不新增；内部先保证语义与守恒
-生产迁移 Phase 4–6：继续冻结，等待 Phase 3 双写闸门
+生产迁移 Phase 4–6：继续冻结，等待独立的权威切换任务
 ```
 
-当前生产实现仍以 `Room.shufflePile()` 的正 ID 暗槽兼容状态为权威。Phase 2 GO 只解冻
-Phase 3 的账本/API 双写，不授权立即删除 `remainingPileIdentityIDs`、正 ID 暗槽置换或
-suspended 恢复路径；这些删除必须分别通过 Phase 4/5 闸门。
+当前生产实现仍以 `Room.shufflePile()` 的正 ID 暗槽兼容状态为权威。Phase 3 只新增生产
+影子账本/API 双写，不授权立即删除 `remainingPileIdentityIDs`、正 ID 暗槽置换或 suspended
+恢复路径；这些删除必须分别作为 Phase 4/5 的独立迁移完成。
 
 ---
 
@@ -496,10 +496,21 @@ FromZone=5 且有正 ID          证伪牌堆断言（手牌现身）
 
 ### Phase 3：生产账本与状态 API
 
-状态：**待启动，已解冻**。
+状态：**首个迁移切片已完成（2026-08-01）**。
 
-只允许先做 §10 定义的最小双写切片。当前 `Room`、`shufflePile()`、`materialize()` 与 UI
-继续以既有状态为权威；不得从 observer 导入测试状态，也不得在此阶段删除兼容分支。
+已完成：
+
+- 新增独立生产 `PileIdentityLedger`，由 `Room` 持有并在 `initDeck()` 初始化 generation 0。
+- `TrackerController` 在协议动作成功后把同一份归一化事件依次双写生产 ledger 与 DEV
+  observer；显式区域揭示使用同一套后置入口。
+- ledger 提供匿名顶/底/任意位置消费、身份揭示、已知/匿名回堆、全局合并、弃牌洗回、
+  快照和一致性诊断原子 API。
+- B14 在范围大小未知且存在多个活动批次时保守合并；B15 仍不绑定获取技能或 SpellID，
+  只合并为全局未决并扣暗槽。
+- DEV 只比较轻量 cohort 快照，差异只告警；ledger 可独立关闭，旧移动结果不受影响。
+
+当前 `Room`、`shufflePile()`、`materialize()` 与 UI 继续以既有状态为权威；本阶段没有删除
+任何正 ID 暗槽、suspended、玩家或 mark 兼容分支。
 
 ### Phase 4–6：生产切换与清理
 
@@ -925,9 +936,18 @@ Phase 2 已完成：
 3. ~~审计生产净复杂度。~~ → Phase 4/5 可删除路径见下表。
 4. ~~形成 Phase 3 启动裁决。~~ → 最小双写切片解冻。
 
-### 10.1 Phase 3 首个迁移切片
+Phase 3 首个双写切片已完成：
 
-新增独立的生产 `PileIdentityLedger`（命名可在实现时按现有模块约定调整），由 `Room` 持有：
+1. ~~新增生产 `PileIdentityLedger` 并由 `Room` 持有。~~
+2. ~~接入初始化、成功协议移动、洗牌与显式揭示双写。~~
+3. ~~覆盖 B1–B15 的保持、合并、条件降级和正常失效规则。~~
+4. ~~增加 DEV ledger/observer cohort 快照一致性告警。~~
+5. ~~保留旧权威路径、UI、正 ID 暗槽与玩家/mark 模型。~~
+6. ~~提供独立关闭开关，账本异常只告警。~~
+
+### 10.1 Phase 3 首个迁移切片（已完成）
+
+生产 `PileIdentityLedger` 由 `Room` 持有：
 
 ```ts
 interface PileIdentityCohort {
@@ -937,7 +957,7 @@ interface PileIdentityCohort {
 }
 ```
 
-首个切片只做：
+首个切片已完成：
 
 1. `Room.initDeck()` 初始化 generation 0；候选全集来自合法初始牌组身份。
 2. 成功移动后通过原子 API 双写初始化、匿名顶/底消费、已知身份揭示、已知/未知回堆、
@@ -949,21 +969,25 @@ interface PileIdentityCohort {
 5. DEV 下比较生产账本与现有 observer 快照；差异只告警，不影响当前权威路径或 UI。
 6. 不修改 `shufflePile()` 分类读取、不删除正 ID 暗槽、不新增 cohort UI、不改变玩家/mark。
 
-建议原子 API：
+已实现的原子 API：
 
 ```ts
 initialize(cardIDs)
+applyMove(move)
+applyReveal(reveal)
 consumeAnonymous(count, position, reason)
 revealIdentity(cardID, source, reason)
 insertKnown(cardIDs, count, position, reason)
 insertAnonymous(count, position, reason)
 mergeAll(reason)
 rotateFromDiscard(cardIDs, reason)
-assertConsistency(context)
+assertConsistency(pileCount, context)
+getSnapshot()
+setEnabled(enabled)
 ```
 
-实现时按协议语义调用，不建立 SpellID 白名单；B15 先 `mergeAll` 再从合并批次
-`consumeAnonymous`，B6 走随机插入并按需合并的规则。
+协议适配不为 B15 建立 SpellID 白名单；匿名任意位置获取先合并为全局未决，再扣对应暗槽。
+B6 走匿名随机插入并按需合并；B14 在无法证明范围仍位于单批次时保守合并。
 
 ### 10.2 后续可删除路径
 
@@ -978,13 +1002,17 @@ assertConsistency(context)
 `releaseUnknownPlaceholderToOutside()`、`suspendedKnownCards` 和玩家/mark 身份交换暂时保留；
 它们还服务非牌堆候选，不能随牌堆迁移一并删除。
 
-### 10.3 Phase 3 闸门
+### 10.3 Phase 3 闸门（已通过）
 
 1. 生产账本与 observer 在现有 44 个 observer 回归及 tracker 全量回归中一致。
 2. B1–B15 的生产账本事件测试覆盖保持、合并、降级和正常失效。
 3. 匿名摸牌不新增身份全集遍历，`traversalBaseline` 不回退。
 4. 账本异常只告警，不改变当前移动结果；可单独关闭并回退到旧权威状态。
-5. 闸门通过后才解冻 Phase 4 的 `shufflePile()` 权威切换。
+5. Phase 3 完成不自动启动 Phase 4；`shufflePile()` 权威切换仍需独立任务与提交。
+
+2026-08-01 闸门结果：`pnpm test:tracker` 50 个文件、458 项通过；
+`pnpm typecheck:tracker`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、
+`pnpm build:prod` 全部通过，`traversalBaseline` 未回退。
 
 真实回放仍拿不到服务器隐藏牌序，`confirmedContradictionCount` 只是确认下界。Phase 1
 能比较的是可见证据下的风险暴露与信息表达成本，不是完整正确率。

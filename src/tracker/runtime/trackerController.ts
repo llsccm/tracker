@@ -5,6 +5,10 @@ import type { Card } from '../Card'
 import { summarizeMoveEvent } from '../helper/moveSummary'
 import { getProtocolMoveSpecialLabel, normalizeMoveEvent } from '../MoveEventNormalizer'
 import {
+  arePileIdentityCohortSnapshotsEqual,
+  type PileIdentityLedgerMove
+} from '../PileIdentityLedger'
+import {
   createBeliefEpochObserver,
   type BeliefEpochObserver,
   type BeliefEpochReport
@@ -217,7 +221,10 @@ export class TrackerController {
     }
 
     this.trackerRoom.initDeck(cardIDs)
-    if (import.meta.env.DEV) this.beliefObserver?.initialize(this.trackerRoom, cardIDs)
+    if (import.meta.env.DEV) {
+      this.beliefObserver?.initialize(this.trackerRoom, cardIDs)
+      this.comparePileIdentityLedger(this.trackerRoom, 'initialize')
+    }
     this.controllerView.mount(this.trackerRoom)
     this.controllerLogger.info('Room 牌堆初始化完成', { cardIDs })
   }
@@ -364,16 +371,36 @@ export class TrackerController {
         readyRoom.moveCards(event.cardIDs, event.toZone, event.options)
       }
 
+      const pileIdentityMove = this.createPileIdentityMove(patchedMsg, event)
+      readyRoom.applyPileIdentityMove(pileIdentityMove)
       this.controllerView.scheduleRender()
       // 只读采集放在状态更新之后：observer 观测的是本次移动生效后的断言集合。
       // 以 import.meta.env.DEV 收口，生产构建整句被静态移除，热路径零开销。
-      if (import.meta.env.DEV) this.observeBeliefEpochs(readyRoom, patchedMsg, event)
+      if (import.meta.env.DEV) this.observeBeliefEpochs(readyRoom, pileIdentityMove)
     } catch (e) {
       this.controllerLogger.warn('移动同步异常，已跳过本次 tracker 更新', {
         error: e,
         raw: this.summarizeProtocolMove(msg)
       })
       this.onError('[Refactor] 移动同步失败:', e, msg)
+    }
+  }
+
+  /** 生产账本与 DEV observer 共用的协议事件口径。 */
+  private createPileIdentityMove(
+    event: RawMoveCardEvent,
+    normalizedEvent: NormalizedMoveEvent
+  ): Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'> {
+    return {
+      eventType: normalizedEvent.type,
+      fromZone: event.FromZone == null ? null : Number(event.FromZone),
+      toZone: event.ToZone == null ? null : Number(event.ToZone),
+      cardIDs: this.normalizeIDs(event.CardIDs),
+      cardCount: normalizedEvent.cardCount,
+      fromPosition: normalizedEvent.options.fromPosition,
+      toPosition: normalizedEvent.options.position,
+      moveType: normalizedEvent.moveType,
+      spellID: event.SpellID
     }
   }
 
@@ -384,26 +411,40 @@ export class TrackerController {
    */
   private observeBeliefEpochs(
     room: Room,
-    event: RawMoveCardEvent,
-    normalizedEvent: NormalizedMoveEvent
+    move: Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'>
   ): void {
     if (!this.beliefObserver) return
 
     try {
       this.beliefObserver.applyProtocolMove(room, {
-        FromZone: event.FromZone,
-        ToZone: event.ToZone,
-        CardIDs: this.normalizeIDs(event.CardIDs),
-        CardCount: normalizedEvent.cardCount,
-        FromPosition: normalizedEvent.options.fromPosition,
-        ToPosition: normalizedEvent.options.position,
-        MoveType: normalizedEvent.moveType,
-        SpellID: event.SpellID,
-        EventType: normalizedEvent.type
+        FromZone: move.fromZone,
+        ToZone: move.toZone,
+        CardIDs: [...move.cardIDs],
+        CardCount: move.cardCount,
+        FromPosition: move.fromPosition,
+        ToPosition: move.toPosition,
+        MoveType: move.moveType ?? undefined,
+        SpellID: move.spellID,
+        EventType: move.eventType
       })
+      this.comparePileIdentityLedger(room, `move:${move.eventType}`)
     } catch (e) {
       this.controllerLogger.warn('belief epoch 采集异常，已跳过本次观测', { error: e })
     }
+  }
+
+  private comparePileIdentityLedger(room: Room, context: string): void {
+    if (!this.beliefObserver || !room.pileIdentityLedger.isEnabled()) return
+
+    const ledgerSnapshot = room.pileIdentityLedger.getSnapshot().cohort
+    const observerSnapshot = this.beliefObserver.getPileIdentityCohortSnapshot()
+    if (arePileIdentityCohortSnapshotsEqual(ledgerSnapshot, observerSnapshot)) return
+
+    this.controllerLogger.warn('牌堆身份生产账本与 DEV observer 不一致', {
+      context,
+      ledger: ledgerSnapshot,
+      observer: observerSnapshot
+    })
   }
 
   /**
@@ -609,12 +650,16 @@ export class TrackerController {
         return
       }
 
+      const revealLocation =
+        target.type === 'public' && (target.zoneName ?? 'pile') === 'pile' ? 'pile' : 'outside'
+      readyRoom.applyPileIdentityReveal(ids, revealLocation)
+
       if (import.meta.env.DEV) {
         this.beliefObserver?.applyReveal(readyRoom, {
           CardIDs: ids,
-          Location:
-            target.type === 'public' && (target.zoneName ?? 'pile') === 'pile' ? 'pile' : 'outside'
+          Location: revealLocation
         })
+        this.comparePileIdentityLedger(readyRoom, `reveal:${revealLocation}`)
       }
       this.controllerView.scheduleRender()
     } catch (e) {
