@@ -30,6 +30,35 @@ describe('PubGsCMoveCard', () => {
     syncTrackerMove.mockClear()
   })
 
+  it.each([
+    ['其他视角', []],
+    ['主视角', [51, 146, 138, 4]]
+  ])('手气卡回堆在%s均归一为 RANDOM', (_view, cardIDs) => {
+    const msg = {
+      CardCount: 4,
+      CardIDs: cardIDs,
+      FromID: 6,
+      FromPosition: POSITION_TOP,
+      FromZone: 5,
+      FromZoneParam: 0,
+      MoveType: 19,
+      SpellID: 0,
+      ToID: 0,
+      ToPosition: POSITION_TOP,
+      ToZone: 1,
+      ToZoneParam: 0
+    }
+
+    handleMoveCard(msg)
+
+    expect(syncTrackerMove).toHaveBeenCalledOnce()
+    expect(syncTrackerMove).toHaveBeenCalledWith(msg, {
+      CardIDs: cardIDs,
+      FromPosition: POSITION_TOP,
+      ToPosition: POSITION_RANDOM
+    })
+  })
+
   it('权变的牌堆同区展示将来源和目标都归一为牌顶', () => {
     const msg = {
       CardCount: 4,

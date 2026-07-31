@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
-import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
+import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { TrackerController } from '@/tracker/runtime/trackerController'
 import {
   createTrackerControllerHarness,
@@ -35,6 +35,44 @@ describe('TrackerController', () => {
     expect(addSpy).not.toHaveBeenCalled()
     expect(room.dirtyCardSeq).toBe(dirtyCardSeq)
   })
+
+  it.each([POSITION_TOP, POSITION_RANDOM])(
+    '匿名牌堆取牌在来源位置 %s 跳过牌顶明牌，只消费暗槽',
+    (fromPosition) => {
+      const { controller } = createTrackerControllerHarness()
+      const seatID = 1
+
+      controller.initTrackerRoom()
+      controller.registerTrackerPlayers([{ SeatID: seatID, ClientID: 100 }], 100)
+      controller.initTrackerDeck([1, 2, 3, 4])
+      controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, [4])
+
+      const room = controller.getTrackerRoom()
+      const pile = room.zones.get('pile')
+      expect(pile.cards.at(-1)?.id).toBe(4)
+      expect(pile.cards.at(-1)?.isKnown).toBe(true)
+
+      controller.syncTrackerMove(
+        protocolMove({
+          CardIDs: [],
+          CardCount: 1,
+          FromPosition: fromPosition,
+          MoveType: 18,
+          SpellID: 9876,
+          ToID: seatID
+        })
+      )
+
+      expect(pile.cards).toHaveLength(3)
+      expect(pile.cards.at(-1)?.id).toBe(4)
+      expect(room.cardIndex.get(4).location).toBe('pile')
+      const handCards = room.cards.filter(
+        (card) => card.location === 'player' && card.subZone === 'hand' && card.seats.has(seatID)
+      )
+      expect(handCards).toHaveLength(1)
+      expect(handCards[0].isKnown).not.toBe(true)
+    }
+  )
 
   it('嚣翻牌底明牌同步将已有卡牌定位到牌底且重复消息保持幂等', () => {
     const { controller } = createTrackerControllerHarness()
@@ -676,6 +714,11 @@ describe('TrackerController', () => {
     expect(pileCards).toHaveLength(cardIDs.length + 1)
     expect(pileCards.every((card) => card.id < 0 && card.entityID < 0)).toBe(true)
     expect(pileCards.every((card) => card.isKnown !== true)).toBe(true)
+    expect(controller.getBeliefEpochReport()!.modelComparison.degradations.at(-1)).toMatchObject({
+      reason: 'random-pile-insertion',
+      toPosition: POSITION_RANDOM,
+      boundaryRisk: true
+    })
     cardIDs.forEach((id) => {
       expect(room.cardIndex.has(id)).toBe(false)
       expect(room.unlocatedIdentities.has(id)).toBe(true)

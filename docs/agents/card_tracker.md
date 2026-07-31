@@ -50,6 +50,22 @@
 - `syncObservedPlayerHandCount()` 用于同步外部观测到的手牌数量快照；它不是由候选牌反推手牌数，而是将协议事实写入 `Player.observedHandCount` 后触发房间级收敛，例如某席位手牌数归零时剔除该席位的手牌候选并保留装备容器候选。
 - `collectPlayerHandSlotCounts()` 支持传入目标座位集合；`resolveConstraints()` 内已按 seat 增量重算手牌槽统计，首轮只计算有观测手牌数的座位，后续轮次只重算上一轮/本轮触碰座位并复用未变缓存。该缓存只在一次 `resolveConstraints()` 调用内有效，依赖 `Room.resolveTouchedSeats` 的保守触碰集合。`Player.refreshUnknownCardCount()` 的兜底路径也会一次性收集 known/candidate，避免同一 seat 连扫两次。
 - `shufflePile({ cardCount })` 会把 `discard` 洗回 `pile`，只随机弃牌堆部分，保留原剩余牌堆的相对顺序；未提供协议张数时按本地可枚举牌堆处理。协议给出剩余牌堆张数时，该张数是硬约束：不会仅为凑齐张数新增牌堆实体，正 ID 但不在协议牌堆、也不是可见明牌的身份会暂停追踪并作为场上候选展示；若这些身份原本是玩家暗牌或暗标记占位，会先复制稳定负 `id/entityID` 的匿名占位继续承担玩家区数量与 `hiddenMarkCandidates` 账本。
+- **牌堆内正 ID 暗槽**（`location === 'pile' && id > 0 && isKnown !== true`）是当前运行时的一等兼容状态，由 `Card.reset()` 洗回时保留正 ID 产生；`shufflePile()` 会用这些实体构造 `remainingPileIdentityIDs` 并排除本轮 suspended 候选。该绑定在洗回批次尚未被不透明消费时可保留集合级牌堆归属，但代码契约不把具体槽位绑定视为协议事实：暗摸进入该批次后，具体剩余身份可能受本地洗牌代表顺序影响。不要在没有替代状态与回归的情况下直接移除该状态。Phase 0.5 已明确：全局世代 active pool 只表示“仍保留牌堆来源可能性”，不是“确定仍在牌堆”；多周期 oracle 中原称“世代假阴性”的 `[8,9]` 应解释为 UI 未展示遗漏。新增批次基数纯模型以 `{candidateIdentityIDs, remainingPileCount}` 保留集合级真信息，不做逐槽身份绑定；两周期夹具最终保留 `{6,7}/0`、`{1..5}/0`、`{8,9,10}/1`，但扁平候选宽度达到 10。当前实施入口见 `docs/pile-identity-cohort-plan.md`；讨论过程归档于 `docs/pile-generation-identity-pool-plan.md`。
+- DEV 三模型只读 observer 已接入牌堆初始化、协议移动与显式区域揭示。基线断言覆盖牌堆内
+  全部正 ID 槽，generation/cohort 分别维护影子账本；旧采集器漏掉正 ID 暗槽，因此
+  「只有观星局才有断言」的结论和 `maxDisplayedCandidateCount=161` 均已作废。observer 不修改
+  `Room`、UI 或索引状态。
+- 匿名公共区取牌在协议无 CardIDs 时只消费暗槽，跳过牌顶/牌底已知明牌；RANDOM 只决定
+  匿名物理代表，不产生身份推断。任意位置匿名获取按通用 B15 处理，不绑定 3644：旧批次
+  合并为全局未决并等待后续展示，记录为 `anonymous-pile-draw`，不计边界风险或实际降级；
+  给出 CardIDs 时仍精确扣所属身份。
+- 当前 3 个独立新口径样本累计 686 个事件，baseline/generation/cohort epoch 为 152/644/967，
+  exposure 总数为 10821/0/843，按事件归一为 15.77/0/1.23，确认矛盾均为 0。前两局边界
+  明细中 B6 风险 11 次、实际降级 0 次；B15 两次已重判为正常匿名失效。第 3 局缺少边界
+  明细，只计入三模型汇总。Phase 1 observer 保留为机会性采样，不再设置 5 局硬门槛。
+- 178 事件历史样本已用新口径复核：真实 UI 候选峰值为 1，cohort-cardinality 仍为 5 条、
+  并发峰值 2、单 belief 候选峰值 1；baseline/generation/cohort epoch 为 0/161/161，三路
+  exposure 均为 0。该回放只作回归证据，不计入上述独立实战样本。
 
 ### `Room` 行为模块
 

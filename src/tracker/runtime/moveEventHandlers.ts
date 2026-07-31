@@ -129,6 +129,8 @@ function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEventDraft 
     return patchEvent(event, {
       options: {
         combinationID: nextGroupID(room, spellID, 'mulligan_return'),
+        // 实测会重新混入牌堆；本地匿名槽顺序只是代表顺序，不是牌顶事实。
+        position: POSITION_RANDOM,
         // 手气卡返还的明牌重新进入牌堆后，应恢复为未知牌身份。
         resetKnownToUnknown: true
       }

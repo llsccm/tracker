@@ -1,5 +1,5 @@
 import { trackerLogger } from '@/utils/logger'
-import { POSITION_TOP } from '../candidate/cardPositions'
+import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
 import { getCompatibleMarkSpellIDs, type SpellIDInput } from '../candidate/markSpellID'
 import { isAnonymous, type Card } from '../Card'
 import type { Zone } from '../Zone'
@@ -26,6 +26,26 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
   ): Card[] {
     const sourceZone = this.room.getPublicZone(zoneID as PublicZoneName | null | undefined)
     return sourceZone?.remove(count, position) ?? []
+  }
+
+  /**
+   * 协议未给 CardIDs 时只消费暗槽。数组端点只是匿名槽的代表顺序，不能因此弹走已知明牌。
+   */
+  takeUnknownCardsFromPublicZone(
+    count: number,
+    zoneID: SourceZoneInput = 'pile',
+    position: PublicPosition = POSITION_TOP
+  ): Card[] {
+    const sourceZone = this.room.getPublicZone(zoneID as PublicZoneName | null | undefined)
+    if (!sourceZone || count <= 0) return []
+
+    const hiddenCards = sourceZone.cards.filter((card) => card.isKnown !== true)
+    const selected =
+      position === POSITION_BOTTOM
+        ? hiddenCards.slice(0, count)
+        : hiddenCards.slice(-count).reverse()
+    selected.forEach((card) => sourceZone.removeCard(card))
+    return selected
   }
 
   /**
@@ -729,7 +749,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       return [...selectedUnknownCards, ...knownCards]
     }
 
-    return this.takeCardsFromPublicZone(count, fromZone, fromPosition)
+    return this.takeUnknownCardsFromPublicZone(count, fromZone, fromPosition)
   }
 
   /**

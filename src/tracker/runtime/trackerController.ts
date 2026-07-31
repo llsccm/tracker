@@ -5,6 +5,11 @@ import type { Card } from '../Card'
 import { summarizeMoveEvent } from '../helper/moveSummary'
 import { getProtocolMoveSpecialLabel, normalizeMoveEvent } from '../MoveEventNormalizer'
 import {
+  createBeliefEpochObserver,
+  type BeliefEpochObserver,
+  type BeliefEpochReport
+} from '../observer/beliefEpochObserver'
+import {
   getProtocolMarkSpellID,
   getProtocolPlayerSubZone,
   getProtocolPublicZone,
@@ -131,6 +136,8 @@ export class TrackerController {
     TrackerControllerOptions['registerMoveEventHandlers']
   >
   private trackerRoom: Room | null = null
+  /** Phase 1 只读 observer；生产构建为 `null`（见 `createBeliefEpochObserver`）。 */
+  private beliefObserver: BeliefEpochObserver | null = null
 
   constructor({
     view = noopView,
@@ -183,6 +190,8 @@ export class TrackerController {
       this.trackerRoom?.destroy()
       this.trackerRoom = this.roomFactory({ gameState: this.gameState })
       this.getRuntime()?.bindRoom?.(this.trackerRoom)
+      // 每局独立采集，不跨局累计。
+      this.beliefObserver = createBeliefEpochObserver()
       this.controllerLogger.info('Room 初始化')
       this.registerMoveEventHandlers(this.trackerRoom)
     } catch (e) {
@@ -208,6 +217,7 @@ export class TrackerController {
     }
 
     this.trackerRoom.initDeck(cardIDs)
+    if (import.meta.env.DEV) this.beliefObserver?.initialize(this.trackerRoom, cardIDs)
     this.controllerView.mount(this.trackerRoom)
     this.controllerLogger.info('Room 牌堆初始化完成', { cardIDs })
   }
@@ -355,12 +365,44 @@ export class TrackerController {
       }
 
       this.controllerView.scheduleRender()
+      // 只读采集放在状态更新之后：observer 观测的是本次移动生效后的断言集合。
+      // 以 import.meta.env.DEV 收口，生产构建整句被静态移除，热路径零开销。
+      if (import.meta.env.DEV) this.observeBeliefEpochs(readyRoom, patchedMsg, event)
     } catch (e) {
       this.controllerLogger.warn('移动同步异常，已跳过本次 tracker 更新', {
         error: e,
         raw: this.summarizeProtocolMove(msg)
       })
       this.onError('[Refactor] 移动同步失败:', e, msg)
+    }
+  }
+
+  /**
+   * Phase 1 只读采集。生产构建 `beliefObserver` 为 `null`，整段被跳过。
+   *
+   * 单独 try/catch：采集是观测设施，任何异常都不得影响记牌器主流程。
+   */
+  private observeBeliefEpochs(
+    room: Room,
+    event: RawMoveCardEvent,
+    normalizedEvent: NormalizedMoveEvent
+  ): void {
+    if (!this.beliefObserver) return
+
+    try {
+      this.beliefObserver.applyProtocolMove(room, {
+        FromZone: event.FromZone,
+        ToZone: event.ToZone,
+        CardIDs: this.normalizeIDs(event.CardIDs),
+        CardCount: normalizedEvent.cardCount,
+        FromPosition: normalizedEvent.options.fromPosition,
+        ToPosition: normalizedEvent.options.position,
+        MoveType: normalizedEvent.moveType,
+        SpellID: event.SpellID,
+        EventType: normalizedEvent.type
+      })
+    } catch (e) {
+      this.controllerLogger.warn('belief epoch 采集异常，已跳过本次观测', { error: e })
     }
   }
 
@@ -567,6 +609,13 @@ export class TrackerController {
         return
       }
 
+      if (import.meta.env.DEV) {
+        this.beliefObserver?.applyReveal(readyRoom, {
+          CardIDs: ids,
+          Location:
+            target.type === 'public' && (target.zoneName ?? 'pile') === 'pile' ? 'pile' : 'outside'
+        })
+      }
       this.controllerView.scheduleRender()
     } catch (e) {
       this.onError('[Refactor] 明牌同步失败:', e, { target, cardIDs: ids })
@@ -838,5 +887,17 @@ export class TrackerController {
     } catch (e) {
       this.onError('[Refactor] Room 销毁失败:', e)
     }
+  }
+
+  /**
+   * 取出本局的 belief epoch 采集报告（Phase 1 对局验证入口）。
+   *
+   * 生产构建恒为 `null`。对局结束后 `destroyTrackerRoom()` 不清空 observer，
+   * 因此结算阶段仍可取到本局数据；下一局 `initTrackerRoom()` 才会重建。
+   *
+   * **读数前请看 `report.note`**：`confirmedContradictionCount` 是下界不是错误率。
+   */
+  getBeliefEpochReport(): BeliefEpochReport | null {
+    return this.beliefObserver?.getReport() ?? null
   }
 }
