@@ -63,6 +63,11 @@
   exposure 总数为 10821/0/843，按事件归一为 15.77/0/1.23，确认矛盾均为 0。前两局边界
   明细中 B6 风险 11 次、实际降级 0 次；B15 两次已重判为正常匿名失效。第 3 局缺少边界
   明细，只计入三模型汇总。Phase 1 observer 保留为机会性采样，不再设置 5 局硬门槛。
+- Phase 2 已于 2026-08-01 判定生产身份账本迁移 GO：Phase 3 解冻为最小双写切片，首轮只在
+  `Room` 内建立 `PileIdentityCohort[]` 账本与原子 API，既有正 ID 暗槽、`shufflePile()`、
+  `materialize()` 和 UI 继续作为权威。cohort 新 UI 暂缓；匿名获取只动暗槽并等待展示收敛。
+  Phase 4/5 通过闸门后再删除 `remainingPileIdentityIDs` 分类、洗牌玩家替身、正 ID 暗公共槽
+  挤出与 suspended 名额转交等牌堆专用路径；玩家/mark 的 `suspendedKnownCards` 语义保留。
 - 178 事件历史样本已用新口径复核：真实 UI 候选峰值为 1，cohort-cardinality 仍为 5 条、
   并发峰值 2、单 belief 候选峰值 1；baseline/generation/cohort epoch 为 0/161/161，三路
   exposure 均为 0。该回放只作回归证据，不计入上述独立实战样本。

@@ -1,10 +1,10 @@
 # 牌堆身份批次模型当前计划
 
-> 状态：**Phase 0/0.5 完成；Phase 1 保留机会性观测；Phase 2 进行中；Phase 3–6 冻结**
+> 状态：**Phase 0/0.5 完成；Phase 1 保留机会性观测；Phase 2 已完成并判定 GO；Phase 3 待启动；Phase 4–6 冻结**
 > 日期：2026-08-01
 > 文档角色：当前有效的设计契约与实施入口
 > 适用范围：`tests/tracker/` 纯模型 + `src/tracker/observer/` 只读 observer（DEV 限定）；
-> `src/tracker/` 生产身份状态尚未迁移，匿名公共区取牌的暗槽选择语义已修正
+> `src/tracker/` 生产身份状态尚未迁移；Phase 3 首个双写切片已完成设计
 > 讨论归档：[`pile-generation-identity-pool-plan.md`](pile-generation-identity-pool-plan.md)
 
 ---
@@ -14,16 +14,19 @@
 ```text
 全局世代身份守恒：GO，仅保留为纯模型对照
 active pool = 确定仍在牌堆：NO-GO，语义错误
-批次候选集合 + 在牌堆数量：GO，进入产品与协议可维护性决策
+批次候选集合 + 在牌堆数量：GO，完成产品与协议可维护性决策
 全局世代独立生产 observer：不推进
 三模型只读 observer：已实现并保留（DEV 限定），后续按机会采样
 匿名任意位置牌堆获取：按普通暗摸处理，只减少暗槽并使身份进入全局未决
 匿名获取导致的批次合并：正常身份失效，不计批次风险或模型降级
-生产迁移 Phase 3–6：继续冻结
+生产身份账本迁移：GO，Phase 3 可启动
+cohort 用户界面：首个迁移切片不新增；内部先保证语义与守恒
+生产迁移 Phase 4–6：继续冻结，等待 Phase 3 双写闸门
 ```
 
-当前生产实现仍以 `Room.shufflePile()` 的正 ID 暗槽兼容状态为权威。不得因为纯模型通过而
-直接删除 `remainingPileIdentityIDs`、正 ID 暗槽置换或 suspended 恢复路径。
+当前生产实现仍以 `Room.shufflePile()` 的正 ID 暗槽兼容状态为权威。Phase 2 GO 只解冻
+Phase 3 的账本/API 双写，不授权立即删除 `remainingPileIdentityIDs`、正 ID 暗槽置换或
+suspended 恢复路径；这些删除必须分别通过 Phase 4/5 闸门。
 
 ---
 
@@ -465,18 +468,45 @@ FromZone=5 且有正 ID          证伪牌堆断言（手牌现身）
 
 ### Phase 2：产品与信息损失决策
 
-状态：**进行中**。
+状态：**已完成（2026-08-01），生产身份账本迁移 GO**。
 
-比较候选宽度、分组数量、恢复速度、已确认矛盾下界、投影遗漏下界、边界降级频率和代码
-净复杂度，给出生产迁移 GO/NO-GO。低频牌堆交互仍必须有通用规则，但样本少或暂未遇到
-洗牌不能单独构成 NO-GO；Phase 1 observer 同时保留为后续机会性校验。
+裁决采用分层 GO：
 
-### Phase 3–6：生产迁移
+1. **内部状态迁移 GO**：Phase 3 可建立批次身份账本与原子 API，并与当前正 ID 暗槽权威
+   状态双写对照。
+2. **首轮 UI 迁移不启动**：Phase 3 不新增 cohort 面板，不把 161/166 张扁平身份直接铺到
+   现有候选区。分组投影保留为后续产品能力，不是内部正确性迁移的前置依赖。
+3. **匿名获取统一处理**：无 CardIDs 的牌堆获取只消费暗槽；不按获取技能或 SpellID 推断
+   身份，等待后续展示收敛。
+4. **observer 继续保留**：样本少或暂未遇到洗牌不构成拒绝理由，后续真实牌堆交互继续
+   机会性验证 Phase 3 双写结果。
+
+决策依据：
+
+- 三局累计 686 个事件中，baseline/cohort 的 exposure per event 为 15.77/1.23；三路确认
+  矛盾均为 0，但该值只是可见证据下界，不能覆盖 baseline 的代表绑定风险。
+- 两局完整边界明细共有 11 次 B6 风险、0 次实际降级；B15 两次均为正常匿名失效，未发现
+  普通事件迫使模型恢复逐槽代表身份。
+- cohort 扁平峰值达到 166，但完整样本中的分组峰值为 10/1；产品层可以按组表达，生产
+  热路径不需要玩家 × 身份展开。
+- 身份恢复仍由同一个后续 reveal/known 事件触发。批次模型扩大的是揭示前的诚实未决集合，
+  不增加协议证据出现后的恢复延迟。
+- 生产代码审计确认至少四类正 ID 暗公共槽专用分支可在 Phase 4/5 删除，且玩家/mark 模型
+  无需全面槽位化，满足以代码净减少支撑迁移的条件。
+
+### Phase 3：生产账本与状态 API
+
+状态：**待启动，已解冻**。
+
+只允许先做 §10 定义的最小双写切片。当前 `Room`、`shufflePile()`、`materialize()` 与 UI
+继续以既有状态为权威；不得从 observer 导入测试状态，也不得在此阶段删除兼容分支。
+
+### Phase 4–6：生产切换与清理
 
 状态：**冻结**。
 
-只有 Phase 2 GO 后才能设计正式 `Room` 状态、洗牌事务、known 揭示切换和兼容路径删除。
-不得提前把测试字段加入生产状态。
+Phase 4 需等待 Phase 3 双写一致性闸门；Phase 5/6 再分别切换 known 揭示与删除正 ID 暗槽
+兼容路径。
 
 ---
 
@@ -811,6 +841,19 @@ Phase 2 依据协议语义、守恒、代码复杂度和已有证据继续推进
 7. 可删除至少两条正 ID 暗槽置换或补偿路径。
 8. 物理牌堆数量完全独立于身份候选状态。
 
+Phase 2 核对结果：
+
+| 闸门               | 证据                                                                        | 结果 |
+| ------------------ | --------------------------------------------------------------------------- | ---- |
+| 协议边界可维护     | 15 类事件均有保持、合并、降级或正常失效规则；11 次 B6 风险均未实际降级      | 通过 |
+| 分组可读           | 完整样本分组峰值 10/1，不需要玩家 × 身份展开                                | 通过 |
+| 不增加确认矛盾     | 三路确认矛盾均为 0；继续按下界解释                                          | 通过 |
+| 有信息或代码收益   | exposure/event 从 baseline 15.77 降至 cohort 1.23；存在明确兼容分支删除清单 | 通过 |
+| 玩家/mark 隔离     | 首个切片只新增牌堆身份账本，保留现有玩家/mark 槽位与候选模型                | 通过 |
+| 暗摸热路径         | 无 CardIDs 时只消费暗槽并扣批次基数，不遍历身份全集                         | 通过 |
+| 至少两条可删除路径 | §10 已列出 `remainingPileIdentityIDs` 分类、正 ID 暗槽挤出/转交等路径       | 通过 |
+| 物理与身份分离     | 目标不变量以 `Zone` 暗槽数和 cohort 账本分别维护                            | 通过 |
+
 ### 9.2 NO-GO
 
 任一成立即停止：
@@ -828,6 +871,22 @@ Phase 2 依据协议语义、守恒、代码复杂度和已有证据继续推进
 
 即使生产迁移最终 NO-GO，也保留纯模型、协议边界结论、回放数据和 DEV observer，除非有
 等价诊断替代；不因一次产品裁决自动删除现有观测能力。
+
+本轮审计未命中上述 NO-GO 条件。扁平候选确实可能接近整副牌，但分组投影保持有界；当前
+生产实现的较窄候选依赖本地代表绑定，不能把“更窄”本身当作更正确。
+
+### 9.3 Phase 2 裁决
+
+```text
+生产身份账本迁移：GO
+Phase 3 最小双写切片：解冻
+cohort 新 UI：暂缓，不作为 Phase 3 前置条件
+Phase 4–6：继续冻结
+```
+
+该 GO 不要求再等待固定局数，也不绑定某个获取技能。后续新增实测若发现普通事件频繁实际
+降级、分组失去可读性或遍历基线回退，可重新触发 NO-GO 审计，但不回退已确认的匿名暗槽
+选择规则。
 
 ---
 
@@ -859,13 +918,73 @@ Phase 2 依据协议语义、守恒、代码复杂度和已有证据继续推进
    15.77/0/1.23，三路确认矛盾均为 0
 6. ~~移除 5 局硬门槛。~~ → Phase 1 转为机会性观测，低频不能单独构成 NO-GO
 
-Phase 2 当前执行方向：
+Phase 2 已完成：
 
-1. 固化生产移动层的匿名公共区取牌规则：无 CardIDs 时只移走暗槽，跳过牌顶/牌底明牌。
-2. 设计最小生产迁移切片，使物理牌堆数量与身份未决状态分离，并明确可删除的正 ID 暗槽
-   置换/补偿路径；在设计评审前不改写 `Room` 权威状态。
-3. 用现有 observer 机会性验证洗牌、回牌堆和匿名牌堆获取，不按 SpellID 建白名单。
-4. 比较分组投影的实际用户价值与代码净复杂度，形成 Phase 3 是否启动的明确 GO/NO-GO。
+1. ~~固化匿名公共区取牌规则。~~ → 无 CardIDs 时只移走暗槽，跳过牌顶/牌底明牌。
+2. ~~比较产品价值与信息损失。~~ → 内部迁移 GO；cohort 新 UI 暂缓。
+3. ~~审计生产净复杂度。~~ → Phase 4/5 可删除路径见下表。
+4. ~~形成 Phase 3 启动裁决。~~ → 最小双写切片解冻。
+
+### 10.1 Phase 3 首个迁移切片
+
+新增独立的生产 `PileIdentityLedger`（命名可在实现时按现有模块约定调整），由 `Room` 持有：
+
+```ts
+interface PileIdentityCohort {
+  generation: number
+  candidateIdentityIDs: Set<CardID>
+  remainingPileCount: number
+}
+```
+
+首个切片只做：
+
+1. `Room.initDeck()` 初始化 generation 0；候选全集来自合法初始牌组身份。
+2. 成功移动后通过原子 API 双写初始化、匿名顶/底消费、已知身份揭示、已知/未知回堆、
+   弃牌洗回和全局合并事件。
+3. `unlocatedIdentities` 继续作为“尚未绑定实体”的基础身份分区；cohort 只表达这些身份与
+   牌堆暗槽数量的集合关系，不复制 `Card` 实体。
+4. 物理牌堆数量只读 `Zone`：正式目标不变量为
+   `sum(cohort.remainingPileCount) === hiddenPileSlotCount`，已知牌堆明牌单独由实体表示。
+5. DEV 下比较生产账本与现有 observer 快照；差异只告警，不影响当前权威路径或 UI。
+6. 不修改 `shufflePile()` 分类读取、不删除正 ID 暗槽、不新增 cohort UI、不改变玩家/mark。
+
+建议原子 API：
+
+```ts
+initialize(cardIDs)
+consumeAnonymous(count, position, reason)
+revealIdentity(cardID, source, reason)
+insertKnown(cardIDs, count, position, reason)
+insertAnonymous(count, position, reason)
+mergeAll(reason)
+rotateFromDiscard(cardIDs, reason)
+assertConsistency(context)
+```
+
+实现时按协议语义调用，不建立 SpellID 白名单；B15 先 `mergeAll` 再从合并批次
+`consumeAnonymous`，B6 走随机插入并按需合并的规则。
+
+### 10.2 后续可删除路径
+
+| 阶段    | 当前符号/分支                                                                                      | 目标处理                                              |
+| ------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Phase 4 | `Room.shufflePile()` 的 `remainingPileIdentityIDs`、UNKNOWN/APPEARED 分类与 detached identity 创建 | 改由 cohort 事务滚动                                  |
+| Phase 4 | `preserveUnknownPlaceholderForShuffle()` 与洗牌手牌替身校验                                        | 不再因牌堆代表身份创建玩家替身后删除                  |
+| Phase 5 | `Room.materialize()` 的 `materialize:replaceHiddenPublicIdentity`                                  | 牌堆 known 只物化匿名槽，不再挤出代表身份             |
+| Phase 5 | `materializeExistingIdentityAtTarget()` 的 `materialize:displacedHiddenPublicIdentity` 名额转交    | 删除牌堆专用 displaced/suspended 交换                 |
+| Phase 5 | `RoomMovement.resolveKnownMoveCards()` 接受正 ID 暗公共目标与失败后回塞目标                        | 公共 known 端点只消费匿名槽或已在来源的同 ID 明确实体 |
+
+`releaseUnknownPlaceholderToOutside()`、`suspendedKnownCards` 和玩家/mark 身份交换暂时保留；
+它们还服务非牌堆候选，不能随牌堆迁移一并删除。
+
+### 10.3 Phase 3 闸门
+
+1. 生产账本与 observer 在现有 44 个 observer 回归及 tracker 全量回归中一致。
+2. B1–B15 的生产账本事件测试覆盖保持、合并、降级和正常失效。
+3. 匿名摸牌不新增身份全集遍历，`traversalBaseline` 不回退。
+4. 账本异常只告警，不改变当前移动结果；可单独关闭并回退到旧权威状态。
+5. 闸门通过后才解冻 Phase 4 的 `shufflePile()` 权威切换。
 
 真实回放仍拿不到服务器隐藏牌序，`confirmedContradictionCount` 只是确认下界。Phase 1
 能比较的是可见证据下的风险暴露与信息表达成本，不是完整正确率。
