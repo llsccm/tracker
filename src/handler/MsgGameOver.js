@@ -18,28 +18,25 @@ function scheduleCloseGameOverWindows() {
 
     const getWindow = (name) => {
       const win = laya.GetWindow(name)
-      return win && !win.destroyed ? win : null
+      return win && win.visible ? win : null
     }
 
     const resultWin = await wait(() => getWindow('GameResultWindow'))
     if (!resultWin) return
 
-    // 此时关闭战绩会导致山河图结算窗口没有数据
-    if (getWindow('RogueZhanJiWindow')) return
+    // 此时关闭战绩 山河图结算数据还不存在导致窗口空白
 
-    const zhanJiWin = await wait(() => getWindow('RogueZhanJiWindow'), 4, 250)
-    if (zhanJiWin) return
+    // const zhanJiWin = await wait(() => getWindow('RogueZhanJiWindow'), 4, 250)
+    // if (zhanJiWin) return
+    resultWin.laterClose?.()
 
-    if (!resultWin.destroyed) {
-      resultWin.laterClose?.()
-    }
-
+    // 山河图没有mvp窗口
     // mvp窗口在战绩后出现
     const mvpWin = await wait(() => getWindow('GameMvpWindow'))
-    if (mvpWin && !mvpWin.destroyed) {
+    if (mvpWin) {
       mvpWin.laterClose?.()
     }
-  }, 1000)
+  }, 2000)
 }
 
 export function handleGameOver() {
