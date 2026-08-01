@@ -229,6 +229,12 @@ export class PileIdentityLedger {
             Number(move.moveType) === 18 &&
             Number(move.spellID) === 7011 &&
             move.fromPosition !== POSITION_RANDOM
+          const isAnonymousArbitraryPileGain =
+            !isTopRangeGain &&
+            (Number(move.moveType) === 18 || move.fromPosition === POSITION_RANDOM)
+          if (isAnonymousArbitraryPileGain) {
+            this.releaseKnownPileIdentitiesExceptInternal(move.visiblePileIdentityIDsAfter)
+          }
           if (isTopRangeGain) {
             this.consumeAnonymousTopRangeInternal(anonymousPileConsumptionCount)
           } else if (Number(move.moveType) === 18) {
@@ -543,6 +549,24 @@ export class PileIdentityLedger {
     this.knownDiscardIdentityIDs.delete(cardID)
     this.knownPileIdentityIDs.delete(cardID)
     this.removeIdentityFromCohorts(cardID, false)
+  }
+
+  private releaseKnownPileIdentitiesExceptInternal(
+    preservedCardIDs: readonly CardID[] | undefined
+  ): void {
+    const preserved = new Set(normalizeIDs(preservedCardIDs ?? []))
+    const released: CardID[] = []
+    this.knownPileIdentityIDs.forEach((cardID) => {
+      if (preserved.has(cardID)) return
+      this.knownPileIdentityIDs.delete(cardID)
+      this.locatedIdentityIDs.delete(cardID)
+      released.push(cardID)
+    })
+    if (released.length === 0) return
+
+    const merged = this.mergeAllCohortsInternal()
+    released.forEach((cardID) => merged.candidateIdentityIDs.add(cardID))
+    merged.remainingPileCount += released.length
   }
 
   private rotateFromDiscardInternal(cardIDs: readonly CardID[]): void {

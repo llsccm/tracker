@@ -285,6 +285,11 @@ export class PileIdentityModelComparison {
           Number(move.moveType) === 18 &&
           Number(move.spellID) === 7011 &&
           move.fromPosition !== POSITION_RANDOM
+        const isAnonymousArbitraryPileGain =
+          !isTopRangeGain && (Number(move.moveType) === 18 || move.fromPosition === POSITION_RANDOM)
+        if (isAnonymousArbitraryPileGain) {
+          this.releaseKnownPileIdentitiesExcept(move.visiblePileIdentityIDsAfter)
+        }
         if (isTopRangeGain) this.consumeUnknownPileTopRange(anonymousPileConsumptionCount)
         else if (Number(move.moveType) === 18) {
           this.consumeUnknownPileSlots(anonymousPileConsumptionCount, POSITION_RANDOM)
@@ -644,6 +649,25 @@ export class PileIdentityModelComparison {
     if (targetUnknownCount === currentUnknownCount) return
 
     this.degradeToSingleCohort(pileCountAfter, `pile-count-reconcile:${reason}`, false)
+  }
+
+  private releaseKnownPileIdentitiesExcept(preservedCardIDs: readonly CardID[] | undefined): void {
+    const preserved = new Set(normalizeIDs(preservedCardIDs ?? []))
+    const released: CardID[] = []
+    this.knownPileIDs.forEach((cardID) => {
+      if (preserved.has(cardID)) return
+      this.knownPileIDs.delete(cardID)
+      this.locatedIdentityIDs.delete(cardID)
+      this.activeGenerationIDs.add(cardID)
+      this.suspendedGenerationIDs.delete(cardID)
+      this.generationDefinitelyInPileIDs.delete(cardID)
+      released.push(cardID)
+    })
+    if (released.length === 0) return
+
+    const merged = this.mergeAllCohorts()
+    released.forEach((cardID) => merged.candidateIdentityIDs.add(cardID))
+    merged.remainingPileCount += released.length
   }
 
   private degradeToSingleCohort(

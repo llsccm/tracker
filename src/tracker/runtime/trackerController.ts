@@ -413,12 +413,7 @@ export class TrackerController {
       fromZone === 1 && cardIDs.length === 0
         ? Math.max(0, actualPileConsumptionCount - knownPileIdentityIDsConsumed.length)
         : undefined
-    const visiblePileIdentityIDsAfter = this.normalizeIDs(normalizedEvent.cardIDs).filter(
-      (cardID) => {
-        const card = room.cardIndex.get(cardID)
-        return card?.location === 'pile' && card.isKnown === true
-      }
-    )
+    const visiblePileIdentityIDsAfter = this.collectVisiblePileTopIdentityIDs(room)
 
     return {
       eventType: normalizedEvent.type,
@@ -457,6 +452,17 @@ export class TrackerController {
         ? pileCards.slice(0, count)
         : pileCards.slice(-count)
     return sourceCards.filter((card) => card.id > 0 && card.isKnown === true)
+  }
+
+  private collectVisiblePileTopIdentityIDs(room: Room): CardID[] {
+    const pileCards = room.zones.get('pile')?.cards ?? []
+    const visibleCardIDs: CardID[] = []
+    for (let index = pileCards.length - 1; index >= 0; index -= 1) {
+      const card = pileCards[index]
+      if (card?.isKnown !== true || card.id <= 0) break
+      visibleCardIDs.push(card.id)
+    }
+    return this.normalizeIDs(visibleCardIDs)
   }
 
   /**

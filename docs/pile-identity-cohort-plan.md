@@ -1057,6 +1057,35 @@ B6 走匿名随机插入并按需合并；B14 在无法证明范围仍位于单�
 `pnpm typecheck:tracker`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、
 `pnpm build:prod` 全部通过，`traversalBaseline` 未回退。
 
+### 10.5 Phase 3 实测追补：匿名获得后的延迟身份展示
+
+后续实测中，事件 28/71 的 `MoveType=18` 已正确消费 2 个暗槽并保留牌顶明牌，但事件 80
+是 `FromZone=5 -> ToZone=2` 的普通明弃，牌堆数量前后均为 110，却记录了
+`pile-count-reconcile:protocol-move`。这说明数量口径已经正确，身份失效口径仍不完整。
+
+根因是匿名任意位置获得只合并了 cohort，未把 `knownPileIdentityIDs` 中不受牌顶边界保护的
+身份一起降为全局未决。物理 Room 为保持展示顺序只移走暗占位是正确的，但这个暗占位只是
+实体代表，不能证明堆内其他已知身份没有被获得。若其中一个身份之后在手牌中展示，旧实现
+只能先删除“确定在牌堆”身份，再靠全局 reconcile 补回一个暗槽，于是把正常的延迟展示错误
+归因到当前弃牌事件。
+
+追补规则：
+
+1. 匿名任意位置获得发生前，将除连续牌顶明牌段外的 `knownPileIdentityIDs` 释放进全局未决
+   cohort，再按实际暗槽消费数扣减基数。
+2. Controller 在移动后传递仍受保护的连续牌顶明牌 ID；这些身份继续保持精确在堆。
+3. 之后某个候选身份在手牌或弃牌中展示时，只从候选集合移除，不改变牌堆基数，也不触发
+   `pile-count-reconcile:protocol-move`。
+4. 生产 ledger 与 DEV observer 执行同一转换；物理 Room 仍只移动暗占位，Phase 4–6 不因此
+   解冻。
+
+复测时，事件 28/71 仍应只出现非风险 `anonymous-pile-draw`；事件 80 这类延迟展示不应再
+出现在 `degradations` 中，且牌顶明牌实体、生产账本与 observer 一致性告警均保持正常。
+
+2026-08-01 追补验证结果：`pnpm test:tracker` 50 个文件、465 项通过；格式检查、
+`pnpm typecheck:tracker`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、
+`pnpm build:prod` 全部通过，`traversalBaseline` 未回退。
+
 ---
 
 ## 11. 验证

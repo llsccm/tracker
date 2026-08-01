@@ -452,6 +452,75 @@ describe('PileIdentityLedger', () => {
     ])
   })
 
+  it('B15 释放非牌顶已知身份，延迟手牌展示不再触发牌数 reconcile', () => {
+    const ledger = new PileIdentityLedger()
+    const comparison = new PileIdentityModelComparison()
+    ledger.initialize([1, 2, 3, 4])
+    comparison.initialize([1, 2, 3, 4])
+
+    applyAndCompare(ledger, comparison, {
+      eventType: 'showCards',
+      fromZone: 1,
+      toZone: 1,
+      cardIDs: [1, 2],
+      cardCount: 2,
+      visiblePileIdentityIDsAfter: [1],
+      pileCountBefore: 4,
+      pileCountAfter: 4
+    })
+    applyAndCompare(ledger, comparison, {
+      eventType: 'moveUnknown',
+      fromZone: 1,
+      toZone: 5,
+      cardIDs: [],
+      cardCount: 1,
+      fromPosition: POSITION_RANDOM,
+      moveType: 18,
+      spellID: 4567,
+      visiblePileIdentityIDsAfter: [1],
+      pileCountBefore: 4,
+      pileCountAfter: 3
+    })
+
+    expect(ledger.getSnapshot()).toMatchObject({
+      knownPileIdentityIDs: [1],
+      hiddenPileSlotCount: 2,
+      accountedPileCount: 3
+    })
+    expect(ledger.getSnapshot().cohort.groups).toEqual([
+      {
+        generation: 0,
+        kind: 'partial',
+        cardIDs: [2, 3, 4],
+        remainingPileCount: 2,
+        label: '这 3 张里有 2 张在牌堆'
+      }
+    ])
+
+    applyAndCompare(ledger, comparison, {
+      eventType: 'discardKnown',
+      fromZone: 5,
+      toZone: 2,
+      cardIDs: [2],
+      cardCount: 1,
+      pileCountBefore: 3,
+      pileCountAfter: 3
+    })
+
+    expect(ledger.getSnapshot().cohort.groups).toEqual([
+      {
+        generation: 0,
+        kind: 'all-in-pile',
+        cardIDs: [3, 4],
+        remainingPileCount: 2,
+        label: '这 2 张都在牌堆'
+      }
+    ])
+    expect(comparison.getReport().degradations.map(({ reason }) => reason)).toEqual([
+      'anonymous-pile-draw'
+    ])
+  })
+
   it('B12 回收区 noop 不改变批次状态', () => {
     const ledger = createTwoCohortLedger()
     const before = ledger.getSnapshot().cohort
