@@ -1216,6 +1216,8 @@ export class Room {
     }
 
     if (closesPileGeneration) {
+      // 每个过期未决身份都需要一个 suspended 展示实体；这些实体不占牌堆物理槽，但会作为
+      // 新 Room card 注册到计数器和增量索引，因此洗牌遍历量随旧 cohort 宽度线性增长。
       const suspensionResult = this.suspendUnresolvedPileIdentitiesForShuffle(
         expiringIdentityIDs,
         recycledIdentityIDs

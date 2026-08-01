@@ -1,19 +1,22 @@
 import type { CardID } from '@/tracker/types'
 
 /**
- * Phase 0/0.5 纯模型：世代身份卡池、批次基数与当前正 ID 暗槽账本。
+ * Phase 0/0.5 纯模型：世代身份卡池、批次基数、历史正 ID 暗槽账本与真实牌序 oracle。
  *
- * 这里不引用任何生产代码，只用同一套事件序列驱动两个独立的账本模型：
+ * 这里不引用任何生产代码，只用同一套事件序列驱动相互独立的模型。它们不属于已退役的
+ * 运行时 observer，而是用于反证生产 `PileIdentityLedger` 语义的长期回归基线，应随新增事件
+ * 一起维护：
  *
- * - `runGenerationPoolModel`：`docs/pile-identity-cohort-plan.md` 保留的全局世代对照模型。
+ * - `runGenerationPoolModel`：保留的全局世代对照模型。
  *   它采用「匿名牌堆 + 当前世代未揭示身份候选池」：暗摸不更新卡池；实际弃牌洗回时旧卡池
  *   整体过期为 suspended，洗回的已知身份组成下一世代卡池。
  * - `runBaselineLedgerModel`：Phase 0 时冻结的旧生产基线。`Card.reset()` 洗回时保留正 ID，
  *   牌堆里存在「正 ID 暗槽」；旧洗牌分类用这些 ID 排除仍有明确牌堆位置的身份。
  * - `runCohortPoolModel`：不绑定具体身份与物理槽，只保留每个洗回批次的候选身份集合和
  *   其中仍在牌堆的数量。它用于验证集合级基数约束能否保留世代模型主动丢弃的信息。
+ * - `runOracle`：仅由测试夹具提供服务器真实隐藏牌序，用于判定上述模型是否作出错误陈述。
  *
- * 两个模型都把 `candidateWidth`（= suspended 集合大小）作为对照指标：按计划 §7.4，
+ * 世代与基线模型都把 `candidateWidth`（= suspended 集合大小）作为对照指标：按设计契约，
  * 活动卡池不直接展示，UI 展示的是「未知位置候选」，也就是 suspended 集合。
  *
  * 基线模型有意保留「被挤身份退回未定位池」这条代价路径（见 `revealFromPile`），
@@ -43,8 +46,8 @@ export type PileGenerationEvent =
    * 见 `MoveEventNormalizer.getProtocolMoveSpecialLabel()` 的「从牌堆获取牌」）。
    *
    * 与 `revealFromPile` 的区别只在语义标注：协议给出 CardID 本身就证明该身份此刻在
-   * 牌堆，因此两者都不要求身份位于牌顶批次。单独建模是为了让 Phase 1 能分别统计
-   * 「牌顶摸牌」与「任意位置搜牌」的频率。
+   * 牌堆，因此两者都不要求身份位于牌顶批次。单独建模是为了让固定 seed 属性序列分别
+   * 覆盖「牌顶摸牌」与「任意位置搜牌」的边界。
    */
   | { type: 'gainFromPile'; cardIDs: CardID[] }
   /**
@@ -280,13 +283,14 @@ function applyGenerationEvent(
     }
     case 'insertExternalAtRandom': {
       // 外部牌暗置进入牌堆：身份未揭示，属于当前世代候选（§5.8 规则 4）。
-      event.cardIDs.forEach((cardID) => {
+      const cardIDs = normalizeIdentityIDs(event.cardIDs)
+      cardIDs.forEach((cardID) => {
         state.identityUniverse.add(cardID)
         state.locatedIdentityIDs.delete(cardID)
         state.activeIdentityIDs.add(cardID)
         state.suspendedIdentityIDs.delete(cardID)
       })
-      state.pileSlotCount += event.cardIDs.length
+      state.pileSlotCount += cardIDs.length
       return
     }
     case 'drawAcrossShuffle': {
@@ -855,6 +859,19 @@ function consumeBaselineHiddenHandSlot(state: BaselineModelState, cardID: CardID
   state.locatedIdentityIDs.delete(displaced)
 }
 
+/**
+ * 基线模型仍允许正 ID 暗槽物理存在；从牌顶暗摸时必须把弹出的槽位按匿名/正 ID 分类，
+ * 否则玩家暗区槽数与身份位置归因会在不同事件分支间漂移。
+ */
+function moveBaselinePileTopSlotToHiddenHand(state: BaselineModelState): void {
+  const slot = state.pileSlots.pop() ?? null
+  if (slot === null) {
+    state.playerAnonSlotCount += 1
+    return
+  }
+  state.playerHiddenPositiveIDs.add(slot)
+}
+
 function shuffleBaseline(state: BaselineModelState): ShuffleObservation | null {
   const recycledSlotCount = state.discardKnownIDs.length + state.discardAnonSlotCount
   if (recycledSlotCount === 0) return null
@@ -938,15 +955,14 @@ function applyBaselineEvent(
         throw new Error(`暗摸张数超过牌堆物理槽：${event.count} > ${state.pileSlots.length}`)
       }
       for (let index = 0; index < event.count; index += 1) {
-        const slot = state.pileSlots.pop() ?? null
-        if (slot === null) state.playerAnonSlotCount += 1
-        else state.playerHiddenPositiveIDs.add(slot)
+        moveBaselinePileTopSlotToHiddenHand(state)
       }
       return
     }
     case 'insertExternalAtRandom': {
       // 位置未知：基线只能按本地顺序追加到牌顶，这正是它的代表绑定近似来源。
-      event.cardIDs.forEach((cardID) => {
+      const cardIDs = normalizeIdentityIDs(event.cardIDs)
+      cardIDs.forEach((cardID) => {
         state.identityUniverse.add(cardID)
         state.pileSlots.push(cardID)
         state.locatedIdentityIDs.add(cardID)
@@ -969,9 +985,7 @@ function applyBaselineEvent(
       }
 
       for (let index = 0; index < event.count; index += 1) {
-        const slot = state.pileSlots.pop() ?? null
-        if (slot === null) state.playerAnonSlotCount += 1
-        else state.playerHiddenPositiveIDs.add(slot)
+        moveBaselinePileTopSlotToHiddenHand(state)
       }
 
       const consumedFromRecycledCount = event.count - carriedOverSlotCount
@@ -1021,9 +1035,7 @@ function applyBaselineEvent(
       }
       // 无 CardID：与暗摸一致，按本地牌序从牌顶消费。
       for (let index = 0; index < event.count; index += 1) {
-        const slot = state.pileSlots.pop() ?? null
-        if (slot === null) state.playerAnonSlotCount += 1
-        else state.playerHiddenPositiveIDs.add(slot)
+        moveBaselinePileTopSlotToHiddenHand(state)
       }
       return
     }
@@ -1158,8 +1170,8 @@ function drawTrueCards(state: OracleState, count: number): void {
   }
 }
 
-function recycleTrueDiscard(state: OracleState, recycledOrder: CardID[] | undefined): void {
-  if (state.trueDiscard.length === 0) return
+function recycleTrueDiscard(state: OracleState, recycledOrder: CardID[] | undefined): boolean {
+  if (state.trueDiscard.length === 0) return false
 
   const order = recycledOrder ?? [...state.trueDiscard]
   const expected = sortIDs(state.trueDiscard)
@@ -1172,6 +1184,7 @@ function recycleTrueDiscard(state: OracleState, recycledOrder: CardID[] | undefi
   // 与 `Room.shufflePile()` 一致：洗回批次进入牌底侧，原剩余牌堆保持在牌顶侧。
   state.truePile = [...order, ...state.truePile]
   state.trueDiscard = []
+  return true
 }
 
 export function runOracle(events: PileGenerationEvent[], options: OracleOptions): OracleState {
@@ -1302,8 +1315,8 @@ export function runOracle(events: PileGenerationEvent[], options: OracleOptions)
         return
       }
       case 'shuffle': {
-        recycleTrueDiscard(state, recycledOrders[shuffleIndex])
-        shuffleIndex += 1
+        // 空弃牌堆 shuffle 不消费夹具提供的洗回顺序；下一次真实洗回仍使用当前索引。
+        if (recycleTrueDiscard(state, recycledOrders[shuffleIndex])) shuffleIndex += 1
         return
       }
       case 'introduceExternal': {

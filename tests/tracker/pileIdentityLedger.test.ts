@@ -45,6 +45,18 @@ function createTwoCohortLedger(): PileIdentityLedger {
 }
 
 describe('PileIdentityLedger', () => {
+  it('初始化一致性按归一化身份数校验', () => {
+    const warnings: Record<string, unknown>[] = []
+    const ledger = new PileIdentityLedger({
+      onWarning: (_message, detail) => warnings.push(detail)
+    })
+
+    ledger.initialize([1, 1, 2, 0, -1])
+
+    expect(ledger.getSnapshot().accountedPileCount).toBe(2)
+    expect(warnings).toEqual([])
+  })
+
   it('开局整副牌暂存弃牌堆时恢复 generation 0 而不滚动世代', () => {
     const ledger = new PileIdentityLedger()
     ledger.initialize([1, 2, 3, 4])

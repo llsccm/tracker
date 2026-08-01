@@ -315,6 +315,23 @@ describe('Phase 0.5：批次集合 + 在牌堆数量', () => {
     expect(cohort.identityUniverse).toEqual(new Set([1, 2]))
   })
 
+  it('随机位置入堆按归一化身份数扩展三个纯模型', () => {
+    const events: PileGenerationEvent[] = [
+      { type: 'initialize', cardIDs: [1, 2] },
+      { type: 'insertExternalAtRandom', cardIDs: [3, 3, 0, -1] }
+    ]
+    const generation = runGenerationPoolModel(events).state
+    const baseline = runBaselineLedgerModel(events).state
+    const cohort = runCohortPoolModel(events)
+
+    expect(countGenerationSlots(generation)).toBe(3)
+    expect(countBaselineSlots(baseline)).toBe(3)
+    expect(countCohortSlots(cohort)).toBe(3)
+    expect(generation.identityUniverse).toEqual(new Set([1, 2, 3]))
+    expect(baseline.identityUniverse).toEqual(new Set([1, 2, 3]))
+    expect(cohort.identityUniverse).toEqual(new Set([1, 2, 3]))
+  })
+
   it('基线模型拒绝洗牌后仍超过物理牌堆的摸牌请求', () => {
     expect(() =>
       runBaselineLedgerModel([
@@ -530,6 +547,24 @@ describe('§18.6-3 真实隐藏牌序 oracle：假阳性与假阴性', () => {
         deckOrder: [1, 2, 4]
       })
     ).toThrow(/初始牌序/)
+  })
+
+  it('空弃牌堆洗牌不消费下一次真实洗回顺序', () => {
+    const state = runOracle(
+      [
+        { type: 'initialize', cardIDs: [1, 2, 3, 4] },
+        { type: 'shuffle' },
+        { type: 'revealFromPile', cardIDs: [4, 3] },
+        { type: 'discardKnown', cardIDs: [4, 3] },
+        { type: 'shuffle' }
+      ],
+      {
+        deckOrder: [1, 2, 3, 4],
+        recycledOrders: [[3, 4]]
+      }
+    )
+
+    expect(state.truePile).toEqual([3, 4, 1, 2])
   })
 
   it('单洗牌周期内：基线产生错误断言，另外两模型保持集合语义', () => {
@@ -952,7 +987,7 @@ describe('固定 seed 属性序列', () => {
     pileSlotCount: number
     playerAnonSlotCount: number
     playerKnownIDs: CardID[]
-    discardCount: number
+    discardKnownIDs: CardID[]
   }
 
   /**
@@ -975,11 +1010,12 @@ describe('固定 seed 属性序列', () => {
       pileSlotCount: deckSize,
       playerAnonSlotCount: 0,
       playerKnownIDs: [],
-      discardCount: 0
+      discardKnownIDs: []
     }
     // 已被揭示或已进入弃牌堆的身份不能再次从牌堆明摸。
     const availablePileIdentities = new Set(cardIDs)
     let nextExternalID = 60000
+    let hasGeneratedGainFromPile = false
 
     /** 当前牌顶批次里仍可揭示的身份；空表示这一步不能做牌堆明摸。 */
     const topCohortCandidates = (): CardID[] => {
@@ -995,10 +1031,43 @@ describe('固定 seed 属性序列', () => {
       return []
     }
 
+    /** 搜牌事件故意选择仍有牌在堆、但不属于当前牌顶批次的候选身份。 */
+    const nonTopCohortCandidates = (): CardID[] => {
+      const topCandidates = new Set(topCohortCandidates())
+      const cohortState = runCohortPoolModel(events)
+      const candidates = new Set<CardID>()
+
+      cohortState.cohorts.forEach((cohort) => {
+        if (cohort.remainingPileCount <= 0) return
+        cohort.candidateIdentityIDs.forEach((cardID) => {
+          if (availablePileIdentities.has(cardID) && !topCandidates.has(cardID)) {
+            candidates.add(cardID)
+          }
+        })
+      })
+
+      return sortIDs(candidates)
+    }
+
     for (let step = 0; step < steps; step += 1) {
+      // 一旦显式洗牌形成了仍在牌顶批次之外的可取身份，优先覆盖一次任意位置搜牌。
+      // 这使固定 seed 集合稳定包含 B13，而不是把覆盖率寄托在短暂窗口内的随机 roll。
+      if (!hasGeneratedGainFromPile && state.pileSlotCount > 0) {
+        const pool = nonTopCohortCandidates()
+        if (pool.length > 0) {
+          const cardID = pool[pick(pool.length)]
+          events.push({ type: 'gainFromPile', cardIDs: [cardID] })
+          availablePileIdentities.delete(cardID)
+          state.pileSlotCount -= 1
+          state.playerKnownIDs.push(cardID)
+          hasGeneratedGainFromPile = true
+          continue
+        }
+      }
+
       const roll = pick(100)
 
-      if (roll < 25 && state.pileSlotCount > 0) {
+      if (roll < 22 && state.pileSlotCount > 0) {
         const count = 1 + pick(Math.min(3, state.pileSlotCount))
         events.push({ type: 'drawUnknown', count })
         state.pileSlotCount -= count
@@ -1006,7 +1075,7 @@ describe('固定 seed 属性序列', () => {
         continue
       }
 
-      if (roll < 50 && state.pileSlotCount > 0) {
+      if (roll < 42 && state.pileSlotCount > 0) {
         // 明摸：只能从牌顶批次取，否则是协议不可能产生的序列。
         const pool = topCohortCandidates()
         if (pool.length === 0) continue
@@ -1019,7 +1088,29 @@ describe('固定 seed 属性序列', () => {
         continue
       }
 
-      if (roll < 62 && state.playerAnonSlotCount > 0 && availablePileIdentities.size > 0) {
+      if (roll < 50 && state.pileSlotCount > 0) {
+        const pool = nonTopCohortCandidates()
+        if (pool.length === 0) continue
+
+        const cardID = pool[pick(pool.length)]
+        events.push({ type: 'gainFromPile', cardIDs: [cardID] })
+        availablePileIdentities.delete(cardID)
+        state.pileSlotCount -= 1
+        state.playerKnownIDs.push(cardID)
+        hasGeneratedGainFromPile = true
+        continue
+      }
+
+      if (roll < 58 && state.pileSlotCount > 0) {
+        const count = 1 + pick(Math.min(3, state.pileSlotCount))
+        const rangeSize = count + pick(state.pileSlotCount - count + 1)
+        events.push({ type: 'gainUnknownFromPileTopRange', count, rangeSize })
+        state.pileSlotCount -= count
+        state.playerAnonSlotCount += count
+        continue
+      }
+
+      if (roll < 68 && state.playerAnonSlotCount > 0 && availablePileIdentities.size > 0) {
         // 从手牌揭示不受批次顺序约束：暗摸可能来自任何批次。
         const pool = sortIDs(availablePileIdentities)
         const cardID = pool[pick(pool.length)]
@@ -1030,36 +1121,42 @@ describe('固定 seed 属性序列', () => {
         continue
       }
 
-      if (roll < 75 && state.playerKnownIDs.length > 0) {
+      if (roll < 78 && state.playerKnownIDs.length > 0) {
         const index = pick(state.playerKnownIDs.length)
         const [cardID] = state.playerKnownIDs.splice(index, 1)
         events.push({ type: 'discardKnown', cardIDs: [cardID] })
-        state.discardCount += 1
+        state.discardKnownIDs.push(cardID)
         continue
       }
 
-      if (roll < 85 && state.discardCount > 0) {
+      if (roll < 86 && state.discardKnownIDs.length > 0) {
         events.push({ type: 'shuffle' })
-        state.pileSlotCount += state.discardCount
-        state.discardCount = 0
+        state.discardKnownIDs.forEach((cardID) => availablePileIdentities.add(cardID))
+        state.pileSlotCount += state.discardKnownIDs.length
+        state.discardKnownIDs = []
         continue
       }
 
-      if (roll < 92 && state.discardCount > 0 && state.pileSlotCount + state.discardCount >= 1) {
+      if (
+        roll < 93 &&
+        state.discardKnownIDs.length > 0 &&
+        state.pileSlotCount + state.discardKnownIDs.length >= 1
+      ) {
         // 自动补牌：必须超过洗牌前牌堆量，且不超过洗牌后总量。
-        const postShuffleCount = state.pileSlotCount + state.discardCount
+        const postShuffleCount = state.pileSlotCount + state.discardKnownIDs.length
         const minDraw = state.pileSlotCount + 1
         if (minDraw > postShuffleCount) continue
 
         const count = minDraw + pick(postShuffleCount - minDraw + 1)
         events.push({ type: 'drawAcrossShuffle', count })
+        state.discardKnownIDs.forEach((cardID) => availablePileIdentities.add(cardID))
         state.pileSlotCount = postShuffleCount - count
-        state.discardCount = 0
+        state.discardKnownIDs = []
         state.playerAnonSlotCount += count
         continue
       }
 
-      if (roll < 96) {
+      if (roll < 97) {
         // B3/B4：随机位置入堆，触发批次合并降级。
         const cardID = nextExternalID
         nextExternalID += 1
@@ -1072,9 +1169,27 @@ describe('固定 seed 属性序列', () => {
     return events
   }
 
-  /** 失败时把 seed 与完整序列一起输出，保证可重放。 */
+  /** 把 seed 与完整序列格式化为可重放的失败上下文。 */
   function describeSequence(seed: number, events: PileGenerationEvent[]): string {
     return `seed=${seed}\n${JSON.stringify(events, null, 2)}`
+  }
+
+  /** 属性序列 JSON 只在断言失败时生成，避免每个成功前缀都重复序列化。 */
+  function withSequenceContext(
+    seed: number,
+    events: PileGenerationEvent[],
+    runAssertions: () => void
+  ): void {
+    try {
+      runAssertions()
+    } catch (error) {
+      const context = describeSequence(seed, events)
+      if (!(error instanceof Error)) {
+        throw new Error(`${context}\n${String(error)}`, { cause: error })
+      }
+      error.message = `${context}\n${error.message}`
+      throw error
+    }
   }
 
   const SEEDS = [1, 7, 42, 101, 256, 1337, 20260731, 99991]
@@ -1085,41 +1200,37 @@ describe('固定 seed 属性序列', () => {
 
       events.forEach((_event, index) => {
         const slice = events.slice(0, index + 1)
-        const state = runCohortPoolModel(slice)
-        const context = describeSequence(seed, slice)
+        withSequenceContext(seed, slice, () => {
+          const state = runCohortPoolModel(slice)
 
-        // §4.1 物理守恒。
-        expect(countCohortSlots(state), context).toBe(state.identityUniverse.size)
+          // §4.1 物理守恒。
+          expect(countCohortSlots(state)).toBe(state.identityUniverse.size)
 
-        // §4.2 批次守恒。
-        const totalRemaining = state.cohorts.reduce(
-          (sum, cohort) => sum + cohort.remainingPileCount,
-          0
-        )
-        expect(totalRemaining, context).toBe(state.pileSlotCount)
-
-        state.cohorts.forEach((cohort) => {
-          expect(cohort.remainingPileCount, context).toBeGreaterThanOrEqual(0)
-          expect(cohort.remainingPileCount, context).toBeLessThanOrEqual(
-            cohort.candidateIdentityIDs.size
+          // §4.2 批次守恒。
+          const totalRemaining = state.cohorts.reduce(
+            (sum, cohort) => sum + cohort.remainingPileCount,
+            0
           )
-        })
+          expect(totalRemaining).toBe(state.pileSlotCount)
 
-        // 批次候选两两互斥。
-        const seen = new Set<CardID>()
-        state.cohorts.forEach((cohort) => {
-          cohort.candidateIdentityIDs.forEach((cardID) => {
-            expect(seen.has(cardID), `${context}\n重复身份 ${cardID}`).toBe(false)
-            seen.add(cardID)
+          state.cohorts.forEach((cohort) => {
+            expect(cohort.remainingPileCount).toBeGreaterThanOrEqual(0)
+            expect(cohort.remainingPileCount).toBeLessThanOrEqual(cohort.candidateIdentityIDs.size)
           })
-        })
 
-        // 批次身份不得同时位于 locatedIdentityIDs。
-        seen.forEach((cardID) => {
-          expect(
-            state.locatedIdentityIDs.has(cardID),
-            `${context}\n身份 ${cardID} 同时已定位`
-          ).toBe(false)
+          // 批次候选两两互斥。
+          const seen = new Set<CardID>()
+          state.cohorts.forEach((cohort) => {
+            cohort.candidateIdentityIDs.forEach((cardID) => {
+              expect(seen.has(cardID), `重复身份 ${cardID}`).toBe(false)
+              seen.add(cardID)
+            })
+          })
+
+          // 批次身份不得同时位于 locatedIdentityIDs。
+          seen.forEach((cardID) => {
+            expect(state.locatedIdentityIDs.has(cardID), `身份 ${cardID} 同时已定位`).toBe(false)
+          })
         })
       })
     })
@@ -1131,21 +1242,22 @@ describe('固定 seed 属性序列', () => {
 
       events.forEach((_event, index) => {
         const slice = events.slice(0, index + 1)
-        const { state } = runGenerationPoolModel(slice)
-        const context = describeSequence(seed, slice)
+        withSequenceContext(seed, slice, () => {
+          const { state } = runGenerationPoolModel(slice)
 
-        expect(countGenerationSlots(state), context).toBe(state.identityUniverse.size)
+          expect(countGenerationSlots(state)).toBe(state.identityUniverse.size)
 
-        // active 与 suspended 不重叠。
-        const overlap = sortIDs(state.activeIdentityIDs).filter((cardID) =>
-          state.suspendedIdentityIDs.has(cardID)
-        )
-        expect(overlap, context).toEqual([])
+          // active 与 suspended 不重叠。
+          const overlap = sortIDs(state.activeIdentityIDs).filter((cardID) =>
+            state.suspendedIdentityIDs.has(cardID)
+          )
+          expect(overlap).toEqual([])
 
-        // active ⊆ 未定位。
-        const unlocated = getGenerationUnlocated(state)
-        state.activeIdentityIDs.forEach((cardID) => {
-          expect(unlocated.has(cardID), `${context}\nactive ${cardID} 已定位`).toBe(true)
+          // active ⊆ 未定位。
+          const unlocated = getGenerationUnlocated(state)
+          state.activeIdentityIDs.forEach((cardID) => {
+            expect(unlocated.has(cardID), `active ${cardID} 已定位`).toBe(true)
+          })
         })
       })
     })
@@ -1157,32 +1269,30 @@ describe('固定 seed 属性序列', () => {
 
       events.forEach((_event, index) => {
         const slice = events.slice(0, index + 1)
-        const state = runBaselineLedgerModel(slice).state
-        const context = describeSequence(seed, slice)
-
-        expect(countBaselineSlots(state), context).toBe(state.identityUniverse.size)
+        withSequenceContext(seed, slice, () => {
+          const state = runBaselineLedgerModel(slice).state
+          expect(countBaselineSlots(state)).toBe(state.identityUniverse.size)
+        })
       })
     })
   })
 
-  it('降级只在 RANDOM 事件发生，且单调不减', () => {
+  it('降级只由 RANDOM 或跨批次牌顶范围事件触发，且单调不减', () => {
     SEEDS.forEach((seed) => {
       const events = generateSequence(seed, 40)
-      const randomEventCount = events.filter(
-        (event) => event.type === 'insertExternalAtRandom'
-      ).length
+      withSequenceContext(seed, events, () => {
+        let previous = 0
+        events.forEach((event, index) => {
+          const current = runCohortPoolModel(events.slice(0, index + 1)).cohortDegradationCount
+          const delta = current - previous
 
-      const state = runCohortPoolModel(events)
-      const context = describeSequence(seed, events)
+          expect(current).toBeGreaterThanOrEqual(previous)
+          expect(delta).toBeLessThanOrEqual(1)
+          if (event.type === 'insertExternalAtRandom') expect(delta).toBe(1)
+          else if (event.type !== 'gainUnknownFromPileTopRange') expect(delta).toBe(0)
 
-      // 每个 RANDOM 事件恰好记一次降级，不多不少。
-      expect(state.cohortDegradationCount, context).toBe(randomEventCount)
-
-      let previous = 0
-      events.forEach((_event, index) => {
-        const current = runCohortPoolModel(events.slice(0, index + 1)).cohortDegradationCount
-        expect(current, context).toBeGreaterThanOrEqual(previous)
-        previous = current
+          previous = current
+        })
       })
     })
   })
@@ -1198,6 +1308,8 @@ describe('固定 seed 属性序列', () => {
       'discardKnown',
       'drawAcrossShuffle',
       'drawUnknown',
+      'gainFromPile',
+      'gainUnknownFromPileTopRange',
       'initialize',
       'insertExternalAtRandom',
       'revealFromHand',

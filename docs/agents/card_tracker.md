@@ -274,6 +274,8 @@
 - `CardLocationIndex`、`Room.notifyCardChanged()` 与 `view/dirtyRenderState.ts` 已接入：面板与玩家手牌可按脏集合局部重绘；仍可继续收紧边界场景与高频刷新策略。
 - cohort 分组 UI 已裁决不接入；若未来重新评估，应以独立产品需求启动，不要恢复迁移期
   observer 或双写状态。
+- `tests/tracker/helpers/pileGenerationPoolModel.ts` 中的历史基线、世代、批次与真实牌序 oracle
+  继续作为纯测试对照保留；Phase 6 退役的是运行时 observer，不是这些可证伪模型。
 
 ---
 
@@ -294,12 +296,17 @@
 - 若新增会影响手牌槽 known/candidate 计数的收敛路径，必须确保相关座位进入 `Room.resolveTouchedSeats`；E1 会复用未触碰座位的手牌槽统计缓存。
 - 新增或修改 `this.cards.filter(...)` 等全牌池扫描前，必须先判断能否改用现有增量快照、索引、脏事件集合，或在入口一次性归组后复用结果；尤其避免把全牌池扫描放进玩家、约束组或收敛轮循环中，意外放大为 O(玩家数 × 全牌数) 或更高复杂度。若确认全量扫描确有必要，必须使用 `recordTraversal(...)` 对该扫描站点显式插桩，并在 `tests/tracker/traversalBaseline.test.ts` 中新增或更新对应场景与内联快照，使后续遍历量增长可见且可解释；不得以未插桩的隐藏扫描绕过基线护栏。
 - [`tests/tracker/traversalBaseline.test.ts`](../../tests/tracker/traversalBaseline.test.ts) 的内联快照是遍历量回归护栏：结构性优化使数字下降属预期（`vitest run -u` 刷新），无关改动使数字上升需要先解释原因再更新快照。
+- 生产 `Room.initDeck()` 只创建匿名牌堆槽；测试 helper 的 `materializeDeckIdentities: true` 是
+  历史正 ID 暗槽对照，不代表生产。真实洗牌关闭 cohort 时会为过期未决身份创建 suspended
+  展示实体，遍历基线应把这类线性成本与物理牌堆扫描区分记录。
 - 匿名槽 G0/G1 真实回放已经完成并决定 NO-GO / 收缩；临时浏览器回放探针已退役。历史数据见本地归档 [`plans/anonymous-entity-and-slot.md`](../../plans/anonymous-entity-and-slot.md)。
 - 初始牌堆初始化后，`pile.cards` 顺序应独立于 `room.cards`。
 - 摸暗牌、摸明牌时手牌额度及状态维护应保持准确。
 - 洗牌时协议 `cardCount` 与本地可枚举牌堆不一致属于高风险路径：需要确认 cohort generation 滚动、匿名实体数量、剩余牌堆相对顺序、牌顶/牌底公开明牌保留、玩家/mark 原对象与账本引用，以及数量不足时只告警而不补槽。
 - 公共 known 物化必须限定在协议 `cardCount` 端点范围；除来源区中的同 ID 实体外只能消费
   匿名槽，不能穿透正 ID 暗端点寻找更深处匿名槽，也不能把 displaced 身份转成 suspended。
+- 非牌堆公共区（`discard` / `process` / `exchange`）的无 CardIDs 移动必须消费实际端点实体；
+  只有牌堆的非标准无 ID 获取才允许跳过已展示明牌并只取匿名槽。
 - 玩家来源明牌残留公共区时，需要确认旧公共区槽位被占位修复，且同批已知牌不会被用作其它明牌的回补占位。
 - `AmbiguousKnownIndex.describe()` 多候选位置展示应准确。
 - 手牌暗置到标记区的 4 选 1 / 4 选 2 / 4 选 3、逐张明置、混有暗牌和叠加跨角色候选的场景应保持保守且可收敛。
@@ -344,3 +351,8 @@
   `PileIdentityLedger.ts` 同步补充 cohort、降级、守恒与事务边界注释。Prettier、
   `git diff --check`、`pnpm test:tracker`（51 个文件、471 项）、`pnpm typecheck:tracker`、
   `pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm build:prod` 与 `serena memories check` 全部通过。
+- 2026-08-02：收口牌堆身份模型评审反馈：非牌堆公共区无 CardIDs 移动恢复消费实际端点，
+  纯模型统一身份归一化、空弃牌洗牌索引与固定 seed 事件覆盖，并明确阶段纯模型长期保留。
+  洗牌遍历基线记录匿名生产路径 197、历史已物化对照 308；Prettier、`git diff --check`、
+  `pnpm test:tracker`（49 个文件、426 项）、`pnpm typecheck:tracker`、`pnpm typecheck`、
+  `pnpm lint`、`pnpm build`、`pnpm build:prod` 全部通过。

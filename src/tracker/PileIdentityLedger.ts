@@ -192,7 +192,7 @@ export class PileIdentityLedger {
             }
           ]
 
-    this.warnForIssues(this.collectConsistencyIssues(cardIDs.length, 'initialize'))
+    this.warnForIssues(this.collectConsistencyIssues(identities.length, 'initialize'))
   }
 
   applyMove(move: PileIdentityLedgerMove): void {

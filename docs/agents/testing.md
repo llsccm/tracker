@@ -35,6 +35,7 @@
 - 约束与收敛：`convergenceTermination.test.ts`、`resolveConstraintsIncrementalIndex.test.ts`、`ambiguousKnownIndexIncremental.test.ts`
 - 暗牌 / 标记 / 随机转移：`hiddenMarkCandidates.test.ts`、`randomTransferLifecycle.test.ts`、`handCountObservation.test.ts`、`playerHandMirror.test.ts`
 - 局流与技能副作用：`gameFlowState.test.ts`、`spellEffects.test.ts`、`roleOptTargetNtf.test.ts`
+- 牌堆身份模型：`pileGenerationPool.test.ts`、`pileIdentityLedger.test.ts`、`pileIdentityLedgerIntegration.test.ts`
 - 视图与展示：`viewDirtyRender.test.ts`、`pileDisplayOrder.test.ts`、`suitGlyph.test.ts`
 - 性能护栏：`traversalBaseline.test.ts`
 - 计数器：`cardCounter.test.ts`
@@ -142,8 +143,12 @@ CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑�
 ### 牌堆身份纯模型
 
 `tests/tracker/pileGenerationPool.test.ts` + `tests/tracker/helpers/pileGenerationPoolModel.ts`
-并排维护三个不接生产状态的模型：当前正 ID 暗槽基线、全局世代滚动、批次候选集合 +
-`remainingPileCount`。目标测试当前为 57 例。
+并排维护三个不接生产状态的独立模型：历史正 ID 暗槽基线、全局世代滚动、批次候选集合 +
+`remainingPileCount`，并由仅用于夹具的真实隐藏牌序 oracle 裁决模型陈述。
+
+这些纯模型是生产 `PileIdentityLedger` 的长期可证伪回归基线，不属于 Phase 6 已删除的运行时
+observer、双写状态或统计 schema。新增牌堆事件语义时应同步扩展模型与固定 seed 生成器，
+不能因为其名称带有“阶段/Phase”就按迁移残留删除。
 
 建模范围：计划 §5.3.2 枚举的 B8–B11（潜伏、伊籍机捷、骋烈/天辩/宴戏、特殊装备牌）
 由各自的特殊路径实现，不在本纯模型内，因此没有对应事件类型，批次消费也只有牌顶方向。
@@ -170,7 +175,7 @@ CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑�
 
 Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入口和对应测试 helper。生产
 只保留 `PileIdentityLedger` 单一身份权威；真实样本与 observer 指标仅作为历史决策证据，见
-[`docs/pile-identity-cohort-plan.md`](../pile-identity-cohort-plan.md)。
+本地归档 [`plans/pile-identity-cohort-plan.md`](../../plans/pile-identity-cohort-plan.md)。
 
 当前必须保持的自动化契约：
 
@@ -183,11 +188,14 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
   承担玩家/mark 等物理槽位。
 - `MoveType=1` 常规摸牌按端点顺序精确移走牌顶/牌底明牌；`MoveType=18` 无 CardIDs 时只消费
   匿名槽并跳过端点明牌，且规则不绑定某个 SpellID。
+- 上述“只消费匿名槽”只适用于明确的牌堆来源。`discard`、`process`、`exchange` 等非牌堆
+  公共区在无 CardIDs 时仍须按端点移除实际实体，包括已知牌；否则会遗留来源明牌并虚构
+  匿名 fallback。
 - Room/ledger 事务完成后，cohort 身份必须恰好位于 `unlocatedIdentities` 或
   `suspendedKnownCards`，不能缺失或同时存在于两边。
 
 纯模型的历史推演与 oracle 边界仍归档于
-[`docs/pile-generation-identity-pool-plan.md`](../pile-generation-identity-pool-plan.md)。
+本地 [`plans/pile-generation-identity-pool-plan.md`](../../plans/pile-generation-identity-pool-plan.md)。
 
 ---
 
@@ -208,6 +216,9 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
 - 结构性优化导致数字下降：可更新快照，并在 PR 说明收益场景
 - 无关改动导致数字上升：先解释原因；不能无说明地 `-u`
 - 新增必要全量扫描：先问能否改增量；若必须全量，插桩 + 基线场景同步落地
+- `createTestRoom({ materializeDeckIdentities: false })` 才对齐生产 `Room.initDeck()` 的匿名牌堆；
+  `true` 仅是历史正 ID 暗槽对照。洗牌因创建 suspended 展示实体而增长时，应同时记录
+  cohort 宽度、变更实体数与对照快照，不能把测试专用已物化路径误称为生产路径。
 
 领域风险细则仍以 [`card_tracker.md`](card_tracker.md) 的「风险与验证清单」为准。
 

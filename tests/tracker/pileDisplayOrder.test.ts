@@ -6,7 +6,7 @@ import type { Room } from '@/tracker/Room'
 import { getPileDisplayCards } from '@/tracker/helper/pileOrder'
 import { getPublicFieldCandidateCards } from '@/tracker/view/publicFieldCandidates'
 import { trackerLogger } from '@/utils/logger'
-import { createTestRoom } from './helpers/room'
+import { createTestRoom, getSuspendedIdentityIDs } from './helpers/room'
 
 function getPile(room: Room) {
   return room.zones.get('pile')!
@@ -14,10 +14,6 @@ function getPile(room: Room) {
 
 function getDiscard(room: Room) {
   return room.zones.get('discard')!
-}
-
-function getSuspendedIdentityIDs(room: Room): number[] {
-  return Array.from(room.suspendedKnownCards, (card) => card.id).sort((left, right) => left - right)
 }
 
 function getCards(room: Room, ids: number[]) {
@@ -138,6 +134,34 @@ describe('牌堆展示顺序', () => {
     expect(topCard.location).toBe('pile')
     expectConsistentPublicZones(room)
   })
+
+  it.each(['discard', 'process', 'exchange'] as const)(
+    '%s 全明牌来源的无 CardID 移动消费实际端点实体',
+    (fromZone) => {
+      const { room } = createTestRoom({ cardIDs: [1, 2, 3] })
+      const pile = getPile(room)
+      const sourceZone = room.zones.get(fromZone)!
+      const toZone = fromZone === 'process' ? 'exchange' : 'process'
+      const targetZone = room.zones.get(toZone)!
+      const [knownCard] = pile.remove(1, POSITION_TOP)
+      knownCard.confirmKnown()
+      sourceZone.add(knownCard, POSITION_TOP)
+      const cardPoolSize = room.cards.length
+
+      room.moveCards([], toZone, {
+        fromZone,
+        fromPosition: POSITION_TOP,
+        cardCount: 1,
+        sourceEvent: { type: `test:${fromZone}-known-count-only-source` }
+      })
+
+      expect(sourceZone.cards).not.toContain(knownCard)
+      expect(targetZone.cards).toContain(knownCard)
+      expect(knownCard.isKnown).toBe(true)
+      expect(room.cards).toHaveLength(cardPoolSize)
+      expectConsistentPublicZones(room)
+    }
+  )
 
   it('洗回弃牌时匿名化身份并保留剩余牌堆顶部顺序', () => {
     const { room } = createTestRoom({

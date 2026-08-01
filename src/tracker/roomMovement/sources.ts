@@ -29,7 +29,10 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     return sourceZone?.remove(count, position) ?? []
   }
 
-  /** 获得类协议未给 CardIDs 时只消费暗槽，不把本地数组端点当作真实牌顶。 */
+  /**
+   * 牌堆获得类协议未给 CardIDs 时只消费暗槽，不把已展示端点误当成被随机取得的牌。
+   * 非牌堆公共区不能走这里，否则全明牌来源会遗留原实体并触发匿名 fallback。
+   */
   takeUnknownCardsFromPublicZone(
     count: number,
     zoneID: SourceZoneInput = 'pile',
@@ -749,11 +752,14 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     }
 
     const moveType = Number(sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType)
-    const isRegularPileDraw =
-      (fromZone === 'pile' || Number(fromZone) === 1) && moveType === MOVE_TYPE.DRAW
+    const isPileSource = fromZone === 'pile' || Number(fromZone) === 1
+    const isRegularPileDraw = isPileSource && moveType === MOVE_TYPE.DRAW
 
-    // 常规摸牌按牌顶/牌底实体顺序执行，已展示的端点明牌也会被摸走。
-    if (isRegularPileDraw) return this.takeCardsFromPublicZone(count, fromZone, fromPosition)
+    // 常规摸牌与非牌堆公共区都必须按端点移动真实实体；只有牌堆的非标准无 ID 获取
+    // 才跳过已展示明牌，避免把本地端点顺序误当成服务器实际选择。
+    if (!isPileSource || isRegularPileDraw) {
+      return this.takeCardsFromPublicZone(count, fromZone, fromPosition)
+    }
 
     return this.takeUnknownCardsFromPublicZone(count, fromZone, fromPosition)
   }

@@ -4,11 +4,7 @@ import { CARD_INSTANCE_STATUS } from '@/tracker/CardCounter'
 import { getPublicFieldCandidateCards } from '@/tracker/view/publicFieldCandidates'
 import { trackerLogger } from '@/utils/logger'
 import { expectLocationIndexMatchesRebuild } from './helpers/locationIndex'
-import { createTestRoom } from './helpers/room'
-
-function getSuspendedIdentityIDs(room: ReturnType<typeof createTestRoom>['room']): number[] {
-  return Array.from(room.suspendedKnownCards, (card) => card.id).sort((left, right) => left - right)
-}
+import { createTestRoom, getSuspendedIdentityIDs } from './helpers/room'
 
 describe('阶段 1 匿名牌堆 spike', () => {
   it('牌堆初始化为匿名槽并把整副牌登记为未定位身份', () => {
