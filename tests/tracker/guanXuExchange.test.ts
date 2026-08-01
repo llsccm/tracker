@@ -48,7 +48,7 @@ function captureMaterializationState(room: Room, cards: Card[]) {
 }
 
 describe('黄承彦观虚目标视角交换', () => {
-  it('目标手牌随五张牌顶回堆，选中的牌堆身份进入目标手牌且不补建实体', () => {
+  it('目标手牌按 ToPosition 的确定槽位回堆，选中的牌堆身份进入目标手牌且不补建实体', () => {
     const targetSeat = 1
     const actorSeat = 6
     const returnedHandCardID = 16
@@ -129,7 +129,7 @@ describe('黄承彦观虚目标视角交换', () => {
         SpellID: 987,
         ToID: actorSeat,
         ToZone: 10,
-        ToPosition: POSITION_RANDOM
+        ToPosition: 2
       }),
       protocolMove({
         CardCount: 5,
@@ -173,6 +173,101 @@ describe('黄承彦观虚目标视角交换', () => {
     expect(targetHandCards).toContain(gainedPileCard)
     expect(targetHandCards).not.toContain(returnedHandCard)
     expect(pile.cards).toHaveLength(pileCountBefore)
+    const returnedPileTopFive = pile.cards.slice(-5).reverse()
+    expect(returnedPileTopFive[2]).toBe(returnedHandCard)
+    expect(returnedHandCard.publicCandidates).toEqual([])
+    expect(pile.cards).not.toContain(gainedPileCard)
+    expect(exchange.cards).toHaveLength(0)
+    expect(room.cards).toHaveLength(entityCountBefore)
+    expect(room.skillState.has(GUAN_XU_STATE_KEY)).toBe(false)
+  })
+
+  it('交换桶 ToPosition 为 RANDOM 时仍保留牌顶范围候选', () => {
+    const targetSeat = 1
+    const actorSeat = 6
+    const returnedHandCardID = 16
+    const gainedPileCardID = 142
+    const { controller } = createTrackerControllerHarness()
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers(
+      [
+        { SeatID: targetSeat, ClientID: 100 },
+        { SeatID: actorSeat, ClientID: 600 }
+      ],
+      100
+    )
+    controller.initTrackerDeck([
+      returnedHandCardID,
+      gainedPileCardID,
+      201,
+      202,
+      203,
+      204,
+      205,
+      206,
+      207,
+      208
+    ])
+
+    const room = controller.getTrackerRoom()!
+    const pile = room.zones.get('pile')!
+    const returnedHandCard = room.materialize(returnedHandCardID, pile.cards[0])!
+    room.clearCardsFromPublicZones([returnedHandCard])
+    returnedHandCard.bindCandidates([targetSeat], 'hand', null, { known: true })
+    room.getPlayer(targetSeat)!.syncObservedHandCount(1)
+    room.resolveConstraints()
+
+    const moves = [
+      guanXuMove({
+        CardCount: 5,
+        FromID: 255,
+        FromZone: 1,
+        ToID: actorSeat,
+        ToZone: 10
+      }),
+      guanXuMove({
+        CardCount: 1,
+        CardIDs: [returnedHandCardID],
+        FromID: targetSeat,
+        FromZone: 5,
+        ToID: targetSeat,
+        ToZone: 10
+      }),
+      guanXuMove({
+        CardCount: 1,
+        CardIDs: [gainedPileCardID],
+        FromID: actorSeat,
+        FromZone: 10,
+        ToID: targetSeat,
+        ToZone: 10
+      }),
+      guanXuMove({
+        CardCount: 1,
+        CardIDs: [returnedHandCardID],
+        FromID: targetSeat,
+        FromZone: 10,
+        ToID: actorSeat,
+        ToZone: 10
+      }),
+      guanXuMove({
+        CardCount: 5,
+        FromID: actorSeat,
+        FromZone: 10,
+        ToID: 255,
+        ToZone: 1
+      }),
+      guanXuMove({
+        CardCount: 1,
+        CardIDs: [gainedPileCardID],
+        FromID: targetSeat,
+        FromZone: 10,
+        ToID: targetSeat,
+        ToZone: 5
+      })
+    ]
+    moves.forEach((move) => controller.syncTrackerMove(move))
+
     expect(pile.cards.slice(-5)).toContain(returnedHandCard)
     expect(returnedHandCard.publicCandidates).toEqual([
       expect.objectContaining({
@@ -182,10 +277,112 @@ describe('黄承彦观虚目标视角交换', () => {
         label: '牌堆顶前5张'
       })
     ])
-    expect(pile.cards).not.toContain(gainedPileCard)
-    expect(exchange.cards).toHaveLength(0)
-    expect(room.cards).toHaveLength(entityCountBefore)
-    expect(room.skillState.has(GUAN_XU_STATE_KEY)).toBe(false)
+  })
+
+  it('主视角完整回堆 CardIDs 不会被目标视角范围候选覆盖', () => {
+    const targetSeat = 1
+    const actorSeat = 6
+    const returnedHandCardID = 16
+    const gainedPileCardID = 142
+    const observedPileTopIDs = [62, 67, 37, 53, gainedPileCardID]
+    const deckIDs = [returnedHandCardID, ...observedPileTopIDs, 201, 202, 203, 204, 205, 206]
+    const { controller } = createTrackerControllerHarness()
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers(
+      [
+        { SeatID: targetSeat, ClientID: 100 },
+        { SeatID: actorSeat, ClientID: 600 }
+      ],
+      100
+    )
+    controller.initTrackerDeck(deckIDs)
+
+    const room = controller.getTrackerRoom()!
+    const pile = room.zones.get('pile')!
+    const returnedHandCard = room.materialize(returnedHandCardID, pile.cards[0])!
+    room.clearCardsFromPublicZones([returnedHandCard])
+    returnedHandCard.bindCandidates([targetSeat], 'hand', null, { known: true })
+    room.getPlayer(targetSeat)!.syncObservedHandCount(1)
+    room.resolveConstraints()
+
+    // 等价于主视角 handleRoleOptTargetNtf：先建立精确、top-first 的五张牌顶。
+    controller.revealTrackerCards(
+      {
+        type: 'public',
+        zoneName: 'pile',
+        reposition: true,
+        cardIDsTopFirst: true
+      },
+      observedPileTopIDs
+    )
+    expect(
+      pile.cards
+        .slice(-5)
+        .reverse()
+        .map((card) => card.id)
+    ).toEqual(observedPileTopIDs)
+
+    const exchangeMoves = [
+      guanXuMove({
+        CardCount: 5,
+        CardIDs: observedPileTopIDs,
+        FromID: 255,
+        FromZone: 1,
+        ToID: actorSeat,
+        ToZone: 10
+      }),
+      guanXuMove({
+        CardCount: 1,
+        CardIDs: [returnedHandCardID],
+        FromID: targetSeat,
+        FromZone: 5,
+        ToID: targetSeat,
+        ToZone: 10
+      }),
+      guanXuMove({
+        CardCount: 1,
+        CardIDs: [gainedPileCardID],
+        FromID: actorSeat,
+        FromZone: 10,
+        ToID: targetSeat,
+        ToZone: 10
+      }),
+      guanXuMove({
+        CardCount: 1,
+        CardIDs: [returnedHandCardID],
+        FromID: targetSeat,
+        FromZone: 10,
+        ToID: actorSeat,
+        ToZone: 10,
+        ToPosition: 2
+      })
+    ]
+    exchangeMoves.forEach((move) => controller.syncTrackerMove(move))
+
+    const guanXuState = room.skillState.get(GUAN_XU_STATE_KEY) as {
+      bySpell: Record<string, { buckets: Record<string, { cards: Card[] }> }>
+    }
+    const returnedPileCardIDs = guanXuState.bySpell[String(987)].buckets[String(actorSeat)].cards
+      .filter((card) => card.location === 'exchange')
+      .map((card) => card.id)
+    expect(returnedPileCardIDs).toHaveLength(5)
+    expect(returnedPileCardIDs[2]).toBe(returnedHandCardID)
+    expect(returnedPileCardIDs).not.toContain(gainedPileCardID)
+
+    controller.syncTrackerMove(
+      guanXuMove({
+        CardCount: 5,
+        CardIDs: returnedPileCardIDs,
+        FromID: actorSeat,
+        FromZone: 10,
+        ToID: 255,
+        ToZone: 1
+      })
+    )
+
+    expect(returnedHandCard.location).toBe('pile')
+    expect(returnedHandCard.publicCandidates).toEqual([])
   })
 
   it('牌堆分桶校验失败不会确认暗身份或物化部分 CardID', () => {

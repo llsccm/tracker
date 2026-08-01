@@ -1,9 +1,34 @@
 import { describe, expect, it } from 'vitest'
-import { POSITION_BOTTOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
+import {
+  POSITION_BOTTOM,
+  POSITION_RANDOM,
+  POSITION_TOP,
+  getProtocolInsertionIndex
+} from '@/tracker/candidate/cardPositions'
 import { isAnonymous } from '@/tracker/Card'
 import { createTestRoom } from './helpers/room'
 
 describe('getPublicEndpointCards 位置归一化', () => {
+  it('通用协议位置只接受当前区域范围内的普通数值插槽', () => {
+    expect(getProtocolInsertionIndex(POSITION_BOTTOM, 4)).toBe(0)
+    expect(getProtocolInsertionIndex(2, 4)).toBe(2)
+    expect(getProtocolInsertionIndex(POSITION_TOP, 4)).toBe(4)
+    expect(getProtocolInsertionIndex(POSITION_RANDOM, 4)).toBeNull()
+    expect(getProtocolInsertionIndex(5, 4)).toBeNull()
+    expect(getProtocolInsertionIndex(null, 4)).toBeNull()
+  })
+
+  it('Zone.add 对普通数值 ToPosition 按底到顶的零基插槽插入', () => {
+    const { room } = createTestRoom({ cardIDs: [11, 12, 13, 14] })
+    const pile = room.zones.get('pile')!
+    const insertedCards = room.createExternalCards([91, 92], 2)
+
+    pile.add(insertedCards, 2)
+
+    // 批量位置与 POSITION_BOTTOM 语义一致：协议数组末张更靠近牌底。
+    expect(pile.cards.map((card) => card.id)).toEqual([11, 12, 92, 91, 13, 14])
+  })
+
   it('数值常量与 bottom 字符串都走牌底，不误入牌顶', () => {
     const { room } = createTestRoom({
       cardIDs: [11, 12, 13, 14],

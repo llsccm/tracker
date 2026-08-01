@@ -1,4 +1,8 @@
-import { POSITION_BOTTOM, POSITION_TOP } from './candidate/cardPositions'
+import {
+  POSITION_BOTTOM,
+  POSITION_TOP,
+  insertCardsAtProtocolPosition
+} from './candidate/cardPositions'
 import type { Card } from './Card'
 import type { Room } from './Room'
 import type { PublicPosition, PublicZoneName } from './types'
@@ -71,7 +75,7 @@ export class Zone {
 
   /**
    * 向该区域放入一张或多张牌，并同步 Card.location 至当前公共区。
-   * @param position - 顶/底位置指示器
+   * @param position - 顶/底哨兵或从区域底端起算的协议精确插槽
    */
   add(nodes: Card | Card[], position: PublicPosition = POSITION_TOP): void {
     const cardsToAdd = Array.isArray(nodes) ? nodes : [nodes]
@@ -87,14 +91,8 @@ export class Zone {
       this.removeCard(card)
     })
 
-    if (position === POSITION_BOTTOM) {
-      // 插入到底部
-      this._orderedCards.splice(0, 0, ...[...cardsToAdd].reverse())
-    } else if (position === POSITION_TOP) {
-      // 插入到顶部
-      this._orderedCards.push(...cardsToAdd)
-    } else {
-      // 随机/无序：直接推入尾部
+    if (!insertCardsAtProtocolPosition(this._orderedCards, cardsToAdd, position)) {
+      // 随机、缺失或越界位置没有可复现的精确插槽，沿用原逻辑追加代表实体。
       this._orderedCards.push(...cardsToAdd)
     }
 

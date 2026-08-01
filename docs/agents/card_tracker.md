@@ -220,8 +220,16 @@
   张数和桶容量全部通过后才确认或物化；失败校验不能改写实体、`cardIndex` 或身份账本。
 - 牌堆侧已知身份尚未定位时，直接物化到该桶匿名实体；空 `CardIDs` 的整批回牌堆仍按桶
   携带本地已知换出手牌，因此不会 `known-fallback/createExternal`，也不会把该牌遗留在交换区。
-- 交换协议不提供换入手牌在整批牌顶中的序号；回堆后只附加“牌顶前 N 张”公共范围候选，
-  不能根据本地物理代表顺序把它实锤为牌顶或第 N 张。
+- `ToPosition` 是 `PubGsCMoveCard` 的通用位置语义，详见 `docs/protocols/move-position.md`；
+  普通非负小整数按公共区底 -> 顶顺序表示零基精确插槽，`0` 与 `POSITION_BOTTOM` 一致。
+- 观虚只因全局 `exchange` 无法表达牌堆侧/手牌侧两个归属而保留逻辑桶；桶内同样按底 -> 顶
+  保存，并复用 `insertCardsAtProtocolPosition()`，不能在技能内另行定义位置坐标。
+- `POSITION_BOTTOM/POSITION_TOP` 与有效普通数值都是确定位置，不叠加弱候选；只有
+  `ToPosition` 缺失、越界或为 `POSITION_RANDOM` 时才降级为“牌顶前 N 张”公共范围候选。
+  发动者主视角的回堆 `CardIDs` 若完整覆盖整桶，同样保留该精确信息，避免覆盖
+  `handleRoleOptTargetNtf` 已建立的牌顶顺序。
+- 牌堆逻辑桶与公共 `Zone` 都按 bottom-first 保存；空或不完整 `CardIDs` 回堆时可直接作为
+  `sourceCards`，避免技能层再次反转而破坏协议顺序。
 - `987/988` 显式绕过 `HandExchange`；即使目标恰好只有一张手牌，也不能把这条技能路径误判为
   双方整手互换。回归见 `tests/tracker/guanXuExchange.test.ts`。
 

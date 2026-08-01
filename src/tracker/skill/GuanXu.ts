@@ -6,7 +6,7 @@
  * 最后的空 CardIDs 回牌堆也会漏掉已经换入牌堆侧的已知手牌。
  */
 import { isAnonymous, type Card } from '../Card'
-import { POSITION_TOP } from '../candidate/cardPositions'
+import { POSITION_TOP, insertCardsAtProtocolPosition } from '../candidate/cardPositions'
 import { createPublicCandidate } from '../candidate/publicCandidate'
 import { MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Room } from '../Room'
@@ -209,7 +209,8 @@ function stagePileToExchange(event: MoveEventDraft, room: Room, spellID: number)
   const count = getCount(event)
   const pileBucketID = Number(raw.ToID)
   const pileCards = room.zones.get('pile')?.cards ?? []
-  const selectedCards = pileCards.slice(-count).reverse()
+  // 逻辑桶复用公共 Zone 的底 -> 顶顺序，后续可直接套用通用 ToPosition 插槽语义。
+  const selectedCards = pileCards.slice(-count)
 
   if (!(count > 0) || !Number.isFinite(pileBucketID) || selectedCards.length !== count) {
     clearBatch(room, spellID)
@@ -300,15 +301,26 @@ function transferExchangeBucket(
 
   const selectedSet = new Set(selectedCards)
   sourceBucket.cards = sourceBucket.cards.filter((card) => !selectedSet.has(card))
-  selectedCards.forEach((card) => {
-    if (!targetBucket.cards.includes(card)) targetBucket.cards.push(card)
-  })
+  const targetIsPileBucket = Number(raw.ToID) === batch.pileBucketID
+  const cardsToInsert = selectedCards.filter((card) => !targetBucket.cards.includes(card))
+  const insertedAtExactPosition = targetIsPileBucket
+    ? insertCardsAtProtocolPosition(targetBucket.cards, cardsToInsert, raw.ToPosition)
+    : false
+  if (!insertedAtExactPosition) {
+    targetBucket.cards.push(...cardsToInsert)
+  }
 
   if (Number(raw.FromID) === batch.pileBucketID) {
     selectedCards.forEach((card) => batch.pileRangeCards.delete(card))
   }
-  if (Number(raw.ToID) === batch.pileBucketID) {
-    selectedCards.forEach((card) => batch.pileRangeCards.add(card))
+  if (targetIsPileBucket) {
+    selectedCards.forEach((card) => {
+      if (insertedAtExactPosition) {
+        batch.pileRangeCards.delete(card)
+        return
+      }
+      batch.pileRangeCards.add(card)
+    })
   }
 
   const sourceCards = splitProtocolKnownAndUnknown(event, selectedCards)
@@ -326,13 +338,29 @@ function returnBucketToPile(event: MoveEventDraft, room: Room, spellID: number):
   const bucket = batch?.buckets[bucketKey]
   if (!batch || !bucket || Number(raw.FromID) !== batch.pileBucketID) return event
 
-  const cards = bucket.cards.filter((card) => card.location === 'exchange')
-  if (cards.length !== getCount(event) || cards.length !== bucket.expectedCount) return event
+  // 牌堆逻辑桶与 Zone 都按底 -> 顶保存，空 CardIDs 回堆时可直接作为 sourceCards 使用。
+  const cardsBottomFirst = bucket.cards.filter((card) => card.location === 'exchange')
+  if (
+    cardsBottomFirst.length !== getCount(event) ||
+    cardsBottomFirst.length !== bucket.expectedCount
+  ) {
+    return event
+  }
 
+  const protocolKnownIDs = getPositiveIDs(event.cardIDs ?? [])
+  const protocolKnownIDSet = new Set(protocolKnownIDs)
+  const hasCompletePileOrder =
+    protocolKnownIDs.length === cardsBottomFirst.length &&
+    protocolKnownIDSet.size === cardsBottomFirst.length &&
+    cardsBottomFirst.every((card) => protocolKnownIDSet.has(card.id))
   const pileCandidate = createPublicCandidate('pile', POSITION_TOP, bucket.expectedCount)
-  const postMovePublicCandidates = cards
-    .filter((card) => batch.pileRangeCards.has(card) && card.id > 0 && card.isKnown === true)
-    .map((card) => ({ card, candidate: pileCandidate }))
+  // 主视角的完整 CardIDs 已给出整批回堆顺序；范围候选只用于看不到完整列表的其它视角，
+  // 否则较弱的“牌顶前 N 张”会在移动后覆盖 handleRoleOptTargetNtf 建立的精确牌顶。
+  const postMovePublicCandidates = hasCompletePileOrder
+    ? []
+    : cardsBottomFirst
+        .filter((card) => batch.pileRangeCards.has(card) && card.id > 0 && card.isKnown === true)
+        .map((card) => ({ card, candidate: pileCandidate }))
 
   delete batch.buckets[bucketKey]
   clearBatchIfEmpty(room, spellID, batch)
@@ -340,7 +368,7 @@ function returnBucketToPile(event: MoveEventDraft, room: Room, spellID: number):
   return patchEvent(event, {
     options: {
       position: POSITION_TOP,
-      sourceCards: splitProtocolKnownAndUnknown(event, cards),
+      sourceCards: splitProtocolKnownAndUnknown(event, cardsBottomFirst),
       ...(postMovePublicCandidates.length > 0 ? { postMovePublicCandidates } : {})
     }
   })
