@@ -362,6 +362,14 @@ export class PileIdentityLedger {
     }
   }
 
+  getUnresolvedIdentityIDs(): CardID[] {
+    const identityIDs = new Set<CardID>()
+    this.cohorts.forEach((cohort) => {
+      cohort.candidateIdentityIDs.forEach((cardID) => identityIDs.add(cardID))
+    })
+    return normalizeIDs(Array.from(identityIDs))
+  }
+
   private applyShuffleInternal(pileCountAfter: number): void {
     const recycledIdentityIDs = normalizeIDs(Array.from(this.knownDiscardIdentityIDs))
     const anonymousDiscardCount = Math.max(

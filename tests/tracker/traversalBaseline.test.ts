@@ -121,7 +121,11 @@ describe('Room.cards 遍历基线', () => {
   })
 
   it('洗牌：弃牌堆回收并按协议张数重建牌堆', () => {
-    const { room } = createTestRoom({ cardIDs: DECK_IDS, seatIDs: [1, 2] })
+    const { room } = createTestRoom({
+      cardIDs: DECK_IDS,
+      seatIDs: [1, 2],
+      materializeDeckIdentities: false
+    })
     room.moveCards([10, 11, 12], 'player', {
       seatID: 1,
       subZone: 'hand',
@@ -147,16 +151,15 @@ describe('Room.cards 遍历基线', () => {
     expect(room.zones.get('pile').cards).toHaveLength(pileCount + 3)
     expect(summarize(stats)).toMatchInlineSnapshot(`
       {
-        "ambiguousKnownIndex:applyDirty": "calls=1 visited=0",
+        "ambiguousKnownIndex:applyDirty": "calls=1 visited=3",
         "cardCounter:update": "calls=1 visited=40",
         "handSlotCounts:collectBySeat": "calls=1 visited=0",
-        "locationIndex:applyDirty": "calls=1 visited=0",
+        "locationIndex:applyDirty": "calls=1 visited=3",
         "reconcileAnonymousHandCards:group": "calls=1 visited=0",
         "resolveConstraints:constraint1": "calls=1 visited=0",
         "resolveConstraints:constraint3:exclusion": "calls=1 visited=0",
-        "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=0",
-        "shufflePile:classify": "calls=1 visited=0",
-        "total": "visited=40",
+        "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=3",
+        "total": "visited=49",
       }
     `)
   })

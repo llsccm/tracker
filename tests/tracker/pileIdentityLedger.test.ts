@@ -639,4 +639,30 @@ describe('PileIdentityLedger', () => {
       boundaryDegraded: true
     })
   })
+
+  it('直接枚举全部 cohort 未决身份且不受剩余牌堆基数影响', () => {
+    const ledger = new PileIdentityLedger()
+    ledger.initialize([1, 2, 3, 4])
+
+    ledger.applyReveal({
+      cardIDs: [1],
+      location: 'pile',
+      pileCountAfter: 4,
+      discardCountAfter: 0
+    })
+    expect(ledger.getUnresolvedIdentityIDs()).toEqual([2, 3, 4])
+
+    ledger.consumeAnonymous(3, POSITION_TOP, 'test:consume-all-hidden-slots')
+
+    expect(ledger.getSnapshot().cohort.groups).toEqual([
+      {
+        generation: 0,
+        kind: 'none-in-pile',
+        cardIDs: [2, 3, 4],
+        remainingPileCount: 0,
+        label: '这 3 张都不在牌堆'
+      }
+    ])
+    expect(ledger.getUnresolvedIdentityIDs()).toEqual([2, 3, 4])
+  })
 })

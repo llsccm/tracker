@@ -301,7 +301,7 @@ describe('身份账本守恒', () => {
     )
   })
 
-  it('未定位身份复用正 ID 暗牌堆槽后账本仍然守恒', () => {
+  it('未定位身份物化匿名牌堆槽后账本仍然守恒', () => {
     const { room } = createTestRoom({
       cardIDs: [1, 2, 3, 4, 5, 6],
       seatIDs: [1],
@@ -322,9 +322,9 @@ describe('身份账本守恒', () => {
     })
     room.shufflePile({ cardCount: 4 })
 
-    // 洗牌后牌堆里存在 reset() 留下的正 ID 暗槽；明摸另一个未定位身份应复用该物理槽。
-    const hiddenSlot = pile.cards.find((card) => card.id > 0 && card.isKnown !== true)
-    expect(hiddenSlot).toBeDefined()
+    const hiddenSlot = pile.cards.at(-1)!
+    expect(hiddenSlot).toSatisfy(isAnonymous)
+    expect(room.cardIndex.has(4)).toBe(false)
 
     const pileCountBefore = pile.cards.length
     room.moveCards([4], 'player', {
@@ -336,6 +336,8 @@ describe('身份账本守恒', () => {
 
     // 物理槽守恒：身份绑定成功与否都必须消费恰好一个牌堆槽。
     expect(pile.cards).toHaveLength(pileCountBefore - 1)
+    expect(room.cardIndex.get(4)).toBe(hiddenSlot)
+    expect(hiddenSlot.location).toBe('player')
     expectIdentityLedgerIntact(room, [1, 2, 3, 4, 5, 6])
     expectConservationClean(room, 'test:reuse-hidden-slot')
   })

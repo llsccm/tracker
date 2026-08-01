@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { isAnonymous } from '@/tracker/Card'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
 
@@ -67,6 +68,105 @@ describe('PileIdentityLedger integration', () => {
     expect(ledgerSnapshot.knownPileIdentityIDs).toEqual([1])
     expect(ledgerSnapshot.hiddenPileSlotCount).toBe(2)
     expect(ledgerSnapshot.cohort).toEqual(observerSnapshot)
+  })
+
+  it('连续洗牌由 cohort 滚动并保留公开牌顶牌底身份', () => {
+    const warnCalls: unknown[][] = []
+    const { controller } = createTrackerControllerHarness({
+      logger: {
+        warn(...args: unknown[]) {
+          warnCalls.push(args)
+        }
+      }
+    })
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2, 3, 4, 5, 6, 7, 8])
+    controller.revealTrackerCards({ type: 'public', zoneName: 'pile' }, [1])
+    controller.revealTrackerCards(
+      {
+        type: 'public',
+        zoneName: 'pile',
+        position: POSITION_BOTTOM,
+        reposition: true
+      },
+      [2]
+    )
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [3, 4],
+        CardCount: 2,
+        FromZone: 1,
+        MoveType: 4,
+        ToZone: 2
+      })
+    )
+
+    const room = controller.getTrackerRoom()
+    const shuffle = () => {
+      const cardCount =
+        room.zones.get('pile')!.cards.length + room.zones.get('discard')!.cards.length
+      controller.syncTrackerMove(
+        protocolMove({
+          CardIDs: [],
+          CardCount: cardCount,
+          FromZone: 2,
+          MoveType: 255,
+          ToZone: 9
+        })
+      )
+    }
+
+    shuffle()
+
+    expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
+      knownPileIdentityIDs: [1, 2],
+      accountedPileCount: 8
+    })
+    expect(room.pileIdentityLedger.getSnapshot().cohort.generation).toBe(1)
+    expect(room.zones.get('pile')!.cards.at(-1)).toMatchObject({ id: 1, isKnown: true })
+    expect(room.cardIndex.get(2)).toMatchObject({ isKnown: true, location: 'pile' })
+    expect(room.cardIndex.has(3)).toBe(false)
+    expect(room.cardIndex.has(4)).toBe(false)
+    expect(room.unlocatedIdentities.has(3)).toBe(true)
+    expect(room.unlocatedIdentities.has(4)).toBe(true)
+    expect(
+      room.zones
+        .get('pile')!
+        .cards.filter((card) => card.id !== 1 && card.id !== 2)
+        .every(isAnonymous)
+    ).toBe(true)
+    expect(room.suspendedKnownCards.size).toBe(0)
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [5],
+        CardCount: 1,
+        FromZone: 1,
+        MoveType: 4,
+        ToZone: 2
+      })
+    )
+    shuffle()
+
+    const ledgerSnapshot = room.pileIdentityLedger.getSnapshot()
+    const observerSnapshot = controller.getBeliefEpochReport()?.modelComparison.snapshot.cohort
+    expect(ledgerSnapshot.cohort.generation).toBe(2)
+    expect(ledgerSnapshot.knownPileIdentityIDs).toEqual([1, 2])
+    expect(ledgerSnapshot.accountedPileCount).toBe(8)
+    expect(ledgerSnapshot.cohort).toEqual(observerSnapshot)
+    expect(room.zones.get('pile')!.cards.at(-1)).toMatchObject({ id: 1, isKnown: true })
+    expect(room.cardIndex.get(2)).toMatchObject({ isKnown: true, location: 'pile' })
+    expect(room.cardIndex.has(5)).toBe(false)
+    expect(room.unlocatedIdentities.has(3)).toBe(true)
+    expect(room.unlocatedIdentities.has(4)).toBe(true)
+    expect(room.unlocatedIdentities.has(5)).toBe(true)
+    expect(room.zones.get('discard')!.cards).toEqual([])
+    expect(room.suspendedKnownCards.size).toBe(0)
+    expect(warnCalls.some(([label]) => label === '牌堆身份生产账本与 DEV observer 不一致')).toBe(
+      false
+    )
   })
 
   it('MoveType=18 匿名获得跳过牌顶明牌，只消费暗占位并等待后续展示', () => {

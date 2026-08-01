@@ -164,7 +164,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
     expect(room.unlocatedIdentities.has(77)).toBe(false)
   })
 
-  it('匿名牌堆洗牌时恢复未定位身份的暂停追踪并保留玩家槽位', () => {
+  it('洗牌不再为未定位身份创建 detached 实体并保留玩家槽位', () => {
     const { room } = createTestRoom({
       cardIDs: [1, 2, 3, 4, 5, 6],
       seatIDs: [1],
@@ -197,22 +197,14 @@ describe('阶段 1 匿名牌堆 spike', () => {
 
     room.shufflePile({ cardCount: 4 })
 
-    const suspendedIdentities = Array.from(room.suspendedKnownCards).sort(
-      (left, right) => left.id - right.id
-    )
-    expect(suspendedIdentities.map((card) => card.id)).toEqual([4, 5, 6])
-    suspendedIdentities.forEach((card) => {
-      expect(card.location).toBe('suspended')
-      expect(card.suspended).toBe(true)
-      expect(card.isKnown).toBe(true)
-      expect(room.counter.cardInstances[card.id].status).toBe(CARD_INSTANCE_STATUS.APPEARED)
-    })
-    expect(getPublicFieldCandidateCards(room)).toEqual(expect.arrayContaining(suspendedIdentities))
-    expect(room.unlocatedIdentities).toEqual(new Set())
+    expect(room.suspendedKnownCards.size).toBe(0)
+    expect(room.cardIndex.size).toBe(0)
+    expect(getPublicFieldCandidateCards(room)).toEqual([])
+    expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3, 4, 5, 6]))
     expect(discard.cards).toEqual([])
     expect(pile.cards).toHaveLength(4)
     expect(pile.cards).toContain(remainingPileSlot)
-    expect(remainingPileSlot).toSatisfy(isAnonymous)
+    expect(pile.cards.every(isAnonymous)).toBe(true)
     expect(playerSlots.map((card) => card.entityID)).toEqual(playerSlotEntityIDs)
     playerSlots.forEach((card) => {
       expect(card.location).toBe('player')
@@ -222,7 +214,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
     expect(room.getPlayer(1).unknownCardCount).toBe(2)
   })
 
-  it('洗牌后明摸暂停身份遇到正 ID 暗牌顶时仍消耗牌堆槽', () => {
+  it('洗牌后连续明摸只物化匿名牌堆槽', () => {
     const { room } = createTestRoom({
       cardIDs: [1, 2, 3, 4, 5, 6],
       seatIDs: [1],
@@ -242,6 +234,8 @@ describe('阶段 1 匿名牌堆 spike', () => {
       sourceEvent: { type: 'stage1:discard-before-shuffle' }
     })
     room.shufflePile({ cardCount: 4 })
+    expect(pile.cards.every(isAnonymous)).toBe(true)
+    expect(room.suspendedKnownCards.size).toBe(0)
 
     room.moveCards([4], 'player', {
       seatID: 1,
@@ -250,10 +244,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
       sourceEvent: { type: 'stage1:draw-suspended-from-anonymous-top' }
     })
     expect(pile.cards).toHaveLength(3)
-
-    const suspendedCountBeforePositiveHiddenDraw = room.suspendedKnownCards.size
-    const displacedPileIdentityID = pile.cards.at(-1)!.id
-    expect(displacedPileIdentityID).toBeGreaterThan(0)
+    expect(room.cardIndex.get(4)).toMatchObject({ location: 'player', isKnown: true })
 
     room.moveCards([5], 'player', {
       seatID: 1,
@@ -263,12 +254,9 @@ describe('阶段 1 匿名牌堆 spike', () => {
     })
 
     expect(pile.cards).toHaveLength(2)
-    expect(room.counter.statusIndex[CARD_INSTANCE_STATUS.UNKNOWN].size).toBe(2)
-    // 5 原本占用一个场外 suspended 名额。它从正 ID 暗牌顶出现后，该名额应转交给
-    // 被挤出的牌堆身份，而不是像普通 unlocated 物化一样只释放到未定位池。
-    expect(room.suspendedKnownCards.size).toBe(suspendedCountBeforePositiveHiddenDraw)
-    expect(room.suspendedKnownCards.has(room.cardIndex.get(displacedPileIdentityID)!)).toBe(true)
-    expect(room.suspendedKnownCards.has(room.cardIndex.get(5)!)).toBe(false)
+    expect(room.cardIndex.get(5)).toMatchObject({ location: 'player', isKnown: true })
+    expect(room.suspendedKnownCards.size).toBe(0)
+    expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3, 6]))
   })
 
   it('洗牌新建的暂停身份逆序进入手牌并二次洗牌时保持增量索引顺序', () => {
@@ -309,7 +297,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
     expectLocationIndexMatchesRebuild(room)
   })
 
-  it('二次洗牌日志合并沿用与本轮新增的暂停身份', () => {
+  it('连续洗牌不创建或沿用 suspended 身份', () => {
     const { room } = createTestRoom({
       cardIDs: [1, 2, 3, 4, 5, 6],
       seatIDs: [1],
@@ -331,8 +319,8 @@ describe('阶段 1 匿名牌堆 spike', () => {
     })
     room.shufflePile({ cardCount: 4 })
 
-    const carriedSuspendedCardIDs = Array.from(room.suspendedKnownCards, (card) => card.id)
-    const hiddenPileCard = pile.cards.find((card) => card.id > 0 && card.isKnown !== true)!
+    const hiddenPileCard = pile.cards.at(-1)!
+    const hiddenPileEntityID = hiddenPileCard.entityID
     room.moveCards([], 'player', {
       seatID: 1,
       fromZone: 'pile',
@@ -341,8 +329,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
       sourceEvent: { type: 'stage1:draw-positive-hidden-before-second-shuffle' }
     })
 
-    const recycledCard = pile.cards.find((card) => card.id > 0 && card.isKnown !== true)!
-    room.moveCards([recycledCard.id], 'discard', {
+    room.moveCards([4], 'discard', {
       fromZone: 'pile',
       cardCount: 1,
       sourceEvent: { type: 'stage1:discard-before-second-shuffle-summary' }
@@ -352,26 +339,24 @@ describe('阶段 1 匿名牌堆 spike', () => {
     try {
       room.shufflePile({ cardCount: pile.cards.length + discard.cards.length })
 
-      const activeSuspendedCardIDs = Array.from(room.suspendedKnownCards, (card) => card.id)
-      expect(activeSuspendedCardIDs).toEqual([...carriedSuspendedCardIDs, hiddenPileCard.id])
-      expect(infoSpy).toHaveBeenCalledWith(
+      expect(room.suspendedKnownCards.size).toBe(0)
+      expect(infoSpy).not.toHaveBeenCalledWith(
         '洗牌后暂停追踪非实际牌堆内正 ID 暗身份',
-        expect.objectContaining({
-          suspendedCardIDs: activeSuspendedCardIDs,
-          carriedSuspendedCardIDs,
-          newlySuspendedCardIDs: [hiddenPileCard.id],
-          visibleKnownCardIDs: expect.not.arrayContaining(carriedSuspendedCardIDs),
-          preservedPlayerPlaceholders: expect.arrayContaining([
-            expect.objectContaining({ sourceCardID: hiddenPileCard.id })
-          ])
-        })
+        expect.anything()
       )
     } finally {
       infoSpy.mockRestore()
     }
+
+    expect(hiddenPileCard.entityID).toBe(hiddenPileEntityID)
+    expect(hiddenPileCard.location).toBe('player')
+    expect(hiddenPileCard).toSatisfy(isAnonymous)
+    expect(pile.cards.every(isAnonymous)).toBe(true)
+    expect(room.cardIndex.has(4)).toBe(false)
+    expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3, 4, 5, 6]))
   })
 
-  it('玩家来源揭示暂停身份时保留被替换的正 ID 暗身份', () => {
+  it('玩家匿名槽揭示后再次洗牌仍保持身份全集', () => {
     const { room } = createTestRoom({
       cardIDs: [1, 2, 3, 4],
       seatIDs: [1],
@@ -387,13 +372,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
     })
     room.shufflePile({ cardCount: 4 })
 
-    const suspendedCard = room.cardIndex.get(4)!
-    const hiddenPileCard = pile.cards.find((card) => card.id > 0 && card.isKnown !== true)!
-    const hiddenIdentityID = hiddenPileCard.id
-    expect(suspendedCard.suspended).toBe(true)
-
-    // 暗摸把一个 reset() 后的正 ID 牌堆槽带入手牌；随后协议从同一手牌明示暂停身份 4。
-    // 置换后该正 ID 暗槽不再承担手牌数量，但它的身份仍必须留在完整牌组中。
+    const hiddenPileCard = pile.cards.at(-1)!
     room.moveCards([], 'player', {
       seatID: 1,
       fromZone: 'pile',
@@ -401,28 +380,28 @@ describe('阶段 1 匿名牌堆 spike', () => {
       cardCount: 1,
       sourceEvent: { type: 'stage1:draw-positive-hidden-player-placeholder' }
     })
-    room.moveCards([suspendedCard.id], 'discard', {
+    room.moveCards([4], 'discard', {
       fromSeatID: 1,
       fromSubZone: 'hand',
       cardCount: 1,
       sourceEvent: { type: 'stage1:reveal-suspended-from-positive-hidden-placeholder' }
     })
 
-    expect(room.cardIndex.has(hiddenIdentityID)).toBe(false)
-    expect(room.unlocatedIdentities.has(hiddenIdentityID)).toBe(true)
+    expect(room.cardIndex.get(4)).toBe(hiddenPileCard)
+    expect(hiddenPileCard.location).toBe('discard')
+    expect(hiddenPileCard.isKnown).toBe(true)
 
     room.shufflePile({ cardCount: pile.cards.length + discard.cards.length })
 
-    expect(Array.from(room.suspendedKnownCards, (card) => card.id)).toContain(hiddenIdentityID)
-    const remainingIdentityIDs = new Set([
-      ...pile.cards.map((card) => card.id).filter((cardID) => cardID > 0),
-      ...Array.from(room.suspendedKnownCards, (card) => card.id)
-    ])
-    expect(remainingIdentityIDs).toEqual(room.deckIdentities)
+    expect(hiddenPileCard).toSatisfy(isAnonymous)
+    expect(hiddenPileCard.location).toBe('pile')
+    expect(room.cardIndex.size).toBe(0)
+    expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3, 4]))
+    expect(room.suspendedKnownCards.size).toBe(0)
     expect(room.deckIdentities.size).toBe(4)
   })
 
-  it('匿名牌堆洗牌时将 APPEARED 暗身份归入独立诊断分类', () => {
+  it('洗牌时将 cohort 暗标记实体原地匿名化', () => {
     const { room } = createTestRoom({
       cardIDs: [1, 2, 3, 4, 5],
       seatIDs: [1]
@@ -454,23 +433,31 @@ describe('阶段 1 匿名牌堆 spike', () => {
     })
 
     expect(room.counter.cardsByStatus[CARD_INSTANCE_STATUS.APPEARED]).toContain(hiddenMarkCard)
+    const recordBefore = room.getSkillState('hiddenMarkCandidates').records.get('1:1:700')
+    expect(recordBefore.placeholderCards.has(hiddenMarkCard)).toBe(true)
     const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
 
     try {
       room.shufflePile({ cardCount: 3 })
 
-      expect(hiddenMarkCard.location).toBe('suspended')
-      expect(hiddenMarkCard.suspended).toBe(true)
-      expect(hiddenMarkCard.isKnown).toBe(true)
-      expect(getPublicFieldCandidateCards(room)).toContain(hiddenMarkCard)
+      const recordAfter = room.getSkillState('hiddenMarkCandidates').records.get('1:1:700')
+      expect(recordAfter.placeholderCards.has(hiddenMarkCard)).toBe(true)
+      expect(hiddenMarkCard).toSatisfy(isAnonymous)
+      expect(hiddenMarkCard.location).toBe('player')
+      expect(hiddenMarkCard.subZone).toBe('mark')
+      expect(hiddenMarkCard.spellID).toBe(700)
+      expect(hiddenMarkCard.seats.has(1)).toBe(true)
+      expect(hiddenMarkCard.suspended).toBe(false)
+      expect(hiddenMarkCard.isKnown).toBe(false)
+      expect(room.counter.cardsByStatus[CARD_INSTANCE_STATUS.APPEARED]).toContain(hiddenMarkCard)
+      expect(room.cardIndex.has(5)).toBe(false)
+      expect(room.unlocatedIdentities.has(5)).toBe(true)
+      expect(room.suspendedKnownCards.size).toBe(0)
+      expect(getPublicFieldCandidateCards(room)).not.toContain(hiddenMarkCard)
       expect(discard.cards).toEqual([])
-      expect(infoSpy).toHaveBeenCalledWith(
+      expect(infoSpy).not.toHaveBeenCalledWith(
         '洗牌后暂停追踪非实际牌堆内正 ID 暗身份',
-        expect.objectContaining({
-          neverAppearedCardIDs: [],
-          appearedHiddenIdentityCardIDs: [5],
-          suspendedCardIDs: [5]
-        })
+        expect.anything()
       )
     } finally {
       infoSpy.mockRestore()
