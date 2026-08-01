@@ -750,11 +750,14 @@ describe('TrackerController', () => {
     expect(pileCards).toHaveLength(cardIDs.length + 1)
     expect(pileCards.every((card) => card.id < 0 && card.entityID < 0)).toBe(true)
     expect(pileCards.every((card) => card.isKnown !== true)).toBe(true)
-    expect(controller.getBeliefEpochReport()!.modelComparison.degradations.at(-1)).toMatchObject({
-      reason: 'random-pile-insertion',
-      toPosition: POSITION_RANDOM,
-      boundaryRisk: true
-    })
+    expect(room.pileIdentityLedger.getSnapshot().cohort.groups).toEqual([
+      {
+        generation: 0,
+        kind: 'all-in-pile',
+        cardIDs: [1, 7, 76, 79, 139],
+        remainingPileCount: 5
+      }
+    ])
     cardIDs.forEach((id) => {
       expect(room.cardIndex.has(id)).toBe(false)
       expect(room.unlocatedIdentities.has(id)).toBe(true)

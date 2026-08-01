@@ -155,7 +155,11 @@ describe('resolveConstraints 接入 locationIndex 增量（阶段 3）', () => {
   })
 
   it('洗牌：弃牌堆回收并按协议张数重建牌堆后一致', () => {
-    const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [1, 2] })
+    const { room } = createTestRoom({
+      cardIDs: DECK,
+      seatIDs: [1, 2],
+      materializeDeckIdentities: false
+    })
     room.moveCards([10, 11, 12], 'player', { seatID: 1, subZone: 'hand', cardCount: 3 })
     room.moveCards([10, 11, 12], 'discard', { fromSeatID: 1, fromSubZone: 'hand', cardCount: 3 })
     const pileCount = room.zones.get('pile').cards.length

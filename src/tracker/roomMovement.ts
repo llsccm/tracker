@@ -257,7 +257,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         missingIDs = knownIDs.filter((id) => !cardMap.has(id))
       }
     } else if (fromSeat !== null && !Number.isNaN(fromSeat) && fromSubZone) {
-      // 阶段 1 的玩家区既可能是匿名槽，也可能仍沿用真 ID 暗牌，两者统一由 materialize 收口。
+      // 玩家/mark 通用模型允许本机已知身份暂时保持暗状态，两类实体统一由 materialize 收口。
       // 手牌 known 禁止消费 mark:700 等占位；木马身份只在 mark 收敛/快照路径 materialize。
       const markSpellID = context.fromSpellID ?? context.spellID
 

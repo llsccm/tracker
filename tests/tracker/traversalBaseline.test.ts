@@ -151,15 +151,15 @@ describe('Room.cards 遍历基线', () => {
     expect(room.zones.get('pile').cards).toHaveLength(pileCount + 3)
     expect(summarize(stats)).toMatchInlineSnapshot(`
       {
-        "ambiguousKnownIndex:applyDirty": "calls=1 visited=3",
-        "cardCounter:update": "calls=1 visited=40",
+        "ambiguousKnownIndex:applyDirty": "calls=1 visited=40",
+        "cardCounter:update": "calls=1 visited=77",
         "handSlotCounts:collectBySeat": "calls=1 visited=0",
-        "locationIndex:applyDirty": "calls=1 visited=3",
+        "locationIndex:applyDirty": "calls=1 visited=40",
         "reconcileAnonymousHandCards:group": "calls=1 visited=0",
         "resolveConstraints:constraint1": "calls=1 visited=0",
         "resolveConstraints:constraint3:exclusion": "calls=1 visited=0",
-        "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=3",
-        "total": "visited=49",
+        "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=40",
+        "total": "visited=197",
       }
     `)
   })

@@ -8,9 +8,8 @@ import type { CardID } from '@/tracker/types'
  * - `runGenerationPoolModel`：`docs/pile-identity-cohort-plan.md` 保留的全局世代对照模型。
  *   它采用「匿名牌堆 + 当前世代未揭示身份候选池」：暗摸不更新卡池；实际弃牌洗回时旧卡池
  *   整体过期为 suspended，洗回的已知身份组成下一世代卡池。
- * - `runBaselineLedgerModel`：当前生产语义。`Card.reset()` 洗回时保留正 ID，于是牌堆里
- *   存在「正 ID 暗槽」；洗牌分类时用这些正 ID 排除仍有明确牌堆位置的身份
- *   （对应 `Room.shufflePile()` 的 `remainingPileIdentityIDs`）。
+ * - `runBaselineLedgerModel`：Phase 0 时冻结的旧生产基线。`Card.reset()` 洗回时保留正 ID，
+ *   牌堆里存在「正 ID 暗槽」；旧洗牌分类用这些 ID 排除仍有明确牌堆位置的身份。
  * - `runCohortPoolModel`：不绑定具体身份与物理槽，只保留每个洗回批次的候选身份集合和
  *   其中仍在牌堆的数量。它用于验证集合级基数约束能否保留世代模型主动丢弃的信息。
  *
@@ -863,7 +862,7 @@ function shuffleBaseline(state: BaselineModelState): ShuffleObservation | null {
   const pileSlotCountBefore = state.pileSlots.length
   const carriedSuspendedIDs = sortIDs(state.suspendedIdentityIDs)
 
-  // 对应 `Room.shufflePile()`：用剩余牌堆里的正 ID 排除仍有明确牌堆位置的身份。
+  // 对应 Phase 0 冻结的旧 Room 基线：用剩余牌堆正 ID 排除仍有明确位置的身份。
   const remainingPileIdentityIDs = new Set(
     state.pileSlots.filter((slot): slot is CardID => slot !== null)
   )
@@ -877,7 +876,7 @@ function shuffleBaseline(state: BaselineModelState): ShuffleObservation | null {
     (cardID) => !remainingPileIdentityIDs.has(cardID) && !state.suspendedIdentityIDs.has(cardID)
   )
 
-  // 对应 `Room.shufflePile()` 的 appearedHiddenIdentityCards 分支：被暗摸带进玩家暗区的
+  // 对应 Phase 0 冻结基线的 appearedHiddenIdentityCards 分支：被暗摸带进玩家暗区的
   // 正 ID 暗槽（`reset()` 保留了 id，牌面未明示）不在协议牌堆内，同样要暂停追踪，
   // 并由 preserveUnknownPlaceholderForShuffle() 复制匿名占位继续承担手牌数量。
   const appearedHiddenIdentityIDs = sortIDs(state.playerHiddenPositiveIDs).filter(

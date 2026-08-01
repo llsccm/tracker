@@ -4,15 +4,7 @@ import { createPublicCandidate } from '../candidate/publicCandidate'
 import type { Card } from '../Card'
 import { summarizeMoveEvent } from '../helper/moveSummary'
 import { getProtocolMoveSpecialLabel, MOVE_TYPE, normalizeMoveEvent } from '../MoveEventNormalizer'
-import {
-  arePileIdentityCohortSnapshotsEqual,
-  type PileIdentityLedgerMove
-} from '../PileIdentityLedger'
-import {
-  createBeliefEpochObserver,
-  type BeliefEpochObserver,
-  type BeliefEpochReport
-} from '../observer/beliefEpochObserver'
+import type { PileIdentityLedgerMove } from '../PileIdentityLedger'
 import {
   getProtocolMarkSpellID,
   getProtocolPlayerSubZone,
@@ -140,8 +132,6 @@ export class TrackerController {
     TrackerControllerOptions['registerMoveEventHandlers']
   >
   private trackerRoom: Room | null = null
-  /** Phase 1 只读 observer；生产构建为 `null`（见 `createBeliefEpochObserver`）。 */
-  private beliefObserver: BeliefEpochObserver | null = null
 
   constructor({
     view = noopView,
@@ -194,8 +184,6 @@ export class TrackerController {
       this.trackerRoom?.destroy()
       this.trackerRoom = this.roomFactory({ gameState: this.gameState })
       this.getRuntime()?.bindRoom?.(this.trackerRoom)
-      // 每局独立采集，不跨局累计。
-      this.beliefObserver = createBeliefEpochObserver()
       this.controllerLogger.info('Room 初始化')
       this.registerMoveEventHandlers(this.trackerRoom)
     } catch (e) {
@@ -221,10 +209,6 @@ export class TrackerController {
     }
 
     this.trackerRoom.initDeck(cardIDs)
-    if (import.meta.env.DEV) {
-      this.beliefObserver?.initialize(this.trackerRoom, cardIDs)
-      this.comparePileIdentityLedger(this.trackerRoom, 'initialize')
-    }
     this.controllerView.mount(this.trackerRoom)
     this.controllerLogger.info('Room 牌堆初始化完成', { cardIDs })
   }
@@ -382,9 +366,6 @@ export class TrackerController {
       )
       readyRoom.applyPileIdentityMove(pileIdentityMove)
       this.controllerView.scheduleRender()
-      // 只读采集放在状态更新之后：observer 观测的是本次移动生效后的断言集合。
-      // 以 import.meta.env.DEV 收口，生产构建整句被静态移除，热路径零开销。
-      if (import.meta.env.DEV) this.observeBeliefEpochs(readyRoom, pileIdentityMove)
     } catch (e) {
       this.controllerLogger.warn('移动同步异常，已跳过本次 tracker 更新', {
         error: e,
@@ -394,7 +375,7 @@ export class TrackerController {
     }
   }
 
-  /** 生产账本与 DEV observer 共用的协议事件口径。 */
+  /** 把规范化后的协议移动转换为生产身份账本事件。 */
   private createPileIdentityMove(
     event: RawMoveCardEvent,
     normalizedEvent: NormalizedMoveEvent,
@@ -463,53 +444,6 @@ export class TrackerController {
       visibleCardIDs.push(card.id)
     }
     return this.normalizeIDs(visibleCardIDs)
-  }
-
-  /**
-   * Phase 1 只读采集。生产构建 `beliefObserver` 为 `null`，整段被跳过。
-   *
-   * 单独 try/catch：采集是观测设施，任何异常都不得影响记牌器主流程。
-   */
-  private observeBeliefEpochs(
-    room: Room,
-    move: Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'>
-  ): void {
-    if (!this.beliefObserver) return
-
-    try {
-      this.beliefObserver.applyProtocolMove(room, {
-        FromZone: move.fromZone,
-        ToZone: move.toZone,
-        CardIDs: [...move.cardIDs],
-        CardCount: move.cardCount,
-        PileCountBefore: move.pileCountBefore,
-        AnonymousPileConsumptionCount: move.anonymousPileConsumptionCount,
-        KnownPileIdentityIDsConsumed: [...(move.knownPileIdentityIDsConsumed ?? [])],
-        VisiblePileIdentityIDsAfter: [...(move.visiblePileIdentityIDsAfter ?? [])],
-        FromPosition: move.fromPosition,
-        ToPosition: move.toPosition,
-        MoveType: move.moveType ?? undefined,
-        SpellID: move.spellID,
-        EventType: move.eventType
-      })
-      this.comparePileIdentityLedger(room, `move:${move.eventType}`)
-    } catch (e) {
-      this.controllerLogger.warn('belief epoch 采集异常，已跳过本次观测', { error: e })
-    }
-  }
-
-  private comparePileIdentityLedger(room: Room, context: string): void {
-    if (!this.beliefObserver || !room.pileIdentityLedger.isEnabled()) return
-
-    const ledgerSnapshot = room.pileIdentityLedger.getSnapshot().cohort
-    const observerSnapshot = this.beliefObserver.getPileIdentityCohortSnapshot()
-    if (arePileIdentityCohortSnapshotsEqual(ledgerSnapshot, observerSnapshot)) return
-
-    this.controllerLogger.warn('牌堆身份生产账本与 DEV observer 不一致', {
-      context,
-      ledger: ledgerSnapshot,
-      observer: observerSnapshot
-    })
   }
 
   /**
@@ -718,14 +652,6 @@ export class TrackerController {
       const revealLocation =
         target.type === 'public' && (target.zoneName ?? 'pile') === 'pile' ? 'pile' : 'outside'
       readyRoom.applyPileIdentityReveal(ids, revealLocation)
-
-      if (import.meta.env.DEV) {
-        this.beliefObserver?.applyReveal(readyRoom, {
-          CardIDs: ids,
-          Location: revealLocation
-        })
-        this.comparePileIdentityLedger(readyRoom, `reveal:${revealLocation}`)
-      }
       this.controllerView.scheduleRender()
     } catch (e) {
       this.onError('[Refactor] 明牌同步失败:', e, { target, cardIDs: ids })
@@ -997,17 +923,5 @@ export class TrackerController {
     } catch (e) {
       this.onError('[Refactor] Room 销毁失败:', e)
     }
-  }
-
-  /**
-   * 取出本局的 belief epoch 采集报告（Phase 1 对局验证入口）。
-   *
-   * 生产构建恒为 `null`。对局结束后 `destroyTrackerRoom()` 不清空 observer，
-   * 因此结算阶段仍可取到本局数据；下一局 `initTrackerRoom()` 才会重建。
-   *
-   * **读数前请看 `report.note`**：`confirmedContradictionCount` 是下界不是错误率。
-   */
-  getBeliefEpochReport(): BeliefEpochReport | null {
-    return this.beliefObserver?.getReport() ?? null
   }
 }

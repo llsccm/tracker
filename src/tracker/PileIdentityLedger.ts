@@ -21,7 +21,6 @@ export interface PileIdentityCohortProjectionGroup {
   kind: PileIdentityCohortKind
   cardIDs: CardID[]
   remainingPileCount: number
-  label: string
 }
 
 export interface PileIdentityCohortSnapshot {
@@ -32,7 +31,7 @@ export interface PileIdentityCohortSnapshot {
   flatCandidateWidth: number
 }
 
-/** 供 Room、DEV observer 与诊断逻辑消费的只读投影。 */
+/** 供 Room、测试与诊断逻辑消费的只读投影。 */
 export interface PileIdentityLedgerSnapshot {
   revision: number
   identityUniverseIDs: CardID[]
@@ -77,13 +76,24 @@ export interface PileIdentityConsistencyIssue {
   cardID?: CardID
 }
 
+/**
+ * Room 身份分区的只读切片，用于验证 cohort 身份仍由未定位池或 suspended 展示实体承载。
+ *
+ * ledger 只维护身份集合与牌堆基数，不持有 Card；因此跨越“身份账本 / 物理实体”边界的
+ * 目标态断言必须由 Room 在一次协议事务完成后显式传入，而不能在 ledger 内部猜测。
+ */
+export interface PileIdentityRoomPartition {
+  deckIdentityIDs: ReadonlySet<CardID>
+  unlocatedIdentityIDs: ReadonlySet<CardID>
+  suspendedIdentityIDs: ReadonlySet<CardID>
+}
+
 export type PileIdentityLedgerWarningHandler = (
   message: string,
   detail: Record<string, unknown>
 ) => void
 
 export interface PileIdentityLedgerOptions {
-  enabled?: boolean
   onWarning?: PileIdentityLedgerWarningHandler
 }
 
@@ -110,10 +120,19 @@ function normalizeCount(count: number): number {
   return Number.isFinite(normalized) ? Math.max(0, normalized) : 0
 }
 
-function createCohortLabel(kind: PileIdentityCohortKind, size: number, count: number): string {
-  if (kind === 'all-in-pile') return `这 ${size} 张都在牌堆`
-  if (kind === 'none-in-pile') return `这 ${size} 张都不在牌堆`
-  return `这 ${size} 张里有 ${count} 张在牌堆`
+/**
+ * 判断一次 2 -> 9 洗牌通知是否只是开局牌堆初始化。
+ *
+ * 实测协议存在两种等价形态：本地弃牌堆为空，或整副牌先暂存在弃牌堆。后者必须与普通
+ * 弃牌洗回区分，否则初始卡池会在开局即被错误关闭世代并投影为 suspended 身份。
+ */
+export function isInitialPileShuffle(discardCount: number, deckCardCount: number): boolean {
+  const normalizedDiscardCount = normalizeCount(discardCount)
+  const normalizedDeckCardCount = normalizeCount(deckCardCount)
+  return (
+    normalizedDiscardCount === 0 ||
+    (normalizedDeckCardCount > 0 && normalizedDiscardCount === normalizedDeckCardCount)
+  )
 }
 
 function cloneCohort(cohort: PileIdentityCohort): PileIdentityCohort {
@@ -124,19 +143,6 @@ function cloneCohort(cohort: PileIdentityCohort): PileIdentityCohort {
   }
 }
 
-/**
- * snapshot 在生成时已排序并规范化，因此稳定序列化可用于 DEV 双写一致性比较。
- */
-export function arePileIdentityCohortSnapshotsEqual(
-  left: PileIdentityCohortSnapshot,
-  right: PileIdentityCohortSnapshot
-): boolean {
-  return JSON.stringify(left) === JSON.stringify(right)
-}
-
-/**
- * Production cohort ledger. It shadows the current authoritative card entities and never mutates them.
- */
 /**
  * 牌堆身份账本维护“哪些真实身份仍未决”以及“每组中有几张仍在牌堆”。
  *
@@ -160,24 +166,13 @@ export class PileIdentityLedger {
   private previousDiscardCount = 0
   // 数组顺序为牌底到牌顶；只有边界仍可证明时该顺序才有消费意义。
   private cohorts: PileIdentityCohort[] = []
-  private enabled: boolean
   private readonly onWarning: PileIdentityLedgerWarningHandler
 
-  constructor({ enabled = true, onWarning = () => undefined }: PileIdentityLedgerOptions = {}) {
-    this.enabled = enabled
+  constructor({ onWarning = () => undefined }: PileIdentityLedgerOptions = {}) {
     this.onWarning = onWarning
   }
 
-  isEnabled(): boolean {
-    return this.enabled
-  }
-
-  setEnabled(enabled: boolean): void {
-    this.enabled = enabled
-  }
-
   initialize(cardIDs: readonly CardID[]): void {
-    if (!this.enabled) return
     const identities = normalizeIDs(cardIDs)
     this.revision += 1
     this.generation = 0
@@ -201,7 +196,6 @@ export class PileIdentityLedger {
   }
 
   applyMove(move: PileIdentityLedgerMove): void {
-    if (!this.enabled) return
     this.commit(`move:${move.eventType}`, () => {
       const cardIDs = normalizeIDs(move.cardIDs)
       const knownCount = cardIDs.length
@@ -313,7 +307,6 @@ export class PileIdentityLedger {
   }
 
   applyReveal(reveal: PileIdentityLedgerReveal): void {
-    if (!this.enabled) return
     this.commit(`reveal:${reveal.location}`, () => {
       normalizeIDs(reveal.cardIDs).forEach((cardID) => {
         if (reveal.location === 'pile') this.revealIdentityInPileInternal(cardID)
@@ -329,7 +322,6 @@ export class PileIdentityLedger {
   }
 
   consumeAnonymous(count: number, position: PublicPosition, reason: string): void {
-    if (!this.enabled) return
     this.commit(reason, () => this.consumeAnonymousInternal(count, position))
   }
 
@@ -339,7 +331,6 @@ export class PileIdentityLedger {
     reason: string,
     staysInPile = false
   ): void {
-    if (!this.enabled) return
     this.commit(reason, () => {
       if (source === 'pile' && staysInPile) this.revealIdentityInPileInternal(cardID)
       else if (source === 'pile') this.revealIdentityFromPileInternal(cardID)
@@ -353,30 +344,39 @@ export class PileIdentityLedger {
     position: PublicPosition,
     reason: string
   ): void {
-    if (!this.enabled) return
     this.commit(reason, () => this.insertKnownInternal(cardIDs, count, position))
   }
 
   insertAnonymous(count: number, position: PublicPosition, reason: string): void {
-    if (!this.enabled) return
     this.commit(reason, () => this.insertAnonymousInternal(count, position))
   }
 
   mergeAll(reason: string): void {
-    if (!this.enabled) return
     this.commit(reason, () => {
       this.mergeAllCohortsInternal()
     })
   }
 
   rotateFromDiscard(cardIDs: readonly CardID[], reason: string): void {
-    if (!this.enabled) return
     this.commit(reason, () => this.rotateFromDiscardInternal(cardIDs))
   }
 
-  assertConsistency(pileCount: number, context: string): PileIdentityConsistencyIssue[] {
-    if (!this.enabled) return []
-    const issues = this.collectConsistencyIssues(pileCount, context)
+  /**
+   * 检查账本内部基数，并在 Room 提供身份分区时启用最终目标态断言。
+   *
+   * cohort 身份有两种合法的 Room 表达：未物化身份留在 `unlocatedIdentities`；旧世代失效
+   * 后，为了继续向用户展示而创建的身份则进入 `suspendedKnownCards`。suspended 实体只有
+   * 展示身份，没有物理位置，牌堆基数与集合归属仍以本 ledger 为权威。
+   *
+   * 该断言必须放在 Room 物理移动和 ledger 事件都完成之后运行，事务中途的短暂状态不参与
+   * 判断。
+   */
+  assertConsistency(
+    pileCount: number,
+    context: string,
+    roomPartition?: PileIdentityRoomPartition
+  ): PileIdentityConsistencyIssue[] {
+    const issues = this.collectConsistencyIssues(pileCount, context, roomPartition)
     this.warnForIssues(issues)
     return issues
   }
@@ -397,7 +397,8 @@ export class PileIdentityLedger {
 
   getUnresolvedIdentityIDs(): CardID[] {
     // remainingPileCount 为 0 的 cohort 仍然有价值：它表示这些身份确定不在牌堆，但尚未
-    // 展示到具体区域。洗牌物理层仍需匿名化承载这些未决身份的正 ID 暗实体。
+    // 展示到具体区域。实际洗牌会用本快照关闭旧世代：暗实体先退回匿名物理槽，身份本身
+    // 转入 suspended 展示，等待后续协议再次明确出现。
     const identityIDs = new Set<CardID>()
     this.cohorts.forEach((cohort) => {
       cohort.candidateIdentityIDs.forEach((cardID) => identityIDs.add(cardID))
@@ -413,7 +414,14 @@ export class PileIdentityLedger {
       this.previousDiscardCount - recycledIdentityIDs.length
     )
 
-    if (this.previousDiscardCount === 0 && recycledIdentityIDs.length === 0) {
+    if (isInitialPileShuffle(this.previousDiscardCount, this.identityUniverse.size)) {
+      if (this.previousDiscardCount > 0) {
+        // “整副牌暂存在弃牌堆”只是初始化载体差异，不代表 generation 0 已结束。已知弃牌
+        // 身份先退回未决集合，匿名弃牌则由 reconcile 恢复完整牌堆基数；两者最终仍属于
+        // 当前 generation，而不会建立新的牌底批次。
+        recycledIdentityIDs.forEach((cardID) => this.prepareIdentityForPile(cardID))
+        this.knownDiscardIdentityIDs.clear()
+      }
       this.reconcilePileCountInternal(pileCountAfter)
       return
     }
@@ -736,8 +744,7 @@ export class PileIdentityLedger {
         generation: cohort.generation,
         kind,
         cardIDs,
-        remainingPileCount: cohort.remainingPileCount,
-        label: createCohortLabel(kind, cardIDs.length, cohort.remainingPileCount)
+        remainingPileCount: cohort.remainingPileCount
       })
 
       if (kind === 'all-in-pile') {
@@ -764,7 +771,8 @@ export class PileIdentityLedger {
 
   private collectConsistencyIssues(
     pileCount: number,
-    context: string
+    context: string,
+    roomPartition?: PileIdentityRoomPartition
   ): PileIdentityConsistencyIssue[] {
     const issues: PileIdentityConsistencyIssue[] = []
     const seen = new Set<CardID>()
@@ -785,15 +793,46 @@ export class PileIdentityLedger {
 
       cohort.candidateIdentityIDs.forEach((cardID) => {
         if (seen.has(cardID)) issues.push({ context, reason: 'duplicate-cohort-identity', cardID })
+        if (!this.identityUniverse.has(cardID)) {
+          issues.push({ context, reason: 'cohort-identity-missing-from-universe', cardID })
+        }
         if (this.locatedIdentityIDs.has(cardID)) {
           issues.push({ context, reason: 'located-identity-in-cohort', cardID })
         }
         if (this.knownPileIdentityIDs.has(cardID)) {
           issues.push({ context, reason: 'known-pile-identity-in-cohort', cardID })
         }
+        if (roomPartition && !roomPartition.deckIdentityIDs.has(cardID)) {
+          issues.push({ context, reason: 'cohort-identity-missing-from-room-universe', cardID })
+        }
+        if (roomPartition) {
+          const isUnlocated = roomPartition.unlocatedIdentityIDs.has(cardID)
+          const isSuspended = roomPartition.suspendedIdentityIDs.has(cardID)
+          if (!isUnlocated && !isSuspended) {
+            issues.push({
+              context,
+              reason: 'cohort-identity-missing-from-room-partition',
+              cardID
+            })
+          }
+          if (isUnlocated && isSuspended) {
+            issues.push({
+              context,
+              reason: 'cohort-identity-duplicated-in-room-partition',
+              cardID
+            })
+          }
+        }
         seen.add(cardID)
       })
     })
+
+    if (roomPartition) {
+      this.locatedIdentityIDs.forEach((cardID) => {
+        if (!roomPartition.unlocatedIdentityIDs.has(cardID)) return
+        issues.push({ context, reason: 'located-identity-still-unlocated', cardID })
+      })
+    }
 
     const expectedPileCount = normalizeCount(pileCount)
     const actualPileCount = this.getAccountedPileCount()

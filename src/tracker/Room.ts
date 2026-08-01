@@ -5,7 +5,12 @@ import { CardCounter } from './CardCounter'
 import { GameState } from './gameState'
 import { AmbiguousKnownIndex } from './AmbiguousKnownIndex'
 import { CardLocationIndex } from './CardLocationIndex'
-import { PileIdentityLedger, type PileIdentityLedgerMove } from './PileIdentityLedger'
+import {
+  isInitialPileShuffle,
+  PileIdentityLedger,
+  type PileIdentityConsistencyIssue,
+  type PileIdentityLedgerMove
+} from './PileIdentityLedger'
 import { normalizePublicPosition } from './candidate/publicCandidate'
 import { summarizeMoveContext, summarizeMoveEvent } from './helper/moveSummary'
 import { RoomConstraints } from './roomConstraints'
@@ -33,7 +38,6 @@ const CONVERGENCE_ROUNDS_WARN = 8
 
 interface RoomOptions {
   gameState?: GameState
-  pileIdentityLedgerEnabled?: boolean
 }
 
 interface HandSlotCountSummary {
@@ -134,7 +138,7 @@ export class Room {
   /**
    * @param cardIDs - 卡牌的物理 ID 列表，用以初始化卡牌池
    */
-  constructor({ gameState = new GameState(), pileIdentityLedgerEnabled = true }: RoomOptions = {}) {
+  constructor({ gameState = new GameState() }: RoomOptions = {}) {
     // 2. 初始化逻辑分区与公共区域
     this.players = new Map() // seatID -> Player
     this.zones = new Map([
@@ -177,7 +181,6 @@ export class Room {
     this.constraints = new RoomConstraints(this)
     this.movement = new RoomMovement(this)
     this.pileIdentityLedger = new PileIdentityLedger({
-      enabled: pileIdentityLedgerEnabled,
       onWarning(message, detail) {
         trackerLogger.warn(message, detail)
       }
@@ -217,6 +220,7 @@ export class Room {
 
     pile.replaceAll(deckCards)
     this.pileIdentityLedger.initialize(cardIDs)
+    this.assertPileIdentityLedgerConsistency('initDeck')
 
     this.locationIndex.rebuild(this)
     this.ambiguousKnownIndex.rebuild(Array.from(this.constraintGroups.values()))
@@ -241,8 +245,9 @@ export class Room {
         pileCountAfter: this.zones.get('pile')?.cards.length ?? 0,
         discardCountAfter: this.zones.get('discard')?.cards.length ?? 0
       })
+      this.assertPileIdentityLedgerConsistency(`move:${move.eventType}`)
     } catch (error) {
-      trackerLogger.warn('牌堆身份账本移动双写失败', { error, move })
+      trackerLogger.warn('牌堆身份账本移动更新失败', { error, move })
     }
   }
 
@@ -254,9 +259,47 @@ export class Room {
         pileCountAfter: this.zones.get('pile')?.cards.length ?? 0,
         discardCountAfter: this.zones.get('discard')?.cards.length ?? 0
       })
+      this.assertPileIdentityLedgerConsistency(`reveal:${location}`)
     } catch (error) {
-      trackerLogger.warn('牌堆身份账本揭示双写失败', { error, cardIDs, location })
+      trackerLogger.warn('牌堆身份账本揭示更新失败', { error, cardIDs, location })
     }
+  }
+
+  /**
+   * 在物理 Room 与身份 ledger 都完成一次协议事务后检查最终目标态。
+   *
+   * 这里刻意不挂到 `resolveConstraints()`：卡牌移动先于 Controller 写入 ledger，收敛尾部
+   * 仍处于合法的事务中间态。只有 init / move / reveal 的账本写入完成后，才能要求每个
+   * cohort 身份恰好由未定位池或 suspended 展示实体承载，并禁止牌堆继续承载正 ID 暗实体。
+   */
+  assertPileIdentityLedgerConsistency(context = ''): PileIdentityConsistencyIssue[] {
+    if (!import.meta.env.DEV) return []
+
+    const pile = this.zones.get('pile')
+    const suspendedIdentityIDs = new Set(
+      Array.from(this.suspendedKnownCards, (card) => card.id).filter((cardID) => cardID > 0)
+    )
+    const issues = this.pileIdentityLedger.assertConsistency(pile?.cards.length ?? 0, context, {
+      deckIdentityIDs: this.deckIdentities,
+      unlocatedIdentityIDs: this.unlocatedIdentities,
+      suspendedIdentityIDs
+    })
+    const hiddenPileIdentityIDs = (pile?.cards ?? [])
+      .filter((card) => card.id > 0 && card.isKnown !== true)
+      .map((card) => card.id)
+
+    hiddenPileIdentityIDs.forEach((cardID) => {
+      issues.push({ context, reason: 'hidden-pile-identity', cardID })
+    })
+
+    if (hiddenPileIdentityIDs.length > 0) {
+      trackerLogger.warn('牌堆仍存在正 ID 暗实体', {
+        context,
+        cardIDs: hiddenPileIdentityIDs
+      })
+    }
+
+    return issues
   }
 
   /**
@@ -616,7 +659,7 @@ export class Room {
   /**
    * 移除不再承担位置数量的暗占位，同时保住它携带的真实身份。
    *
-   * 洗牌后的正 ID 暗实体只表示一次本地身份绑定，并不表示牌面已经公开。
+   * 玩家手牌或 mark 中的正 ID 暗实体只表示本机掌握身份，并不表示其具体位置已经公开。
    * 若直接把它移到 outside，cardIndex 仍会认为该身份已定位，但 CardCounter 会把它归为
    * REMOVED，下一次洗牌便无法从“未定位身份”或“暗位置身份”中重新找到它。
    * 因此先把身份退回 unlocatedIdentities，再移出已经多余的匿名物理槽。
@@ -1074,8 +1117,10 @@ export class Room {
   /**
    * 将牌堆和弃牌堆中的实体牌重置后洗回牌堆。
    * 洗牌时实际牌堆只由“剩余牌堆 + 弃牌堆”组成，不再为了协议张数补匿名占位。
-   * 协议牌堆空间剩余身份由实际牌堆与从未在场上出现的牌共同解释；
-   * 非实际牌堆内的正 ID 暗身份暂停具体位置追踪，等待后续明示/交互时恢复。
+   *
+   * 发生真实弃牌洗回时，旧 cohort 中仍未出现的身份会失去原世代归因。它们必须转入
+   * suspendedKnownCards 继续展示，但 suspended 只保存身份，不占用牌堆或玩家物理槽；若
+   * 身份仍由暗实体承载，原实体会先原地匿名化并保留位置，再创建 detached 展示实体。
    */
   shufflePile(options: ShufflePileOptions = {}): void {
     const pile = this.zones.get('pile')
@@ -1089,12 +1134,21 @@ export class Room {
     const hasProtocolPileCount = Number.isFinite(normalizedCardCount) && normalizedCardCount >= 0
     const remainingPileCards = [...pile.cards]
     const recycledCards = [...discard.cards]
+    // 开局 2 -> 9 通知有两种实测形态：discard 为空，或整副牌先暂存在 discard。两者都
+    // 只是初始化/对账，不关闭 generation 0；只有部分弃牌实体洗回才暂停旧 cohort。
     const hasDiscardCards = recycledCards.length > 0
-    const ledgerSnapshot = this.pileIdentityLedger.getSnapshot()
-    const knownPileIdentityIDs = new Set(ledgerSnapshot.knownPileIdentityIDs)
-    const remainingPileCardSet = new Set(remainingPileCards)
-    const recycledCardSet = new Set(recycledCards)
+    const isInitialShuffle = isInitialPileShuffle(recycledCards.length, this.deckIdentities.size)
+    const closesPileGeneration = hasDiscardCards && !isInitialShuffle
+    const recycledIdentityIDs = new Set(
+      recycledCards.map((card) => card.id).filter((cardID) => cardID > 0)
+    )
+    // Controller 会在 Room 物理事务结束后提交 ledger 洗牌事件，因此这里拿到的正是旧世代
+    // 快照。先冻结再改实体，才能区分“本轮过期身份”和“本轮洗回后进入新世代的弃牌身份”。
+    const expiringIdentityIDs = closesPileGeneration
+      ? this.pileIdentityLedger.getUnresolvedIdentityIDs()
+      : []
     const anonymizedIdentityIDs: CardID[] = []
+    const newlySuspendedCardIDs: CardID[] = []
 
     const rebuildPileAfterShuffle = () => {
       // 只随机洗回弃牌堆；原本仍留在牌堆里的部分保持相对顺序，避免已知牌堆顶被误重排。
@@ -1110,44 +1164,23 @@ export class Room {
       return rebuiltPileCards
     }
 
-    if (hasDiscardCards) {
-      // 剩余牌堆中的正 ID 暗实体只是旧逐槽代表；可见边界身份继续保留精确实体。
-      remainingPileCards.forEach((card) => {
-        if (card.id <= 0 || card.isKnown === true || knownPileIdentityIDs.has(card.id)) return
-        const releasedIdentityID = this.anonymizeLocatedIdentity(
-          card,
-          'shufflePile:hiddenPileIdentity',
-          { preservePlacement: true }
-        )
-        if (releasedIdentityID) anonymizedIdentityIDs.push(releasedIdentityID)
-      })
+    if (closesPileGeneration) {
+      const suspensionResult = this.suspendUnresolvedPileIdentitiesForShuffle(
+        expiringIdentityIDs,
+        recycledIdentityIDs
+      )
+      anonymizedIdentityIDs.push(...suspensionResult.anonymizedIdentityIDs)
+      newlySuspendedCardIDs.push(...suspensionResult.suspendedIdentityIDs)
+    }
 
-      // 洗回弃牌区的正 ID 已失去随机后的位置身份，物理实体原地转为匿名槽。
+    if (hasDiscardCards) {
+      // 无论是真实换代还是全量弃牌形态的初洗，洗回后的随机位置都不再承载正 ID；区别仅
+      // 在于前者会暂停旧世代未出现身份，后者仍把全部身份保留在 generation 0 未决集合。
       recycledCards.forEach((card) => {
         if (card.id <= 0) return
         const releasedIdentityID = this.anonymizeLocatedIdentity(
           card,
           'shufflePile:recycledIdentity'
-        )
-        if (releasedIdentityID) anonymizedIdentityIDs.push(releasedIdentityID)
-      })
-
-      // cohort 候选若仍由玩家、mark 或其它区域的正 ID 暗实体承载，只匿名化实体身份，
-      // 保留同一个对象上的位置、席位与候选绑定，不再创建替身或 suspended 身份。
-      this.pileIdentityLedger.getUnresolvedIdentityIDs().forEach((cardID) => {
-        const card = this.cardIndex.get(cardID)
-        if (
-          !card ||
-          card.isKnown === true ||
-          remainingPileCardSet.has(card) ||
-          recycledCardSet.has(card)
-        ) {
-          return
-        }
-        const releasedIdentityID = this.anonymizeLocatedIdentity(
-          card,
-          'shufflePile:cohortIdentity',
-          { preservePlacement: true }
         )
         if (releasedIdentityID) anonymizedIdentityIDs.push(releasedIdentityID)
       })
@@ -1187,8 +1220,81 @@ export class Room {
       })
     }
 
+    if (newlySuspendedCardIDs.length > 0) {
+      trackerLogger.info('洗牌后暂停追踪旧牌堆世代中尚未出现的身份', {
+        suspendedCardIDs: newlySuspendedCardIDs,
+        activeSuspendedCardIDs: Array.from(this.suspendedKnownCards, (card) => card.id).filter(
+          (cardID) => cardID > 0
+        )
+      })
+    }
+
     // 触发收敛
     this.resolveConstraints()
+  }
+
+  /**
+   * 把一次真实洗牌前仍留在 cohort 中的身份转为可展示的 suspended 实体。
+   *
+   * cohort 身份可能尚未物化，也可能暂由玩家手牌、mark 或旧兼容牌堆槽中的正 ID 暗实体
+   * 承载。后一种情况不能直接 suspend 原实体，否则会凭空删掉一个物理槽；必须先调用
+   * anonymizeLocatedIdentity({ preservePlacement: true })，让同一对象继续承担匿名位置数量，
+   * 再创建一个 detached 正 ID 实体负责展示。已经 suspended 的历史身份保持原对象，不重复
+   * 创建；本轮洗回弃牌身份属于新世代，由调用方显式排除。
+   */
+  private suspendUnresolvedPileIdentitiesForShuffle(
+    identityIDs: readonly CardID[],
+    recycledIdentityIDs: ReadonlySet<CardID>
+  ): { suspendedIdentityIDs: CardID[]; anonymizedIdentityIDs: CardID[] } {
+    const suspendedIdentityIDs: CardID[] = []
+    const anonymizedIdentityIDs: CardID[] = []
+
+    identityIDs.forEach((cardID) => {
+      if (!(cardID > 0) || recycledIdentityIDs.has(cardID)) return
+
+      const existing = this.cardIndex.get(cardID)
+      if (existing && (existing.suspended === true || this.suspendedKnownCards.has(existing))) {
+        return
+      }
+
+      // 已经通过协议公开的身份不属于“尚未出现”。正常生产事务中 ledger 已把它移出 cohort；
+      // 该分支同时让直接调用 Room 的测试/兼容路径不会把可见实体错误暂停。
+      if (existing?.isKnown === true) return
+
+      if (existing) {
+        const releasedIdentityID = this.anonymizeLocatedIdentity(
+          existing,
+          'shufflePile:expiredCohortIdentity',
+          { preservePlacement: true }
+        )
+        if (releasedIdentityID === null) {
+          trackerLogger.warn('洗牌关闭旧牌堆世代时释放暗实体身份失败', {
+            cardID,
+            entityID: existing.entityID,
+            location: existing.location
+          })
+          return
+        }
+        anonymizedIdentityIDs.push(releasedIdentityID)
+      } else if (!this.unlocatedIdentities.has(cardID)) {
+        trackerLogger.warn('洗牌关闭旧牌堆世代时身份不在 Room 分区中', { cardID })
+        return
+      }
+
+      const displayCard = this.createExternalCards([cardID], 1)[0]
+      if (!displayCard) {
+        trackerLogger.warn('洗牌关闭旧牌堆世代时创建 suspended 展示实体失败', { cardID })
+        return
+      }
+
+      // confirmKnown 只负责让身份可显示，不表示它已在场上出现；location=suspended 明确说明
+      // 具体位置未知，后续协议携带同 ID 时由 materialize()/moveCards() 恢复追踪。
+      displayCard.confirmKnown()
+      this.constraints.suspendKnownCard(displayCard, 'pile-generation-expired')
+      suspendedIdentityIDs.push(cardID)
+    })
+
+    return { suspendedIdentityIDs, anonymizedIdentityIDs }
   }
 
   createConstraintGroup(...args) {

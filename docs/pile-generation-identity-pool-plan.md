@@ -2,9 +2,9 @@
 
 > 文档角色：**历史讨论、反驳与再裁决归档，不再作为实施入口**
 > 当前计划：[`pile-identity-cohort-plan.md`](pile-identity-cohort-plan.md)
-> 归档状态：Phase 0/0.5 纯模型完成；全局世代 observer 暂缓；批次基数模型进入决策闸门
+> 归档状态：Phase 0/0.5 纯模型完成；后续 Phase 2–6 已按当前计划完成生产迁移
 > 日期：2026-07-29（Phase 0 再裁决 2026-07-30；Phase 0.5 语义修正 2026-07-31）
-> 适用范围：`tests/tracker/`（Phase 0/0.5 已落地）；`src/tracker/` 未改动
+> 适用范围：历史纯模型与决策过程；不描述当前 `src/tracker/` 运行时入口
 > 上游讨论：[`pile-slot-identity-decoupling-reopen.md`](../plans/pile-slot-identity-decoupling-reopen.md)
 > 历史归档：[`anonymous-entity-and-slot.md`](../plans/anonymous-entity-and-slot.md)
 >
@@ -13,8 +13,8 @@
 > [`docs/agents/card_tracker.md`](agents/card_tracker.md) 为准。
 >
 > **§17–§20 保留讨论与反驳过程；[§21](#21-phase-05-语义统一与批次基数模型2026-07-31)
-> 修正了“active pool = 确定仍在牌堆”的语义倒置。当前不直接实现全局世代 observer，
-> 先以批次候选集合 + 在牌堆数量作为第三纯模型完成产品投影决策；Phase 3–6 仍未放行。**
+> 修正了“active pool = 确定仍在牌堆”的语义倒置。本文后续所有“冻结”“未放行”均保留
+> 当时决策语境；最终生产状态以当前计划和 `docs/agents/card_tracker.md` 为准。**
 
 ---
 

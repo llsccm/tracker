@@ -1,11 +1,11 @@
 # 牌堆身份批次模型当前计划
 
-> 状态：**Phase 0/0.5 完成；Phase 1 保留机会性观测；Phase 2–5 已完成；Phase 6 冻结**
+> 状态：**Phase 0/0.5 纯模型保留；Phase 1 观测已归档退役；Phase 2–6 已完成**
 > 日期：2026-08-01
 > 文档角色：当前有效的设计契约与实施入口
-> 适用范围：`tests/tracker/` 纯模型 + `src/tracker/observer/` 只读 observer（DEV 限定）+
-> `src/tracker/PileIdentityLedger.ts` 生产身份账本；`Room.shufflePile()` 的身份判断已切换为
-> cohort 权威，公共 known 物化已切换为匿名槽/同 ID 端点契约，UI 仍沿用既有路径
+> 适用范围：`tests/tracker/` 纯模型 + `src/tracker/PileIdentityLedger.ts` 生产身份账本；
+> `Room.shufflePile()` 的身份判断已切换为 cohort 权威，公共 known 物化已切换为匿名槽/
+> 同 ID 端点契约，迁移 observer、统计 schema 与 ledger 开关已删除，UI 沿用既有实体投影
 > 讨论归档：[`pile-generation-identity-pool-plan.md`](pile-generation-identity-pool-plan.md)
 
 ---
@@ -17,20 +17,20 @@
 active pool = 确定仍在牌堆：NO-GO，语义错误
 批次候选集合 + 在牌堆数量：GO，完成产品与协议可维护性决策
 全局世代独立生产 observer：不推进
-三模型只读 observer：已实现并保留（DEV 限定），后续按机会采样
+三模型只读 observer：历史采样完成，Phase 6 已删除运行时、控制台入口与固定统计 schema
 匿名任意位置牌堆获取：只在身份不可筛方面类似暗摸；不沿用牌顶边界，身份进入全局未决
 匿名获取导致的批次合并：正常身份失效，不计批次风险或模型降级
-生产身份账本迁移：Phase 3 双写、Phase 4 洗牌和 Phase 5 known 物化切换均已完成
-cohort 用户界面：Phase 5 不新增；内部身份与物理槽解耦已覆盖洗牌和公开揭示
-生产迁移 Phase 6：继续冻结，等待最终兼容清理与 UI 裁决
+生产身份账本迁移：Phase 3–6 已完成，ledger 是不可关闭的生产权威状态
+cohort 用户界面：本轮不接入；生产 ledger 仅保留结构化快照，不携带用户文案
+生产迁移 Phase 6：已删除正 ID 暗牌堆读取兼容、observer 双写与迁移诊断
 ```
 
 当前生产洗牌以 `PileIdentityLedger` 的未决身份集合为身份权威，`Room.shufflePile()` 只负责
-物理槽、公开边界与区域对象的迁移。Phase 4 已删除 `remainingPileIdentityIDs` 分类、
-UNKNOWN/APPEARED 洗牌分类、detached identity、洗牌专用玩家/mark 替身及校验；
-Phase 5 又将 `materialize()` 与公共 known 端点切换为“匿名槽或端点同 ID 实体”契约，删除
-正 ID 暗公共身份挤出与 suspended 名额转交。玩家/mark interop 和通用 suspended 语义保留，
-cohort UI 尚未切换。
+物理槽、公开边界与区域对象的迁移。Phase 4 删除了基于本地正 ID 暗槽分类的 detached/
+suspended 启发式；Phase 6 再以 cohort 权威恢复 detached `suspendedKnownCards` 展示投影，
+用于保留真实洗牌后旧世代尚未出现的身份，但不让展示实体占用物理槽。Phase 5 已将
+`materialize()` 与公共 known 端点切换为“匿名槽或端点同 ID 实体”契约。玩家/mark interop
+继续保留，cohort 分组 UI 经 Phase 6 裁决保持不接入。
 
 ---
 
@@ -188,7 +188,7 @@ sum(cohort.remainingPileCount) == pileSlotCount
 | 从手牌揭示   | 复用一个玩家匿名槽         | 从所属批次删除身份        | 不变               |
 | 明牌弃置     | 明牌进入 discard           | 不属于任何未决批次        | 不变               |
 | 弃牌洗回     | discard 槽进入牌底侧       | 洗回身份建立新批次        | 等于洗回身份数     |
-| 空弃牌洗牌   | 物理状态不变               | 不建立批次                | 不变               |
+| 初次洗牌     | 空弃牌不变；全量弃牌洗回   | 不建立批次                | 不变               |
 | 合法外部身份 | 由专用入口创建物理牌       | 首次加入身份全集          | 由入口决定         |
 
 ### 5.1 自动补牌
@@ -422,7 +422,10 @@ oracle 校验：`k=1..5` 全部通过，`brokenAllInPileIDs`、`brokenNoneInPile
 
 ### Phase 1：只读三模型 observer
 
-状态：**只读 observer 与采集口径修正已完成（2026-08-01），转为机会性真实对局观测**。
+状态：**历史采样已完成；运行时、控制台入口、固定 schema 与对应测试已在 Phase 6 删除**。
+
+本节保留 Phase 1 的实施和判读过程，不再提供当前可调用入口。下面提到的 observer 文件、
+`__trackerBeliefReport()` 与双写比较都只代表迁移期历史状态。
 
 前置条件（全部满足）：
 
@@ -445,11 +448,9 @@ oracle 校验：`k=1..5` 全部通过，`brokenAllInPileIDs`、`brokenNoneInPile
   `tests/tracker/pileIdentityModelComparison.test.ts` 合计 44 例，覆盖只读契约、三模型
   exposure、协议事件、候选差异、批次降级与接线。
 
-当前执行范围只覆盖 DEV 测试环境。本轮不复核生产产物摇树，也不把生产产物字符串检索
-作为 Phase 1 采集前置条件。
+历史执行范围只覆盖 DEV 测试环境，当时不把生产产物字符串检索作为采集前置条件。
 
-**读数入口**：`import.meta.env.DEV` 只在 **serve** 模式为真，`pnpm build --mode development`
-同样会剔除 observer。因此对局验证必须用 `pnpm dev`，在控制台执行：
+**历史读数入口（已删除）**：当时需用 `pnpm dev` 启动后在控制台执行：
 
 ```js
 __trackerBeliefReport()
@@ -483,8 +484,8 @@ FromZone=5 且有正 ID          证伪牌堆断言（手牌现身）
    现有候选区。分组投影保留为后续产品能力，不是内部正确性迁移的前置依赖。
 3. **匿名获取统一处理**：无 CardIDs 的牌堆获取只消费暗槽；不按获取技能或 SpellID 推断
    身份，等待后续展示收敛。
-4. **observer 继续保留**：样本少或暂未遇到洗牌不构成拒绝理由，后续真实牌堆交互继续
-   机会性验证 Phase 3 双写结果。
+4. **observer 当时继续保留**：样本少或暂未遇到洗牌不构成拒绝理由；完成迁移裁决后，
+   Phase 6 已删除该临时观测链路。
 
 决策依据：
 
@@ -506,13 +507,14 @@ FromZone=5 且有正 ID          证伪牌堆断言（手牌现身）
 已完成：
 
 - 新增独立生产 `PileIdentityLedger`，由 `Room` 持有并在 `initDeck()` 初始化 generation 0。
-- `TrackerController` 在协议动作成功后把同一份归一化事件依次双写生产 ledger 与 DEV
-  observer；显式区域揭示使用同一套后置入口。
+- `TrackerController` 当时在协议动作成功后把同一份归一化事件双写生产 ledger 与 DEV
+  observer；Phase 6 已删除 observer 一侧，只保留生产 ledger 后置入口。
 - ledger 提供匿名顶/底/任意位置消费、身份揭示、已知/匿名回堆、全局合并、弃牌洗回、
   快照和一致性诊断原子 API。
 - B14 在范围大小未知且存在多个活动批次时保守合并；B15 仍不绑定获取技能或 SpellID，
   只合并为全局未决并扣暗槽。
-- DEV 只比较轻量 cohort 快照，差异只告警；ledger 可独立关闭，旧移动结果不受影响。
+- DEV 当时只比较轻量 cohort 快照，差异只告警；ledger 关闭开关和旧权威回退均已在
+  Phase 6 删除。
 
 Phase 3 完成时，`Room`、`shufflePile()`、`materialize()` 与 UI 仍以既有状态为权威；该阶段
 没有删除任何正 ID 暗槽、suspended、玩家或 mark 兼容分支。此段记录 Phase 3 闸门基线，
@@ -524,8 +526,8 @@ Phase 3 完成时，`Room`、`shufflePile()`、`materialize()` 与 UI 仍以既�
 
 - `PileIdentityLedger.getUnresolvedIdentityIDs()` 成为洗牌未决身份枚举入口，覆盖
   `remainingPileCount === 0` 但尚未展示的 cohort 成员。
-- `shufflePile()` 不再从正 ID 暗实体反推牌堆身份，也不再创建 detached identity、洗牌专用
-  suspended 身份或玩家/mark 匿名替身。
+- `shufflePile()` 不再从正 ID 暗实体反推牌堆身份，并删除基于旧本地分类创建 detached/
+  suspended 身份的启发式。Phase 6 后续以 cohort 权威恢复 suspended 展示投影。
 - 洗回弃牌、剩余牌堆和仍承载未决身份的暗区正 ID 实体原地匿名化；玩家座位、mark 子区、
   候选集合及 `hiddenMarkCandidates` 对象引用保持不变。
 - ledger 明确仍在牌堆的身份和 `isKnown === true` 的牌顶/牌底公开边界继续保留正 ID。
@@ -546,14 +548,27 @@ Phase 3 完成时，`Room`、`shufflePile()`、`materialize()` 与 UI 仍以既�
 
 ### Phase 6：最终兼容清理与 UI 裁决
 
-状态：**冻结**。
+状态：**已完成（2026-08-01）**。
 
-Phase 6 审计剩余正 ID 暗公共假设、迁移期诊断与 observer 开关，并决定是否接入 cohort 分组
-UI；玩家/mark 的通用身份交换不因牌堆迁移自动删除。
+- 删除 belief epoch、三模型只读 observer、控制台报告入口、对应测试 helper 与固定统计
+  schema；`PileIdentityLedger` 不再支持关闭，成为单一生产身份权威。
+- 删除 ledger/observer 快照比较、迁移期告警与 cohort 投影中的用户文案字段。cohort 分组 UI
+  本轮不接入，现有公共候选继续投影具体可展示实体。
+- 真实弃牌洗回时，ledger 旧 cohort 尚未出现身份转成 detached `suspendedKnownCards` 展示
+  实体；原玩家/mark 暗实体原地匿名化并保留物理位置，suspended 不占物理槽。
+- 同 ID 再次出现时恢复 suspended 身份并消费对应匿名槽；Room 最终分区断言要求 cohort 身份
+  恰好存在于 `unlocatedIdentities` 或 `suspendedKnownCards`。
+- 初次洗牌统一识别两种协议形态：弃牌堆数量为 `0`，或弃牌堆数量等于整副卡池身份数。
+  两者都不暂停身份、不滚动 generation；全量弃牌形态仍正常重建匿名物理牌堆。
+- 玩家/mark 的通用身份交换继续保留；它仍服务非牌堆候选和 suspended 恢复，不属于迁移
+  兼容残留。
 
 ---
 
-## 8. Phase 1 观测契约
+## 8. Phase 1 观测契约（历史归档）
+
+本章描述已删除 observer 的历史采集契约，仅用于解释 Phase 2 裁决，不是当前测试或运行时
+入口。
 
 真实回放没有 oracle。只能记录后续协议证实的下界，并为每个判断建立 belief epoch。
 
@@ -935,7 +950,7 @@ Phase 3 闸门随后通过，Phase 4 已在独立任务中完成；当前状态�
 
 ---
 
-## 10. 下一步
+## 10. 实施记录
 
 已完成：
 
@@ -982,12 +997,19 @@ Phase 3 首个双写切片已完成：
 Phase 4 洗牌身份权威切换已完成：
 
 1. ~~由 ledger 未决身份集合取代 `remainingPileIdentityIDs` 与 CardCounter 分类。~~
-2. ~~删除 detached identity、洗牌专用 suspended 身份和玩家/mark 替身校验。~~
+2. ~~删除旧本地分类驱动的 detached/suspended 创建和玩家/mark 替身校验。~~
 3. ~~将暗区正 ID 实体原地匿名化，并保留位置、候选与 mark 账本引用。~~
 4. ~~保留 ledger 已知牌堆身份和牌顶/牌底公开明牌。~~
 5. ~~覆盖连续洗牌、完整 Controller 双写、身份守恒与遍历基线回归。~~
 
-### 10.1 Phase 3 首个迁移切片（已完成）
+Phase 6 最终清理已完成：
+
+1. ~~删除 observer、belief epoch、控制台报告入口、双写比较和 ledger 开关。~~
+2. ~~以 cohort 权威恢复 suspended 展示投影，并增加 Room 最终身份分区断言。~~
+3. ~~裁决不接入 cohort 分组 UI，删除生产快照中的用户文案。~~
+4. ~~覆盖空弃牌与全量弃牌两种初洗协议，均不暂停身份或滚动 generation。~~
+
+### 10.1 Phase 3 首个迁移切片（历史状态，已完成）
 
 生产 `PileIdentityLedger` 由 `Room` 持有：
 
@@ -1008,7 +1030,7 @@ interface PileIdentityCohort {
    牌堆暗槽数量的集合关系，不复制 `Card` 实体。
 4. 物理牌堆数量只读 `Zone`：正式目标不变量为
    `sum(cohort.remainingPileCount) === hiddenPileSlotCount`，已知牌堆明牌单独由实体表示。
-5. DEV 下比较生产账本与现有 observer 快照；差异只告警，不影响当前权威路径或 UI。
+5. DEV 下比较生产账本与当时 observer 快照；该迁移比较已在 Phase 6 删除。
 6. 不修改 `shufflePile()` 分类读取、不删除正 ID 暗槽、不新增 cohort UI、不改变玩家/mark。
 
 已实现的原子 API：
@@ -1025,7 +1047,7 @@ mergeAll(reason)
 rotateFromDiscard(cardIDs, reason)
 assertConsistency(pileCount, context)
 getSnapshot()
-setEnabled(enabled)
+setEnabled(enabled) // Phase 6 已删除
 ```
 
 协议适配不为 B15 建立 SpellID 白名单；匿名任意位置获取先合并为全局未决，再扣对应暗槽。
@@ -1041,8 +1063,8 @@ B6 走匿名随机插入并按需合并；B14 在无法证明范围仍位于单�
 | Phase 5（已完成） | ~~`materializeExistingIdentityAtTarget()` 的 `materialize:displacedHiddenPublicIdentity` 名额转交~~    | 已删除牌堆专用 displaced/suspended 交换    |
 | Phase 5（已完成） | ~~`RoomMovement.resolveKnownMoveCards()` 接受正 ID 暗公共目标与失败后回塞目标~~                        | known 端点只消费匿名槽或来源中的同 ID 实体 |
 
-`releaseUnknownPlaceholderToOutside()`、`suspendedKnownCards` 和玩家/mark 身份交换暂时保留；
-它们还服务非牌堆候选，不能随牌堆迁移一并删除。
+`releaseUnknownPlaceholderToOutside()`、`suspendedKnownCards` 和玩家/mark 身份交换继续保留；
+它们既服务非牌堆候选，也承担 Phase 6 的旧 cohort 身份展示与再次出现恢复，不能删除。
 
 ### 10.3 Phase 3 闸门（已通过）
 
@@ -1195,10 +1217,22 @@ interop、特殊牌堆获取、身份守恒和遍历基线。玩家/mark 的通�
 `pnpm typecheck:tracker`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm build:prod` 与
 `serena memories check` 全部通过。
 
-### 10.9 下一阶段：Phase 6
+### 10.9 Phase 6 最终兼容清理与 UI 裁决（已完成）
 
-Phase 6 继续审计迁移期剩余兼容、诊断和 observer 开关，并单独裁决 cohort 分组 UI。当前
-冻结，需以独立任务实施。
+Phase 6 删除了 `beliefEpochObserver`、`pileIdentityModelComparison`、控制台报告入口、
+迁移期双写比较、固定统计 schema 和 ledger 开关。`PileIdentityLedger` 现在是不可关闭的生产
+身份权威，snapshot 只提供结构化 cohort 数据，不再携带 UI 文案；cohort 分组 UI 本轮不接入。
+
+真实弃牌洗回会读取旧 ledger cohort，把尚未出现身份转成 detached suspended 展示实体。
+实体只负责沿用现有公共候选界面展示，原玩家/mark 暗实体保持物理槽并原地匿名化；同 ID
+再次出现时恢复 suspended 身份并消费对应匿名槽。Room/ledger 事务后会断言每个 cohort 身份
+恰好由 `unlocatedIdentities` 或 `suspendedKnownCards` 承载。
+
+初次洗牌按实测协议统一为两种形态：弃牌堆数量为 `0`，或弃牌堆数量等于整副卡池身份数。
+两者都不关闭 generation 0、不创建 suspended；全量弃牌形态仍把实体洗回并重建匿名牌堆。
+
+2026-08-01 最终 tracker 回归为 48 个文件、415 项通过；完整格式、类型、lint、构建与
+Serena 对齐结果见本次提交记录。
 
 ---
 

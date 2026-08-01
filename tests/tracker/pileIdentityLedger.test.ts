@@ -1,31 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { PileIdentityLedger, type PileIdentityLedgerMove } from '@/tracker/PileIdentityLedger'
-import { PileIdentityModelComparison } from '@/tracker/observer/pileIdentityModelComparison'
 
 type SharedMove = Omit<PileIdentityLedgerMove, 'discardCountAfter'>
 
 function applyMove(ledger: PileIdentityLedger, move: SharedMove, discardCountAfter = 0): void {
   ledger.applyMove({ ...move, discardCountAfter })
   expect(ledger.assertConsistency(move.pileCountAfter, move.eventType)).toEqual([])
-}
-
-function applyAndCompare(
-  ledger: PileIdentityLedger,
-  comparison: PileIdentityModelComparison,
-  move: SharedMove,
-  discardCountAfter = 0
-): void {
-  applyMove(ledger, move, discardCountAfter)
-  comparison.applyMove(
-    {
-      ...move,
-      cardIDs: [...move.cardIDs]
-    },
-    [],
-    discardCountAfter
-  )
-  expect(ledger.getSnapshot().cohort).toEqual(comparison.getReport().snapshot.cohort)
 }
 
 function createTwoCohortLedger(): PileIdentityLedger {
@@ -53,33 +34,47 @@ function createTwoCohortLedger(): PileIdentityLedger {
 }
 
 describe('PileIdentityLedger', () => {
-  it('可独立关闭而不建立或推进影子账本', () => {
-    const ledger = new PileIdentityLedger({ enabled: false })
-    ledger.initialize([1, 2, 3])
-    ledger.applyMove({
-      eventType: 'drawUnknown',
-      fromZone: 1,
-      toZone: 5,
+  it('开局整副牌暂存弃牌堆时恢复 generation 0 而不滚动世代', () => {
+    const ledger = new PileIdentityLedger()
+    ledger.initialize([1, 2, 3, 4])
+
+    applyMove(
+      ledger,
+      {
+        eventType: 'discardKnown',
+        fromZone: 1,
+        toZone: 2,
+        cardIDs: [1, 2, 3, 4],
+        cardCount: 4,
+        pileCountAfter: 0
+      },
+      4
+    )
+    applyMove(ledger, {
+      eventType: 'shuffleDiscardIntoPile',
+      fromZone: 2,
+      toZone: 9,
       cardIDs: [],
-      cardCount: 1,
-      fromPosition: POSITION_TOP,
-      pileCountAfter: 2,
-      discardCountAfter: 0
+      cardCount: 4,
+      pileCountAfter: 4
     })
 
-    expect(ledger.getSnapshot()).toMatchObject({
-      revision: 0,
-      hiddenPileSlotCount: 0,
-      accountedPileCount: 0,
-      cohort: { groups: [] }
+    expect(ledger.getSnapshot().cohort).toMatchObject({
+      generation: 0,
+      groups: [
+        {
+          generation: 0,
+          kind: 'all-in-pile',
+          cardIDs: [1, 2, 3, 4],
+          remainingPileCount: 4
+        }
+      ]
     })
   })
 
-  it('与现有 cohort observer 在完整双写序列中保持一致', () => {
+  it('完整协议序列保持 cohort 基数与身份分区守恒', () => {
     const ledger = new PileIdentityLedger()
-    const comparison = new PileIdentityModelComparison()
     ledger.initialize([1, 2, 3, 4, 5, 6])
-    comparison.initialize([1, 2, 3, 4, 5, 6])
 
     const events: { move: SharedMove; discardCountAfter?: number }[] = [
       {
@@ -201,7 +196,42 @@ describe('PileIdentityLedger', () => {
     ]
 
     events.forEach(({ move, discardCountAfter = 0 }) => {
-      applyAndCompare(ledger, comparison, move, discardCountAfter)
+      applyMove(ledger, move, discardCountAfter)
+    })
+
+    expect(ledger.getSnapshot()).toMatchObject({
+      revision: events.length + 1,
+      knownPileIdentityIDs: [7],
+      hiddenPileSlotCount: 4,
+      accountedPileCount: 5,
+      cohort: {
+        generation: 1,
+        groups: [
+          {
+            generation: 1,
+            kind: 'partial',
+            cardIDs: [1, 2, 4, 5, 6, 8],
+            remainingPileCount: 4
+          }
+        ]
+      }
+    })
+  })
+
+  it('正式目标态允许 cohort 身份由未定位池或 suspended 展示实体承载', () => {
+    const ledger = new PileIdentityLedger()
+    ledger.initialize([1, 2, 3])
+
+    expect(
+      ledger.assertConsistency(3, 'test:target-partition', {
+        deckIdentityIDs: new Set([1, 2, 3]),
+        unlocatedIdentityIDs: new Set([1]),
+        suspendedIdentityIDs: new Set([2])
+      })
+    ).toContainEqual({
+      context: 'test:target-partition',
+      reason: 'cohort-identity-missing-from-room-partition',
+      cardID: 3
     })
   })
 
@@ -238,11 +268,9 @@ describe('PileIdentityLedger', () => {
 
   it('常规匿名摸牌分别扣除牌顶明牌身份与暗槽', () => {
     const ledger = new PileIdentityLedger()
-    const comparison = new PileIdentityModelComparison()
     ledger.initialize([1])
-    comparison.initialize([1])
 
-    applyAndCompare(ledger, comparison, {
+    applyMove(ledger, {
       eventType: 'moveKnown',
       fromZone: 0,
       toZone: 1,
@@ -253,7 +281,7 @@ describe('PileIdentityLedger', () => {
       pileCountBefore: 1,
       pileCountAfter: 2
     })
-    applyAndCompare(ledger, comparison, {
+    applyMove(ledger, {
       eventType: 'drawUnknown',
       fromZone: 1,
       toZone: 5,
@@ -277,8 +305,7 @@ describe('PileIdentityLedger', () => {
         generation: 0,
         kind: 'none-in-pile',
         cardIDs: [1],
-        remainingPileCount: 0,
-        label: '这 1 张都不在牌堆'
+        remainingPileCount: 0
       }
     ])
   })
@@ -344,8 +371,7 @@ describe('PileIdentityLedger', () => {
         generation: 0,
         kind: 'all-in-pile',
         cardIDs: [1, 2, 3, 4],
-        remainingPileCount: 4,
-        label: '这 4 张都在牌堆'
+        remainingPileCount: 4
       }
     ])
   })
@@ -446,19 +472,16 @@ describe('PileIdentityLedger', () => {
         generation: 0,
         kind: 'partial',
         cardIDs: [1, 2, 3, 4],
-        remainingPileCount: 2,
-        label: '这 4 张里有 2 张在牌堆'
+        remainingPileCount: 2
       }
     ])
   })
 
   it('B15 释放非牌顶已知身份，延迟手牌展示不再触发牌数 reconcile', () => {
     const ledger = new PileIdentityLedger()
-    const comparison = new PileIdentityModelComparison()
     ledger.initialize([1, 2, 3, 4])
-    comparison.initialize([1, 2, 3, 4])
 
-    applyAndCompare(ledger, comparison, {
+    applyMove(ledger, {
       eventType: 'showCards',
       fromZone: 1,
       toZone: 1,
@@ -468,7 +491,7 @@ describe('PileIdentityLedger', () => {
       pileCountBefore: 4,
       pileCountAfter: 4
     })
-    applyAndCompare(ledger, comparison, {
+    applyMove(ledger, {
       eventType: 'moveUnknown',
       fromZone: 1,
       toZone: 5,
@@ -492,12 +515,11 @@ describe('PileIdentityLedger', () => {
         generation: 0,
         kind: 'partial',
         cardIDs: [2, 3, 4],
-        remainingPileCount: 2,
-        label: '这 3 张里有 2 张在牌堆'
+        remainingPileCount: 2
       }
     ])
 
-    applyAndCompare(ledger, comparison, {
+    applyMove(ledger, {
       eventType: 'discardKnown',
       fromZone: 5,
       toZone: 2,
@@ -512,12 +534,8 @@ describe('PileIdentityLedger', () => {
         generation: 0,
         kind: 'all-in-pile',
         cardIDs: [3, 4],
-        remainingPileCount: 2,
-        label: '这 2 张都在牌堆'
+        remainingPileCount: 2
       }
-    ])
-    expect(comparison.getReport().degradations.map(({ reason }) => reason)).toEqual([
-      'anonymous-pile-draw'
     ])
   })
 
@@ -557,15 +575,13 @@ describe('PileIdentityLedger', () => {
         generation: 0,
         kind: 'partial',
         cardIDs: [1, 3],
-        remainingPileCount: 1,
-        label: '这 2 张里有 1 张在牌堆'
+        remainingPileCount: 1
       },
       {
         generation: 0,
         kind: 'all-in-pile',
         cardIDs: [4],
-        remainingPileCount: 1,
-        label: '这 1 张都在牌堆'
+        remainingPileCount: 1
       }
     ])
   })
@@ -595,10 +611,8 @@ describe('PileIdentityLedger', () => {
     expect(singleLedger.getSnapshot().cohort.groups[0].remainingPileCount).toBe(2)
 
     const ledger = new PileIdentityLedger()
-    const comparison = new PileIdentityModelComparison()
     ledger.initialize([1, 2, 3])
-    comparison.initialize([1, 2, 3])
-    applyAndCompare(ledger, comparison, {
+    applyMove(ledger, {
       eventType: 'drawUnknown',
       fromZone: 1,
       toZone: 5,
@@ -607,7 +621,7 @@ describe('PileIdentityLedger', () => {
       fromPosition: POSITION_TOP,
       pileCountAfter: 2
     })
-    applyAndCompare(ledger, comparison, {
+    applyMove(ledger, {
       eventType: 'moveKnown',
       fromZone: 0,
       toZone: 1,
@@ -616,7 +630,7 @@ describe('PileIdentityLedger', () => {
       toPosition: POSITION_TOP,
       pileCountAfter: 3
     })
-    applyAndCompare(ledger, comparison, {
+    applyMove(ledger, {
       eventType: 'moveUnknown',
       fromZone: 1,
       toZone: 5,
@@ -632,11 +646,6 @@ describe('PileIdentityLedger', () => {
     expect(ledger.getSnapshot().cohort.groups[0]).toMatchObject({
       cardIDs: [1, 2, 3, 4],
       remainingPileCount: 2
-    })
-    expect(comparison.getReport().degradations.at(-1)).toMatchObject({
-      reason: 'anonymous-top-range-gain',
-      boundaryRisk: true,
-      boundaryDegraded: true
     })
   })
 
@@ -659,8 +668,7 @@ describe('PileIdentityLedger', () => {
         generation: 0,
         kind: 'none-in-pile',
         cardIDs: [2, 3, 4],
-        remainingPileCount: 0,
-        label: '这 3 张都不在牌堆'
+        remainingPileCount: 0
       }
     ])
     expect(ledger.getUnresolvedIdentityIDs()).toEqual([2, 3, 4])
