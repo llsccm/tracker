@@ -528,8 +528,8 @@ export class Room {
    * 把手气卡回牌堆等路径上的已定位正 ID 槽真正匿名化：
    * 实体保留在牌堆位置，身份回到 unlocatedIdentities，供后续揭示时再物化。
    *
-   * 这是「解绑身份」的唯一原语。materialize、materializeExistingIdentityAtTarget、
-   * releaseUnknownPlaceholderToOutside 与洗牌路径全部经由此处，因此身份分区守恒
+   * 这是「解绑身份」的唯一原语。releaseUnknownPlaceholderToOutside、手气卡匿名化与
+   * 洗牌路径全部经由此处，因此身份分区守恒
    * （一个 deckIdentity 必须恰好处于 cardIndex 或 unlocatedIdentities 之一）
    * 只需在这里断言一次。
    *
@@ -670,9 +670,11 @@ export class Room {
   }
 
   /**
-   * 将真实身份绑定到匿名槽或正 ID 暗槽，并同步身份守恒账本与查询索引。
-   * 已定位身份命中玩家暗槽时，仅允许阶段 1 的旧式暗手牌 interop 纠正槽位；
-   * 未定位身份命中公共区正 ID 暗槽时，会在同一物理实体上释放旧身份并物化新身份。
+   * 将真实身份绑定到匿名物理槽，并同步身份守恒账本与查询索引。
+   *
+   * 公共区正 ID 实体只能证明它自身的身份，不能作为其它 CardID 的可替换物理代表。
+   * 已定位身份命中玩家暗槽时，仍保留旧式暗手牌/mark interop；outside 或 suspended
+   * 身份则可占用匿名公共槽重新进入物理区域。
    */
   materialize(cardID: CardID, target: Card | null = null): Card | null {
     const normalizedCardID = Number(cardID)
@@ -680,24 +682,24 @@ export class Room {
 
     const existing = this.cardIndex.get(normalizedCardID)
     if (existing) {
-      // 洗牌后牌顶可能是 reset() 过的正 ID 暗槽。它与匿名槽一样代表一个可消费的
-      // 物理牌堆位置；明摸已有暂停身份时必须占据该槽，不能只移动身份而保留牌堆张数。
-      if (target && target !== existing && target.isKnown !== true) {
+      // target 只有在匿名时才可承接已有身份。若 target 是其它正 ID，即使其牌面未公开，
+      // 也不能用本次揭示覆盖该身份；调用方应保留原端点并走诊断/兜底路径。
+      if (target && target !== existing && isAnonymous(target)) {
         this.materializeExistingIdentityAtTarget(existing, target)
       }
 
       existing.confirmKnown()
+      // moveCards 会在 known 批次末尾再次调用恢复，直接公共揭示则不会；在物化原语内
+      // 收口可确保 suspended 集合不会残留已重新出现的身份，重复恢复是幂等的。
+      this.resumeSuspendedKnownCard(existing)
       return existing
     }
 
-    if (!target || target.isKnown === true) return null
+    // 未定位身份只能物化到没有真实身份的物理槽。正 ID 暗公共实体已不再是牌堆身份权威，
+    // 但也不能被另一个身份覆盖；这条门槛把 Phase 4 的匿名洗牌结果固化为通用 known 契约。
+    if (!target || !isAnonymous(target)) return null
 
     const wasDeckIdentity = this.deckIdentities.has(normalizedCardID)
-    // 只有初始牌组中尚未定位的身份才能占用洗牌后的正 ID 暗槽。
-    // 牌组外首次出现的技能生成牌仍走 createExternal 兜底，不能凭一个 pile 来源字段
-    // 挤走已有牌组身份；部分技能/测试会用 pile 作为动画来源但并不消耗真实牌堆槽。
-    if (!isAnonymous(target) && !wasDeckIdentity) return null
-
     // 游戏外首次出现的合法正 ID 不在初始牌组中，发现时扩展身份全集。
     if (!wasDeckIdentity) {
       this.deckIdentities.add(normalizedCardID)
@@ -705,28 +707,6 @@ export class Room {
     }
 
     if (!this.unlocatedIdentities.has(normalizedCardID)) return null
-
-    if (!isAnonymous(target)) {
-      // 正 ID 暗槽上的身份只是本地洗牌后随机保留的内部绑定，不代表该身份确定处于此槽。
-      // 当另一个 unlocated 身份被协议明确揭示在这里时，两者应交换“已定位/未定位”状态：
-      // 旧身份退回 unlocated，新身份复用同一个物理实体。若把旧身份转为 suspended，
-      // 每次明摸都会凭本地随机牌序制造新的场上候选（例如 160 挤出 146）。
-      if (!this.findPublicZoneEntry(target)) return null
-
-      this.removeCardsFromConstraintGroups([target])
-      const displacedIdentityID = this.anonymizeLocatedIdentity(
-        target,
-        'materialize:replaceHiddenPublicIdentity'
-      )
-      if (displacedIdentityID === null) return null
-
-      trackerLogger.debug('未定位身份复用正 ID 暗公共槽', {
-        cardID: normalizedCardID,
-        displacedIdentityID,
-        targetEntityID: target.entityID,
-        targetLocation: target.location
-      })
-    }
 
     target.materializeIdentity(normalizedCardID)
     target.confirmKnown()
@@ -751,14 +731,9 @@ export class Room {
     position: PublicPosition
   ): Card[] {
     const targets = this.getPublicEndpointCards(zoneID, cardIDs.length, position)
-    const cardIDSet = new Set(cardIDs.map(Number))
-    // 与 moveCards 的公共来源解析保持一致：洗牌后的正 ID 暗槽同样是可消费端点，
-    // 但不能让本批明确身份互相充当目标，否则会把同批后一张错误转为 suspended。
-    const availableTargets = targets.filter(
-      (card) =>
-        isAnonymous(card) ||
-        (card.id > 0 && card.isKnown !== true && !cardIDSet.has(Number(card.id)))
-    )
+    // 端点中的同 ID 实体由 existing 分支直接确认；其它身份只能占用匿名槽。
+    // 不跳过正 ID 暗端点去拿更深处匿名槽，否则会把协议端点顺序改写成本地选择。
+    const availableTargets = targets.filter(isAnonymous)
 
     return cardIDs
       .map((cardID) => {
@@ -770,10 +745,15 @@ export class Room {
   }
 
   /**
-   * 阶段 1 兼容旧式“暗手牌借用真实 ID”模型。
-   * 将真实实体放入目标公共槽，并让被替换的匿名槽接管原玩家位置与候选。
+   * 将已有真实身份迁入匿名公共槽。
+   *
+   * 玩家暗手牌/mark 仍保留旧式正 ID interop：真实身份进入公共端点，匿名槽接管原玩家
+   * 位置、候选与 mark 账本引用。outside/suspended 身份则直接替换匿名端点，匿名槽退出
+   * 物理区域；这里不再支持任何正 ID 暗公共实体的 displaced/suspended 名额转交。
    */
   private materializeExistingIdentityAtTarget(existing: Card, target: Card): void {
+    if (!isAnonymous(target)) return
+
     if (existing.location === 'player' && existing.isKnown !== true) {
       const oldSubZone = existing.subZone ?? 'hand'
       const oldSeats = Array.from(existing.seats, Number)
@@ -815,39 +795,18 @@ export class Room {
       return
     }
 
-    // 已知玩家实体（isKnown===true，未命中上面的暗手牌分支）或其它非 outside/suspended
-    // 位置命中此处：此时无 interop 可做，直接返回。注意调用方（resolveKnownMoveCards /
-    // materializeAtPublicEndpoint）已通过 shift 消费了传入的匿名 target，本分支不会接管它，
-    // 该匿名槽会被“浪费”一格；若下游出现匿名目标提前耗尽，应从这里的空操作路径排查。
+    // 已知玩家实体或其它仍有确定物理位置的身份不能被公共揭示强行搬走；调用方按协议
+    // 顺序保留本次匿名端点名额，后续 known 移动负责用来源占位修正陈旧位置。
     if (existing.location !== 'outside' && existing.location !== 'suspended') return
 
     const targetZoneEntry = this.findPublicZoneEntry(target)
     if (!targetZoneEntry) return
 
     const [targetZoneID, targetZone] = targetZoneEntry
-    const transfersSuspendedRole =
-      existing.location === 'suspended' ||
-      existing.suspended === true ||
-      this.suspendedKnownCards.has(existing)
-    const displacedHiddenIdentity = target.id > 0 && target.isKnown !== true
+    // existing 接管匿名槽的物理位置；target 没有真实身份，也不需要继承 suspended 角色。
+    // materialize() 随后恢复 existing 的 suspended 集合状态，使身份与物理槽同时收敛。
     existing.moveToPublicZone(targetZoneID)
     targetZone.replaceCard(target, existing)
-    if (displacedHiddenIdentity && transfersSuspendedRole) {
-      // suspended 身份从牌堆再次出现，说明原先分配给它的“场外暗身份名额”仍需由
-      // 被挤出的牌堆暗身份承接。这里转移 suspended 角色，随后调用方会恢复 existing，
-      // 因而活动 suspended 总数保持不变。
-      target.confirmKnown()
-      this.constraints.suspendKnownCard(target, 'materialize:displacedHiddenPublicIdentity')
-      return
-    }
-
-    if (displacedHiddenIdentity) {
-      // outside 的已有身份没有 suspended 名额需要转移。被挤身份只需回到 unlocated；
-      // 直接以正 ID 移出会让 cardIndex 继续宣称它已定位，并在下次洗牌永久漏掉该身份。
-      this.releaseUnknownPlaceholderToOutside(target, 'materialize:displacedHiddenPublicIdentity')
-      return
-    }
-
     target.moveToPublicZone('outside')
   }
 

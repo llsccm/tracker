@@ -72,21 +72,24 @@ describe('阶段 1 匿名牌堆 spike', () => {
     expect(pile.cards).toHaveLength(3)
   })
 
-  it('未定位身份命中正 ID 暗牌顶时复用槽位并释放被挤身份', () => {
+  it('公共 known 不覆盖正 ID 暗牌顶，缺失实体走诊断兜底', () => {
     const { room } = createTestRoom({
-      cardIDs: [1, 2, 3, 4],
-      seatIDs: [1],
-      materializeDeckIdentities: false
+      cardIDs: [1, 2, 3, 4, 5],
+      seatIDs: [1]
     })
     const pile = room.zones.get('pile')!
-    const hiddenTopCard = room.materialize(1, pile.cards.at(-1)!)!
+    const hiddenTopCard = pile.cards.at(-1)!
     const displacedIdentityID = hiddenTopCard.id
-    hiddenTopCard.reset()
+    const releasedSlot = room.cardIndex.get(4)!
+    room.anonymizeLocatedIdentity(releasedSlot, 'test:phase5-unlocated-source', {
+      preservePlacement: true
+    })
     const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
 
     try {
-      // 4 尚未建立实体，而牌顶已经是洗牌后隐藏的正 ID 1。明摸 4 应消费这个
-      // 物理牌堆槽，并把仅由本地随机牌序绑定的身份 1 退回未定位池。
+      // 这是 Phase 4 后生产流程不应再产生的兼容状态：牌顶仍承载正 ID 1，但牌面未公开。
+      // Phase 5 必须拒绝用协议身份 4 覆盖它；由于端点没有匿名槽，known 路径只能留下
+      // 可观测诊断并补建身份 4，不能继续伪造“1 只是可替换的本地代表”。
       room.moveCards([4], 'player', {
         seatID: 1,
         fromZone: 'pile',
@@ -94,7 +97,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
         sourceEvent: { type: 'stage1:draw-unlocated-from-positive-hidden-top' }
       })
 
-      expect(infoSpy).not.toHaveBeenCalledWith(
+      expect(infoSpy).toHaveBeenCalledWith(
         'known 路径实体缺口，将 createExternal',
         expect.anything()
       )
@@ -102,15 +105,18 @@ describe('阶段 1 匿名牌堆 spike', () => {
       infoSpy.mockRestore()
     }
 
-    const materializedCard = room.cardIndex.get(4)
-    expect(materializedCard).toBeTruthy()
-    expect(materializedCard).toBe(hiddenTopCard)
-    expect(materializedCard?.location).toBe('player')
-    expect(materializedCard?.isKnown).toBe(true)
-    expect(pile.cards).toHaveLength(3)
-    expect(room.cardIndex.has(displacedIdentityID)).toBe(false)
+    const fallbackCard = room.cardIndex.get(4)
+    expect(fallbackCard).toBeTruthy()
+    expect(fallbackCard).not.toBe(hiddenTopCard)
+    expect(fallbackCard?.location).toBe('player')
+    expect(fallbackCard?.isKnown).toBe(true)
+    expect(pile.cards).toHaveLength(5)
+    expect(pile.cards.at(-1)).toBe(hiddenTopCard)
+    expect(hiddenTopCard.id).toBe(displacedIdentityID)
+    expect(hiddenTopCard.isKnown).toBe(false)
+    expect(room.cardIndex.get(displacedIdentityID)).toBe(hiddenTopCard)
     expect(room.suspendedKnownCards.size).toBe(0)
-    expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3]))
+    expect(room.unlocatedIdentities).toEqual(new Set())
   })
 
   it('游戏外匿名手牌首次揭示时扩展并物化身份全集', () => {

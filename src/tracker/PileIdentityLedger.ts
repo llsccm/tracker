@@ -3,9 +3,16 @@ import type { CardID, PublicPosition } from './types'
 
 export type PileIdentityCohortKind = 'all-in-pile' | 'none-in-pile' | 'partial'
 
+/**
+ * cohort 只表达集合级基数事实，不把某个 CardID 绑定到某个匿名物理槽。
+ * 例如候选集合有 5 张、remainingPileCount 为 4，只能断言其中恰有 4 张仍在牌堆。
+ */
 export interface PileIdentityCohort {
+  /** 弃牌洗回时递增；同一 generation 的身份来自同一次牌堆世代。 */
   generation: number
+  /** 尚未被协议定位、仍参与该集合陈述的真实身份。 */
   candidateIdentityIDs: Set<CardID>
+  /** 候选集合中仍在牌堆暗槽里的身份数量。 */
   remainingPileCount: number
 }
 
@@ -25,6 +32,7 @@ export interface PileIdentityCohortSnapshot {
   flatCandidateWidth: number
 }
 
+/** 供 Room、DEV observer 与诊断逻辑消费的只读投影。 */
 export interface PileIdentityLedgerSnapshot {
   revision: number
   identityUniverseIDs: CardID[]
@@ -79,6 +87,7 @@ export interface PileIdentityLedgerOptions {
   onWarning?: PileIdentityLedgerWarningHandler
 }
 
+/** commit() 的回滚快照；所有可变集合必须深拷贝。 */
 interface PileIdentityLedgerState {
   revision: number
   generation: number
@@ -115,6 +124,9 @@ function cloneCohort(cohort: PileIdentityCohort): PileIdentityCohort {
   }
 }
 
+/**
+ * snapshot 在生成时已排序并规范化，因此稳定序列化可用于 DEV 双写一致性比较。
+ */
 export function arePileIdentityCohortSnapshotsEqual(
   left: PileIdentityCohortSnapshot,
   right: PileIdentityCohortSnapshot
@@ -125,14 +137,28 @@ export function arePileIdentityCohortSnapshotsEqual(
 /**
  * Production cohort ledger. It shadows the current authoritative card entities and never mutates them.
  */
+/**
+ * 牌堆身份账本维护“哪些真实身份仍未决”以及“每组中有几张仍在牌堆”。
+ *
+ * Room/Zone 负责匿名实体的数量、顺序和移动；本类不持有 Card 实体，也不尝试建立
+ * CardID 与匿名槽的一一映射。协议无法证明批次边界时，账本宁可合并 cohort，也不沿用
+ * 本地代表顺序制造精确信息。
+ */
 export class PileIdentityLedger {
   private revision = 0
+  // 每次弃牌洗回递增，用于保留仍可证明的牌底到牌顶批次顺序。
   private generation = 0
+  // 本局见过的全部合法真实身份；降级时从这里补回仍未定位的候选。
   private identityUniverse = new Set<CardID>()
+  // 已被协议定位到具体实体/区域的身份，knownPileIdentityIDs 也属于这一集合。
   private locatedIdentityIDs = new Set<CardID>()
+  // 协议明确仍在牌堆且身份可见的牌，例如已知牌顶或牌底。
   private knownPileIdentityIDs = new Set<CardID>()
+  // 弃牌区内身份明确的牌，洗牌时会形成新 generation 的牌底 cohort。
   private knownDiscardIdentityIDs = new Set<CardID>()
+  // 用于识别弃牌堆中无法枚举 CardID 的匿名槽；只保存最近一次协议计数。
   private previousDiscardCount = 0
+  // 数组顺序为牌底到牌顶；只有边界仍可证明时该顺序才有消费意义。
   private cohorts: PileIdentityCohort[] = []
   private enabled: boolean
   private readonly onWarning: PileIdentityLedgerWarningHandler
@@ -180,6 +206,8 @@ export class PileIdentityLedger {
       const cardIDs = normalizeIDs(move.cardIDs)
       const knownCount = cardIDs.length
       const protocolUnknownCount = Math.max(0, normalizeCount(move.cardCount) - knownCount)
+      // 常规摸牌的 CardIDs 可能为空，但 Room 已精确移走可见牌顶；Controller 用该字段把
+      // 已知边界身份从账本中同步消费，剩余数量才按匿名槽处理。
       const knownPileIdentityIDsConsumed =
         move.fromZone === 1 && cardIDs.length === 0
           ? normalizeIDs(move.knownPileIdentityIDsConsumed ?? [])
@@ -212,6 +240,7 @@ export class PileIdentityLedger {
 
       const staysInPile = move.fromZone === 1 && move.toZone === 1
       if (staysInPile) {
+        // 同区展示只把身份从未决 cohort 提升为已知牌堆身份，不消费物理牌堆数量。
         cardIDs.forEach((cardID) => this.revealIdentityInPileInternal(cardID))
         this.confirmVisiblePileIdentitiesInternal(move.visiblePileIdentityIDsAfter)
         this.reconcilePileCountInternal(move.pileCountAfter)
@@ -233,6 +262,8 @@ export class PileIdentityLedger {
             !isTopRangeGain &&
             (Number(move.moveType) === 18 || move.fromPosition === POSITION_RANDOM)
           if (isAnonymousArbitraryPileGain) {
+            // 任意位置匿名获取后，之前的已知边界可能已被绕过或混入未知手牌；只保留协议
+            // 明确仍可见的牌堆身份，其余身份重新进入全局未决集合。
             this.releaseKnownPileIdentitiesExceptInternal(move.visiblePileIdentityIDsAfter)
           }
           if (isTopRangeGain) {
@@ -245,6 +276,7 @@ export class PileIdentityLedger {
         }
       } else if (move.toZone === 1) {
         if (cardIDs.length > 0) {
+          // RANDOM 入堆会落入未知批次内部；即使本地 Zone 暂时追加到一端，也不能沿用该顺序。
           const randomInsertion =
             move.toPosition === POSITION_RANDOM ||
             (move.fromZone === 0 && Number(move.spellID) === 3694) ||
@@ -258,6 +290,7 @@ export class PileIdentityLedger {
         }
 
         if (protocolUnknownCount > 0) {
+          // 匿名回堆只增加物理数量，无法证明具体身份或插入边界，统一退化为单 cohort。
           this.degradeToSingleCohortInternal(move.pileCountAfter)
         }
       } else {
@@ -363,6 +396,8 @@ export class PileIdentityLedger {
   }
 
   getUnresolvedIdentityIDs(): CardID[] {
+    // remainingPileCount 为 0 的 cohort 仍然有价值：它表示这些身份确定不在牌堆，但尚未
+    // 展示到具体区域。洗牌物理层仍需匿名化承载这些未决身份的正 ID 暗实体。
     const identityIDs = new Set<CardID>()
     this.cohorts.forEach((cohort) => {
       cohort.candidateIdentityIDs.forEach((cardID) => identityIDs.add(cardID))
@@ -372,6 +407,7 @@ export class PileIdentityLedger {
 
   private applyShuffleInternal(pileCountAfter: number): void {
     const recycledIdentityIDs = normalizeIDs(Array.from(this.knownDiscardIdentityIDs))
+    // 协议只给弃牌总数；减去已知弃牌身份后，剩余部分是无法建立新精确 cohort 的匿名弃牌。
     const anonymousDiscardCount = Math.max(
       0,
       this.previousDiscardCount - recycledIdentityIDs.length
@@ -386,6 +422,7 @@ export class PileIdentityLedger {
     this.knownDiscardIdentityIDs.clear()
 
     if (anonymousDiscardCount > 0) {
+      // 匿名弃牌洗回后无法区分新旧世代边界，只保留“总共有多少暗身份在牌堆”。
       this.degradeToSingleCohortInternal(pileCountAfter)
       this.warn('anonymous-discard-shuffle', {
         anonymousDiscardCount,
@@ -402,6 +439,7 @@ export class PileIdentityLedger {
     if (normalizedCount === 0) return
 
     if (position === POSITION_RANDOM) {
+      // 任意位置消费无法确定命中了哪个连续批次，先合并再只扣总基数。
       this.degradeToSingleCohortInternal(
         Math.max(0, this.getAccountedPileCount() - normalizedCount)
       )
@@ -409,6 +447,7 @@ export class PileIdentityLedger {
     }
 
     let remaining = normalizedCount
+    // cohort 按牌底到牌顶存储：底摸正序消费，默认牌顶摸倒序消费。
     const indexes =
       position === POSITION_BOTTOM
         ? Array.from({ length: this.cohorts.length }, (_, index) => index)
@@ -434,6 +473,7 @@ export class PileIdentityLedger {
   private consumeAnonymousTopRangeInternal(count: number): void {
     const activeCohortCount = this.cohorts.filter((cohort) => cohort.remainingPileCount > 0).length
     if (activeCohortCount > 1) {
+      // 协议只说明“牌顶范围内获得”，未提供范围宽度；多个活动批次时无法证明范围未跨界。
       this.degradeToSingleCohortInternal(this.getAccountedPileCount())
     }
     this.consumeAnonymousInternal(count, POSITION_TOP)
@@ -453,6 +493,7 @@ export class PileIdentityLedger {
       return
     }
 
+    // 身份明确从牌堆离开：候选集合与“仍在牌堆数量”必须同时减少。
     if (cohort.remainingPileCount <= 0) {
       this.warn('revealed-pile-identity-from-empty-cohort', { cardID: normalizedCardID })
     } else {
@@ -473,6 +514,8 @@ export class PileIdentityLedger {
     const cohort = this.findIdentityCohort(normalizedCardID)
     if (!cohort) return
 
+    // partial cohort 中某个身份在牌堆外现身，只能删除该候选，不能断言在堆名额减少。
+    // 只有 all-in-pile 陈述被证伪时，才同步修正 remainingPileCount 并发出诊断。
     if (cohort.candidateIdentityIDs.size <= cohort.remainingPileCount) {
       cohort.remainingPileCount = Math.max(0, cohort.remainingPileCount - 1)
       this.warn('outside-reveal-from-all-in-cohort', { cardID: normalizedCardID })
@@ -490,6 +533,7 @@ export class PileIdentityLedger {
 
     const cohort = this.findIdentityCohort(normalizedCardID)
     if (cohort) {
+      // 从集合级暗身份提升为精确牌堆身份，总牌堆计数不变：cohort 基数减一，known 加一。
       if (cohort.remainingPileCount > 0) cohort.remainingPileCount -= 1
       else this.warn('pile-reveal-from-empty-cohort', { cardID: normalizedCardID })
       cohort.candidateIdentityIDs.delete(normalizedCardID)
@@ -514,11 +558,13 @@ export class PileIdentityLedger {
     }
 
     if (position === POSITION_RANDOM) {
+      // 已知身份虽可确定在牌堆，但随机插入位置会破坏所有已有 cohort 边界。
       identities.forEach((cardID) => this.prepareIdentityForPile(cardID))
       const merged = this.mergeAllCohortsInternal()
       identities.forEach((cardID) => merged.candidateIdentityIDs.add(cardID))
       merged.remainingPileCount += identities.length
     } else {
+      // 顶/底插入位置可证明，为每张身份建立精确 singleton cohort 并保持端点顺序。
       identities.forEach((cardID) => {
         this.prepareIdentityForPile(cardID)
         const cohort: PileIdentityCohort = {
@@ -539,6 +585,7 @@ export class PileIdentityLedger {
     const normalizedCount = normalizeCount(count)
     if (normalizedCount === 0) return
 
+    // 匿名插入无法指认回堆身份；合并边界后，从身份全集补齐所有仍未定位的可能身份。
     const merged = this.mergeAllCohortsInternal()
     this.addUnresolvedUniverseToCohort(merged)
     const targetCount = merged.remainingPileCount + normalizedCount
@@ -572,6 +619,8 @@ export class PileIdentityLedger {
     })
     if (released.length === 0) return
 
+    // 任意位置匿名获取使这些身份不再能被声明为“确定仍在牌堆”，但也没有证据说明它们
+    // 已经离开，因此回收到未决 cohort，并保持总在堆名额不变。
     const merged = this.mergeAllCohortsInternal()
     released.forEach((cardID) => merged.candidateIdentityIDs.add(cardID))
     merged.remainingPileCount += released.length
@@ -582,6 +631,7 @@ export class PileIdentityLedger {
     identities.forEach((cardID) => this.prepareIdentityForPile(cardID))
     this.generation += 1
     if (identities.length > 0) {
+      // 洗回弃牌位于剩余牌堆下方，因此新 generation 插入数组牌底端。
       this.cohorts.unshift({
         generation: this.generation,
         candidateIdentityIDs: new Set(identities),
@@ -594,6 +644,7 @@ export class PileIdentityLedger {
     const targetPileCount = normalizeCount(pileCountAfter)
     const targetHiddenCount = Math.max(0, targetPileCount - this.knownPileIdentityIDs.size)
     if (targetHiddenCount === this.getHiddenPileSlotCount()) return
+    // 协议物理张数优先；出现差异时丢弃批次边界，但不丢弃身份全集。
     this.degradeToSingleCohortInternal(targetPileCount)
   }
 
@@ -615,6 +666,7 @@ export class PileIdentityLedger {
   }
 
   private addUnresolvedUniverseToCohort(cohort: PileIdentityCohort): void {
+    // “未决”包含 remainingPileCount 为 0 的 cohort 成员；只排除已有具体位置或已知在堆身份。
     this.identityUniverse.forEach((cardID) => {
       if (this.locatedIdentityIDs.has(cardID) || this.knownPileIdentityIDs.has(cardID)) return
       cohort.candidateIdentityIDs.add(cardID)
@@ -622,6 +674,7 @@ export class PileIdentityLedger {
   }
 
   private mergeAllCohortsInternal(): PileIdentityCohort {
+    // 合并只丢失批次边界，候选身份并集与在堆名额总和必须保持守恒。
     const merged: PileIdentityCohort = {
       generation: this.generation,
       candidateIdentityIDs: new Set(),
@@ -638,6 +691,7 @@ export class PileIdentityLedger {
   private removeIdentityFromCohorts(cardID: CardID, wasInPile: boolean): void {
     const cohort = this.findIdentityCohort(cardID)
     if (!cohort) return
+    // 精确从牌堆取走会减少名额；从牌堆外定位仅在原陈述为 all-in-pile 时修正名额。
     if (wasInPile && cohort.remainingPileCount > 0) cohort.remainingPileCount -= 1
     if (!wasInPile && cohort.candidateIdentityIDs.size <= cohort.remainingPileCount) {
       cohort.remainingPileCount = Math.max(0, cohort.remainingPileCount - 1)
@@ -695,6 +749,7 @@ export class PileIdentityLedger {
         return
       }
 
+      // 扁平候选宽度只统计 partial 组；确定在堆/堆外的组无需逐卡作为“可能”展示。
       flatCandidateWidth += cardIDs.length
     })
 
@@ -714,6 +769,7 @@ export class PileIdentityLedger {
     const issues: PileIdentityConsistencyIssue[] = []
     const seen = new Set<CardID>()
 
+    // cohort 身份必须互斥，且不能同时出现在任何精确位置集合中。
     this.cohorts.forEach((cohort) => {
       if (
         cohort.remainingPileCount < 0 ||
@@ -754,6 +810,7 @@ export class PileIdentityLedger {
   }
 
   private commit(reason: string, update: () => void): void {
+    // 对外原子操作共享事务边界；规则实现抛错时恢复集合和基数，避免留下半更新状态。
     const previous = this.captureState()
     try {
       update()

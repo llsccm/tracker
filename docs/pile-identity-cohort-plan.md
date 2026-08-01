@@ -1,11 +1,11 @@
 # 牌堆身份批次模型当前计划
 
-> 状态：**Phase 0/0.5 完成；Phase 1 保留机会性观测；Phase 2–4 已完成；Phase 5–6 冻结**
+> 状态：**Phase 0/0.5 完成；Phase 1 保留机会性观测；Phase 2–5 已完成；Phase 6 冻结**
 > 日期：2026-08-01
 > 文档角色：当前有效的设计契约与实施入口
 > 适用范围：`tests/tracker/` 纯模型 + `src/tracker/observer/` 只读 observer（DEV 限定）+
 > `src/tracker/PileIdentityLedger.ts` 生产身份账本；`Room.shufflePile()` 的身份判断已切换为
-> cohort 权威，通用 known 物化与 UI 仍沿用既有路径
+> cohort 权威，公共 known 物化已切换为匿名槽/同 ID 端点契约，UI 仍沿用既有路径
 > 讨论归档：[`pile-generation-identity-pool-plan.md`](pile-generation-identity-pool-plan.md)
 
 ---
@@ -20,15 +20,17 @@ active pool = 确定仍在牌堆：NO-GO，语义错误
 三模型只读 observer：已实现并保留（DEV 限定），后续按机会采样
 匿名任意位置牌堆获取：只在身份不可筛方面类似暗摸；不沿用牌顶边界，身份进入全局未决
 匿名获取导致的批次合并：正常身份失效，不计批次风险或模型降级
-生产身份账本迁移：Phase 3 双写与 Phase 4 洗牌身份权威切换均已完成
-cohort 用户界面：Phase 4 不新增；内部先完成身份与物理槽解耦
-生产迁移 Phase 5–6：继续冻结，等待 known 物化与兼容路径清理任务
+生产身份账本迁移：Phase 3 双写、Phase 4 洗牌和 Phase 5 known 物化切换均已完成
+cohort 用户界面：Phase 5 不新增；内部身份与物理槽解耦已覆盖洗牌和公开揭示
+生产迁移 Phase 6：继续冻结，等待最终兼容清理与 UI 裁决
 ```
 
 当前生产洗牌以 `PileIdentityLedger` 的未决身份集合为身份权威，`Room.shufflePile()` 只负责
 物理槽、公开边界与区域对象的迁移。Phase 4 已删除 `remainingPileIdentityIDs` 分类、
 UNKNOWN/APPEARED 洗牌分类、detached identity、洗牌专用玩家/mark 替身及校验；
-`materialize()`、通用 known 揭示与 UI 尚未切换，非牌堆场景的玩家/mark suspended 语义保留。
+Phase 5 又将 `materialize()` 与公共 known 端点切换为“匿名槽或端点同 ID 实体”契约，删除
+正 ID 暗公共身份挤出与 suspended 名额转交。玩家/mark interop 和通用 suspended 语义保留，
+cohort UI 尚未切换。
 
 ---
 
@@ -529,12 +531,25 @@ Phase 3 完成时，`Room`、`shufflePile()`、`materialize()` 与 UI 仍以既�
 - ledger 明确仍在牌堆的身份和 `isKnown === true` 的牌顶/牌底公开边界继续保留正 ID。
 - 协议 `cardCount` 大于本地物理槽时继续告警，不为满足协议张数虚构实体。
 
-### Phase 5–6：known 物化切换与兼容清理
+### Phase 5：known 物化权威切换
+
+状态：**已完成（2026-08-01）**。
+
+- 未定位身份只能物化到匿名实体；其它正 ID 即使 `isKnown !== true` 也不能作为可替换代表。
+- 公共端点中的同 ID 实体可直接确认，既有 outside/suspended 身份可接管匿名端点并恢复追踪。
+- 删除 `materialize:replaceHiddenPublicIdentity` 和
+  `materialize:displacedHiddenPublicIdentity` 两类牌堆专用身份交换。
+- `resolveKnownMoveCards()` 只检查本次协议 `cardCount` 覆盖的端点范围，不再扫描整个公共区
+  寻找更深处匿名槽；B13 指定身份仍可通过来源区中的同 ID 实体精确命中。
+- 玩家暗手牌/mark 的旧式正 ID interop、`releaseUnknownPlaceholderToOutside()` 与通用
+  `suspendedKnownCards` 继续保留。
+
+### Phase 6：最终兼容清理与 UI 裁决
 
 状态：**冻结**。
 
-Phase 5 切换 `materialize()` 与通用 known 揭示的牌堆身份处理；Phase 6 再删除剩余正 ID 暗公共
-槽兼容路径并评估 cohort UI。两阶段均需独立任务、回归与提交。
+Phase 6 审计剩余正 ID 暗公共假设、迁移期诊断与 observer 开关，并决定是否接入 cohort 分组
+UI；玩家/mark 的通用身份交换不因牌堆迁移自动删除。
 
 ---
 
@@ -1018,13 +1033,13 @@ B6 走匿名随机插入并按需合并；B14 在无法证明范围仍位于单�
 
 ### 10.2 已删除与后续可删除路径
 
-| 阶段              | 当前符号/分支                                                                                          | 目标处理                                              |
-| ----------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| Phase 4（已完成） | ~~`Room.shufflePile()` 的 `remainingPileIdentityIDs`、UNKNOWN/APPEARED 分类与 detached identity 创建~~ | 已改由 cohort 事务滚动                                |
-| Phase 4（已完成） | ~~`preserveUnknownPlaceholderForShuffle()` 与洗牌手牌替身校验~~                                        | 已删除洗牌专用替身与校验                              |
-| Phase 5           | `Room.materialize()` 的 `materialize:replaceHiddenPublicIdentity`                                      | 牌堆 known 只物化匿名槽，不再挤出代表身份             |
-| Phase 5           | `materializeExistingIdentityAtTarget()` 的 `materialize:displacedHiddenPublicIdentity` 名额转交        | 删除牌堆专用 displaced/suspended 交换                 |
-| Phase 5           | `RoomMovement.resolveKnownMoveCards()` 接受正 ID 暗公共目标与失败后回塞目标                            | 公共 known 端点只消费匿名槽或已在来源的同 ID 明确实体 |
+| 阶段              | 当前符号/分支                                                                                          | 目标处理                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| Phase 4（已完成） | ~~`Room.shufflePile()` 的 `remainingPileIdentityIDs`、UNKNOWN/APPEARED 分类与 detached identity 创建~~ | 已改由 cohort 事务滚动                     |
+| Phase 4（已完成） | ~~`preserveUnknownPlaceholderForShuffle()` 与洗牌手牌替身校验~~                                        | 已删除洗牌专用替身与校验                   |
+| Phase 5（已完成） | ~~`Room.materialize()` 的 `materialize:replaceHiddenPublicIdentity`~~                                  | known 只物化匿名槽，不再挤出代表身份       |
+| Phase 5（已完成） | ~~`materializeExistingIdentityAtTarget()` 的 `materialize:displacedHiddenPublicIdentity` 名额转交~~    | 已删除牌堆专用 displaced/suspended 交换    |
+| Phase 5（已完成） | ~~`RoomMovement.resolveKnownMoveCards()` 接受正 ID 暗公共目标与失败后回塞目标~~                        | known 端点只消费匿名槽或来源中的同 ID 实体 |
 
 `releaseUnknownPlaceholderToOutside()`、`suspendedKnownCards` 和玩家/mark 身份交换暂时保留；
 它们还服务非牌堆候选，不能随牌堆迁移一并删除。
@@ -1156,11 +1171,34 @@ Controller 完整双写、身份全集守恒和遍历基线。2026-08-01 验证�
 `pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm build:prod` 全部通过；洗牌场景 visited 为
 49，旧 `shufflePile:classify` 扫描已消失。
 
-### 10.8 下一阶段：Phase 5
+### 10.8 Phase 5 known 物化权威切换（已完成）
 
-Phase 5 将切换 `materialize()` 与通用 known 揭示的牌堆身份处理，删除牌堆专用
-`replaceHiddenPublicIdentity`、displaced/suspended 名额转交和正 ID 暗公共目标兼容。当前仍
-冻结，需以独立任务评估并提交；玩家/mark 的通用 suspended 语义不在删除范围。
+`Room.materialize()` 现在只允许未定位身份占用匿名物理槽；公共端点中已经存在同 ID 实体时
+直接确认，不再把其它正 ID 暗实体解释为可替换的本地代表。已有 outside/suspended 身份重新
+出现时接管匿名端点并直接恢复原身份，匿名槽退出公共区，不再继承 suspended 名额。
+
+`RoomMovement.resolveKnownMoveCards()` 的公共来源候选范围改为本次协议 `cardCount`，避免为
+寻找匿名槽穿透牌顶/牌底端点；指定 CardID 若已存在于来源区，仍按 B13 精确消费同 ID 实体。
+匿名端点按协议顺序分配后不再回塞，防止后续 CardID 错占前一张牌的物理端点。
+
+本阶段删除了：
+
+1. `materialize:replaceHiddenPublicIdentity` 的正 ID 暗公共身份挤出。
+2. `materialize:displacedHiddenPublicIdentity` 的 displaced/suspended 名额转交。
+3. 公共 known 扫描整个区域寻找匿名槽，以及正 ID 暗目标进入可物化候选集合的兼容逻辑。
+
+回归覆盖正 ID 暗端点拒绝覆盖、端点同 ID 确认、suspended 身份从匿名端点恢复、玩家/mark
+interop、特殊牌堆获取、身份守恒和遍历基线。玩家/mark 的通用 suspended 与占位置换语义
+仍保留，不属于本阶段删除范围。
+
+2026-08-01 验证结果：Prettier、`git diff --check`、`pnpm test:tracker`（51 个文件、471 项）、
+`pnpm typecheck:tracker`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm build:prod` 与
+`serena memories check` 全部通过。
+
+### 10.9 下一阶段：Phase 6
+
+Phase 6 继续审计迁移期剩余兼容、诊断和 observer 开关，并单独裁决 cohort 分组 UI。当前
+冻结，需以独立任务实施。
 
 ---
 
