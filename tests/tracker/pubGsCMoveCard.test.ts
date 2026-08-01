@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 
-const { syncTrackerMove } = vi.hoisted(() => ({
-  syncTrackerMove: vi.fn()
-}))
+const { applySpellEffect, handleGameFlowState, handleSpecialZones, syncTrackerMove } = vi.hoisted(
+  () => ({
+    applySpellEffect: vi.fn(),
+    handleGameFlowState: vi.fn(),
+    handleSpecialZones: vi.fn(() => ({ handled: false })),
+    syncTrackerMove: vi.fn()
+  })
+)
 
 vi.mock('../../src/tracker/runtime/browser', () => ({
   tracker: {
@@ -12,21 +17,24 @@ vi.mock('../../src/tracker/runtime/browser', () => ({
 }))
 
 vi.mock('../../src/handler/gameFlowState', () => ({
-  handleGameFlowState: vi.fn()
+  handleGameFlowState
 }))
 
 vi.mock('../../src/handler/specialZones', () => ({
-  handleSpecialZones: vi.fn(() => ({ handled: false }))
+  handleSpecialZones
 }))
 
 vi.mock('../../src/handler/spellEffects', () => ({
-  applySpellEffect: vi.fn()
+  applySpellEffect
 }))
 
 import { handleMoveCard } from '../../src/handler/PubGsCMoveCard'
 
 describe('PubGsCMoveCard', () => {
   beforeEach(() => {
+    applySpellEffect.mockClear()
+    handleGameFlowState.mockClear()
+    handleSpecialZones.mockClear()
     syncTrackerMove.mockClear()
   })
 
@@ -57,6 +65,9 @@ describe('PubGsCMoveCard', () => {
       FromPosition: POSITION_TOP,
       ToPosition: POSITION_RANDOM
     })
+    expect(handleSpecialZones).toHaveBeenCalledOnce()
+    expect(handleGameFlowState).toHaveBeenCalledOnce()
+    expect(applySpellEffect).toHaveBeenCalledOnce()
   })
 
   it('权变的牌堆同区展示将来源和目标都归一为牌顶', () => {

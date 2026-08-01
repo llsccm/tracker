@@ -229,23 +229,23 @@ POSITION_RANDOM  push(...)           实现落到牌顶，但语义是「随机�
 
 #### 5.3.2 事件枚举表
 
-| #   | 事件                 | 触发条件                                                                                                                         | 位置                                  | 批次影响                                                     | 建议规则                                        |
-| --- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------- |
-| B1  | 权变/观虚同区展示    | `From/ToZone=1`、`MoveType=21`、`SpellID ∈ {7011, 987, 988}`（`PubGsCMoveCard.js:11,70`）                                        | 两端归一为 TOP                        | 不移动卡牌，只揭示牌顶身份                                   | **保持边界**：从所属批次删身份并减基数          |
-| B2  | 天候牌顶三选一       | `SpellID=3903`（`MoveEventNormalizer.ts:257`、`runtime/moveEventHandlers.ts:141,416`）                                           | 牌顶三张中亮一张，位置不确定          | 揭示一个身份但不确定消费哪个槽                               | **保持边界**（同批次内），基数减 1              |
-| B3  | 浑天仪特殊底置       | `SpellID=3694`、`FromZone=0→1`、`MoveType=19`（`specialZones.js:16-27`）                                                         | 强制改写为 `POSITION_RANDOM`          | **破坏**：外部牌进入未知批次                                 | **合并批次**：合并全部批次为单一批次            |
-| B4  | 回魂牌随机入堆       | `ToZone=1`、`CardID ∈ {4400, 4401}`（`PubGsCMoveCard.js:144-152`）                                                               | 强制改写为 `POSITION_RANDOM`          | **破坏**：同 B3                                              | **合并批次**                                    |
-| B5  | 牌堆添加初始牌       | `FromZone=0→1`、`ToPosition=TOP`、`MoveType=19`（`specialZones.js:29-38`）                                                       | TOP                                   | 外部身份 + 物理牌同时扩展                                    | **保持边界**：建立新牌顶批次                    |
-| B6  | 手气卡放回牌堆       | `FromZone=5→1`、`SpellID=0`、`MoveType=19`（`specialZones.js:40-48`）；tracker 侧 `resetKnownToUnknown`（`roomMovement.ts:883`） | RANDOM                                | 明牌匿名化后重新混入牌堆                                     | **条件降级**：多批次时合并                      |
-| B7  | 弃牌堆→洗牌区        | `FromZone=2→9`、`MoveType=255`（`specialZones.js:50-54`）                                                                        | —                                     | 正常世代滚动                                                 | **保持边界**（已建模）                          |
-| B8  | 潜伏（弃牌回堆）     | `FromZone=2→1`、`MoveType=15`、无正 ID（`spellEffects.js:93-105`）                                                               | 由协议决定                            | 弃牌堆身份回牌堆                                             | **保持边界**：建立新批次                        |
-| B9  | 伊籍机捷（牌底摸）   | `FromZone=1`、`SpellID=3101`，`RANDOM→BOTTOM`（`PubGsCMoveCard.js:109-118`）                                                     | BOTTOM                                | 从**牌底批次**消费                                           | **保持边界**：需支持双端消费                    |
-| B10 | 骋烈/天辩/宴戏       | `SpellID=3208`、`MoveType=13`、`SpellID ∈ {7016,7017}`，`RANDOM→TOP`（`PubGsCMoveCard.js:83-130`）                               | TOP                                   | 从牌顶批次消费                                               | **保持边界**                                    |
-| B11 | 特殊装备牌           | `FromZone=1`、`FromPosition=TOP+1`、4 张 type=8，改写为 `RANDOM`（`PubGsCMoveCard.js:131-142`）                                  | **RANDOM 来源**                       | **破坏**：从未知位置取走 4 张                                | **保守降级**：受影响批次基数不可推              |
-| B12 | 回收区 12            | `From/ToZone=12`（`specialZones.js:11-14`）                                                                                      | —                                     | 直接 `finishMove`，不入牌堆                                  | 无影响                                          |
-| B13 | 搜牌类技能取指定牌   | `FromZone=1`、`MoveType=18`（`MoveEventNormalizer.getProtocolMoveSpecialLabel()`），协议给出 CardID                              | **任意位置**                          | 从所属批次扣基数，**不要求位于牌顶批次**                     | **保持边界**                                    |
-| B14 | 权变牌顶范围取牌     | `FromZone=1`、`MoveType=18`、`SpellID=7011`，`CardIDs: []`、`CardCount=1`                                                        | 牌顶 X 张范围内，非主视角不知是第几张 | 范围内 → 只扣牌顶批次；**跨批次 → 合并降级**                 | **条件降级**                                    |
-| B15 | 匿名任意位置牌堆获取 | `FromZone=1`、无正 CardIDs、来源位置为 RANDOM/任意位置；牌数与 SpellID 不限                                                      | RANDOM / 任意位置                     | 只确认暗槽数量减少，不能筛出具体身份；旧批次统一进入全局未决 | **正常失效**：合并为单一未决批次，不计风险/降级 |
+| #   | 事件                 | 触发条件                                                                                                  | 位置                                  | 批次影响                                                     | 建议规则                                        |
+| --- | -------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------- |
+| B1  | 权变/观虚同区展示    | `From/ToZone=1`、`MoveType=21`、`SpellID ∈ {7011, 987, 988}`（`PubGsCMoveCard.js:11,70`）                 | 两端归一为 TOP                        | 不移动卡牌，只揭示牌顶身份                                   | **保持边界**：从所属批次删身份并减基数          |
+| B2  | 天候牌顶三选一       | `SpellID=3903`（`MoveEventNormalizer.ts:257`、`runtime/moveEventHandlers.ts:141,416`）                    | 牌顶三张中亮一张，位置不确定          | 揭示一个身份但不确定消费哪个槽                               | **保持边界**（同批次内），基数减 1              |
+| B3  | 浑天仪特殊底置       | `SpellID=3694`、`FromZone=0→1`、`MoveType=19`（`specialZones.js:16-27`）                                  | 强制改写为 `POSITION_RANDOM`          | **破坏**：外部牌进入未知批次                                 | **合并批次**：合并全部批次为单一批次            |
+| B4  | 回魂牌随机入堆       | `ToZone=1`、`CardID ∈ {4400, 4401}`（`PubGsCMoveCard.js:144-152`）                                        | 强制改写为 `POSITION_RANDOM`          | **破坏**：同 B3                                              | **合并批次**                                    |
+| B5  | 牌堆添加初始牌       | `FromZone=0→1`、`ToPosition=TOP`、`MoveType=19`（`specialZones.js:29-38`）                                | TOP                                   | 外部身份 + 物理牌同时扩展                                    | **保持边界**：建立新牌顶批次                    |
+| B6  | 手气卡放回牌堆       | `FromZone=5→1`、`SpellID=0`、`MoveType=19`；协议层归一为 RANDOM，tracker 装饰器设置 `resetKnownToUnknown` | RANDOM                                | 明牌匿名化后重新混入牌堆                                     | **条件降级**：多批次时合并                      |
+| B7  | 弃牌堆→洗牌区        | `FromZone=2→9`、`MoveType=255`（`specialZones.js:50-54`）                                                 | —                                     | 正常世代滚动                                                 | **保持边界**（已建模）                          |
+| B8  | 潜伏（弃牌回堆）     | `FromZone=2→1`、`MoveType=15`、无正 ID（`spellEffects.js:93-105`）                                        | 由协议决定                            | 弃牌堆身份回牌堆                                             | **保持边界**：建立新批次                        |
+| B9  | 伊籍机捷（牌底摸）   | `FromZone=1`、`SpellID=3101`，`RANDOM→BOTTOM`（`PubGsCMoveCard.js:109-118`）                              | BOTTOM                                | 从**牌底批次**消费                                           | **保持边界**：需支持双端消费                    |
+| B10 | 骋烈/天辩/宴戏       | `SpellID=3208`、`MoveType=13`、`SpellID ∈ {7016,7017}`，`RANDOM→TOP`（`PubGsCMoveCard.js:83-130`）        | TOP                                   | 从牌顶批次消费                                               | **保持边界**                                    |
+| B11 | 特殊装备牌           | `FromZone=1`、`FromPosition=TOP+1`、4 张 type=8，改写为 `RANDOM`（`PubGsCMoveCard.js:131-142`）           | **RANDOM 来源**                       | **破坏**：从未知位置取走 4 张                                | **保守降级**：受影响批次基数不可推              |
+| B12 | 回收区 12            | `From/ToZone=12`（`specialZones.js:11-14`）                                                               | —                                     | 直接 `finishMove`，不入牌堆                                  | 无影响                                          |
+| B13 | 搜牌类技能取指定牌   | `FromZone=1`、`MoveType=18`（`MoveEventNormalizer.getProtocolMoveSpecialLabel()`），协议给出 CardID       | **任意位置**                          | 从所属批次扣基数，**不要求位于牌顶批次**                     | **保持边界**                                    |
+| B14 | 权变牌顶范围取牌     | `FromZone=1`、`MoveType=18`、`SpellID=7011`，`CardIDs: []`、`CardCount=1`                                 | 牌顶 X 张范围内，非主视角不知是第几张 | 范围内 → 只扣牌顶批次；**跨批次 → 合并降级**                 | **条件降级**                                    |
+| B15 | 匿名任意位置牌堆获取 | `FromZone=1`、无正 CardIDs、来源位置为 RANDOM/任意位置；牌数与 SpellID 不限                               | RANDOM / 任意位置                     | 只确认暗槽数量减少，不能筛出具体身份；旧批次统一进入全局未决 | **正常失效**：合并为单一未决批次，不计风险/降级 |
 
 > **B13/B14/B15 的重要性**：`MoveType=18`（`MOVE_TYPE.GAIN`「获得」）表示「从牌堆获取牌」，
 > 它**不等同于牌顶摸牌**。协议给出 CardIDs 时按 B13 精确扣所属身份；协议不给 CardIDs
@@ -1083,6 +1083,26 @@ B6 走匿名随机插入并按需合并；B14 在无法证明范围仍位于单�
 出现在 `degradations` 中，且牌顶明牌实体、生产账本与 observer 一致性告警均保持正常。
 
 2026-08-01 追补验证结果：`pnpm test:tracker` 50 个文件、465 项通过；格式检查、
+`pnpm typecheck:tracker`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、
+`pnpm build:prod` 全部通过，`traversalBaseline` 未回退。
+
+### 10.6 Phase 3 复测：手气卡路由与匿名获得收敛
+
+同一局 445 事件复测中，`degradations` 只剩 6 条预期记录：其他视角手气卡未知回堆 3 次、
+主视角已知手气卡随机回堆 1 次、匿名任意位置获得 2 次。此前延迟弃牌展示触发的
+`pile-count-reconcile:protocol-move` 已消失，生产账本与 DEV observer 未报告不一致。
+
+最终 cohort 投影为 4 张确定在堆、6 张确定在堆外，以及一个 105 选 104 的密集部分集合。
+该集合只表达“一张匿名获得尚未展示”，不是 105 次独立推理；保留成员集合后，身份展示时
+才能把剩余 104 张收敛为确定在堆。cohort exposure 为 843、每事件 1.89，确认矛盾为 0，
+与修正前的有效样本一致，未发现新的 Phase 3 阻塞项。
+
+`handleSpecialZones` 原手气卡分支只提前调用 `finishMove()`，没有承担位置、身份或 Room
+转换。位置归一已由 `normalizeMovePosition()` 负责，批次与匿名化由 tracker
+`decorateGenericMove()` 负责，因此删除该提前返回，让主视角派生状态继续经过
+`handleGameFlowState()`；`SpellID=0` 不会命中技能效果处理器。
+
+2026-08-01 路由清理验证结果：`pnpm test:tracker` 51 个文件、466 项通过；格式检查、
 `pnpm typecheck:tracker`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、
 `pnpm build:prod` 全部通过，`traversalBaseline` 未回退。
 
