@@ -980,7 +980,7 @@ Phase 3 闸门随后通过，Phase 4 已在独立任务中完成；当前状态�
 
 Phase 2 已完成：
 
-1. ~~固化匿名公共区取牌规则。~~ → 无 CardIDs 时只移走暗槽，跳过牌顶/牌底明牌。
+1. ~~固化匿名公共区取牌规则。~~ → 无 CardIDs 时只移走暗槽，跳过牌堆中全部已知身份。
 2. ~~比较产品价值与信息损失。~~ → 内部迁移 GO；cohort 新 UI 暂缓。
 3. ~~审计生产净复杂度。~~ → Phase 4/5 可删除路径见下表。
 4. ~~形成 Phase 3 启动裁决。~~ → 最小双写切片解冻。
@@ -1111,7 +1111,8 @@ B6 走匿名随机插入并按需合并；B14 在无法证明范围仍位于单�
 
 1. `MoveType=1` 且牌顶有明牌时，`knownPileIdentityIDsConsumed` 应列出实际离堆身份；
    `anonymousPileConsumptionCount` 只等于同批剩余暗槽数。
-2. `MoveType=18` 无 CardIDs 时，`knownPileIdentityIDsConsumed` 应为空，牌顶明牌实体仍在堆。
+2. `MoveType=18` 无 CardIDs 时，`knownPileIdentityIDsConsumed` 应为空，牌堆中全部已知身份
+   实体均保持原位，只消费匿名槽。
 3. 牌堆实体足够时，不应再出现 `pile-count-reconcile:protocol-move` 或
    `anonymous-pile-draw-count-adjusted`。
 4. `batchBoundaryDegradationCount` 只统计真正有风险且组数减少的事件；数量调整保持
@@ -1124,34 +1125,26 @@ B6 走匿名随机插入并按需合并；B14 在无法证明范围仍位于单�
 
 ### 10.5 Phase 3 实测追补：匿名获得后的延迟身份展示
 
-后续实测中，事件 28/71 的 `MoveType=18` 已正确消费 2 个暗槽并保留牌顶明牌，但事件 80
-是 `FromZone=5 -> ToZone=2` 的普通明弃，牌堆数量前后均为 110，却记录了
-`pile-count-reconcile:protocol-move`。这说明数量口径已经正确，身份失效口径仍不完整。
+2026-08-01 曾尝试在匿名任意位置获得时，把除连续牌顶外的 `knownPileIdentityIDs` 全部释放
+进 cohort，以避免后续身份展示触发数量对账。后续产品语义复核发现，该方案会让一次无
+CardIDs 的 `MoveType=18` 撤销牌底甚至整段已知牌堆身份，例如牌底 10 张明牌会同时从 UI
+消失；这与“获得只消费匿名槽”的既定规则冲突，因此该追补方案已废止。
 
-根因是匿名任意位置获得只合并了 cohort，未把 `knownPileIdentityIDs` 中不受牌顶边界保护的
-身份一起降为全局未决。物理 Room 为保持展示顺序只移走暗占位是正确的，但这个暗占位只是
-实体代表，不能证明堆内其他已知身份没有被获得。若其中一个身份之后在手牌中展示，旧实现
-只能先删除“确定在牌堆”身份，再靠全局 reconcile 补回一个暗槽，于是把正常的延迟展示错误
-归因到当前弃牌事件。
+最终规则：
 
-追补规则：
-
-1. 匿名任意位置获得发生前，将除连续牌顶明牌段外的 `knownPileIdentityIDs` 释放进全局未决
-   cohort，再按实际暗槽消费数扣减基数。
-2. Controller 在移动后传递仍受保护的连续牌顶明牌 ID；这些身份继续保持精确在堆。
-3. 之后某个候选身份在手牌或弃牌中展示时，只从候选集合移除，不改变牌堆基数，也不触发
-   `pile-count-reconcile:protocol-move`。
-4. 生产 ledger 与 DEV observer 执行同一转换；物理 Room 仍只移动暗占位，Phase 4–6 不因此
-   解冻。
-
-复测时，事件 28/71 仍应只出现非风险 `anonymous-pile-draw`；事件 80 这类延迟展示不应再
-出现在 `degradations` 中，且牌顶明牌实体、生产账本与 observer 一致性告警均保持正常。
-
-2026-08-01 追补验证结果：`pnpm test:tracker` 50 个文件、465 项通过；格式检查、
-`pnpm typecheck:tracker`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、
-`pnpm build:prod` 全部通过，`traversalBaseline` 未回退。
+1. `MoveType=18` 且无 CardIDs 时，Room 与 ledger 都只消费匿名槽；牌堆中全部
+   `knownPileIdentityIDs` 保持不变，不区分牌顶、牌底或中间位置。
+2. RANDOM 只表示匿名物理代表与暗 cohort 边界不确定，不用于推断任一已知身份已经离堆。
+3. 若某个已知牌堆身份之后在手牌、弃牌或 mark 中明确展示，再由该条携带 CardID 的协议
+   精确移出已知牌堆集合，并根据实际牌堆数量对账匿名 cohort 基数。
+4. `MoveType=1` 常规摸牌仍按真实端点实体精确消费明牌；协议直接给出 CardID 时仍按 B13
+   精确扣除所属身份。
+5. 回归必须覆盖连续 10 张已知牌底经过匿名任意位置获得后仍保持实体、顺序和 UI 投影。
 
 ### 10.6 Phase 3 复测：手气卡路由与匿名获得收敛
+
+> 本节保留 2026-08-01 observer 实验数据；其中“释放非牌顶 knownPile 身份”的解释已由
+> 10.5 最终规则取代，不代表当前生产行为。
 
 同一局 445 事件复测中，`degradations` 只剩 6 条预期记录：其他视角手气卡未知回堆 3 次、
 主视角已知手气卡随机回堆 1 次、匿名任意位置获得 2 次。此前延迟弃牌展示触发的

@@ -11,23 +11,34 @@ function applyMove(ledger: PileIdentityLedger, move: SharedMove, discardCountAft
 
 function createTwoCohortLedger(): PileIdentityLedger {
   const ledger = new PileIdentityLedger()
-  ledger.initialize([1, 2, 3])
+  ledger.initialize([4])
+  applyMove(
+    ledger,
+    {
+      eventType: 'discardKnown',
+      fromZone: 0,
+      toZone: 2,
+      cardIDs: [1, 2, 3],
+      cardCount: 3,
+      pileCountAfter: 1
+    },
+    3
+  )
+  applyMove(ledger, {
+    eventType: 'shuffleDiscardIntoPile',
+    fromZone: 2,
+    toZone: 9,
+    cardIDs: [],
+    cardCount: 4,
+    pileCountAfter: 4
+  })
   applyMove(ledger, {
     eventType: 'drawUnknown',
     fromZone: 1,
     toZone: 5,
     cardIDs: [],
     cardCount: 1,
-    fromPosition: POSITION_TOP,
-    pileCountAfter: 2
-  })
-  applyMove(ledger, {
-    eventType: 'moveKnown',
-    fromZone: 0,
-    toZone: 1,
-    cardIDs: [4],
-    cardCount: 1,
-    toPosition: POSITION_TOP,
+    fromPosition: POSITION_BOTTOM,
     pileCountAfter: 3
   })
   return ledger
@@ -331,7 +342,7 @@ describe('PileIdentityLedger', () => {
     })
   })
 
-  it('B5 明确牌顶加入建立新的牌顶批次', () => {
+  it('B5 明确牌顶加入登记为已知牌堆身份', () => {
     const ledger = new PileIdentityLedger()
     ledger.initialize([1, 2, 3])
 
@@ -345,10 +356,12 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 4
     })
 
-    expect(ledger.getSnapshot().cohort.groups.map((group) => group.cardIDs)).toEqual([
-      [1, 2, 3],
-      [4]
-    ])
+    expect(ledger.getSnapshot()).toMatchObject({
+      knownPileIdentityIDs: [4],
+      cohort: {
+        groups: [{ cardIDs: [1, 2, 3], remainingPileCount: 3 }]
+      }
+    })
   })
 
   it('B6 匿名随机回堆在多批次时合并，但不虚构具体身份', () => {
@@ -368,7 +381,7 @@ describe('PileIdentityLedger', () => {
 
     expect(ledger.getSnapshot().cohort.groups).toEqual([
       {
-        generation: 0,
+        generation: 1,
         kind: 'all-in-pile',
         cardIDs: [1, 2, 3, 4],
         remainingPileCount: 4
@@ -376,7 +389,7 @@ describe('PileIdentityLedger', () => {
     ])
   })
 
-  it('B7/B8 弃牌洗回或明确回堆建立新的牌底或牌顶批次', () => {
+  it('B7/B8 弃牌洗回建立新批次，明确回堆登记已知牌堆身份', () => {
     const ledger = new PileIdentityLedger()
     ledger.initialize([1, 2, 3])
     applyMove(ledger, {
@@ -421,7 +434,15 @@ describe('PileIdentityLedger', () => {
       moveType: 15,
       pileCountAfter: 4
     })
-    expect(ledger.getSnapshot().cohort.groups.at(-1)?.cardIDs).toEqual([4])
+    expect(ledger.getSnapshot()).toMatchObject({
+      knownPileIdentityIDs: [4],
+      cohort: {
+        groups: [
+          { cardIDs: [1], remainingPileCount: 1 },
+          { cardIDs: [2, 3], remainingPileCount: 2 }
+        ]
+      }
+    })
   })
 
   it('B9/B10 分别从牌底和牌顶批次消费暗槽', () => {
@@ -469,7 +490,7 @@ describe('PileIdentityLedger', () => {
 
     expect(ledger.getSnapshot().cohort.groups).toEqual([
       {
-        generation: 0,
+        generation: 1,
         kind: 'partial',
         cardIDs: [1, 2, 3, 4],
         remainingPileCount: 2
@@ -477,7 +498,7 @@ describe('PileIdentityLedger', () => {
     ])
   })
 
-  it('B15 释放非牌顶已知身份，延迟手牌展示不再触发牌数 reconcile', () => {
+  it('B15 匿名任意位置获得保留全部已知牌堆身份直到明确展示', () => {
     const ledger = new PileIdentityLedger()
     ledger.initialize([1, 2, 3, 4])
 
@@ -506,16 +527,16 @@ describe('PileIdentityLedger', () => {
     })
 
     expect(ledger.getSnapshot()).toMatchObject({
-      knownPileIdentityIDs: [1],
-      hiddenPileSlotCount: 2,
+      knownPileIdentityIDs: [1, 2],
+      hiddenPileSlotCount: 1,
       accountedPileCount: 3
     })
     expect(ledger.getSnapshot().cohort.groups).toEqual([
       {
         generation: 0,
         kind: 'partial',
-        cardIDs: [2, 3, 4],
-        remainingPileCount: 2
+        cardIDs: [3, 4],
+        remainingPileCount: 1
       }
     ])
 
@@ -537,6 +558,7 @@ describe('PileIdentityLedger', () => {
         remainingPileCount: 2
       }
     ])
+    expect(ledger.getSnapshot().knownPileIdentityIDs).toEqual([1])
   })
 
   it('B12 回收区 noop 不改变批次状态', () => {
@@ -572,7 +594,7 @@ describe('PileIdentityLedger', () => {
 
     expect(ledger.getSnapshot().cohort.groups).toEqual([
       {
-        generation: 0,
+        generation: 1,
         kind: 'partial',
         cardIDs: [1, 3],
         remainingPileCount: 1
@@ -610,26 +632,7 @@ describe('PileIdentityLedger', () => {
     expect(singleLedger.getSnapshot().cohort.groups).toHaveLength(1)
     expect(singleLedger.getSnapshot().cohort.groups[0].remainingPileCount).toBe(2)
 
-    const ledger = new PileIdentityLedger()
-    ledger.initialize([1, 2, 3])
-    applyMove(ledger, {
-      eventType: 'drawUnknown',
-      fromZone: 1,
-      toZone: 5,
-      cardIDs: [],
-      cardCount: 1,
-      fromPosition: POSITION_TOP,
-      pileCountAfter: 2
-    })
-    applyMove(ledger, {
-      eventType: 'moveKnown',
-      fromZone: 0,
-      toZone: 1,
-      cardIDs: [4],
-      cardCount: 1,
-      toPosition: POSITION_TOP,
-      pileCountAfter: 3
-    })
+    const ledger = createTwoCohortLedger()
     applyMove(ledger, {
       eventType: 'moveUnknown',
       fromZone: 1,

@@ -137,6 +137,178 @@ describe('PileIdentityLedger integration', () => {
     expect(room.assertPileIdentityLedgerConsistency('test:explicit-reveal')).toEqual([])
   })
 
+  it('思泣将已知弃牌移回牌堆时保持 Room 与 ledger 身份分区一致', () => {
+    const { controller } = createTrackerControllerHarness()
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2, 127])
+
+    // 先把 127 物化为公开牌顶，再按真实流程弃置。实测思泣回堆消息没有携带位置字段，
+    // 但 CardID 已经精确证明该身份仍在牌堆，不能因此退回仅承载未定位身份的 cohort。
+    controller.revealTrackerCards({ type: 'public', zoneName: 'pile' }, [127])
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [127],
+        CardCount: 1,
+        FromZone: 1,
+        FromPosition: POSITION_TOP,
+        MoveType: 4,
+        ToZone: 2
+      })
+    )
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [127],
+        CardCount: 1,
+        FromID: 255,
+        FromZone: 2,
+        FromPosition: undefined,
+        MoveType: 15,
+        SpellID: 3543,
+        ToID: 255,
+        ToZone: 1,
+        ToPosition: undefined
+      })
+    )
+
+    const room = controller.getTrackerRoom()
+    expect(room.zones.get('pile')!.cards.at(-1)).toMatchObject({ id: 127, isKnown: true })
+    expect(room.unlocatedIdentities.has(127)).toBe(false)
+    expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
+      knownPileIdentityIDs: [127],
+      cohort: {
+        groups: [{ cardIDs: [1, 2], remainingPileCount: 2 }]
+      }
+    })
+    expect(room.assertPileIdentityLedgerConsistency('test:siqi-known-return')).toEqual([])
+  })
+
+  it('匿名任意位置获得后保留牌底已知身份并允许后续移动到 mark', () => {
+    const { controller } = createTrackerControllerHarness()
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2, 3, 127])
+
+    // 127 先从弃牌区明确回到牌堆底，1 再成为公开牌顶。无 CardIDs 的 MoveType=18
+    // 只消费两者之间的匿名槽，不撤销任何已经明确在牌堆中的身份。
+    controller.revealTrackerCards({ type: 'public', zoneName: 'pile' }, [127])
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [127],
+        CardCount: 1,
+        FromZone: 1,
+        FromPosition: POSITION_TOP,
+        MoveType: 4,
+        ToZone: 2
+      })
+    )
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [127],
+        CardCount: 1,
+        FromID: 255,
+        FromZone: 2,
+        FromPosition: POSITION_RANDOM,
+        MoveType: 15,
+        SpellID: 3543,
+        ToID: 255,
+        ToZone: 1,
+        ToPosition: POSITION_BOTTOM
+      })
+    )
+    controller.revealTrackerCards({ type: 'public', zoneName: 'pile' }, [1])
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 1,
+        FromPosition: POSITION_RANDOM,
+        MoveType: 18,
+        SpellID: 4567,
+        ToID: 1
+      })
+    )
+
+    const room = controller.getTrackerRoom()
+    const pile = room.zones.get('pile')!
+    expect(pile.cards.at(-1)).toMatchObject({ id: 1, isKnown: true })
+    expect(pile.cards[0]).toMatchObject({ id: 127, isKnown: true })
+    expect(room.cardIndex.get(127)).toMatchObject({ location: 'pile', isKnown: true })
+    expect(room.unlocatedIdentities.has(127)).toBe(false)
+    expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
+      knownPileIdentityIDs: [1, 127],
+      cohort: {
+        groups: [{ cardIDs: [2, 3], remainingPileCount: 1 }]
+      }
+    })
+    expect(room.assertPileIdentityLedgerConsistency('test:anonymous-gain-preserve-known')).toEqual(
+      []
+    )
+
+    // 后续匿名手牌进入 mark 不改变牌堆身份，127 仍应保持精确牌底展示。
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 1,
+        FromID: 1,
+        FromZone: 5,
+        MoveType: 8,
+        SpellID: 9001,
+        ToID: 1,
+        ToZone: 4,
+        ToZoneParam: 9001
+      })
+    )
+    expect(pile.cards[0]).toMatchObject({ id: 127, isKnown: true })
+    expect(room.assertPileIdentityLedgerConsistency('test:move-to-mark-preserve-known')).toEqual([])
+  })
+
+  it('匿名任意位置获得保留连续十张已知牌底身份', () => {
+    const { controller } = createTrackerControllerHarness()
+    const knownBottomIDs = [101, 102, 103, 104, 105, 106, 107, 108, 109, 110]
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2, ...knownBottomIDs])
+    controller.revealTrackerCards(
+      {
+        type: 'public',
+        zoneName: 'pile',
+        position: POSITION_BOTTOM,
+        reposition: true
+      },
+      knownBottomIDs
+    )
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 1,
+        FromPosition: POSITION_RANDOM,
+        MoveType: 18,
+        SpellID: 4567,
+        ToID: 1
+      })
+    )
+
+    const room = controller.getTrackerRoom()
+    const pile = room.zones.get('pile')!
+    expect(new Set(pile.cards.slice(0, knownBottomIDs.length).map((card) => card.id))).toEqual(
+      new Set(knownBottomIDs)
+    )
+    knownBottomIDs.forEach((cardID) => {
+      expect(room.cardIndex.get(cardID)).toMatchObject({ location: 'pile', isKnown: true })
+      expect(room.unlocatedIdentities.has(cardID)).toBe(false)
+    })
+    expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
+      knownPileIdentityIDs: knownBottomIDs,
+      hiddenPileSlotCount: 1,
+      cohort: {
+        groups: [{ cardIDs: [1, 2], remainingPileCount: 1 }]
+      }
+    })
+    expect(room.assertPileIdentityLedgerConsistency('test:ten-known-bottom-cards')).toEqual([])
+  })
+
   it('连续洗牌由 cohort 滚动并保留公开牌顶牌底身份', () => {
     const { controller } = createTrackerControllerHarness()
     controller.initTrackerRoom()
@@ -246,7 +418,7 @@ describe('PileIdentityLedger integration', () => {
     expect(room.assertPileIdentityLedgerConsistency('test:second-shuffle')).toEqual([])
   })
 
-  it('MoveType=18 匿名获得跳过牌顶明牌，只消费暗占位并等待后续展示', () => {
+  it('MoveType=18 匿名获得跳过全部已知牌堆身份，只消费暗占位并等待后续展示', () => {
     const { controller } = createTrackerControllerHarness()
     controller.initTrackerRoom()
     controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
@@ -281,19 +453,21 @@ describe('PileIdentityLedger integration', () => {
     const pile = room.zones.get('pile')!
 
     expect(pile.cards.at(-1)).toMatchObject({ id: 1, isKnown: true })
+    expect(room.cardIndex.get(2)).toMatchObject({ location: 'pile', isKnown: true })
     expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
-      knownPileIdentityIDs: [1],
-      hiddenPileSlotCount: 3,
+      knownPileIdentityIDs: [1, 2],
+      hiddenPileSlotCount: 2,
       accountedPileCount: 4
     })
     expect(room.pileIdentityLedger.getSnapshot().cohort.groups).toEqual([
       {
         generation: 0,
         kind: 'partial',
-        cardIDs: [2, 3, 4, 5],
-        remainingPileCount: 3
+        cardIDs: [3, 4, 5],
+        remainingPileCount: 2
       }
     ])
+    expect(room.assertPileIdentityLedgerConsistency('test:anonymous-gain-known-pile')).toEqual([])
 
     controller.syncTrackerMove(
       protocolMove({

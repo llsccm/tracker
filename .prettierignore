@@ -6,3 +6,4 @@ html/iframe.html
 tsconfig.json
 tsconfig.*.json
 .roo
+*.md

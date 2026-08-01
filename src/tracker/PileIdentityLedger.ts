@@ -252,17 +252,12 @@ export class PileIdentityLedger {
             Number(move.moveType) === 18 &&
             Number(move.spellID) === 7011 &&
             move.fromPosition !== POSITION_RANDOM
-          const isAnonymousArbitraryPileGain =
-            !isTopRangeGain &&
-            (Number(move.moveType) === 18 || move.fromPosition === POSITION_RANDOM)
-          if (isAnonymousArbitraryPileGain) {
-            // 任意位置匿名获取后，之前的已知边界可能已被绕过或混入未知手牌；只保留协议
-            // 明确仍可见的牌堆身份，其余身份重新进入全局未决集合。
-            this.releaseKnownPileIdentitiesExceptInternal(move.visiblePileIdentityIDsAfter)
-          }
           if (isTopRangeGain) {
             this.consumeAnonymousTopRangeInternal(anonymousPileConsumptionCount)
           } else if (Number(move.moveType) === 18) {
+            // 无 CardIDs 的“获得”只消费匿名物理槽。牌堆中已经公开的身份无论位于顶、底
+            // 或中间都继续保持 knownPileIdentityIDs；若其中某张之后在牌堆外明确展示，
+            // 再由那条携带 CardID 的协议移出已知牌堆集合并对账暗槽基数。
             this.consumeAnonymousInternal(anonymousPileConsumptionCount, POSITION_RANDOM)
           } else {
             this.consumeAnonymousInternal(anonymousPileConsumptionCount, move.fromPosition)
@@ -566,23 +561,20 @@ export class PileIdentityLedger {
     }
 
     if (position === POSITION_RANDOM) {
-      // 已知身份虽可确定在牌堆，但随机插入位置会破坏所有已有 cohort 边界。
+      // 随机混入后只能确认身份属于牌堆，不能继续把本地实体位置当成协议事实。此类路径
+      // （例如手气卡、回魂牌）由 Room 同步匿名化实体，因此身份仍进入未定位 cohort；同时
+      // 随机落点会破坏所有既有暗槽批次边界。
       identities.forEach((cardID) => this.prepareIdentityForPile(cardID))
       const merged = this.mergeAllCohortsInternal()
       identities.forEach((cardID) => merged.candidateIdentityIDs.add(cardID))
       merged.remainingPileCount += identities.length
     } else {
-      // 顶/底插入位置可证明，为每张身份建立精确 singleton cohort 并保持端点顺序。
-      identities.forEach((cardID) => {
-        this.prepareIdentityForPile(cardID)
-        const cohort: PileIdentityCohort = {
-          generation: this.generation,
-          candidateIdentityIDs: new Set([cardID]),
-          remainingPileCount: 1
-        }
-        if (position === POSITION_BOTTOM) this.cohorts.unshift(cohort)
-        else this.cohorts.push(cohort)
-      })
+      identities.forEach((cardID) => this.prepareIdentityForPile(cardID))
+
+      // 已知牌精确置于牌顶/牌底时继续由 Room 中的正 ID 实体承载；ledger 以
+      // knownPileIdentityIDs 记录其牌堆归属。端点顺序由物理 Zone 保存，常规摸牌会按实际
+      // 实体精确消费，无需创建与 Room 身份分区冲突的 singleton cohort。
+      identities.forEach((cardID) => this.revealIdentityInPileInternal(cardID))
     }
 
     const anonymousCount = Math.max(0, normalizeCount(count) - identities.length)
@@ -612,26 +604,6 @@ export class PileIdentityLedger {
     this.knownDiscardIdentityIDs.delete(cardID)
     this.knownPileIdentityIDs.delete(cardID)
     this.removeIdentityFromCohorts(cardID, false)
-  }
-
-  private releaseKnownPileIdentitiesExceptInternal(
-    preservedCardIDs: readonly CardID[] | undefined
-  ): void {
-    const preserved = new Set(normalizeIDs(preservedCardIDs ?? []))
-    const released: CardID[] = []
-    this.knownPileIdentityIDs.forEach((cardID) => {
-      if (preserved.has(cardID)) return
-      this.knownPileIdentityIDs.delete(cardID)
-      this.locatedIdentityIDs.delete(cardID)
-      released.push(cardID)
-    })
-    if (released.length === 0) return
-
-    // 任意位置匿名获取使这些身份不再能被声明为“确定仍在牌堆”，但也没有证据说明它们
-    // 已经离开，因此回收到未决 cohort，并保持总在堆名额不变。
-    const merged = this.mergeAllCohortsInternal()
-    released.forEach((cardID) => merged.candidateIdentityIDs.add(cardID))
-    merged.remainingPileCount += released.length
   }
 
   private rotateFromDiscardInternal(cardIDs: readonly CardID[]): void {

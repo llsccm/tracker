@@ -240,15 +240,66 @@ export class Room {
     move: Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'>
   ): void {
     try {
+      const context = `move:${move.eventType}`
       this.pileIdentityLedger.applyMove({
         ...move,
         pileCountAfter: this.zones.get('pile')?.cards.length ?? 0,
         discardCountAfter: this.zones.get('discard')?.cards.length ?? 0
       })
-      this.assertPileIdentityLedgerConsistency(`move:${move.eventType}`)
+      this.anonymizePileCohortIdentityEntities(context)
+      this.assertPileIdentityLedgerConsistency(context)
     } catch (error) {
       trackerLogger.warn('牌堆身份账本移动更新失败', { error, move })
     }
+  }
+
+  /**
+   * 将 ledger 已释放回 cohort 的牌堆身份同步投影成匿名物理槽。
+   *
+   * 典型场景是已知牌被随机混入牌堆：ledger 只能把身份放回 cohort，而 Room 的物理槽也
+   * 必须同步解绑正 ID。无 CardIDs 的 MoveType=18 不走该转换，它只消费匿名槽并保留全部
+   * knownPileIdentityIDs。
+   *
+   * 这里严格限制为“当前仍在物理牌堆”与“最终 cohort 身份”的交集。玩家区、mark、discard
+   * 或 suspended 实体不在本方法中自动修复，避免把其它移动错误误判成牌堆投影更新。
+   */
+  private anonymizePileCohortIdentityEntities(context: string): CardID[] {
+    const pile = this.zones.get('pile')
+    if (!pile) return []
+
+    const cohortIdentityIDs = new Set(this.pileIdentityLedger.getUnresolvedIdentityIDs())
+    if (cohortIdentityIDs.size === 0) return []
+
+    const anonymizedIdentityIDs: CardID[] = []
+    pile.cards.slice().forEach((card) => {
+      const cardID = card.id
+      if (!(cardID > 0) || !cohortIdentityIDs.has(cardID)) return
+
+      const releasedIdentityID = this.anonymizeLocatedIdentity(
+        card,
+        `${context}:cohortPileProjection`
+      )
+      if (releasedIdentityID === null) {
+        trackerLogger.warn('牌堆 cohort 身份投影匿名化失败', {
+          context,
+          cardID,
+          entityID: card.entityID,
+          location: card.location
+        })
+        return
+      }
+
+      anonymizedIdentityIDs.push(releasedIdentityID)
+    })
+
+    if (anonymizedIdentityIDs.length > 0) {
+      trackerLogger.debug('牌堆 cohort 身份已投影为匿名槽', {
+        context,
+        cardIDs: anonymizedIdentityIDs
+      })
+    }
+
+    return anonymizedIdentityIDs
   }
 
   applyPileIdentityReveal(cardIDs: readonly CardID[], location: 'pile' | 'outside'): void {
