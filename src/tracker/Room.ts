@@ -764,6 +764,25 @@ export class Room {
   }
 
   /**
+   * 只读预测 materialize() 会返回的实体，不确认牌面，也不修改身份账本或物理位置。
+   *
+   * 返回已有实体表示本次调用会命中已定位身份；返回 target 表示新身份可占用该匿名槽。
+   * 技能可据此先验证完整协议批次，再统一提交，避免失败校验留下半物化状态。
+   */
+  probeMaterialize(cardID: CardID, target: Card | null = null): Card | null {
+    const normalizedCardID = Number(cardID)
+    if (!(normalizedCardID > 0)) return null
+
+    const existing = this.cardIndex.get(normalizedCardID)
+    if (existing) return existing
+    if (!target || !isAnonymous(target)) return null
+
+    const wasDeckIdentity = this.deckIdentities.has(normalizedCardID)
+    if (wasDeckIdentity && !this.unlocatedIdentities.has(normalizedCardID)) return null
+    return target
+  }
+
+  /**
    * 将真实身份绑定到匿名物理槽，并同步身份守恒账本与查询索引。
    *
    * 公共区正 ID 实体只能证明它自身的身份，不能作为其它 CardID 的可替换物理代表。
@@ -772,7 +791,8 @@ export class Room {
    */
   materialize(cardID: CardID, target: Card | null = null): Card | null {
     const normalizedCardID = Number(cardID)
-    if (!(normalizedCardID > 0)) return null
+    const probedCard = this.probeMaterialize(normalizedCardID, target)
+    if (!probedCard) return null
 
     const existing = this.cardIndex.get(normalizedCardID)
     if (existing) {
@@ -791,8 +811,6 @@ export class Room {
 
     // 未定位身份只能物化到没有真实身份的物理槽。正 ID 暗公共实体已不再是牌堆身份权威，
     // 但也不能被另一个身份覆盖；这条门槛把 Phase 4 的匿名洗牌结果固化为通用 known 契约。
-    if (!target || !isAnonymous(target)) return null
-
     const wasDeckIdentity = this.deckIdentities.has(normalizedCardID)
     // 游戏外首次出现的合法正 ID 不在初始牌组中，发现时扩展身份全集。
     if (!wasDeckIdentity) {
@@ -800,20 +818,18 @@ export class Room {
       this.unlocatedIdentities.add(normalizedCardID)
     }
 
-    if (!this.unlocatedIdentities.has(normalizedCardID)) return null
-
-    target.materializeIdentity(normalizedCardID)
-    target.confirmKnown()
-    this.cardIndex.set(normalizedCardID, target)
+    probedCard.materializeIdentity(normalizedCardID)
+    probedCard.confirmKnown()
+    this.cardIndex.set(normalizedCardID, probedCard)
     this.unlocatedIdentities.delete(normalizedCardID)
-    this.counter?.addCard(target)
+    this.counter?.addCard(probedCard)
 
-    this.notifyCardChanged(target, {
+    this.notifyCardChanged(probedCard, {
       type: 'card-identity-materialized',
       cardID: normalizedCardID
     })
 
-    return target
+    return probedCard
   }
 
   /**

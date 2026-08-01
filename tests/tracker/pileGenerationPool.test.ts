@@ -1017,9 +1017,10 @@ describe('固定 seed 属性序列', () => {
     let nextExternalID = 60000
     let hasGeneratedGainFromPile = false
 
-    /** 当前牌顶批次里仍可揭示的身份；空表示这一步不能做牌堆明摸。 */
-    const topCohortCandidates = (): CardID[] => {
-      const cohortState = runCohortPoolModel(events)
+    /** 从给定模型状态读取当前牌顶批次里仍可揭示的身份。 */
+    const topCohortCandidatesFromState = (
+      cohortState: ReturnType<typeof runCohortPoolModel>
+    ): CardID[] => {
       // cohorts 末尾靠牌顶；取第一个仍有牌在牌堆的批次。
       for (let index = cohortState.cohorts.length - 1; index >= 0; index -= 1) {
         const cohort = cohortState.cohorts[index]
@@ -1031,10 +1032,14 @@ describe('固定 seed 属性序列', () => {
       return []
     }
 
+    /** 当前牌顶批次里仍可揭示的身份；空表示这一步不能做牌堆明摸。 */
+    const topCohortCandidates = (): CardID[] =>
+      topCohortCandidatesFromState(runCohortPoolModel(events))
+
     /** 搜牌事件故意选择仍有牌在堆、但不属于当前牌顶批次的候选身份。 */
     const nonTopCohortCandidates = (): CardID[] => {
-      const topCandidates = new Set(topCohortCandidates())
       const cohortState = runCohortPoolModel(events)
+      const topCandidates = new Set(topCohortCandidatesFromState(cohortState))
       const candidates = new Set<CardID>()
 
       cohortState.cohorts.forEach((cohort) => {
@@ -1137,16 +1142,10 @@ describe('固定 seed 属性序列', () => {
         continue
       }
 
-      if (
-        roll < 93 &&
-        state.discardKnownIDs.length > 0 &&
-        state.pileSlotCount + state.discardKnownIDs.length >= 1
-      ) {
+      if (roll < 93 && state.discardKnownIDs.length > 0) {
         // 自动补牌：必须超过洗牌前牌堆量，且不超过洗牌后总量。
         const postShuffleCount = state.pileSlotCount + state.discardKnownIDs.length
         const minDraw = state.pileSlotCount + 1
-        if (minDraw > postShuffleCount) continue
-
         const count = minDraw + pick(postShuffleCount - minDraw + 1)
         events.push({ type: 'drawAcrossShuffle', count })
         state.discardKnownIDs.forEach((cardID) => availablePileIdentities.add(cardID))

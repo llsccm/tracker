@@ -34,6 +34,28 @@ type GuanXuRoomState = {
   bySpell: Record<string, GuanXuBatch>
 }
 
+type ProtocolKnownCardCommit =
+  | {
+      type: 'confirm'
+      card: Card
+      cardID: number
+    }
+  | {
+      type: 'materialize'
+      cardID: number
+      target: Card
+    }
+
+type ProtocolKnownCardResolution = {
+  cards: Card[]
+  commits: ProtocolKnownCardCommit[]
+}
+
+type KnownMoveSelection = {
+  cards: Card[]
+  knownResolution: ProtocolKnownCardResolution
+}
+
 function patchEvent(event: MoveEventDraft, patch: any = {}): MoveEventDraft {
   return {
     ...event,
@@ -84,35 +106,84 @@ function getHandCards(room: Room, seatID: number): Card[] {
     .filter((card) => card.subZone === 'hand' && card.seats.has(seatID))
 }
 
-function resolveProtocolKnownCards(event: MoveEventDraft, room: Room, candidates: Card[]): Card[] {
+/**
+ * 只读解析协议明牌与候选实体的对应关系。
+ *
+ * 校验阶段只记录 confirm/materialize 计划；调用方确认整批张数与分桶都有效后才能提交，
+ * 否则错误消息会把部分 CardID 提前固化到实体和身份账本。
+ */
+function resolveProtocolKnownCards(
+  event: MoveEventDraft,
+  room: Room,
+  candidates: Card[]
+): ProtocolKnownCardResolution {
   const selected: Card[] = []
   const selectedSet = new Set<Card>()
   const anonymousTargets = candidates.filter(isAnonymous)
+  const plannedCardsByID = new Map<number, Card>()
+  const commits: ProtocolKnownCardCommit[] = []
 
   getPositiveIDs(event.cardIDs ?? []).forEach((cardID) => {
-    let card = candidates.find((candidate) => candidate.id === cardID) ?? null
+    let card =
+      candidates.find((candidate) => candidate.id === cardID) ??
+      plannedCardsByID.get(cardID) ??
+      null
+    let commit: ProtocolKnownCardCommit | null = null
 
     if (!card) {
       const target = anonymousTargets.shift() ?? null
-      const materialized = room.materialize(cardID, target)
-      if (materialized && candidates.includes(materialized)) card = materialized
+      const probedCard = room.probeMaterialize(cardID, target)
+      if (probedCard && candidates.includes(probedCard)) {
+        card = probedCard
+        if (probedCard === target) {
+          plannedCardsByID.set(cardID, probedCard)
+          commit = { type: 'materialize', cardID, target: probedCard }
+        } else {
+          commit = { type: 'confirm', cardID, card: probedCard }
+        }
+      }
     } else {
-      card.confirmKnown()
+      const isPlannedCard = plannedCardsByID.get(cardID) === card
+      if (!isPlannedCard) commit = { type: 'confirm', cardID, card }
     }
 
     if (!card || selectedSet.has(card)) return
     selectedSet.add(card)
     selected.push(card)
+    if (commit) commits.push(commit)
   })
 
-  return selected
+  return { cards: selected, commits }
 }
 
-function selectCardsForKnownMove(event: MoveEventDraft, room: Room, candidates: Card[]): Card[] {
+function commitProtocolKnownCards(room: Room, resolution: ProtocolKnownCardResolution): boolean {
+  // 提交前统一复核物化目标，避免未来调用者在探测与提交之间改动 Room 后产生半提交。
+  const canCommit = resolution.commits.every((commit) => {
+    if (commit.type === 'confirm') return commit.card.id === commit.cardID
+    return room.probeMaterialize(commit.cardID, commit.target) === commit.target
+  })
+  if (!canCommit) return false
+
+  resolution.commits.forEach((commit) => {
+    if (commit.type === 'confirm') {
+      commit.card.confirmKnown()
+      return
+    }
+    room.materialize(commit.cardID, commit.target)
+  })
+  return true
+}
+
+function selectCardsForKnownMove(
+  event: MoveEventDraft,
+  room: Room,
+  candidates: Card[]
+): KnownMoveSelection {
   const count = getCount(event)
   const protocolKnownCount = getPositiveIDs(event.cardIDs ?? []).length
-  const selected = resolveProtocolKnownCards(event, room, candidates)
-  if (selected.length !== protocolKnownCount) return []
+  const knownResolution = resolveProtocolKnownCards(event, room, candidates)
+  const selected = [...knownResolution.cards]
+  if (selected.length !== protocolKnownCount) return { cards: [], knownResolution }
 
   const selectedSet = new Set(selected)
 
@@ -122,7 +193,10 @@ function selectCardsForKnownMove(event: MoveEventDraft, room: Room, candidates: 
     selected.push(card)
   })
 
-  return selected.slice(0, count)
+  return {
+    cards: selected.slice(0, count),
+    knownResolution
+  }
 }
 
 function splitProtocolKnownAndUnknown(event: MoveEventDraft, cards: Card[]): Card[] {
@@ -142,9 +216,10 @@ function stagePileToExchange(event: MoveEventDraft, room: Room, spellID: number)
     return event
   }
 
+  const knownResolution = resolveProtocolKnownCards(event, room, selectedCards)
   if (
-    resolveProtocolKnownCards(event, room, selectedCards).length !==
-    getPositiveIDs(event.cardIDs ?? []).length
+    knownResolution.cards.length !== getPositiveIDs(event.cardIDs ?? []).length ||
+    !commitProtocolKnownCards(room, knownResolution)
   ) {
     clearBatch(room, spellID)
     return event
@@ -177,11 +252,15 @@ function stageHandToExchange(event: MoveEventDraft, room: Room, spellID: number)
   const bucketID = Number(raw.ToID)
   if (!batch || !Number.isFinite(fromSeat) || !Number.isFinite(bucketID)) return event
 
-  const selectedCards = selectCardsForKnownMove(event, room, getHandCards(room, fromSeat))
-  if (selectedCards.length !== getCount(event)) {
+  const selection = selectCardsForKnownMove(event, room, getHandCards(room, fromSeat))
+  if (
+    selection.cards.length !== getCount(event) ||
+    !commitProtocolKnownCards(room, selection.knownResolution)
+  ) {
     clearBatch(room, spellID)
     return event
   }
+  const selectedCards = selection.cards
 
   batch.buckets[String(bucketID)] = {
     cards: selectedCards,
@@ -210,8 +289,14 @@ function transferExchangeBucket(
   if (!batch || !sourceBucket || !targetBucket || fromKey === toKey) return event
 
   const exchangeCards = sourceBucket.cards.filter((card) => card.location === 'exchange')
-  const selectedCards = selectCardsForKnownMove(event, room, exchangeCards)
-  if (selectedCards.length !== getCount(event)) return event
+  const selection = selectCardsForKnownMove(event, room, exchangeCards)
+  if (
+    selection.cards.length !== getCount(event) ||
+    !commitProtocolKnownCards(room, selection.knownResolution)
+  ) {
+    return event
+  }
+  const selectedCards = selection.cards
 
   const selectedSet = new Set(selectedCards)
   sourceBucket.cards = sourceBucket.cards.filter((card) => !selectedSet.has(card))
