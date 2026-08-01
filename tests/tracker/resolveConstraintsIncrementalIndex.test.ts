@@ -169,5 +169,9 @@ describe('resolveConstraints 接入 locationIndex 增量（阶段 3）', () => {
 
     expect(room.zones.get('discard').cards).toHaveLength(0)
     expectLocationIndexMatchesRebuild(room)
+    expectAmbiguousKnownIndexMatchesRebuild(room)
+    expect(room.refreshPlayerSnapshot()).toEqual(
+      room.cards.filter((card) => card.location === 'player')
+    )
   })
 })

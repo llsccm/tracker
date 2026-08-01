@@ -52,7 +52,12 @@
 - `collectPlayerHandSlotCounts()` 支持传入目标座位集合；`resolveConstraints()` 内已按 seat 增量重算手牌槽统计，首轮只计算有观测手牌数的座位，后续轮次只重算上一轮/本轮触碰座位并复用未变缓存。该缓存只在一次 `resolveConstraints()` 调用内有效，依赖 `Room.resolveTouchedSeats` 的保守触碰集合。`Player.refreshUnknownCardCount()` 的兜底路径也会一次性收集 known/candidate，避免同一 seat 连扫两次。
 - `shufflePile({ cardCount })` 会把 `discard` 洗回 `pile`，只随机弃牌堆部分，保留原剩余牌堆的相对顺序；未提供协议张数时按本地可枚举牌堆处理。协议张数只用于核对物理槽，数量不足时告警且不虚构实体。洗牌身份判断以 `PileIdentityLedger.getUnresolvedIdentityIDs()` 为权威，不再读取正 ID 暗槽、CardCounter UNKNOWN/APPEARED 分类或本地代表顺序。
 - 开局 `2 -> 9` 有两种等价协议形态：弃牌堆数量为 `0`，或弃牌堆数量等于整副卡池身份数。两者都只做初始牌堆重建/对账，不关闭 generation 0，也不暂停尚未出现身份。只有部分弃牌洗回才视为真实世代切换。
-- 真实弃牌洗回时，旧 cohort 中仍未出现的身份会转成 detached `suspendedKnownCards` 展示实体；它们可继续出现在现有公共候选投影中，但不占物理牌堆、手牌或 mark 槽。若身份仍由玩家/mark 等正 ID 暗实体承载，原实体会原地匿名化并保留位置、座位、子区、SpellID、候选集合与 `hiddenMarkCandidates` 引用；弃牌区正 ID 实体也会在随机洗回前匿名化。再次出现同 ID 时恢复 suspended 身份并消费对应匿名槽。
+- 真实弃牌洗回时，旧 cohort 中仍未出现的身份会转成 detached `suspendedKnownCards` 展示
+  实体；它们可继续出现在现有公共候选投影中，但不占物理牌堆、手牌或 mark 槽。尚未物化的
+  身份直接按最终 suspended 状态登记到身份索引、计数器和展示集合，不发送没有旧投影可清理的
+  通用脏牌事件。若身份仍由玩家/mark 等正 ID 暗实体承载，原实体会原地匿名化并保留位置、
+  座位、子区、SpellID、候选集合与 `hiddenMarkCandidates` 引用；弃牌区正 ID 实体也会在随机
+  洗回前匿名化。再次出现同 ID 时恢复 suspended 身份并消费对应匿名槽。
 - `materialize()` 的公共 known 契约已切换为“匿名物理槽或端点中的同 ID 实体”：未定位身份
   不再覆盖其它正 ID 暗公共实体。outside/suspended 身份可接管匿名端点并直接恢复追踪，
   匿名槽退出公共区，不转移 suspended 名额；玩家暗手牌/mark 的旧式 interop 继续保留。
@@ -119,7 +124,7 @@
 
 - `AmbiguousKnownIndex`：替代旧 `Zone.obj.unknown` 的部分展示语义，跟踪跨座位候选、完整位置候选、装备容器候选与公共候选的明牌；用于 `Card.getLocationDescription()` 的优先反查。已改为增量维护：通过事件流游标进行单牌增量更新，仅在约束组结构变化（`Room.constraintGroupsDirty === true`）时回退全量 `rebuild()`。容器候选展示时按当前装备承载座位展开。
 - `CardLocationIndex`：提供确定手牌、候选手牌、装备、判定、标记与公共区分组；`RoomConstraints.syncViewGroups()` 和公共区视图读取该索引，避免渲染阶段现场高频分类。已改为增量维护：消费 `dirtyCardEvents` 事件流游标进行投影增量更新，公共区变化通过 `Room.dirtyPublicZones` 变更集局部重算。在游标断档时自动回退全量 `rebuild()`。装备容器候选会先投影成当前承载座位的标记区，再进入玩家视图。
-- `CardCounter`：基于 `Room.cards` 生成 `CardInstance` 查询副本，建立名称、花色、点数、类型倒排索引，并根据 `Card.location` 同步牌堆、玩家、弃牌、销毁四类状态。状态桶已从全量 `update()` 改为增量同步：`Room.markCounterDirty()` / `CardCounter.markDirty()` 收集状态变化牌，getter 在无新变化时复用干净缓存；`createExternalCards()` 会显式注册新牌，避免依赖全量扫描补建倒排索引。
+- `CardCounter`：基于 `Room.cards` 生成 `CardInstance` 查询副本，建立名称、花色、点数、类型倒排索引，并根据 `Card.location` 同步牌堆、玩家、弃牌、销毁四类状态。状态桶已从全量 `update()` 改为增量同步：`Room.markCounterDirty()` / `CardCounter.markDirty()` 收集状态变化牌，getter 在无新变化时复用干净缓存；`createExternalCards()` 会显式注册新牌并推进连续已注册的尾部游标，避免后续更新再次扫描同一批实体。
 - `MoveEventNormalizer`：将原始 `PubGsCMoveCard` 字段归一为标准事件包，依赖 `protocolZones.ts` 处理 `FromZone`、`ToZone`、玩家子区与 `CardIDs` 等字段。
 - `gameState.ts` / `Game.ts`：`GameState` 承载纯对局状态与生命周期；`BrowserGameState`（`Game.ts`）承接 DOM/Laya 钩子。仍可继续收紧兼容层。
 - `src/tracker/runtime/bridge.ts` + `browser.ts`：装配并导出 `tracker` 单例（`TrackerController`）；浏览器代码通常从 `runtime/browser` 导入。单局构建、移动同步（`syncTrackerMove`）、明牌输入（`revealTrackerCards`，含界强识 `fullHand`）与视图调度的实现位于 `runtime/trackerController.ts`；随机手牌转移等候选构建位于 `roomMovement/candidates.ts`。
@@ -297,8 +302,9 @@
 - 新增或修改 `this.cards.filter(...)` 等全牌池扫描前，必须先判断能否改用现有增量快照、索引、脏事件集合，或在入口一次性归组后复用结果；尤其避免把全牌池扫描放进玩家、约束组或收敛轮循环中，意外放大为 O(玩家数 × 全牌数) 或更高复杂度。若确认全量扫描确有必要，必须使用 `recordTraversal(...)` 对该扫描站点显式插桩，并在 `tests/tracker/traversalBaseline.test.ts` 中新增或更新对应场景与内联快照，使后续遍历量增长可见且可解释；不得以未插桩的隐藏扫描绕过基线护栏。
 - [`tests/tracker/traversalBaseline.test.ts`](../../tests/tracker/traversalBaseline.test.ts) 的内联快照是遍历量回归护栏：结构性优化使数字下降属预期（`vitest run -u` 刷新），无关改动使数字上升需要先解释原因再更新快照。
 - 生产 `Room.initDeck()` 只创建匿名牌堆槽；测试 helper 的 `materializeDeckIdentities: true` 是
-  历史正 ID 暗槽对照，不代表生产。真实洗牌关闭 cohort 时会为过期未决身份创建 suspended
-  展示实体，遍历基线应把这类线性成本与物理牌堆扫描区分记录。
+  历史正 ID 暗槽对照，不代表生产。真实洗牌关闭 cohort 时仍会为过期未决身份创建 suspended
+  展示实体，但未物化身份按终态直接注册，不应进入位置索引或玩家快照的通用脏事件流；遍历
+  基线应分别记录匿名生产路径与已物化暗槽的必要匿名化成本。
 - 匿名槽 G0/G1 真实回放已经完成并决定 NO-GO / 收缩；临时浏览器回放探针已退役。历史数据见本地归档 [`plans/anonymous-entity-and-slot.md`](../../plans/anonymous-entity-and-slot.md)。
 - 初始牌堆初始化后，`pile.cards` 顺序应独立于 `room.cards`。
 - 摸暗牌、摸明牌时手牌额度及状态维护应保持准确。
@@ -356,3 +362,9 @@
   洗牌遍历基线记录匿名生产路径 197、历史已物化对照 308；Prettier、`git diff --check`、
   `pnpm test:tracker`（49 个文件、426 项）、`pnpm typecheck:tracker`、`pnpm typecheck`、
   `pnpm lint`、`pnpm build`、`pnpm build:prod` 全部通过。
+- 2026-08-02：洗牌新建的 detached suspended 身份改为按最终状态直接注册，避免没有旧投影
+  可清理的实体进入通用脏事件流；`Zone.replaceAll()` 不再重复改写已在本区关系中的卡牌状态，
+  `CardCounter` 同步推进显式注册实体的尾部游标。匿名生产洗牌基线由 197 降至 12，历史
+  已物化对照由 308 降至 160；`pnpm test:tracker`（49 个文件、427 项）、
+  `pnpm typecheck:tracker`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm build:prod`
+  全部通过。

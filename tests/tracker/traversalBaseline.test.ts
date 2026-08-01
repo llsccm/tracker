@@ -4,7 +4,7 @@ import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import { registerDefaultMoveEventHandlers } from '@/tracker/runtime/moveEventHandlers'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import type { TraversalStats } from '@/tracker/traversalStats'
-import { createTestRoom, getCard } from './helpers/room'
+import { createTestRoom, getCard, getSuspendedIdentityIDs } from './helpers/room'
 
 // 覆盖 Room 高频移动与收敛路径的遍历基线场景。
 // 快照数字是遍历量护栏：结构性优化（如 A1/E2）应使数字下降并用 `vitest run -u` 刷新，
@@ -149,8 +149,8 @@ describe('Room.cards 遍历基线', () => {
 
   it('洗牌：弃牌堆回收并按协议张数重建牌堆', () => {
     // 生产 trackerController 只调用 Room.initDeck()，因此 false 才与实际匿名牌堆路径一致。
-    // 本夹具关闭旧 cohort 时创建 37 个 suspended 展示实体，并匿名化 3 张洗回牌：索引处理
-    // 40 个变更实体，CardCounter 还需注册新展示实体，因此访问 77 张。增长来自当前身份模型。
+    // 37 个旧 cohort 身份仍会创建 suspended 展示实体，但它们从未进入位置投影，直接按终态
+    // 注册即可；只有 3 张洗回牌需要匿名化并进入通用增量索引，因此四个消费者各访问 3 张。
     const { room, pileCount, discardCount } = createShuffleBaselineRoom(false)
     expect(discardCount).toBe(3)
 
@@ -160,24 +160,25 @@ describe('Room.cards 遍历基线', () => {
 
     expect(room.zones.get('discard').cards).toHaveLength(0)
     expect(room.zones.get('pile').cards).toHaveLength(pileCount + 3)
+    expect(getSuspendedIdentityIDs(room)).toHaveLength(37)
     expect(summarize(stats)).toMatchInlineSnapshot(`
       {
-        "ambiguousKnownIndex:applyDirty": "calls=1 visited=40",
-        "cardCounter:update": "calls=1 visited=77",
+        "ambiguousKnownIndex:applyDirty": "calls=1 visited=3",
+        "cardCounter:update": "calls=1 visited=3",
         "handSlotCounts:collectBySeat": "calls=1 visited=0",
-        "locationIndex:applyDirty": "calls=1 visited=40",
+        "locationIndex:applyDirty": "calls=1 visited=3",
         "reconcileAnonymousHandCards:group": "calls=1 visited=0",
         "resolveConstraints:constraint1": "calls=1 visited=0",
         "resolveConstraints:constraint3:exclusion": "calls=1 visited=0",
-        "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=40",
-        "total": "visited=197",
+        "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=3",
+        "total": "visited=12",
       }
     `)
   })
 
   it('洗牌对照：已物化牌堆会额外匿名化旧身份实体', () => {
     // true 是测试 helper 提供的历史对照路径，不是生产初始化方式。它还要匿名化牌堆中
-    // 37 个正 ID 暗实体，再创建 37 个 suspended 展示实体，因此遍历量高于匿名生产路径。
+    // 37 个正 ID 暗实体；新 suspended 实体仍直接按终态注册，所以只有 40 个原实体进入索引。
     const { room, pileCount, discardCount } = createShuffleBaselineRoom(true)
     expect(discardCount).toBe(3)
 
@@ -187,17 +188,18 @@ describe('Room.cards 遍历基线', () => {
 
     expect(room.zones.get('discard').cards).toHaveLength(0)
     expect(room.zones.get('pile').cards).toHaveLength(pileCount + 3)
+    expect(getSuspendedIdentityIDs(room)).toHaveLength(37)
     expect(summarize(stats)).toMatchInlineSnapshot(`
       {
-        "ambiguousKnownIndex:applyDirty": "calls=1 visited=77",
-        "cardCounter:update": "calls=1 visited=77",
+        "ambiguousKnownIndex:applyDirty": "calls=1 visited=40",
+        "cardCounter:update": "calls=1 visited=40",
         "handSlotCounts:collectBySeat": "calls=1 visited=0",
-        "locationIndex:applyDirty": "calls=1 visited=77",
+        "locationIndex:applyDirty": "calls=1 visited=40",
         "reconcileAnonymousHandCards:group": "calls=1 visited=0",
         "resolveConstraints:constraint1": "calls=1 visited=0",
         "resolveConstraints:constraint3:exclusion": "calls=1 visited=0",
-        "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=77",
-        "total": "visited=308",
+        "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=40",
+        "total": "visited=160",
       }
     `)
   })

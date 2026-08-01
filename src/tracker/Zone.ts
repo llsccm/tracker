@@ -109,6 +109,7 @@ export class Zone {
   replaceAll(cards: Card[], position: PublicPosition = POSITION_TOP): void {
     const orderedCards = position === POSITION_BOTTOM ? [...cards].reverse() : [...cards]
     const incomingCards = new Set(orderedCards)
+    const currentCards = new Set(this._orderedCards)
 
     this.room.zones.forEach((zone) => {
       if (zone === this) return
@@ -122,7 +123,11 @@ export class Zone {
     })
 
     orderedCards.forEach((card) => {
-      card.moveToPublicZone(this.zoneID)
+      // 只有原本就在本区关系中且位置事实未变的牌才是纯重排；新牌与跨区牌仍走完整迁移。
+      // 对纯重排重复调用 moveToPublicZone 会把状态未变的剩余牌堆标脏，放大洗牌遍历量。
+      if (!currentCards.has(card) || card.location !== this.zoneID) {
+        card.moveToPublicZone(this.zoneID)
+      }
     })
 
     this._orderedCards = orderedCards

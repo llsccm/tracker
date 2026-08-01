@@ -217,8 +217,9 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
 - 无关改动导致数字上升：先解释原因；不能无说明地 `-u`
 - 新增必要全量扫描：先问能否改增量；若必须全量，插桩 + 基线场景同步落地
 - `createTestRoom({ materializeDeckIdentities: false })` 才对齐生产 `Room.initDeck()` 的匿名牌堆；
-  `true` 仅是历史正 ID 暗槽对照。洗牌因创建 suspended 展示实体而增长时，应同时记录
-  cohort 宽度、变更实体数与对照快照，不能把测试专用已物化路径误称为生产路径。
+  `true` 仅是历史正 ID 暗槽对照。旧 cohort 的未物化身份应直接按最终 suspended 状态注册，
+  不进入只用于清理既有投影的通用脏事件流；已物化暗实体仍须匿名化并保留线性对照快照。
+  更新洗牌基线时同时断言 suspended 数量，避免通过少建展示实体获得虚假的遍历下降。
 
 领域风险细则仍以 [`card_tracker.md`](card_tracker.md) 的「风险与验证清单」为准。
 

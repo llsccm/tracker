@@ -1216,8 +1216,8 @@ export class Room {
     }
 
     if (closesPileGeneration) {
-      // 每个过期未决身份都需要一个 suspended 展示实体；这些实体不占牌堆物理槽，但会作为
-      // 新 Room card 注册到计数器和增量索引，因此洗牌遍历量随旧 cohort 宽度线性增长。
+      // 每个过期未决身份都需要一个 suspended 展示实体；这些实体不占牌堆物理槽。
+      // 尚未物化的身份会直接按最终 suspended 状态注册，避免污染只服务既有投影的脏事件流。
       const suspensionResult = this.suspendUnresolvedPileIdentitiesForShuffle(
         expiringIdentityIDs,
         recycledIdentityIDs
@@ -1334,20 +1334,45 @@ export class Room {
         return
       }
 
-      const displayCard = this.createExternalCards([cardID], 1)[0]
+      const displayCard = this.createDetachedSuspendedIdentity(cardID)
       if (!displayCard) {
         trackerLogger.warn('洗牌关闭旧牌堆世代时创建 suspended 展示实体失败', { cardID })
         return
       }
-
-      // confirmKnown 只负责让身份可显示，不表示它已在场上出现；location=suspended 明确说明
-      // 具体位置未知，后续协议携带同 ID 时由 materialize()/moveCards() 恢复追踪。
-      displayCard.confirmKnown()
-      this.constraints.suspendKnownCard(displayCard, 'pile-generation-expired')
       suspendedIdentityIDs.push(cardID)
     })
 
+    if (suspendedIdentityIDs.length > 0) this.markViewDirty('pile-generation-suspended')
     return { suspendedIdentityIDs, anonymizedIdentityIDs }
+  }
+
+  /**
+   * 为旧牌堆世代中尚未物化的身份直接创建最终 suspended 展示实体。
+   *
+   * 这类实体从未进入玩家区或公共区，三个增量索引没有旧投影需要删除；若复用
+   * createExternalCards() -> confirmKnown() -> suspendKnownCard()，中间态会产生无意义的通用
+   * dirtyCardEvent。这里先写完最终状态再登记索引与计数器，只通过 viewDirty 通知候选区重绘。
+   * 已经承担物理位置的身份仍由调用方先匿名化，其原实体变化继续走完整脏事件路径。
+   */
+  private createDetachedSuspendedIdentity(cardID: CardID): Card | null {
+    if (!(cardID > 0) || this.cardIndex.has(cardID)) return null
+    if (!this.unlocatedIdentities.has(cardID)) return null
+
+    const card = new Card(cardID, this)
+    card.location = 'suspended'
+    card.isKnown = true
+    card.suspended = true
+    card.syncTimestamp()
+
+    this.cards.push(card)
+    this.deckIdentities.add(cardID)
+    this.cardIndex.set(cardID, card)
+    this.unlocatedIdentities.delete(cardID)
+    this.suspendedKnownCards.add(card)
+    // 动态实体仍需按 room.cards 创建顺序登记；它当前不参与任何位置投影，无需触发重投影。
+    this.locationIndex.registerCard(card)
+    this.counter?.addCard(card)
+    return card
   }
 
   createConstraintGroup(...args) {
