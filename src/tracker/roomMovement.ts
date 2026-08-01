@@ -50,6 +50,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       expectedSlotsBySeat,
       resetKnownToUnknown = false,
       sourceCards,
+      postMovePublicCandidates,
       sourceEvent
     } = opt
 
@@ -102,6 +103,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       expectedSlotsBySeat,
       resetKnownToUnknown,
       sourceCards,
+      postMovePublicCandidates,
       sourceEvent,
       targetSeats,
       handMoveCount,

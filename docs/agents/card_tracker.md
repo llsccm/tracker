@@ -204,6 +204,20 @@
 
 - 总入口：`docs/protocols/README.md`（按消息 className / SpellID / 通用模式定位专页）。
 
+## 观虚目标视角交换（SpellID=987/988）
+
+- 协议文档：`docs/protocols/GsCRoleOptTargetNtf-987.md`。
+- 交换序列为 `1->10` 五张牌堆顶、`5->10` 目标手牌、两次跨 `FromID/ToID` 的
+  `10->10`，再由 `10->1` / `10->5` 分别拆回；不是通用整手交换。
+- `src/tracker/skill/GuanXu.ts` 以 `FromID/ToID` 维护牌堆侧与手牌侧逻辑桶，避免全局
+  `exchange` 物理顺序把目标手牌误当成牌堆侧已知身份的物化端点。
+- 牌堆侧已知身份尚未定位时，直接物化到该桶匿名实体；空 `CardIDs` 的整批回牌堆仍按桶
+  携带本地已知换出手牌，因此不会 `known-fallback/createExternal`，也不会把该牌遗留在交换区。
+- 交换协议不提供换入手牌在整批牌顶中的序号；回堆后只附加“牌顶前 N 张”公共范围候选，
+  不能根据本地物理代表顺序把它实锤为牌顶或第 N 张。
+- `987/988` 显式绕过 `HandExchange`；即使目标恰好只有一张手牌，也不能把这条技能路径误判为
+  双方整手互换。回归见 `tests/tracker/guanXuExchange.test.ts`。
+
 ## 整手牌交换（通用协议模式）
 
 - 协议文档：`docs/protocols/hand-exchange.md`（以技能 121 为完整示例）。

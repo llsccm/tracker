@@ -1,4 +1,4 @@
-# `GsCRoleOptTargetNtf` / `PubGsCMoveCard`：观虚观看牌堆顶与目标手牌
+# `GsCRoleOptTargetNtf` / `PubGsCMoveCard`：观虚观看与交换牌堆顶、目标手牌
 
 ## 消息用途
 
@@ -89,6 +89,42 @@ ToZoneParam: 0
 
 这样观看 5 张后，牌堆展示仍应是“5 明 + 剩余暗”，而不是多出一张。
 
+## 目标视角的交换结算
+
+目标座位能看到自己换出的手牌和最终获得的牌堆牌，但牌堆侧整批移动仍可能不带
+`CardIDs`。以下实战序列中，1 号观察 6 号发动观虚，16 是 1 号换出的手牌，142 是从
+五张牌堆顶中选出的牌：
+
+| 阶段 | 来源                         | 目标                         | `CardCount` | `CardIDs` |
+| ---- | ---------------------------- | ---------------------------- | ----------: | --------- |
+| 1    | `255 / pile(1)`              | `6 / exchange(10)`           |           5 | `[]`      |
+| 2    | `1 / hand(5)`                | `1 / exchange(10)`           |           1 | `[16]`    |
+| 3    | `6 / exchange(10)`           | `1 / exchange(10)`           |           1 | `[142]`   |
+| 4    | `1 / exchange(10)`           | `6 / exchange(10)`           |           1 | `[16]`    |
+| 5    | `6 / exchange(10)`           | `255 / pile(1)`              |           5 | `[]`      |
+| 6    | `1 / exchange(10)`           | `1 / hand(5)`                |           1 | `[142]`   |
+
+结算后的确定事实：
+
+- 142 原本属于步骤 1 暂存的五张牌堆顶，最终进入 1 号手牌。
+- 16 在步骤 4 进入牌堆侧交换桶，并随步骤 5 的五张牌一起回到牌堆顶部范围。
+- 步骤 5 的 `CardIDs=[]` 不能解释为“只取交换区里的匿名牌”；其中必须包含本地已知的 16。
+- 协议没有提供 16 在五张中的插入序号；`FromPosition/ToPosition` 也不是可用的位置证据，
+  因此只能记录“牌顶前 5 张”范围候选，不能把 16 实锤为确定牌顶或第 N 张。
+
+`exchange(10)` 在 Room 中是一个全局公共区，物理顺序不能表达协议里的两侧归属。观虚因此
+使用 `FromID/ToID` 维护两个逻辑交换桶：
+
+1. `1->10` 的五张牌堆顶登记到发动者桶 6，`5->10` 的目标手牌登记到目标桶 1。
+2. `10->10` 只在 `FromID` 对应的桶中选牌，再转入 `ToID` 对应的桶。
+3. 若 `[142]` 尚在 `unlocatedIdentities`，直接物化到牌堆侧桶中的匿名实体；不能因为交换区
+   物理顶端碰巧是 16，就走 `known-fallback/createExternal`。
+4. `10->1` 与 `10->5` 分别按桶引用拆回；因此空 ID 的五张回牌堆仍会携带已知实体 16，
+   并在移动完成后给 16 附加“牌顶前 5 张”公共范围候选。
+
+该序列不是“双方整手互换”。即使目标当时恰好只有一张手牌，`987/988` 也会绕过通用
+`HandExchange` 账本，避免把最后的 `[142]` 回手误解释为原手牌批次返回。
+
 ## 相关技能
 
 - 权变：docs/protocols/GsCRoleOptTargetNtf-7011.md
@@ -100,7 +136,9 @@ ToZoneParam: 0
 - 观虚端点归一化：`src/handler/PubGsCMoveCard.js` 的 `normalizeMovePosition`
 - 同区展示识别：`src/tracker/MoveEventNormalizer.ts` 的 `isSameZoneShowEvent`
 - 公共区展示与玩家占用身份回收：`src/tracker/runtime/trackerController.ts`
+- 目标视角交换桶：`src/tracker/skill/GuanXu.ts`
 - 回归测试：
   - `tests/tracker/roleOptTargetNtf.test.ts`
   - `tests/tracker/pubGsCMoveCard.test.ts`
   - `tests/tracker/trackerController.test.ts`
+  - `tests/tracker/guanXuExchange.test.ts`

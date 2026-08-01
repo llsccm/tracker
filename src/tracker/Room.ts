@@ -1894,6 +1894,10 @@ export class Room {
     this.movement.applyMoveCandidatePropagation(context)
     this.movement.moveUnknownCardsForContext(context)
     this.movement.moveKnownCardsForContext(context)
+    context.postMovePublicCandidates?.forEach(({ card, candidate }) => {
+      if (!context.publicMovedCards.includes(card) || card.location !== candidate.zone) return
+      card.addPublicCandidate(candidate)
+    })
     this.movement.createPublicMoveConstraintGroup(context)
 
     // 执行状态收敛

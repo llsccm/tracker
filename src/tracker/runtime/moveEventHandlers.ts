@@ -2,6 +2,7 @@ import { CARD_INSTANCE_STATUS } from '../CardCounter'
 import { POSITION_RANDOM } from '../candidate/cardPositions'
 import { trackerLogger } from '@/utils/logger'
 import type { Room } from '../Room'
+import decorateGuanXu, { isGuanXuSpellID } from '../skill/GuanXu'
 import decorateHandExchange from '../skill/HandExchange'
 import decorateQiaoZhi from '../skill/QiaoZhi'
 import decorateSiQi from '../skill/SiQi'
@@ -140,7 +141,7 @@ function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEventDraft 
   observePendingChengLieFinalDiscard(event, room)
 
   // 天候的部分手牌交换需要同时区分牌堆批次与手牌批次，不能落入整手交换账本。
-  if (spellID === 3903) return event
+  if (spellID === 3903 || isGuanXuSpellID(spellID)) return event
 
   // 整手牌经交换区互易：按协议模式处理，不绑定单一 SpellID。
   return decorateHandExchange(event, room)
@@ -414,6 +415,9 @@ function createFilteredPublicMoveHandler(
 
 export function registerDefaultMoveEventHandlers(room: Room): void {
   room.registerMoveEventHandler('*', decorateGenericMove)
+  // 黄承彦【观虚】：按 FromID/ToID 保留牌堆侧与手牌侧交换桶。
+  room.registerMoveEventHandler(987, decorateGuanXu)
+  room.registerMoveEventHandler(988, decorateGuanXu)
   // 周群【天候】：其他视角的匿名换牌批次及最终单牌范围揭示。
   room.registerMoveEventHandler(3903, decorateTianHou)
   //【巧织】：记录两张展示牌，在另一张明置进弃牌堆时用差集确认暗取牌。

@@ -18,7 +18,7 @@
 
 | 文档                                                         |       SpellID | 场景                                             | 关键识别                                                                           |
 | ------------------------------------------------------------ | ------------: | ------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| [`GsCRoleOptTargetNtf-987.md`](GsCRoleOptTargetNtf-987.md)   | `987` / `988` | 观虚：观看牌堆顶 + 目标手牌                      | `Params=[pileCount,handCount,...pile,...hand]`；配对牌堆同区展示 `MoveType=21`     |
+| [`GsCRoleOptTargetNtf-987.md`](GsCRoleOptTargetNtf-987.md)   | `987` / `988` | 观虚：观看并交换牌堆顶 + 目标手牌                | 观看阶段同区展示；交换阶段按 `FromID/ToID` 维护牌堆侧、手牌侧 exchange 桶          |
 | [`GsCRoleOptTargetNtf-3483.md`](GsCRoleOptTargetNtf-3483.md) |        `3483` | 诫厉：观看牌堆顶 + 目标部分手牌，后续交换拆回    | 观看同观虚布局；交换 `1->10` + 部分 `5->10` 再 `10->1` / `10->5`；数组顺序可能逆序 |
 | [`GsCRoleOptTargetNtf-3876.md`](GsCRoleOptTargetNtf-3876.md) |        `3876` | 界强识：目标全部手牌明牌                         | `Params` 全是手牌 ID，`fullHand`                                                   |
 | [`GsCRoleOptTargetNtf-3903.md`](GsCRoleOptTargetNtf-3903.md) |        `3903` | 天候：发动者私有观看，其他视角匿名换牌及单牌展示 | `Type=28/29` 分别解析；匿名交换建立手牌/牌顶候选；单牌收敛牌顶前三范围             |

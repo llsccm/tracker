@@ -4,6 +4,7 @@ import type {
   CardID,
   LocationCandidate,
   MoveSourceEvent,
+  PostMovePublicCandidate,
   PublicPosition,
   PublicZoneName,
   SeatID,
@@ -42,6 +43,7 @@ export interface RoomMovementOptions {
   expectedSlotsBySeat?: ExpectedSlotsBySeatInput
   resetKnownToUnknown?: boolean
   sourceCards?: Card[]
+  postMovePublicCandidates?: PostMovePublicCandidate[]
   sourceEvent?: MoveSourceEvent
   [key: string]: unknown
 }
@@ -63,6 +65,7 @@ export interface RoomMoveContext {
   expectedSlotsBySeat?: ExpectedSlotsBySeatInput
   resetKnownToUnknown: boolean
   sourceCards?: Card[]
+  postMovePublicCandidates?: PostMovePublicCandidate[]
   sourceEvent?: MoveSourceEvent
   targetSeats: SeatID[]
   handMoveCount: number
