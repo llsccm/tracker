@@ -2,6 +2,7 @@ import { trackerLogger } from '@/utils/logger'
 import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
 import { getCompatibleMarkSpellIDs, type SpellIDInput } from '../candidate/markSpellID'
 import { isAnonymous, type Card } from '../Card'
+import { MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Zone } from '../Zone'
 import type {
   PlayerLocationCandidate,
@@ -28,9 +29,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     return sourceZone?.remove(count, position) ?? []
   }
 
-  /**
-   * 协议未给 CardIDs 时只消费暗槽。数组端点只是匿名槽的代表顺序，不能因此弹走已知明牌。
-   */
+  /** 获得类协议未给 CardIDs 时只消费暗槽，不把本地数组端点当作真实牌顶。 */
   takeUnknownCardsFromPublicZone(
     count: number,
     zoneID: SourceZoneInput = 'pile',
@@ -748,6 +747,13 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
 
       return [...selectedUnknownCards, ...knownCards]
     }
+
+    const moveType = Number(sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType)
+    const isRegularPileDraw =
+      (fromZone === 'pile' || Number(fromZone) === 1) && moveType === MOVE_TYPE.DRAW
+
+    // 常规摸牌按牌顶/牌底实体顺序执行，已展示的端点明牌也会被摸走。
+    if (isRegularPileDraw) return this.takeCardsFromPublicZone(count, fromZone, fromPosition)
 
     return this.takeUnknownCardsFromPublicZone(count, fromZone, fromPosition)
   }

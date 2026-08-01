@@ -17,9 +17,9 @@ active pool = 确定仍在牌堆：NO-GO，语义错误
 批次候选集合 + 在牌堆数量：GO，完成产品与协议可维护性决策
 全局世代独立生产 observer：不推进
 三模型只读 observer：已实现并保留（DEV 限定），后续按机会采样
-匿名任意位置牌堆获取：按普通暗摸处理，只减少暗槽并使身份进入全局未决
+匿名任意位置牌堆获取：只在身份不可筛方面类似暗摸；不沿用牌顶边界，身份进入全局未决
 匿名获取导致的批次合并：正常身份失效，不计批次风险或模型降级
-生产身份账本迁移：Phase 3 首个双写切片已完成
+生产身份账本迁移：Phase 3 首个双写切片及 MoveType 1/18 实测追补已完成
 cohort 用户界面：首个迁移切片不新增；内部先保证语义与守恒
 生产迁移 Phase 4–6：继续冻结，等待独立的权威切换任务
 ```
@@ -455,8 +455,9 @@ __trackerBeliefReport()
 
 ```text
 FromZone=2 → ToZone=9        pile-shuffle 失效
-FromZone=1 且无正 ID          anonymous-pile-draw 失效（暗摸）
+FromZone=1 且实际消费暗槽      anonymous-pile-draw 失效（常规摸牌或匿名获得）
 FromZone=1 且有正 ID          证实这些身份在牌堆（明摸/搜牌）
+MoveType=1 摸走牌顶明牌        证实并精确结束这些身份的牌堆断言
 FromZone=5 且有正 ID          证伪牌堆断言（手牌现身）
 ```
 
@@ -758,8 +759,8 @@ unsupportedEventCount                     0
 #### 8.5.4 B15 语义重判
 
 旧 observer 曾把两次 B15 计为边界风险和实际分组合并，原始输出为 `6/2`。按照当前产品
-语义，匿名获取与普通暗摸一样不能筛出具体身份；`2 -> 1` 只是未决集合归一化，不是可用
-身份信息的失败。候选宽度与分组峰值不变，计数应重判为：
+语义，匿名获取只在“不能筛出具体身份”方面与暗摸相同；它不具有牌顶位置语义。`2 -> 1`
+只是未决集合归一化，不是可用身份信息的失败。候选宽度与分组峰值不变，计数应重判为：
 
 ```text
 batchBoundaryRiskEventCount          4
@@ -861,7 +862,7 @@ Phase 2 核对结果：
 | 不增加确认矛盾     | 三路确认矛盾均为 0；继续按下界解释                                          | 通过 |
 | 有信息或代码收益   | exposure/event 从 baseline 15.77 降至 cohort 1.23；存在明确兼容分支删除清单 | 通过 |
 | 玩家/mark 隔离     | 首个切片只新增牌堆身份账本，保留现有玩家/mark 槽位与候选模型                | 通过 |
-| 暗摸热路径         | 无 CardIDs 时只消费暗槽并扣批次基数，不遍历身份全集                         | 通过 |
+| 暗摸热路径         | MoveType 1 只检查端点张数；MoveType 18 只消费暗槽；均不遍历身份全集         | 通过 |
 | 至少两条可删除路径 | §10 已列出 `remainingPileIdentityIDs` 分类、正 ID 暗槽挤出/转交等路径       | 通过 |
 | 物理与身份分离     | 目标不变量以 `Zone` 暗槽数和 cohort 账本分别维护                            | 通过 |
 
@@ -1016,6 +1017,45 @@ B6 走匿名随机插入并按需合并；B14 在无法证明范围仍位于单�
 
 真实回放仍拿不到服务器隐藏牌序，`confirmedContradictionCount` 只是确认下界。Phase 1
 能比较的是可见证据下的风险暴露与信息表达成本，不是完整正确率。
+
+### 10.4 Phase 3 实测追补：常规摸牌与获得分流
+
+首轮 Phase 3 实测的 445 事件报告没有出现“生产账本与 DEV observer 不一致”告警，但事件
+351/353 暴露了共同口径错误：两条协议均为 `FromZone=1 -> ToZone=5`、`MoveType=1`、
+`CardIDs=[]`、`CardCount=2`，Room 每次只减少 1 张，observer 随后记录
+`pile-count-reconcile:protocol-move`。事件 351 还把 cohort 从 8 组合并为 1 组，却因 reconcile
+诊断使用 `boundaryRisk=false` 而没有计入实际降级。
+
+“无双写告警”只证明两个账本执行了同一转换，不能证明转换符合协议。根因是实现把
+`CardIDs=[]` 同时当成了身份和位置语义：所有无 ID 牌堆移动都走
+`takeUnknownCardsFromPublicZone()`，从而跳过牌顶明牌。正确语义分为两个轴：
+
+1. `MoveType=1` 是常规摸牌，按牌顶/牌底实体顺序移动；端点明牌必须精确离堆，剩余张数
+   才按暗槽消费。
+2. `MoveType=18` 是获得，不等同于牌顶摸牌；无 CardIDs 时只消费暗槽，并按 B14/B15 的
+   范围或任意位置规则更新 cohort。
+3. CardIDs 只表示协议是否直接给出身份，不能用来决定是否保留端点顺序。
+
+追补实现保留 Room 作为 Phase 3 权威顺序源。Controller 在移动前只读取本次端点范围，不扫
+身份全集；移动后把实际离堆的牌顶明牌 ID、实际暗槽消费数和仍留在牌堆的事件明牌 ID 同时
+传给生产 ledger 与 observer。两者分别执行“已知身份离堆”和“暗槽基数减少”，不再依赖
+全局牌数 reconcile 修复。若物理牌堆本身不足，observer 只记录非风险诊断
+`anonymous-pile-draw-count-adjusted`，不合并 cohort。
+
+重跑同类事件时检查：
+
+1. `MoveType=1` 且牌顶有明牌时，`knownPileIdentityIDsConsumed` 应列出实际离堆身份；
+   `anonymousPileConsumptionCount` 只等于同批剩余暗槽数。
+2. `MoveType=18` 无 CardIDs 时，`knownPileIdentityIDsConsumed` 应为空，牌顶明牌实体仍在堆。
+3. 牌堆实体足够时，不应再出现 `pile-count-reconcile:protocol-move` 或
+   `anonymous-pile-draw-count-adjusted`。
+4. `batchBoundaryDegradationCount` 只统计真正有风险且组数减少的事件；数量调整保持
+   `boundaryRisk=false`、`boundaryDegraded=false`。
+5. 仍需确认没有“生产账本与 DEV observer 不一致”以及牌堆身份/槽位守恒告警。
+
+2026-08-01 追补验证结果：`pnpm test:tracker` 50 个文件、464 项通过；
+`pnpm typecheck:tracker`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、
+`pnpm build:prod` 全部通过，`traversalBaseline` 未回退。
 
 ---
 

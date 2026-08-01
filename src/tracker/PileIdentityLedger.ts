@@ -42,6 +42,10 @@ export interface PileIdentityLedgerMove {
   toZone: number | null
   cardIDs: readonly CardID[]
   cardCount: number
+  pileCountBefore?: number
+  anonymousPileConsumptionCount?: number
+  knownPileIdentityIDsConsumed?: readonly CardID[]
+  visiblePileIdentityIDsAfter?: readonly CardID[]
   fromPosition?: PublicPosition
   toPosition?: PublicPosition
   moveType?: number | string | null
@@ -175,15 +179,33 @@ export class PileIdentityLedger {
     this.commit(`move:${move.eventType}`, () => {
       const cardIDs = normalizeIDs(move.cardIDs)
       const knownCount = cardIDs.length
-      const unknownCount = Math.max(0, normalizeCount(move.cardCount) - knownCount)
+      const protocolUnknownCount = Math.max(0, normalizeCount(move.cardCount) - knownCount)
+      const knownPileIdentityIDsConsumed =
+        move.fromZone === 1 && cardIDs.length === 0
+          ? normalizeIDs(move.knownPileIdentityIDsConsumed ?? [])
+          : []
+      const maxAnonymousPileConsumptionCount = Math.max(
+        0,
+        protocolUnknownCount - knownPileIdentityIDsConsumed.length
+      )
+      const anonymousPileConsumptionCount =
+        move.fromZone === 1 && cardIDs.length === 0
+          ? Math.min(
+              maxAnonymousPileConsumptionCount,
+              normalizeCount(move.anonymousPileConsumptionCount ?? maxAnonymousPileConsumptionCount)
+            )
+          : protocolUnknownCount
 
       if (move.eventType === 'noop') {
+        this.confirmVisiblePileIdentitiesInternal(move.visiblePileIdentityIDsAfter)
         this.previousDiscardCount = normalizeCount(move.discardCountAfter)
         return
       }
 
       if (move.eventType === 'shuffleDiscardIntoPile') {
         this.applyShuffleInternal(move.pileCountAfter)
+        this.confirmVisiblePileIdentitiesInternal(move.visiblePileIdentityIDsAfter)
+        this.reconcilePileCountInternal(move.pileCountAfter)
         this.previousDiscardCount = normalizeCount(move.discardCountAfter)
         return
       }
@@ -191,6 +213,7 @@ export class PileIdentityLedger {
       const staysInPile = move.fromZone === 1 && move.toZone === 1
       if (staysInPile) {
         cardIDs.forEach((cardID) => this.revealIdentityInPileInternal(cardID))
+        this.confirmVisiblePileIdentitiesInternal(move.visiblePileIdentityIDsAfter)
         this.reconcilePileCountInternal(move.pileCountAfter)
         this.previousDiscardCount = normalizeCount(move.discardCountAfter)
         return
@@ -198,15 +221,21 @@ export class PileIdentityLedger {
 
       if (move.fromZone === 1) {
         cardIDs.forEach((cardID) => this.revealIdentityFromPileInternal(cardID))
-        if (unknownCount > 0) {
+        knownPileIdentityIDsConsumed.forEach((cardID) =>
+          this.revealIdentityFromPileInternal(cardID)
+        )
+        if (anonymousPileConsumptionCount > 0) {
           const isTopRangeGain =
             Number(move.moveType) === 18 &&
             Number(move.spellID) === 7011 &&
             move.fromPosition !== POSITION_RANDOM
-          if (isTopRangeGain) this.consumeAnonymousTopRangeInternal(unknownCount)
-          else if (Number(move.moveType) === 18) {
-            this.consumeAnonymousInternal(unknownCount, POSITION_RANDOM)
-          } else this.consumeAnonymousInternal(unknownCount, move.fromPosition)
+          if (isTopRangeGain) {
+            this.consumeAnonymousTopRangeInternal(anonymousPileConsumptionCount)
+          } else if (Number(move.moveType) === 18) {
+            this.consumeAnonymousInternal(anonymousPileConsumptionCount, POSITION_RANDOM)
+          } else {
+            this.consumeAnonymousInternal(anonymousPileConsumptionCount, move.fromPosition)
+          }
         }
       } else if (move.toZone === 1) {
         if (cardIDs.length > 0) {
@@ -222,7 +251,7 @@ export class PileIdentityLedger {
           )
         }
 
-        if (unknownCount > 0) {
+        if (protocolUnknownCount > 0) {
           this.degradeToSingleCohortInternal(move.pileCountAfter)
         }
       } else {
@@ -236,6 +265,7 @@ export class PileIdentityLedger {
         cardIDs.forEach((cardID) => this.knownDiscardIdentityIDs.add(cardID))
       }
 
+      this.confirmVisiblePileIdentitiesInternal(move.visiblePileIdentityIDsAfter)
       this.reconcilePileCountInternal(move.pileCountAfter)
       this.previousDiscardCount = normalizeCount(move.discardCountAfter)
     })
@@ -452,6 +482,10 @@ export class PileIdentityLedger {
       this.removeEmptyCohorts()
     }
     this.knownPileIdentityIDs.add(normalizedCardID)
+  }
+
+  private confirmVisiblePileIdentitiesInternal(cardIDs: readonly CardID[] | undefined): void {
+    normalizeIDs(cardIDs ?? []).forEach((cardID) => this.revealIdentityInPileInternal(cardID))
   }
 
   private insertKnownInternal(

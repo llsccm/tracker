@@ -3,7 +3,7 @@ import { fromPublicCandidate } from '../candidate/locationCandidate'
 import { createPublicCandidate } from '../candidate/publicCandidate'
 import type { Card } from '../Card'
 import { summarizeMoveEvent } from '../helper/moveSummary'
-import { getProtocolMoveSpecialLabel, normalizeMoveEvent } from '../MoveEventNormalizer'
+import { getProtocolMoveSpecialLabel, MOVE_TYPE, normalizeMoveEvent } from '../MoveEventNormalizer'
 import {
   arePileIdentityCohortSnapshotsEqual,
   type PileIdentityLedgerMove
@@ -326,6 +326,8 @@ export class TrackerController {
 
       const stateEvent = this.normalizeEventWithTrackerState(rawEvent)
       const event = readyRoom.decorateMoveEvent(stateEvent)
+      const pileCountBefore = readyRoom.zones.get('pile')?.cards.length ?? 0
+      const knownPileDrawCards = this.collectRegularDrawKnownPileCards(readyRoom, patchedMsg, event)
       this.controllerLogger.debug('移动事件装饰完成', {
         before: summarizeMoveEvent(stateEvent, MOVE_EVENT_SUMMARY_OPTIONS),
         after: summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
@@ -371,7 +373,13 @@ export class TrackerController {
         readyRoom.moveCards(event.cardIDs, event.toZone, event.options)
       }
 
-      const pileIdentityMove = this.createPileIdentityMove(patchedMsg, event)
+      const pileIdentityMove = this.createPileIdentityMove(
+        patchedMsg,
+        event,
+        readyRoom,
+        pileCountBefore,
+        knownPileDrawCards
+      )
       readyRoom.applyPileIdentityMove(pileIdentityMove)
       this.controllerView.scheduleRender()
       // 只读采集放在状态更新之后：observer 观测的是本次移动生效后的断言集合。
@@ -389,19 +397,66 @@ export class TrackerController {
   /** 生产账本与 DEV observer 共用的协议事件口径。 */
   private createPileIdentityMove(
     event: RawMoveCardEvent,
-    normalizedEvent: NormalizedMoveEvent
+    normalizedEvent: NormalizedMoveEvent,
+    room: Room,
+    pileCountBefore: number,
+    knownPileDrawCards: readonly Card[]
   ): Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'> {
+    const fromZone = event.FromZone == null ? null : Number(event.FromZone)
+    const cardIDs = this.normalizeIDs(event.CardIDs)
+    const pileCountAfter = room.zones.get('pile')?.cards.length ?? 0
+    const knownPileIdentityIDsConsumed = knownPileDrawCards
+      .filter((card) => card.location !== 'pile' && card.id > 0)
+      .map((card) => card.id)
+    const actualPileConsumptionCount = Math.max(0, pileCountBefore - pileCountAfter)
+    const anonymousPileConsumptionCount =
+      fromZone === 1 && cardIDs.length === 0
+        ? Math.max(0, actualPileConsumptionCount - knownPileIdentityIDsConsumed.length)
+        : undefined
+    const visiblePileIdentityIDsAfter = this.normalizeIDs(normalizedEvent.cardIDs).filter(
+      (cardID) => {
+        const card = room.cardIndex.get(cardID)
+        return card?.location === 'pile' && card.isKnown === true
+      }
+    )
+
     return {
       eventType: normalizedEvent.type,
-      fromZone: event.FromZone == null ? null : Number(event.FromZone),
+      fromZone,
       toZone: event.ToZone == null ? null : Number(event.ToZone),
-      cardIDs: this.normalizeIDs(event.CardIDs),
+      cardIDs,
       cardCount: normalizedEvent.cardCount,
+      pileCountBefore,
+      anonymousPileConsumptionCount,
+      knownPileIdentityIDsConsumed,
+      visiblePileIdentityIDsAfter,
       fromPosition: normalizedEvent.options.fromPosition,
       toPosition: normalizedEvent.options.position,
       moveType: normalizedEvent.moveType,
       spellID: event.SpellID
     }
+  }
+
+  private collectRegularDrawKnownPileCards(
+    room: Room,
+    event: RawMoveCardEvent,
+    normalizedEvent: NormalizedMoveEvent
+  ): Card[] {
+    if (
+      Number(event.FromZone) !== 1 ||
+      this.normalizeIDs(event.CardIDs).length > 0 ||
+      Number(normalizedEvent.moveType) !== MOVE_TYPE.DRAW
+    ) {
+      return []
+    }
+
+    const pileCards = room.zones.get('pile')?.cards ?? []
+    const count = Math.min(Math.max(0, normalizedEvent.cardCount), pileCards.length)
+    const sourceCards =
+      normalizedEvent.options.fromPosition === POSITION_BOTTOM
+        ? pileCards.slice(0, count)
+        : pileCards.slice(-count)
+    return sourceCards.filter((card) => card.id > 0 && card.isKnown === true)
   }
 
   /**
@@ -421,6 +476,10 @@ export class TrackerController {
         ToZone: move.toZone,
         CardIDs: [...move.cardIDs],
         CardCount: move.cardCount,
+        PileCountBefore: move.pileCountBefore,
+        AnonymousPileConsumptionCount: move.anonymousPileConsumptionCount,
+        KnownPileIdentityIDsConsumed: [...(move.knownPileIdentityIDsConsumed ?? [])],
+        VisiblePileIdentityIDsAfter: [...(move.visiblePileIdentityIDsAfter ?? [])],
         FromPosition: move.fromPosition,
         ToPosition: move.toPosition,
         MoveType: move.moveType ?? undefined,

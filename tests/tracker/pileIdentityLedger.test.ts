@@ -236,6 +236,53 @@ describe('PileIdentityLedger', () => {
     })
   })
 
+  it('常规匿名摸牌分别扣除牌顶明牌身份与暗槽', () => {
+    const ledger = new PileIdentityLedger()
+    const comparison = new PileIdentityModelComparison()
+    ledger.initialize([1])
+    comparison.initialize([1])
+
+    applyAndCompare(ledger, comparison, {
+      eventType: 'moveKnown',
+      fromZone: 0,
+      toZone: 1,
+      cardIDs: [2],
+      cardCount: 1,
+      toPosition: POSITION_TOP,
+      visiblePileIdentityIDsAfter: [2],
+      pileCountBefore: 1,
+      pileCountAfter: 2
+    })
+    applyAndCompare(ledger, comparison, {
+      eventType: 'drawUnknown',
+      fromZone: 1,
+      toZone: 5,
+      cardIDs: [],
+      cardCount: 2,
+      pileCountBefore: 2,
+      pileCountAfter: 0,
+      anonymousPileConsumptionCount: 1,
+      knownPileIdentityIDsConsumed: [2],
+      fromPosition: POSITION_TOP,
+      moveType: 1
+    })
+
+    expect(ledger.getSnapshot()).toMatchObject({
+      knownPileIdentityIDs: [],
+      hiddenPileSlotCount: 0,
+      accountedPileCount: 0
+    })
+    expect(ledger.getSnapshot().cohort.groups).toEqual([
+      {
+        generation: 0,
+        kind: 'none-in-pile',
+        cardIDs: [1],
+        remainingPileCount: 0,
+        label: '这 1 张都不在牌堆'
+      }
+    ])
+  })
+
   it('B3/B4 随机插入身份时合并全部批次', () => {
     const ledger = createTwoCohortLedger()
 

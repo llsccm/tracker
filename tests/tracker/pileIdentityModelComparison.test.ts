@@ -256,6 +256,92 @@ describe('Phase 1 只读三模型对照', () => {
     ])
   })
 
+  it('常规摸牌分别扣除牌顶明牌身份与暗槽，不触发全局 reconcile', () => {
+    const comparison = new PileIdentityModelComparison()
+    comparison.initialize([1])
+    comparison.applyMove(
+      {
+        eventType: 'moveKnown',
+        fromZone: 0,
+        toZone: 1,
+        cardIDs: [2],
+        cardCount: 1,
+        pileCountBefore: 1,
+        pileCountAfter: 2,
+        toPosition: POSITION_TOP,
+        visiblePileIdentityIDsAfter: [2]
+      },
+      [],
+      0
+    )
+
+    comparison.applyMove(
+      {
+        eventType: 'drawUnknown',
+        fromZone: 1,
+        toZone: 5,
+        cardIDs: [],
+        cardCount: 2,
+        pileCountBefore: 2,
+        pileCountAfter: 0,
+        anonymousPileConsumptionCount: 1,
+        knownPileIdentityIDsConsumed: [2],
+        fromPosition: POSITION_TOP,
+        moveType: 1
+      },
+      [],
+      0
+    )
+
+    const report = comparison.getReport()
+    expect(report.snapshot.cohort.groups).toEqual([
+      {
+        generation: 0,
+        kind: 'none-in-pile',
+        cardIDs: [1],
+        remainingPileCount: 0,
+        label: '这 1 张都不在牌堆'
+      }
+    ])
+    expect(report.degradations).toEqual([])
+  })
+
+  it('协议张数超过实际牌堆消费时只记录非风险数量调整', () => {
+    const comparison = new PileIdentityModelComparison()
+    comparison.initialize([1])
+
+    comparison.applyMove(
+      {
+        eventType: 'drawUnknown',
+        fromZone: 1,
+        toZone: 5,
+        cardIDs: [],
+        cardCount: 2,
+        pileCountBefore: 1,
+        pileCountAfter: 0,
+        anonymousPileConsumptionCount: 1,
+        fromPosition: POSITION_TOP,
+        moveType: 1
+      },
+      [],
+      0
+    )
+
+    const report = comparison.getReport()
+    expect(report.degradations).toHaveLength(1)
+    expect(report.degradations[0]).toMatchObject({
+      reason: 'anonymous-pile-draw-count-adjusted',
+      pileCountBefore: 1,
+      pileCountAfter: 0,
+      anonymousPileConsumptionCount: 1,
+      knownPileIdentityIDsConsumed: [],
+      boundaryRisk: false,
+      boundaryDegraded: false
+    })
+    expect(report.metrics.batchBoundaryRiskEventCount).toBe(0)
+    expect(report.metrics.batchBoundaryDegradationCount).toBe(0)
+  })
+
   it('随机入堆合并批次并显式记录边界降级', () => {
     const comparison = new PileIdentityModelComparison()
     comparison.initialize([1, 2, 3])
@@ -322,7 +408,10 @@ describe('Phase 1 只读三模型对照', () => {
         toPosition: POSITION_RANDOM,
         moveType: null,
         spellID: null,
+        pileCountBefore: null,
         pileCountAfter: 4,
+        anonymousPileConsumptionCount: null,
+        knownPileIdentityIDsConsumed: [],
         boundaryRisk: true,
         boundaryDegraded: true,
         cohortGroupCountBefore: 2,
@@ -380,7 +469,10 @@ describe('Phase 1 只读三模型对照', () => {
         toPosition: POSITION_TOP,
         moveType: 19,
         spellID: 987,
+        pileCountBefore: null,
         pileCountAfter: 3,
+        anonymousPileConsumptionCount: null,
+        knownPileIdentityIDsConsumed: [],
         boundaryRisk: true,
         boundaryDegraded: false,
         cohortGroupCountBefore: 1,
@@ -398,7 +490,10 @@ describe('Phase 1 只读三模型对照', () => {
         toPosition: null,
         moveType: 18,
         spellID: 7011,
+        pileCountBefore: null,
         pileCountAfter: 2,
+        anonymousPileConsumptionCount: 1,
+        knownPileIdentityIDsConsumed: [],
         boundaryRisk: false,
         boundaryDegraded: false,
         cohortGroupCountBefore: 1,

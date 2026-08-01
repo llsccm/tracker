@@ -25,6 +25,10 @@ export interface PileIdentityComparisonMove {
   toZone: number | null
   cardIDs: CardID[]
   cardCount: number
+  pileCountBefore?: number
+  anonymousPileConsumptionCount?: number
+  knownPileIdentityIDsConsumed?: readonly CardID[]
+  visiblePileIdentityIDsAfter?: readonly CardID[]
   fromPosition?: PublicPosition
   toPosition?: PublicPosition
   moveType?: number | string
@@ -84,7 +88,10 @@ export interface PileIdentityDegradation {
   toPosition: PublicPosition | null
   moveType: number | string | null
   spellID: number | string | null
+  pileCountBefore: number | null
   pileCountAfter: number
+  anonymousPileConsumptionCount: number | null
+  knownPileIdentityIDsConsumed: CardID[]
   boundaryRisk: boolean
   boundaryDegraded: boolean
   cohortGroupCountBefore: number
@@ -111,6 +118,11 @@ function normalizeIDs(cardIDs: readonly CardID[]): CardID[] {
   return Array.from(new Set(cardIDs.filter((cardID) => cardID > 0))).sort(
     (left, right) => left - right
   )
+}
+
+function normalizeCount(count: number): number {
+  const normalized = Math.floor(Number(count))
+  return Number.isFinite(normalized) ? Math.max(0, normalized) : 0
 }
 
 function difference(left: Iterable<CardID>, right: Iterable<CardID>): CardID[] {
@@ -206,6 +218,25 @@ export class PileIdentityModelComparison {
   ): void {
     this.eventSeq += 1
     const cardIDs = normalizeIDs(move.cardIDs)
+    const knownPileIdentityIDsConsumed =
+      move.fromZone === 1 && cardIDs.length === 0
+        ? normalizeIDs(move.knownPileIdentityIDsConsumed ?? [])
+        : []
+    const protocolUnknownCount = Math.max(0, normalizeCount(move.cardCount) - cardIDs.length)
+    const maxAnonymousPileConsumptionCount = Math.max(
+      0,
+      protocolUnknownCount - knownPileIdentityIDsConsumed.length
+    )
+    const anonymousPileConsumptionCount =
+      move.fromZone === 1 && cardIDs.length === 0
+        ? Math.min(
+            maxAnonymousPileConsumptionCount,
+            normalizeCount(move.anonymousPileConsumptionCount ?? maxAnonymousPileConsumptionCount)
+          )
+        : protocolUnknownCount
+    const pileCountBefore =
+      move.pileCountBefore == null ? null : normalizeCount(move.pileCountBefore)
+    const cohortGroupCountBefore = this.cohorts.length
     this.degradationContext = {
       eventType: move.eventType,
       fromZone: move.fromZone,
@@ -216,18 +247,23 @@ export class PileIdentityModelComparison {
       toPosition: move.toPosition ?? null,
       moveType: move.moveType ?? null,
       spellID: move.spellID ?? null,
-      pileCountAfter: move.pileCountAfter
+      pileCountBefore,
+      pileCountAfter: move.pileCountAfter,
+      anonymousPileConsumptionCount:
+        move.fromZone === 1 && cardIDs.length === 0 ? anonymousPileConsumptionCount : null,
+      knownPileIdentityIDsConsumed
     }
-    const knownCount = cardIDs.length
-    const unknownCount = Math.max(0, move.cardCount - knownCount)
 
     if (move.eventType === 'noop') {
+      this.confirmVisiblePileIdentities(move.visiblePileIdentityIDsAfter)
       this.observeProjection(currentCandidateIDs, discardCountAfter)
       return
     }
 
     if (move.eventType === 'shuffleDiscardIntoPile') {
       this.applyShuffle(move.pileCountAfter)
+      this.confirmVisiblePileIdentities(move.visiblePileIdentityIDsAfter)
+      this.reconcilePileCount(move.pileCountAfter, 'pile-shuffle-visible-identities')
       this.observeProjection(currentCandidateIDs, discardCountAfter)
       return
     }
@@ -235,6 +271,7 @@ export class PileIdentityModelComparison {
     const staysInPile = move.fromZone === 1 && move.toZone === 1
     if (staysInPile) {
       cardIDs.forEach((cardID) => this.revealIdentityInPile(cardID))
+      this.confirmVisiblePileIdentities(move.visiblePileIdentityIDsAfter)
       this.reconcilePileCount(move.pileCountAfter, 'same-zone-pile-reveal')
       this.observeProjection(currentCandidateIDs, discardCountAfter)
       return
@@ -242,15 +279,16 @@ export class PileIdentityModelComparison {
 
     if (move.fromZone === 1) {
       cardIDs.forEach((cardID) => this.revealIdentityFromPile(cardID))
-      if (unknownCount > 0) {
+      knownPileIdentityIDsConsumed.forEach((cardID) => this.revealIdentityFromPile(cardID))
+      if (anonymousPileConsumptionCount > 0) {
         const isTopRangeGain =
           Number(move.moveType) === 18 &&
           Number(move.spellID) === 7011 &&
           move.fromPosition !== POSITION_RANDOM
-        if (isTopRangeGain) this.consumeUnknownPileTopRange(unknownCount)
+        if (isTopRangeGain) this.consumeUnknownPileTopRange(anonymousPileConsumptionCount)
         else if (Number(move.moveType) === 18) {
-          this.consumeUnknownPileSlots(unknownCount, POSITION_RANDOM)
-        } else this.consumeUnknownPileSlots(unknownCount, move.fromPosition)
+          this.consumeUnknownPileSlots(anonymousPileConsumptionCount, POSITION_RANDOM)
+        } else this.consumeUnknownPileSlots(anonymousPileConsumptionCount, move.fromPosition)
         this.generationDefinitelyInPileIDs.clear()
       }
     } else if (move.toZone === 1) {
@@ -264,7 +302,7 @@ export class PileIdentityModelComparison {
         else cardIDs.forEach((cardID) => this.returnKnownIdentityToPile(cardID, move.toPosition))
       }
 
-      if (unknownCount > 0) {
+      if (protocolUnknownCount > 0) {
         this.degradeToSingleCohort(move.pileCountAfter, 'unknown-return-to-pile', true)
         this.generationDefinitelyInPileIDs.clear()
       }
@@ -275,7 +313,18 @@ export class PileIdentityModelComparison {
     if (move.fromZone === 2) cardIDs.forEach((cardID) => this.knownDiscardIDs.delete(cardID))
     if (move.toZone === 2) cardIDs.forEach((cardID) => this.knownDiscardIDs.add(cardID))
 
+    this.confirmVisiblePileIdentities(move.visiblePileIdentityIDsAfter)
     this.reconcilePileCount(move.pileCountAfter, 'protocol-move')
+    const actualPileConsumptionCount =
+      pileCountBefore === null ? null : Math.max(0, pileCountBefore - move.pileCountAfter)
+    if (
+      move.fromZone === 1 &&
+      cardIDs.length === 0 &&
+      actualPileConsumptionCount !== null &&
+      actualPileConsumptionCount < protocolUnknownCount
+    ) {
+      this.recordDegradation('anonymous-pile-draw-count-adjusted', false, cohortGroupCountBefore)
+    }
     this.observeProjection(currentCandidateIDs, discardCountAfter)
   }
 
@@ -296,7 +345,10 @@ export class PileIdentityModelComparison {
       toPosition: null,
       moveType: null,
       spellID: null,
-      pileCountAfter: reveal.pileCountAfter
+      pileCountBefore: null,
+      pileCountAfter: reveal.pileCountAfter,
+      anonymousPileConsumptionCount: null,
+      knownPileIdentityIDsConsumed: []
     }
     if (reveal.location === 'pile') {
       cardIDs.forEach((cardID) => this.revealIdentityInPile(cardID))
@@ -435,7 +487,7 @@ export class PileIdentityModelComparison {
 
   private consumeUnknownPileSlots(count: number, position?: PublicPosition): void {
     if (position === POSITION_RANDOM) {
-      // 匿名任意位置取牌与普通暗摸一样，只能确认暗槽数量减少，不能筛出具体身份。
+      // 匿名任意位置获得只能确认暗槽数量减少，不能筛出具体身份或沿用牌顶边界。
       // 合并为全局未决集合等待后续展示，但不把这种正常失效计为批次风险或模型降级。
       this.degradeToSingleCohort(
         Math.max(0, this.getAccountedPileCount() - count),
@@ -538,6 +590,10 @@ export class PileIdentityModelComparison {
       this.removeEmptyCohorts()
     }
     this.knownPileIDs.add(cardID)
+  }
+
+  private confirmVisiblePileIdentities(cardIDs: readonly CardID[] | undefined): void {
+    normalizeIDs(cardIDs ?? []).forEach((cardID) => this.revealIdentityInPile(cardID))
   }
 
   private returnKnownIdentityToPile(cardID: CardID, position?: PublicPosition): void {
@@ -723,7 +779,10 @@ export class PileIdentityModelComparison {
       toPosition: null,
       moveType: null,
       spellID: null,
-      pileCountAfter: this.getAccountedPileCount()
+      pileCountBefore: null,
+      pileCountAfter: this.getAccountedPileCount(),
+      anonymousPileConsumptionCount: null,
+      knownPileIdentityIDsConsumed: []
     }
     const cohortGroupCountAfter = this.cohorts.length
     const boundaryDegraded = boundaryRisk && cohortGroupCountAfter < cohortGroupCountBefore

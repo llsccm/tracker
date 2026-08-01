@@ -220,6 +220,19 @@ describe('协议证据分类', () => {
     expect(actions.confirmedFromPileIDs).toEqual([])
   })
 
+  it('常规摸牌只带走已知牌顶时证实该身份且不失效其它断言', () => {
+    const actions = classifyBeliefEvidence({
+      FromZone: 1,
+      ToZone: 5,
+      CardIDs: [],
+      AnonymousPileConsumptionCount: 0,
+      KnownPileIdentityIDsConsumed: [7]
+    })
+
+    expect(actions.invalidationReason).toBeNull()
+    expect(actions.confirmedFromPileIDs).toEqual([7])
+  })
+
   it('牌堆来源带 CardID 证实身份在牌堆，不失效', () => {
     // 明摸/搜牌：协议给出 CardID 本身就证明该身份此刻在牌堆。
     const actions = classifyBeliefEvidence({ FromZone: 1, ToZone: 5, CardIDs: [7, 8] })
@@ -282,7 +295,7 @@ describe('接线：syncTrackerMove 采集', () => {
     expect(controller.getBeliefEpochReport()!.metrics.unresolvedRiskSetSize).toBe(0)
 
     // 暗摸：协议不给 CardID，只消费牌堆暗槽，不用牌顶明牌代表未知身份。
-    controller.syncTrackerMove(protocolMove({ CardIDs: [], CardCount: 1 }))
+    controller.syncTrackerMove(protocolMove({ CardIDs: [], CardCount: 1, MoveType: 18 }))
 
     const report = controller.getBeliefEpochReport()!
     expect(report.metrics.observedEventCount).toBe(3)
@@ -382,7 +395,7 @@ describe('全零结果的判读', () => {
 
     controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, [1, 2])
     controller.syncTrackerMove(protocolMove({ FromZone: 6, ToZone: 2, CardIDs: [], CardCount: 0 }))
-    controller.syncTrackerMove(protocolMove({ CardIDs: [], CardCount: 1 }))
+    controller.syncTrackerMove(protocolMove({ CardIDs: [], CardCount: 1, MoveType: 18 }))
 
     const report = controller.getBeliefEpochReport()!
     expect(report.metrics.totalEpochCount).toBeGreaterThan(0)

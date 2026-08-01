@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { POSITION_RANDOM } from '@/tracker/candidate/cardPositions'
+import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
 
 describe('PileIdentityLedger integration', () => {
@@ -69,7 +69,7 @@ describe('PileIdentityLedger integration', () => {
     expect(ledgerSnapshot.cohort).toEqual(observerSnapshot)
   })
 
-  it('匿名获取跳过牌顶明牌，只消费暗占位并等待后续展示', () => {
+  it('MoveType=18 匿名获得跳过牌顶明牌，只消费暗占位并等待后续展示', () => {
     const { controller } = createTrackerControllerHarness()
     controller.initTrackerRoom()
     controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
@@ -107,5 +107,64 @@ describe('PileIdentityLedger integration', () => {
         label: '这 3 张里有 2 张在牌堆'
       }
     ])
+  })
+
+  it('MoveType=1 常规摸牌同步扣除牌顶明牌身份与后续暗槽', () => {
+    const warnCalls: unknown[][] = []
+    const { controller } = createTrackerControllerHarness({
+      logger: {
+        warn(...args: unknown[]) {
+          warnCalls.push(args)
+        }
+      }
+    })
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1])
+
+    controller.syncTrackerMove(
+      protocolMove({
+        FromZone: 0,
+        FromID: 0,
+        ToZone: 1,
+        ToID: 255,
+        CardIDs: [2],
+        CardCount: 1,
+        MoveType: 15
+      })
+    )
+
+    let room = controller.getTrackerRoom()
+    expect(room.zones.get('pile')!.cards.at(-1)).toMatchObject({ id: 2, isKnown: true })
+    expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
+      knownPileIdentityIDs: [2],
+      hiddenPileSlotCount: 1
+    })
+
+    controller.syncTrackerMove(
+      protocolMove({ CardIDs: [], CardCount: 2, MoveType: 1, FromPosition: POSITION_TOP })
+    )
+
+    room = controller.getTrackerRoom()
+    const ledgerSnapshot = room.pileIdentityLedger.getSnapshot()
+    const report = controller.getBeliefEpochReport()!
+
+    expect(room.zones.get('pile')!.cards).toHaveLength(0)
+    expect(ledgerSnapshot.knownPileIdentityIDs).toEqual([])
+    expect(ledgerSnapshot.hiddenPileSlotCount).toBe(0)
+    expect(ledgerSnapshot.cohort.groups).toEqual([
+      {
+        generation: 0,
+        kind: 'none-in-pile',
+        cardIDs: [1],
+        remainingPileCount: 0,
+        label: '这 1 张都不在牌堆'
+      }
+    ])
+    expect(ledgerSnapshot.cohort).toEqual(report.modelComparison.snapshot.cohort)
+    expect(report.modelComparison.degradations).toEqual([])
+    expect(warnCalls.some(([label]) => label === '牌堆身份生产账本与 DEV observer 不一致')).toBe(
+      false
+    )
   })
 })

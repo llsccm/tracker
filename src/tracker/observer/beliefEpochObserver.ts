@@ -579,6 +579,10 @@ class ReadOnlyBeliefEpochObserver implements BeliefEpochObserver {
         toZone: event.ToZone == null ? null : Number(event.ToZone),
         cardIDs: [...(event.CardIDs ?? [])],
         cardCount: Number(event.CardCount) || (event.CardIDs ?? []).length,
+        pileCountBefore: event.PileCountBefore,
+        anonymousPileConsumptionCount: event.AnonymousPileConsumptionCount,
+        knownPileIdentityIDsConsumed: event.KnownPileIdentityIDsConsumed,
+        visiblePileIdentityIDsAfter: event.VisiblePileIdentityIDsAfter,
         fromPosition: event.FromPosition,
         toPosition: event.ToPosition,
         moveType: event.MoveType,
@@ -699,6 +703,10 @@ export interface BeliefEvidenceInput {
   ToZone?: number | string
   CardIDs?: readonly CardID[]
   CardCount?: number | string
+  PileCountBefore?: number
+  AnonymousPileConsumptionCount?: number
+  KnownPileIdentityIDsConsumed?: readonly CardID[]
+  VisiblePileIdentityIDsAfter?: readonly CardID[]
   FromPosition?: PublicPosition
   ToPosition?: PublicPosition
   MoveType?: number | string
@@ -715,7 +723,13 @@ export interface BeliefRevealInput {
 export function classifyBeliefEvidence(event: BeliefEvidenceInput): BeliefEvidenceActions {
   const fromZone = Number(event.FromZone)
   const toZone = Number(event.ToZone)
-  const knownIDs = (event.CardIDs ?? []).filter((cardID) => cardID > 0)
+  const knownIDs = Array.from(
+    new Set(
+      [...(event.CardIDs ?? []), ...(event.KnownPileIdentityIDsConsumed ?? [])].filter(
+        (cardID) => cardID > 0
+      )
+    )
+  )
 
   // 弃牌洗回：牌堆整体重建，旧断言的位置依据消失。
   if (fromZone === PROTOCOL_ZONE_DISCARD && toZone === PROTOCOL_ZONE_SHUFFLE) {
@@ -727,10 +741,14 @@ export function classifyBeliefEvidence(event: BeliefEvidenceInput): BeliefEviden
   }
 
   if (fromZone === PROTOCOL_ZONE_PILE) {
+    const hasAnonymousPileConsumption =
+      event.AnonymousPileConsumptionCount === undefined
+        ? knownIDs.length === 0
+        : Number(event.AnonymousPileConsumptionCount) > 0
     // 协议给出 CardID → 证实这些身份此刻在牌堆。
     // 没给 CardID → 匿名消费，在途断言失去可证伪性（§8.3）。
     return {
-      invalidationReason: knownIDs.length > 0 ? null : 'anonymous-pile-draw',
+      invalidationReason: hasAnonymousPileConsumption ? 'anonymous-pile-draw' : null,
       confirmedFromPileIDs: knownIDs,
       contradictedFromHandIDs: []
     }
