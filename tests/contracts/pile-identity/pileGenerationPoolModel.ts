@@ -601,6 +601,8 @@ function applyCohortEvent(state: CohortPoolModelState, event: PileGenerationEven
     case 'insertExternalAtRandom': {
       // B3/B4：位置未知 → 合并全部批次，再把新身份并入合并批次。
       const cardIDs = normalizeIdentityIDs(event.cardIDs)
+      // 只有真的存在多个批次时，随机插入才会丢失批次边界。
+      const mergedBoundaries = state.cohorts.length > 1
       mergeAllCohorts(state)
       cardIDs.forEach((cardID) => state.identityUniverse.add(cardID))
 
@@ -618,7 +620,7 @@ function applyCohortEvent(state: CohortPoolModelState, event: PileGenerationEven
         ]
       }
       state.pileSlotCount += cardIDs.length
-      state.cohortDegradationCount += 1
+      if (mergedBoundaries) state.cohortDegradationCount += 1
       break
     }
     case 'drawAcrossShuffle': {
