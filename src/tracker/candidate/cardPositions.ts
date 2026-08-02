@@ -50,6 +50,10 @@ export function getProtocolInsertionIndex(position: unknown, cardCount: number):
  *
  * 数值位置与 POSITION_BOTTOM 共用从牌底起算的坐标；批量插入时反转输入顺序，保持
  * Zone.add(POSITION_BOTTOM) 既有的批次相对顺序。返回 false 表示位置不是可用的精确插槽。
+ *
+ * 注意：POSITION_TOP 哨兵与等于 orderedCards.length 的数值槽位指向同一落点（牌顶），但批次
+ * 顺序不同——TOP 直接 push，保持 cards 的输入顺序；数值槽位走 splice 分支会反转输入顺序。
+ * 因此不要把 POSITION_TOP 归一化成 cardCount，否则会意外翻转批次顺序。
  */
 export function insertCardsAtProtocolPosition<T>(
   orderedCards: T[],

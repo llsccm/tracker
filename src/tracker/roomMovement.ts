@@ -45,6 +45,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       fromSpellID,
       cardCount = normalizedCardIDs.length,
       handMoveCount: requestedHandMoveCount,
+      moveType,
       position = POSITION_TOP,
       fromPosition = position,
       expectedSlotsBySeat,
@@ -98,6 +99,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       fromSubZone,
       fromSpellID: normalizedFromSpellID,
       cardCount: Number(cardCount),
+      moveType,
       position,
       fromPosition,
       expectedSlotsBySeat,
@@ -521,7 +523,8 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       subZone,
       targetSeats,
       toZone,
-      unknownCount
+      unknownCount,
+      moveType
     } = context
 
     if (unknownCount <= 0) return
@@ -549,7 +552,8 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         fromZone,
         fromPosition,
         sourceCards,
-        sourceEvent
+        sourceEvent,
+        moveType
       })
 
       context.movedUnknownCards = movedUnknownCards
@@ -607,7 +611,8 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       fromZone,
       fromPosition,
       sourceCards,
-      sourceEvent
+      sourceEvent,
+      moveType
     })
 
     const takenCount = movedUnknownCards.length

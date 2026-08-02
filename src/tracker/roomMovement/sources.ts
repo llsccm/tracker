@@ -751,7 +751,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       return [...selectedUnknownCards, ...knownCards]
     }
 
-    const moveType = Number(sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType)
+    const moveType = Number(sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType ?? options.moveType)
     const isPileSource = fromZone === 'pile' || Number(fromZone) === 1
     const isRegularPileDraw = isPileSource && moveType === MOVE_TYPE.DRAW
 
