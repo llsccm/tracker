@@ -3,7 +3,8 @@ import { fromPublicCandidate } from '../candidate/locationCandidate'
 import { createPublicCandidate } from '../candidate/publicCandidate'
 import type { Card } from '../Card'
 import { summarizeMoveEvent } from '../helper/moveSummary'
-import { getProtocolMoveSpecialLabel, normalizeMoveEvent } from '../MoveEventNormalizer'
+import { getProtocolMoveSpecialLabel, MOVE_TYPE, normalizeMoveEvent } from '../MoveEventNormalizer'
+import type { PileIdentityLedgerMove } from '../PileIdentityLedger'
 import {
   getProtocolMarkSpellID,
   getProtocolPlayerSubZone,
@@ -309,6 +310,8 @@ export class TrackerController {
 
       const stateEvent = this.normalizeEventWithTrackerState(rawEvent)
       const event = readyRoom.decorateMoveEvent(stateEvent)
+      const pileCountBefore = readyRoom.zones.get('pile')?.cards.length ?? 0
+      const knownPileDrawCards = this.collectRegularDrawKnownPileCards(readyRoom, patchedMsg, event)
       this.controllerLogger.debug('移动事件装饰完成', {
         before: summarizeMoveEvent(stateEvent, MOVE_EVENT_SUMMARY_OPTIONS),
         after: summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
@@ -345,7 +348,18 @@ export class TrackerController {
           '移动事件分支: shuffleDiscardIntoPile',
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
-        readyRoom.shufflePile({ cardCount: event.cardCount })
+        // 洗牌闭世代依赖账本提交结果，因此把同一条身份事件交给 Room，在物理区重建前提交；
+        // 其它移动仍保持“先移动实体、再写账本”的普通后置流程。
+        const pileIdentityMove = this.createPileIdentityMove(
+          patchedMsg,
+          event,
+          readyRoom,
+          pileCountBefore,
+          knownPileDrawCards
+        )
+        readyRoom.shufflePile({ cardCount: event.cardCount, identityMove: pileIdentityMove })
+        this.controllerView.scheduleRender()
+        return
       } else {
         this.controllerLogger.info(
           '移动事件分支: moveCards',
@@ -354,6 +368,14 @@ export class TrackerController {
         readyRoom.moveCards(event.cardIDs, event.toZone, event.options)
       }
 
+      const pileIdentityMove = this.createPileIdentityMove(
+        patchedMsg,
+        event,
+        readyRoom,
+        pileCountBefore,
+        knownPileDrawCards
+      )
+      readyRoom.applyPileIdentityMove(pileIdentityMove)
       this.controllerView.scheduleRender()
     } catch (e) {
       this.controllerLogger.warn('移动同步异常，已跳过本次 tracker 更新', {
@@ -362,6 +384,77 @@ export class TrackerController {
       })
       this.onError('[Refactor] 移动同步失败:', e, msg)
     }
+  }
+
+  /** 把规范化后的协议移动转换为生产身份账本事件。 */
+  private createPileIdentityMove(
+    event: RawMoveCardEvent,
+    normalizedEvent: NormalizedMoveEvent,
+    room: Room,
+    pileCountBefore: number,
+    knownPileDrawCards: readonly Card[]
+  ): Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'> {
+    const fromZone = event.FromZone == null ? null : Number(event.FromZone)
+    const cardIDs = this.normalizeIDs(event.CardIDs)
+    const pileCountAfter = room.zones.get('pile')?.cards.length ?? 0
+    const knownPileIdentityIDsConsumed = knownPileDrawCards
+      .filter((card) => card.location !== 'pile' && card.id > 0)
+      .map((card) => card.id)
+    const actualPileConsumptionCount = Math.max(0, pileCountBefore - pileCountAfter)
+    const anonymousPileConsumptionCount =
+      fromZone === 1 && cardIDs.length === 0
+        ? Math.max(0, actualPileConsumptionCount - knownPileIdentityIDsConsumed.length)
+        : undefined
+    const visiblePileIdentityIDsAfter = this.collectVisiblePileTopIdentityIDs(room)
+
+    return {
+      eventType: normalizedEvent.type,
+      fromZone,
+      toZone: event.ToZone == null ? null : Number(event.ToZone),
+      cardIDs,
+      cardCount: normalizedEvent.cardCount,
+      pileCountBefore,
+      anonymousPileConsumptionCount,
+      knownPileIdentityIDsConsumed,
+      visiblePileIdentityIDsAfter,
+      fromPosition: normalizedEvent.options.fromPosition,
+      toPosition: normalizedEvent.options.position,
+      moveType: normalizedEvent.moveType,
+      spellID: event.SpellID
+    }
+  }
+
+  private collectRegularDrawKnownPileCards(
+    room: Room,
+    event: RawMoveCardEvent,
+    normalizedEvent: NormalizedMoveEvent
+  ): Card[] {
+    if (
+      Number(event.FromZone) !== 1 ||
+      this.normalizeIDs(event.CardIDs).length > 0 ||
+      Number(normalizedEvent.moveType) !== MOVE_TYPE.DRAW
+    ) {
+      return []
+    }
+
+    const pileCards = room.zones.get('pile')?.cards ?? []
+    const count = Math.min(Math.max(0, normalizedEvent.cardCount), pileCards.length)
+    const sourceCards =
+      normalizedEvent.options.fromPosition === POSITION_BOTTOM
+        ? pileCards.slice(0, count)
+        : pileCards.slice(-count)
+    return sourceCards.filter((card) => card.id > 0 && card.isKnown === true)
+  }
+
+  private collectVisiblePileTopIdentityIDs(room: Room): CardID[] {
+    const pileCards = room.zones.get('pile')?.cards ?? []
+    const visibleCardIDs: CardID[] = []
+    for (let index = pileCards.length - 1; index >= 0; index -= 1) {
+      const card = pileCards[index]
+      if (card?.isKnown !== true || card.id <= 0) break
+      visibleCardIDs.push(card.id)
+    }
+    return this.normalizeIDs(visibleCardIDs)
   }
 
   /**
@@ -567,6 +660,9 @@ export class TrackerController {
         return
       }
 
+      const revealLocation =
+        target.type === 'public' && (target.zoneName ?? 'pile') === 'pile' ? 'pile' : 'outside'
+      readyRoom.applyPileIdentityReveal(ids, revealLocation)
       this.controllerView.scheduleRender()
     } catch (e) {
       this.onError('[Refactor] 明牌同步失败:', e, { target, cardIDs: ids })
@@ -756,6 +852,7 @@ export class TrackerController {
       ToZone: msg.ToZone,
       ToID: msg.ToID,
       ToZoneParam: msg.ToZoneParam,
+      ToPosition: msg.ToPosition,
       MoveType: msg.MoveType,
       SpellID: msg.SpellID
     }

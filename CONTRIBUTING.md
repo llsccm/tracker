@@ -42,6 +42,7 @@ pnpm build
 - `src/tracker/`：当前记牌器运行时状态、推理模型和视图。
 - `src/config/`：远端配置解析。
 - `tests/tracker/`：记牌器 Vitest 回归测试。
+- `tests/contracts/pile-identity/`：牌堆身份纯模型与长期可证伪契约。
 - `html/iframe.html`：界面 HTML 源文件，运行时从外部 URL 加载。
 
 更详细的模块说明见 `docs/agents/overview.md`；记牌器设计和风险清单见 `docs/agents/card_tracker.md`。
@@ -92,10 +93,10 @@ pnpm test:tracker
 
 - 仅修改文档：无需运行构建或测试。
 - 普通代码修改：运行 `pnpm lint` 与 `pnpm build`。
-- 修改 `src/tracker/` 或 `tests/tracker/`：额外运行 `pnpm test:tracker`。
+- 修改 `src/tracker/`、`tests/tracker/` 或 `tests/contracts/pile-identity/`：额外运行 `pnpm test:tracker`。
 - 修改 TypeScript 类型契约、`tsconfig*`、ESLint TypeScript 覆盖范围或 tracker 类型迁移：运行 `pnpm typecheck:tracker`，必要时运行 `pnpm typecheck`。
 - 修改发布配置、打包参数、用户脚本元信息、构建产物命名或记牌器核心高风险路径：额外运行 `pnpm build:prod`。
-- 新增或修改推理逻辑时，优先补充 `tests/tracker/` 回归；外围工具逻辑可放 `tests/utils/`。
+- 新增或修改生产推理逻辑时，优先补充 `tests/tracker/` 回归；不接生产状态的长期模型契约放在 `tests/contracts/`，外围工具逻辑可放 `tests/utils/`。
 
 ## 记牌器贡献提示
 

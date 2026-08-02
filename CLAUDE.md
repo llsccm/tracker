@@ -23,8 +23,8 @@ pnpm build:prod        # production userscript build (run for release/packaging/
 pnpm lint              # ESLint (flat config)
 pnpm format            # Prettier --write over src
 pnpm typecheck         # full-repo tsc --noEmit
-pnpm typecheck:tracker # tsc -p tsconfig.tracker.json (src/tracker + tests/tracker only)
-pnpm test:tracker      # vitest run tests/tracker
+pnpm typecheck:tracker # src/tracker + tracker 回归 + 牌堆身份契约
+pnpm test:tracker      # tests/tracker + tests/contracts/pile-identity
 ```
 
 Run a **single** tracker test file or filter by name (bypass the wrapper script and call vitest directly):
@@ -38,7 +38,7 @@ pnpm exec vitest run tests/tracker -t "hidden mark"
 
 - Docs only → nothing.
 - Normal code → `pnpm lint` + `pnpm build`.
-- Anything under `src/tracker/` or `tests/tracker/` → also `pnpm test:tracker`.
+- Anything under `src/tracker/`, `tests/tracker/`, or `tests/contracts/pile-identity/` → also `pnpm test:tracker`.
 - TS type contracts, `tsconfig*`, ESLint TS coverage, or tracker type migration → `pnpm typecheck:tracker` (and `pnpm typecheck` when a full-repo entry needs confirming).
 - Release/packaging config, userscript metadata, or high-risk tracker core paths → also `pnpm build:prod`.
 
@@ -78,6 +78,26 @@ Key model concepts (these span multiple files and are the "why" behind the desig
 ## Lifecycle (when Room/view actually exist)
 
 The tracker is created per-game, not at script INIT. Two-phase view mount. See [`docs/agents/lifecycle.md`](docs/agents/lifecycle.md). Roughly: `GsCModifyUserseatNtf` creates the `Room` + registers players + early `view.mount` (clears panel, inits hand containers); `MsgGamePlayCardNtf` → `initDeck` builds the physical card pool + `CardCounter`, then a second `view.mount` does the full render; `MsgGameOver`/`ClientLeavetableRep` unmounts the view then destroys the `Room`.
+
+## File Modification & Editing Standards (文件编辑与写入规范)
+
+编辑与写入文件时按以下优先级与适用条件严格执行：
+
+1. **P0 级：后台任务隔离原则（Background Session Isolation Only）**
+   - 仅当处于**后台非交互式 Session** 且**当前工作目录尚未处于隔离工作树**时，才需在修改代码前调用 `EnterWorktree` 防止多 Job 冲突。
+   - 在正常交互式 Session 或已处于开发分支/工作树下时，直接在当前目录修改，无需额外创建工作树。
+
+2. **P1 级：读取与编辑协议（Read-Before-Edit Protocol）**
+   - **前置读取**：修改或覆盖已有文件前，必须在当前 Session 中通过 `Read`（或 Serena 检索工具）读取目标文件，避免未读覆盖报错。
+   - **局部精准修改**：对现有文件优先使用 `Edit` 进行精准字符串替换或 Serena `replace_content` / 符号编辑工具，仅在新建文件或彻底重写时使用 `Write`。
+
+3. **P2 级：换行符与格式规范（Line Endings & Formatting）**
+   - **换行符强制为 LF (`\n`)**：严格禁止引入 CRLF (`\r\n`)。
+   - **格式对齐**：遵循项目 Prettier 规范（单引号 `'`、无分号 `no-semi`、无尾随逗号 `trailingComma: none`、缩进 2 空格、单行宽度 100）。
+
+4. **P3 级：最小化变更与验证（Surgical Diff & Gated Checks）**
+   - **精细化 Diff**：仅修改目标逻辑，严禁无意义的全文件格式化或无关代码改动。
+   - **后置验证**：修改完成后依据变更路径触发对应检查（如 `pnpm lint` + `pnpm build` 或 `pnpm test:tracker`）。
 
 ## Conventions worth knowing
 
