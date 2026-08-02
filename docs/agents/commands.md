@@ -48,7 +48,7 @@
 - **静态检查**：普通代码修改后运行 `pnpm lint`。
 - **构建测试**：普通代码修改后运行 `pnpm build`。
 - **类型检查**：修改 TypeScript 类型契约、`tsconfig*`、ESLint TypeScript 覆盖范围或 tracker 类型迁移相关代码后运行 `pnpm typecheck:tracker`；需要确认全仓类型入口时运行 `pnpm typecheck`。
-- **记牌器测试**：修改 `src/tracker/` 或 `tests/tracker/` 后运行 `pnpm test:tracker`。
+- **记牌器测试**：修改 `src/tracker/`、`tests/tracker/` 或 `tests/contracts/pile-identity/` 后运行 `pnpm test:tracker`。
 - **生产构建**：修改打包配置、核心协议、用户脚本元信息或准备发布时运行 `pnpm build:prod`。
 
 ---

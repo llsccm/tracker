@@ -57,8 +57,25 @@ export interface PileIdentityLedgerMove {
   toPosition?: PublicPosition
   moveType?: number | string | null
   spellID?: number | string | null
+  /** 洗牌事务开始前的物理弃牌张数；未提供时兼容读取上一条账本观测。 */
+  discardCountBefore?: number
+  /** 洗牌前弃牌区可确认的身份；用于直接 Room 调用补齐尚未双写的测试事实。 */
+  knownDiscardIdentityIDsBefore?: readonly CardID[]
   pileCountAfter: number
   discardCountAfter: number
+}
+
+/** 账本完成洗牌事件后交给 Room 的世代过渡事实。 */
+export interface PileIdentityShuffleTransition {
+  closesGeneration: boolean
+  discardCountBefore: number
+  expiringIdentityIDs: CardID[]
+  recycledIdentityIDs: CardID[]
+}
+
+export interface PileIdentityLedgerMoveResult {
+  committed: boolean
+  shuffleTransition?: PileIdentityShuffleTransition
 }
 
 export interface PileIdentityLedgerReveal {
@@ -195,8 +212,9 @@ export class PileIdentityLedger {
     this.warnForIssues(this.collectConsistencyIssues(identities.length, 'initialize'))
   }
 
-  applyMove(move: PileIdentityLedgerMove): void {
-    this.commit(`move:${move.eventType}`, () => {
+  applyMove(move: PileIdentityLedgerMove): PileIdentityLedgerMoveResult {
+    let shuffleTransition: PileIdentityShuffleTransition | undefined
+    const committed = this.commit(`move:${move.eventType}`, () => {
       const cardIDs = normalizeIDs(move.cardIDs)
       const knownCount = cardIDs.length
       const protocolUnknownCount = Math.max(0, normalizeCount(move.cardCount) - knownCount)
@@ -225,7 +243,8 @@ export class PileIdentityLedger {
       }
 
       if (move.eventType === 'shuffleDiscardIntoPile') {
-        this.applyShuffleInternal(move.pileCountAfter)
+        shuffleTransition = this.createShuffleTransition(move)
+        this.applyShuffleInternal(move.pileCountAfter, shuffleTransition)
         this.confirmVisiblePileIdentitiesInternal(move.visiblePileIdentityIDsAfter)
         this.reconcilePileCountInternal(move.pileCountAfter)
         this.previousDiscardCount = normalizeCount(move.discardCountAfter)
@@ -299,6 +318,7 @@ export class PileIdentityLedger {
     })
 
     this.warnForIssues(this.collectConsistencyIssues(move.pileCountAfter, `move:${move.eventType}`))
+    return committed && shuffleTransition ? { committed, shuffleTransition } : { committed }
   }
 
   applyReveal(reveal: PileIdentityLedgerReveal): void {
@@ -401,16 +421,34 @@ export class PileIdentityLedger {
     return normalizeIDs(Array.from(identityIDs))
   }
 
-  private applyShuffleInternal(pileCountAfter: number): void {
-    const recycledIdentityIDs = normalizeIDs(Array.from(this.knownDiscardIdentityIDs))
-    // 协议只给弃牌总数；减去已知弃牌身份后，剩余部分是无法建立新精确 cohort 的匿名弃牌。
-    const anonymousDiscardCount = Math.max(
-      0,
-      this.previousDiscardCount - recycledIdentityIDs.length
-    )
+  private createShuffleTransition(move: PileIdentityLedgerMove): PileIdentityShuffleTransition {
+    const discardCountBefore = normalizeCount(move.discardCountBefore ?? this.previousDiscardCount)
+    const recycledIdentityIDs = normalizeIDs([
+      ...this.knownDiscardIdentityIDs,
+      ...(move.knownDiscardIdentityIDsBefore ?? [])
+    ])
+    const closesGeneration = !isInitialPileShuffle(discardCountBefore, this.identityUniverse.size)
 
-    if (isInitialPileShuffle(this.previousDiscardCount, this.identityUniverse.size)) {
-      if (this.previousDiscardCount > 0) {
+    return {
+      closesGeneration,
+      discardCountBefore,
+      // 先冻结旧 cohort，再由同一事务滚动账本；Room 只能消费提交成功后的这份结果。
+      expiringIdentityIDs: closesGeneration ? this.getUnresolvedIdentityIDs() : [],
+      recycledIdentityIDs
+    }
+  }
+
+  private applyShuffleInternal(
+    pileCountAfter: number,
+    transition: PileIdentityShuffleTransition
+  ): void {
+    const discardCountBefore = transition.discardCountBefore
+    const recycledIdentityIDs = transition.recycledIdentityIDs
+    // 协议只给弃牌总数；减去已知弃牌身份后，剩余部分是无法建立新精确 cohort 的匿名弃牌。
+    const anonymousDiscardCount = Math.max(0, discardCountBefore - recycledIdentityIDs.length)
+
+    if (!transition.closesGeneration) {
+      if (discardCountBefore > 0) {
         // “整副牌暂存在弃牌堆”只是初始化载体差异，不代表 generation 0 已结束。已知弃牌
         // 身份先退回未决集合，匿名弃牌则由 reconcile 恢复完整牌堆基数；两者最终仍属于
         // 当前 generation，而不会建立新的牌底批次。
@@ -820,16 +858,18 @@ export class PileIdentityLedger {
     return issues
   }
 
-  private commit(reason: string, update: () => void): void {
+  private commit(reason: string, update: () => void): boolean {
     // 对外原子操作共享事务边界；规则实现抛错时恢复集合和基数，避免留下半更新状态。
     const previous = this.captureState()
     try {
       update()
       this.assertInternalState(reason)
       this.revision += 1
+      return true
     } catch (error) {
       this.restoreState(previous)
       this.warn('transaction-rollback', { reason, error })
+      return false
     }
   }
 

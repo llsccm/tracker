@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { isAnonymous, type Card } from '@/tracker/Card'
 import { POSITION_RANDOM } from '@/tracker/candidate/cardPositions'
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { MOVE_TYPE, normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
 import decorateGuanXu, { GUAN_XU_STATE_KEY } from '@/tracker/skill/GuanXu'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
@@ -14,7 +14,7 @@ function guanXuMove(overrides: RawMoveOverrides): RawMoveOverrides {
     CardCount: 0,
     FromPosition: POSITION_RANDOM,
     ToPosition: POSITION_RANDOM,
-    MoveType: 11,
+    MoveType: MOVE_TYPE.EXCHANGE,
     SpellID: 987,
     ...overrides
   })
@@ -89,7 +89,7 @@ describe('黄承彦观虚目标视角交换', () => {
         FromID: 255,
         FromZone: 1,
         FromPosition: POSITION_RANDOM,
-        MoveType: 11,
+        MoveType: MOVE_TYPE.EXCHANGE,
         SpellID: 987,
         ToID: actorSeat,
         ToZone: 10,
@@ -101,7 +101,7 @@ describe('黄承彦观虚目标视角交换', () => {
         FromID: targetSeat,
         FromZone: 5,
         FromPosition: POSITION_RANDOM,
-        MoveType: 11,
+        MoveType: MOVE_TYPE.EXCHANGE,
         SpellID: 987,
         ToID: targetSeat,
         ToZone: 10,
@@ -113,7 +113,7 @@ describe('黄承彦观虚目标视角交换', () => {
         FromID: actorSeat,
         FromZone: 10,
         FromPosition: POSITION_RANDOM,
-        MoveType: 11,
+        MoveType: MOVE_TYPE.EXCHANGE,
         SpellID: 987,
         ToID: targetSeat,
         ToZone: 10,
@@ -125,7 +125,7 @@ describe('黄承彦观虚目标视角交换', () => {
         FromID: targetSeat,
         FromZone: 10,
         FromPosition: POSITION_RANDOM,
-        MoveType: 11,
+        MoveType: MOVE_TYPE.EXCHANGE,
         SpellID: 987,
         ToID: actorSeat,
         ToZone: 10,
@@ -137,7 +137,7 @@ describe('黄承彦观虚目标视角交换', () => {
         FromID: actorSeat,
         FromZone: 10,
         FromPosition: POSITION_RANDOM,
-        MoveType: 11,
+        MoveType: MOVE_TYPE.EXCHANGE,
         SpellID: 987,
         ToID: 255,
         ToZone: 1,
@@ -149,7 +149,7 @@ describe('黄承彦观虚目标视角交换', () => {
         FromID: targetSeat,
         FromZone: 10,
         FromPosition: POSITION_RANDOM,
-        MoveType: 11,
+        MoveType: MOVE_TYPE.EXCHANGE,
         SpellID: 987,
         ToID: targetSeat,
         ToZone: 5,

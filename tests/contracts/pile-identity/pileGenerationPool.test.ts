@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CardID } from '@/tracker/types'
-import type { PileGenerationEvent } from './helpers/pileGenerationPoolModel'
+import type { PileGenerationEvent } from './pileGenerationPoolModel'
 import {
   countBaselineSlots,
   countCohortSlots,
@@ -19,7 +19,7 @@ import {
   runGenerationPoolModel,
   runOracle,
   sortIDs
-} from './helpers/pileGenerationPoolModel'
+} from './pileGenerationPoolModel'
 
 /**
  * Phase 0/0.5：世代身份卡池、批次基数模型与当前账本对照。

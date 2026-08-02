@@ -14,8 +14,9 @@
 - 覆盖率配置：默认关注 `src/tracker/**/*.{js,ts}`，排除 `src/tracker/view/**`
 - 现状：
   - 已有较完整的记牌器单元/回归：`tests/tracker/`
+  - 牌堆身份纯模型契约独立放在：`tests/contracts/pile-identity/`
   - 已有少量运行时与外围工具测试：`tests/runtime/`、`tests/utils/peixiuRouteFeature.test.js`
-  - **没有**通用 `pnpm test` 脚本；记牌器专用脚本是 `pnpm test:tracker`（只跑 `tests/tracker`）
+  - **没有**通用 `pnpm test` 脚本；`pnpm test:tracker` 同时运行 tracker 回归与牌堆身份契约
   - **没有**浏览器 E2E / 用户脚本注入自动化
 
 ### 主要目录
@@ -24,6 +25,7 @@
 | ------------------------ | ----------------------------------------------------- |
 | `tests/tracker/`         | Room 移动、候选、收敛、Controller、脏渲染、遍历基线等 |
 | `tests/tracker/helpers/` | 测试夹具与 noop runtime/view                          |
+| `tests/contracts/pile-identity/` | 牌堆身份纯模型、真实牌序 oracle 与长期语义契约 |
 | `tests/runtime/`         | 宿主运行时适配、窗口关闭与对局结束 UI 生命周期        |
 | `tests/utils/`           | 非 tracker 工具逻辑，如裴秀路线                       |
 
@@ -35,7 +37,7 @@
 - 约束与收敛：`convergenceTermination.test.ts`、`resolveConstraintsIncrementalIndex.test.ts`、`ambiguousKnownIndexIncremental.test.ts`
 - 暗牌 / 标记 / 随机转移：`hiddenMarkCandidates.test.ts`、`randomTransferLifecycle.test.ts`、`handCountObservation.test.ts`、`playerHandMirror.test.ts`
 - 局流与技能副作用：`gameFlowState.test.ts`、`spellEffects.test.ts`、`roleOptTargetNtf.test.ts`
-- 牌堆身份模型：`pileGenerationPool.test.ts`、`pileIdentityLedger.test.ts`、`pileIdentityLedgerIntegration.test.ts`
+- 牌堆身份模型：`tests/contracts/pile-identity/pileGenerationPool.test.ts`、`pileIdentityLedger.test.ts`、`pileIdentityLedgerIntegration.test.ts`
 - 视图与展示：`viewDirtyRender.test.ts`、`pileDisplayOrder.test.ts`、`suitGlyph.test.ts`
 - 性能护栏：`traversalBaseline.test.ts`
 - 计数器：`cardCounter.test.ts`
@@ -91,7 +93,7 @@ Windows 本机执行时遵循 [`commands.md`](commands.md) 与 Serena 本机记�
 | ---------------------------------------------------------- | --------------------------------------------------------------- |
 | 仅文档 / 注释                                              | 无需构建与测试                                                  |
 | 普通 `src/` 代码（非 tracker 高风险）                      | `pnpm lint` + `pnpm build`                                      |
-| `src/tracker/` 或 `tests/tracker/`                         | `pnpm lint` + `pnpm build` + `pnpm test:tracker`                |
+| `src/tracker/`、`tests/tracker/` 或 `tests/contracts/pile-identity/` | `pnpm lint` + `pnpm build` + `pnpm test:tracker`        |
 | TS 类型契约、`tsconfig*`、ESLint TS 覆盖、tracker 类型迁移 | `pnpm typecheck:tracker`；需要确认全仓入口时再 `pnpm typecheck` |
 | `tests/utils/` 或非 tracker 测试                           | `pnpm exec vitest run`（或对应文件）+ 适用 lint/build           |
 | 发布配置、打包参数、用户脚本元信息、核心协议高风险路径     | 额外 `pnpm build:prod`                                          |
@@ -142,7 +144,8 @@ CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑�
 
 ### 牌堆身份纯模型
 
-`tests/tracker/pileGenerationPool.test.ts` + `tests/tracker/helpers/pileGenerationPoolModel.ts`
+`tests/contracts/pile-identity/pileGenerationPool.test.ts` +
+`tests/contracts/pile-identity/pileGenerationPoolModel.ts`
 并排维护三个不接生产状态的独立模型：历史正 ID 暗槽基线、全局世代滚动、批次候选集合 +
 `remainingPileCount`，并由仅用于夹具的真实隐藏牌序 oracle 裁决模型陈述。
 
@@ -229,7 +232,7 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
 
 ```text
 L0 静态检查     lint / typecheck
-L1 单元回归     tests/tracker + tests/utils
+L1 单元回归     tests/tracker + tests/contracts + tests/utils
 L2 构建产物     pnpm build / build:prod
 L3 手工注入验收 浏览器 / 微端真实页面
 ```

@@ -50,7 +50,7 @@
 - `resolveEquipmentContainerLocationCandidates()` 将装备容器候选投影到当前装备承载座位的标记区；容器候选本身固定在装备实体上，装备迁移时无需重写候选 key。
 - `syncObservedPlayerHandCount()` 用于同步外部观测到的手牌数量快照；它不是由候选牌反推手牌数，而是将协议事实写入 `Player.observedHandCount` 后触发房间级收敛，例如某席位手牌数归零时剔除该席位的手牌候选并保留装备容器候选。
 - `collectPlayerHandSlotCounts()` 支持传入目标座位集合；`resolveConstraints()` 内已按 seat 增量重算手牌槽统计，首轮只计算有观测手牌数的座位，后续轮次只重算上一轮/本轮触碰座位并复用未变缓存。该缓存只在一次 `resolveConstraints()` 调用内有效，依赖 `Room.resolveTouchedSeats` 的保守触碰集合。`Player.refreshUnknownCardCount()` 的兜底路径也会一次性收集 known/candidate，避免同一 seat 连扫两次。
-- `shufflePile({ cardCount })` 会把 `discard` 洗回 `pile`，只随机弃牌堆部分，保留原剩余牌堆的相对顺序；未提供协议张数时按本地可枚举牌堆处理。协议张数只用于核对物理槽，数量不足时告警且不虚构实体。洗牌身份判断以 `PileIdentityLedger.getUnresolvedIdentityIDs()` 为权威，不再读取正 ID 暗槽、CardCounter UNKNOWN/APPEARED 分类或本地代表顺序。
+- `shufflePile({ cardCount, identityMove })` 会把 `discard` 洗回 `pile`，只随机弃牌堆部分，保留原剩余牌堆的相对顺序；未提供协议张数时按本地可枚举牌堆处理。协议张数只用于核对物理槽，数量不足时告警且不虚构实体。洗牌事件先由 `PileIdentityLedger.applyMove()` 原子提交并返回旧世代/洗回身份过渡，再由 Room 重建物理区与 suspended 投影；物理层不再自行读取事务前的未决身份快照作为已生效事实。
 - 开局 `2 -> 9` 有两种等价协议形态：弃牌堆数量为 `0`，或弃牌堆数量等于整副卡池身份数。两者都只做初始牌堆重建/对账，不关闭 generation 0，也不暂停尚未出现身份。只有部分弃牌洗回才视为真实世代切换。
 - 真实弃牌洗回时，旧 cohort 中仍未出现的身份会转成 detached `suspendedKnownCards` 展示
   实体；它们可继续出现在现有公共候选投影中，但不占物理牌堆、手牌或 mark 槽。尚未物化的
@@ -289,7 +289,7 @@
 - `CardLocationIndex`、`Room.notifyCardChanged()` 与 `view/dirtyRenderState.ts` 已接入：面板与玩家手牌可按脏集合局部重绘；仍可继续收紧边界场景与高频刷新策略。
 - cohort 分组 UI 已裁决不接入；若未来重新评估，应以独立产品需求启动，不要恢复迁移期
   observer 或双写状态。
-- `tests/tracker/helpers/pileGenerationPoolModel.ts` 中的历史基线、世代、批次与真实牌序 oracle
+- `tests/contracts/pile-identity/pileGenerationPoolModel.ts` 中的历史基线、世代、批次与真实牌序 oracle
   继续作为纯测试对照保留；Phase 6 退役的是运行时 observer，不是这些可证伪模型。
 
 ---

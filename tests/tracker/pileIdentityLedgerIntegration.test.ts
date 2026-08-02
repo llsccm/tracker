@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
@@ -82,6 +82,59 @@ describe('PileIdentityLedger integration', () => {
     expect(room.assertPileIdentityLedgerConsistency('test:initial-full-discard-shuffle')).toEqual(
       []
     )
+  })
+
+  it('洗牌先提交账本世代过渡，再重建物理牌堆', () => {
+    const { controller } = createTrackerControllerHarness()
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2, 3, 4])
+    controller.revealTrackerCards({ type: 'public', zoneName: 'pile' }, [1])
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [1],
+        CardCount: 1,
+        FromZone: 1,
+        FromPosition: POSITION_TOP,
+        ToZone: 2,
+        ToID: 0,
+        MoveType: 4
+      })
+    )
+
+    const room = controller.getTrackerRoom()
+    const pile = room.zones.get('pile')!
+    const ledgerApplySpy = vi.spyOn(room.pileIdentityLedger, 'applyMove')
+    const replaceAllSpy = vi.spyOn(pile, 'replaceAll')
+
+    try {
+      controller.syncTrackerMove(
+        protocolMove({
+          CardIDs: [],
+          CardCount: 4,
+          FromZone: 2,
+          MoveType: 255,
+          ToZone: 9
+        })
+      )
+
+      // Room 只能根据已提交的世代过渡创建 suspended，不能先改物理区再读取旧账本快照。
+      expect(ledgerApplySpy).toHaveBeenCalledTimes(1)
+      expect(replaceAllSpy).toHaveBeenCalledTimes(1)
+      expect(ledgerApplySpy.mock.invocationCallOrder[0]).toBeLessThan(
+        replaceAllSpy.mock.invocationCallOrder[0]
+      )
+    } finally {
+      ledgerApplySpy.mockRestore()
+      replaceAllSpy.mockRestore()
+    }
+
+    expect(room.pileIdentityLedger.getSnapshot().cohort.generation).toBe(1)
+    expect(room.unlocatedIdentities.has(1)).toBe(true)
+    expect(
+      Array.from(room.suspendedKnownCards, (card) => card.id).sort((left, right) => left - right)
+    ).toEqual([2, 3, 4])
+    expect(room.assertPileIdentityLedgerConsistency('test:shuffle-commit-order')).toEqual([])
   })
 
   it('成功协议移动后更新 Room 权威身份账本', () => {

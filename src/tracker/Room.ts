@@ -6,10 +6,10 @@ import { GameState } from './gameState'
 import { AmbiguousKnownIndex } from './AmbiguousKnownIndex'
 import { CardLocationIndex } from './CardLocationIndex'
 import {
-  isInitialPileShuffle,
   PileIdentityLedger,
   type PileIdentityConsistencyIssue,
-  type PileIdentityLedgerMove
+  type PileIdentityLedgerMove,
+  type PileIdentityShuffleTransition
 } from './PileIdentityLedger'
 import { normalizePublicPosition } from './candidate/publicCandidate'
 import { summarizeMoveContext, summarizeMoveEvent } from './helper/moveSummary'
@@ -52,6 +52,8 @@ interface AnonymizeLocatedIdentityOptions {
 
 interface ShufflePileOptions {
   cardCount?: number | null
+  /** Controller 归一化后的同一条洗牌事件，由 Room 在物理重建前提交给身份账本。 */
+  identityMove?: Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'>
 }
 
 export interface DirtyCardEvent {
@@ -1201,19 +1203,34 @@ export class Room {
     const hasProtocolPileCount = Number.isFinite(normalizedCardCount) && normalizedCardCount >= 0
     const remainingPileCards = [...pile.cards]
     const recycledCards = [...discard.cards]
-    // 开局 2 -> 9 通知有两种实测形态：discard 为空，或整副牌先暂存在 discard。两者都
-    // 只是初始化/对账，不关闭 generation 0；只有部分弃牌实体洗回才暂停旧 cohort。
+    const hasAuthoritativeIdentityMove = options.identityMove !== undefined
     const hasDiscardCards = recycledCards.length > 0
-    const isInitialShuffle = isInitialPileShuffle(recycledCards.length, this.deckIdentities.size)
-    const closesPileGeneration = hasDiscardCards && !isInitialShuffle
-    const recycledIdentityIDs = new Set(
-      recycledCards.map((card) => card.id).filter((cardID) => cardID > 0)
+    const projectedPileCount = remainingPileCards.length + recycledCards.length
+    const knownDiscardIdentityIDsBefore = recycledCards
+      .map((card) => card.id)
+      .filter((cardID) => cardID > 0)
+    const identityMove = options.identityMove ?? {
+      eventType: 'shuffleDiscardIntoPile',
+      fromZone: 2,
+      toZone: 9,
+      cardIDs: [],
+      cardCount: hasProtocolPileCount ? normalizedCardCount : projectedPileCount,
+      pileCountBefore: remainingPileCards.length
+    }
+    // 洗牌会同时关闭旧 cohort 与建立洗回批次；必须先让账本原子提交这次过渡，Room 才能
+    // 把提交结果投影成 suspended/匿名实体，避免物理状态领先于身份权威。
+    const shuffleTransition = this.applyPileIdentityShuffleBeforePhysicalMove(
+      identityMove,
+      projectedPileCount,
+      recycledCards.length,
+      knownDiscardIdentityIDsBefore
     )
-    // Controller 会在 Room 物理事务结束后提交 ledger 洗牌事件，因此这里拿到的正是旧世代
-    // 快照。先冻结再改实体，才能区分“本轮过期身份”和“本轮洗回后进入新世代的弃牌身份”。
-    const expiringIdentityIDs = closesPileGeneration
-      ? this.pileIdentityLedger.getUnresolvedIdentityIDs()
-      : []
+    const closesPileGeneration = shuffleTransition?.closesGeneration === true
+    const recycledIdentityIDs = new Set(
+      shuffleTransition?.recycledIdentityIDs ?? knownDiscardIdentityIDsBefore
+    )
+    const expiringIdentityIDs = shuffleTransition?.expiringIdentityIDs ?? []
+    const identityContext = `move:${identityMove.eventType}`
     const anonymizedIdentityIDs: CardID[] = []
     const newlySuspendedCardIDs: CardID[] = []
 
@@ -1298,8 +1315,46 @@ export class Room {
       })
     }
 
-    // 触发收敛
+    // 账本已经在物理事务前滚动；这里完成实体投影、收敛与最终态校验，事务中间态不告警。
+    this.anonymizePileCohortIdentityEntities(identityContext)
     this.resolveConstraints()
+    // 直接调用 Room 的历史测试可能绕过此前移动的账本事件；只有 Controller 提供完整事件时，
+    // 才能要求 Room 分区与账本在本次事务末尾严格一致。
+    if (hasAuthoritativeIdentityMove) this.assertPileIdentityLedgerConsistency(identityContext)
+  }
+
+  private applyPileIdentityShuffleBeforePhysicalMove(
+    move: Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'>,
+    pileCountAfter: number,
+    discardCountBefore: number,
+    knownDiscardIdentityIDsBefore: readonly CardID[]
+  ): PileIdentityShuffleTransition | null {
+    try {
+      const result = this.pileIdentityLedger.applyMove({
+        ...move,
+        discardCountBefore,
+        knownDiscardIdentityIDsBefore,
+        pileCountAfter,
+        discardCountAfter: 0
+      })
+      if (result.committed && result.shuffleTransition) return result.shuffleTransition
+
+      trackerLogger.warn('洗牌前牌堆身份账本事务未提交，已跳过旧世代身份暂停', {
+        move,
+        pileCountAfter,
+        discardCountBefore,
+        knownDiscardIdentityIDsBefore
+      })
+    } catch (error) {
+      trackerLogger.warn('洗牌前牌堆身份账本更新失败，已跳过旧世代身份暂停', {
+        error,
+        move,
+        pileCountAfter,
+        discardCountBefore,
+        knownDiscardIdentityIDsBefore
+      })
+    }
+    return null
   }
 
   /**

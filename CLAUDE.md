@@ -23,8 +23,8 @@ pnpm build:prod        # production userscript build (run for release/packaging/
 pnpm lint              # ESLint (flat config)
 pnpm format            # Prettier --write over src
 pnpm typecheck         # full-repo tsc --noEmit
-pnpm typecheck:tracker # tsc -p tsconfig.tracker.json (src/tracker + tests/tracker only)
-pnpm test:tracker      # vitest run tests/tracker
+pnpm typecheck:tracker # src/tracker + tracker 回归 + 牌堆身份契约
+pnpm test:tracker      # tests/tracker + tests/contracts/pile-identity
 ```
 
 Run a **single** tracker test file or filter by name (bypass the wrapper script and call vitest directly):
@@ -38,7 +38,7 @@ pnpm exec vitest run tests/tracker -t "hidden mark"
 
 - Docs only → nothing.
 - Normal code → `pnpm lint` + `pnpm build`.
-- Anything under `src/tracker/` or `tests/tracker/` → also `pnpm test:tracker`.
+- Anything under `src/tracker/`, `tests/tracker/`, or `tests/contracts/pile-identity/` → also `pnpm test:tracker`.
 - TS type contracts, `tsconfig*`, ESLint TS coverage, or tracker type migration → `pnpm typecheck:tracker` (and `pnpm typecheck` when a full-repo entry needs confirming).
 - Release/packaging config, userscript metadata, or high-risk tracker core paths → also `pnpm build:prod`.
 

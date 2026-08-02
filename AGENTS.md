@@ -28,7 +28,7 @@
 - **保留功能范围**：记牌器（`src/tracker/` 已从影子模式切换为主动运行）、山河图信息展示、斗地主记牌、聊天基础过滤、本地设置。已彻底清理或隔离非保留能力（如旧 Laya 自动化、后端网络集成等）。
 - **技术栈**：JavaScript/TypeScript ESM + Vite + vite-plugin-monkey + pnpm；运行时状态与记牌器核心位于 `src/tracker/`，不再存在 `src/context/` 主动实现；不提交构建产物与本地 `.env` 文件，不要无关删除或重生成已跟踪的 `pnpm-lock.yaml`。
 - **编码规范**：EditorConfig（UTF-8, 2空格, LF换行符）/ Prettier（单引号, 无分号, 无尾随逗号）/ ESLint flat config (`eslint.config.js`，包含项目特定全局变量如 Laya、JSZip 等）。
-- **任务完成核验流程**：代码修改后运行 `pnpm lint` 与 `pnpm build`；涉及 TypeScript 类型契约、`tsconfig*` 或 tracker 类型迁移时运行 `pnpm typecheck:tracker`，必要时运行 `pnpm typecheck`；涉及 `src/tracker/` 或 `tests/tracker/` 时额外运行 `pnpm test:tracker`；涉及发布、打包配置或记牌器核心风险变更时额外运行 `pnpm build:prod`；仅修改文档无需构建；修改记忆后运行 `serena memories check` 确认引用对齐。
+- **任务完成核验流程**：代码修改后运行 `pnpm lint` 与 `pnpm build`；涉及 TypeScript 类型契约、`tsconfig*` 或 tracker 类型迁移时运行 `pnpm typecheck:tracker`，必要时运行 `pnpm typecheck`；涉及 `src/tracker/`、`tests/tracker/` 或 `tests/contracts/pile-identity/` 时额外运行 `pnpm test:tracker`；涉及发布、打包配置或记牌器核心风险变更时额外运行 `pnpm build:prod`；仅修改文档无需构建；修改记忆后运行 `serena memories check` 确认引用对齐。
 
 ## Always-On Rules
 

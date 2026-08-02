@@ -348,7 +348,18 @@ export class TrackerController {
           '移动事件分支: shuffleDiscardIntoPile',
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
-        readyRoom.shufflePile({ cardCount: event.cardCount })
+        // 洗牌闭世代依赖账本提交结果，因此把同一条身份事件交给 Room，在物理区重建前提交；
+        // 其它移动仍保持“先移动实体、再写账本”的普通后置流程。
+        const pileIdentityMove = this.createPileIdentityMove(
+          patchedMsg,
+          event,
+          readyRoom,
+          pileCountBefore,
+          knownPileDrawCards
+        )
+        readyRoom.shufflePile({ cardCount: event.cardCount, identityMove: pileIdentityMove })
+        this.controllerView.scheduleRender()
+        return
       } else {
         this.controllerLogger.info(
           '移动事件分支: moveCards',
