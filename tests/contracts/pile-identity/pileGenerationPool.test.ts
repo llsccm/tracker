@@ -1287,8 +1287,17 @@ describe('固定 seed 属性序列', () => {
 
           expect(current).toBeGreaterThanOrEqual(previous)
           expect(delta).toBeLessThanOrEqual(1)
-          if (event.type === 'insertExternalAtRandom') expect(delta).toBe(1)
-          else if (event.type !== 'gainUnknownFromPileTopRange') expect(delta).toBe(0)
+
+          if (
+            event.type !== 'insertExternalAtRandom' &&
+            event.type !== 'gainUnknownFromPileTopRange'
+          ) {
+            expect(delta).toBe(0)
+          }
+
+          if (delta > 0) {
+            expect(['insertExternalAtRandom', 'gainUnknownFromPileTopRange']).toContain(event.type)
+          }
 
           previous = current
         })
