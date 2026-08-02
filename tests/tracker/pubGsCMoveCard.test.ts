@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 
-const { syncTrackerMove } = vi.hoisted(() => ({
-  syncTrackerMove: vi.fn()
-}))
+const { applySpellEffect, handleGameFlowState, handleSpecialZones, syncTrackerMove } = vi.hoisted(
+  () => ({
+    applySpellEffect: vi.fn(),
+    handleGameFlowState: vi.fn(),
+    handleSpecialZones: vi.fn(() => ({ handled: false })),
+    syncTrackerMove: vi.fn()
+  })
+)
 
 vi.mock('../../src/tracker/runtime/browser', () => ({
   tracker: {
@@ -12,22 +17,57 @@ vi.mock('../../src/tracker/runtime/browser', () => ({
 }))
 
 vi.mock('../../src/handler/gameFlowState', () => ({
-  handleGameFlowState: vi.fn()
+  handleGameFlowState
 }))
 
 vi.mock('../../src/handler/specialZones', () => ({
-  handleSpecialZones: vi.fn(() => ({ handled: false }))
+  handleSpecialZones
 }))
 
 vi.mock('../../src/handler/spellEffects', () => ({
-  applySpellEffect: vi.fn()
+  applySpellEffect
 }))
 
 import { handleMoveCard } from '../../src/handler/PubGsCMoveCard'
 
 describe('PubGsCMoveCard', () => {
   beforeEach(() => {
+    applySpellEffect.mockClear()
+    handleGameFlowState.mockClear()
+    handleSpecialZones.mockClear()
     syncTrackerMove.mockClear()
+  })
+
+  it.each([
+    ['其他视角', []],
+    ['主视角', [51, 146, 138, 4]]
+  ])('手气卡回堆在%s均归一为 RANDOM', (_view, cardIDs) => {
+    const msg = {
+      CardCount: 4,
+      CardIDs: cardIDs,
+      FromID: 6,
+      FromPosition: POSITION_TOP,
+      FromZone: 5,
+      FromZoneParam: 0,
+      MoveType: 19,
+      SpellID: 0,
+      ToID: 0,
+      ToPosition: POSITION_TOP,
+      ToZone: 1,
+      ToZoneParam: 0
+    }
+
+    handleMoveCard(msg)
+
+    expect(syncTrackerMove).toHaveBeenCalledOnce()
+    expect(syncTrackerMove).toHaveBeenCalledWith(msg, {
+      CardIDs: cardIDs,
+      FromPosition: POSITION_TOP,
+      ToPosition: POSITION_RANDOM
+    })
+    expect(handleSpecialZones).toHaveBeenCalledOnce()
+    expect(handleGameFlowState).toHaveBeenCalledOnce()
+    expect(applySpellEffect).toHaveBeenCalledOnce()
   })
 
   it('权变的牌堆同区展示将来源和目标都归一为牌顶', () => {

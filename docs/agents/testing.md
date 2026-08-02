@@ -14,8 +14,9 @@
 - 覆盖率配置：默认关注 `src/tracker/**/*.{js,ts}`，排除 `src/tracker/view/**`
 - 现状：
   - 已有较完整的记牌器单元/回归：`tests/tracker/`
+  - 牌堆身份纯模型契约独立放在：`tests/contracts/pile-identity/`
   - 已有少量运行时与外围工具测试：`tests/runtime/`、`tests/utils/peixiuRouteFeature.test.js`
-  - **没有**通用 `pnpm test` 脚本；记牌器专用脚本是 `pnpm test:tracker`（只跑 `tests/tracker`）
+  - **没有**通用 `pnpm test` 脚本；`pnpm test:tracker` 同时运行 tracker 回归与牌堆身份契约
   - **没有**浏览器 E2E / 用户脚本注入自动化
 
 ### 主要目录
@@ -24,6 +25,7 @@
 | ------------------------ | ----------------------------------------------------- |
 | `tests/tracker/`         | Room 移动、候选、收敛、Controller、脏渲染、遍历基线等 |
 | `tests/tracker/helpers/` | 测试夹具与 noop runtime/view                          |
+| `tests/contracts/pile-identity/` | 牌堆身份纯模型、真实牌序 oracle 与长期语义契约 |
 | `tests/runtime/`         | 宿主运行时适配、窗口关闭与对局结束 UI 生命周期        |
 | `tests/utils/`           | 非 tracker 工具逻辑，如裴秀路线                       |
 
@@ -35,6 +37,7 @@
 - 约束与收敛：`convergenceTermination.test.ts`、`resolveConstraintsIncrementalIndex.test.ts`、`ambiguousKnownIndexIncremental.test.ts`
 - 暗牌 / 标记 / 随机转移：`hiddenMarkCandidates.test.ts`、`randomTransferLifecycle.test.ts`、`handCountObservation.test.ts`、`playerHandMirror.test.ts`
 - 局流与技能副作用：`gameFlowState.test.ts`、`spellEffects.test.ts`、`roleOptTargetNtf.test.ts`
+- 牌堆身份模型：`tests/contracts/pile-identity/pileGenerationPool.test.ts`、`pileIdentityLedger.test.ts`、`pileIdentityLedgerIntegration.test.ts`
 - 视图与展示：`viewDirtyRender.test.ts`、`pileDisplayOrder.test.ts`、`suitGlyph.test.ts`
 - 性能护栏：`traversalBaseline.test.ts`
 - 计数器：`cardCounter.test.ts`
@@ -90,7 +93,7 @@ Windows 本机执行时遵循 [`commands.md`](commands.md) 与 Serena 本机记�
 | ---------------------------------------------------------- | --------------------------------------------------------------- |
 | 仅文档 / 注释                                              | 无需构建与测试                                                  |
 | 普通 `src/` 代码（非 tracker 高风险）                      | `pnpm lint` + `pnpm build`                                      |
-| `src/tracker/` 或 `tests/tracker/`                         | `pnpm lint` + `pnpm build` + `pnpm test:tracker`                |
+| `src/tracker/`、`tests/tracker/` 或 `tests/contracts/pile-identity/` | `pnpm lint` + `pnpm build` + `pnpm test:tracker`        |
 | TS 类型契约、`tsconfig*`、ESLint TS 覆盖、tracker 类型迁移 | `pnpm typecheck:tracker`；需要确认全仓入口时再 `pnpm typecheck` |
 | `tests/utils/` 或非 tracker 测试                           | `pnpm exec vitest run`（或对应文件）+ 适用 lint/build           |
 | 发布配置、打包参数、用户脚本元信息、核心协议高风险路径     | 额外 `pnpm build:prod`                                          |
@@ -139,6 +142,64 @@ CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑�
 （该目录被 `.gitignore` 忽略）。通用性能变更仍必须使用
 `recordTraversal(...)` 和 `tests/tracker/traversalBaseline.test.ts` 维护自动化遍历护栏。
 
+### 牌堆身份纯模型
+
+`tests/contracts/pile-identity/pileGenerationPool.test.ts` +
+`tests/contracts/pile-identity/pileGenerationPoolModel.ts`
+并排维护三个不接生产状态的独立模型：历史正 ID 暗槽基线、全局世代滚动、批次候选集合 +
+`remainingPileCount`，并由仅用于夹具的真实隐藏牌序 oracle 裁决模型陈述。
+
+这些纯模型是生产 `PileIdentityLedger` 的长期可证伪回归基线，不属于 Phase 6 已删除的运行时
+observer、双写状态或统计 schema。新增牌堆事件语义时应同步扩展模型与固定 seed 生成器，
+不能因为其名称带有“阶段/Phase”就按迁移残留删除。
+
+建模范围：计划 §5.3.2 枚举的 B8–B11（潜伏、伊籍机捷、骋烈/天辩/宴戏、特殊装备牌）
+由各自的特殊路径实现，不在本纯模型内，因此没有对应事件类型，批次消费也只有牌顶方向。
+
+必须保持的结论：
+
+- 活动卡池大小与物理牌堆槽数不等是合法状态；不得把两者等量当作身份守恒条件。
+- active pool 表示“仍保留牌堆来源可能性”，不是“确定仍在牌堆”。全局世代模型未显示的
+  active 身份若后来被 oracle 证明已离开牌堆，应记为 `omittedOutsidePileIDs`，不是模型
+  `falseNegativeIDs`。
+- `runCohortPoolModel()` 不分配 CardID ↔ 匿名槽，只维护每个批次的候选身份集合与在牌堆
+  数量。暗摸减少批次基数；按来源揭示收紧集合/基数；洗回身份在牌底侧建立新批次。
+- 批次模型不一定降低扁平候选按钮数量。两周期夹具最终宽度为 10，但保留 `{6,7}/0`、
+  `{1..5}/0`、`{8,9,10}/1` 三个精确关系，且没有具体身份牌堆断言错误。
+- `projectCohorts()` 把批次投影成 `all-in-pile` / `none-in-pile` / `partial` 三类可读
+  陈述。其中 `none-in-pile` 是扁平投影无法表达的一类，也是批次模型的主要信息收益；
+  前两类都是对用户的确定陈述，必须用 `evaluateCohortProjection()` 逐组过 oracle。
+- `k=0` 只是不满足普通自动补牌的超量摸牌前置条件；显式回收或未知原因的 `2 -> 9` 仍是
+  独立事件，不能笼统称为协议非法。
+- oracle 必须验证初始牌序身份全集、洗回排列、自动补牌触发条件和物理槽上限；基线模型
+  不得用空 `pop()` 静默生成匿名槽。
+
+### 牌堆身份迁移回归
+
+Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入口和对应测试 helper。生产
+只保留 `PileIdentityLedger` 单一身份权威；真实样本与 observer 指标仅作为历史决策证据，见
+本地归档 [`plans/pile-identity-cohort-plan.md`](../../plans/pile-identity-cohort-plan.md)。
+
+当前必须保持的自动化契约：
+
+- `pileIdentityLedger.test.ts` 覆盖 cohort 基数、批次消费、已知/匿名回堆、初洗与一致性。
+- `pileIdentityLedgerIntegration.test.ts` 覆盖 Controller 事务、常规摸牌、匿名获得、连续洗牌、
+  suspended 身份恢复，以及两种开局初洗协议。
+- 开局 `2 -> 9` 在弃牌堆数量为 `0`，或等于整副卡池身份数时，都不得滚动 generation 或
+  创建 suspended；全量弃牌形态仍需把物理实体洗回匿名牌堆。
+- 真实的部分弃牌洗回必须暂停旧 cohort 尚未出现身份；suspended 只承担展示，原暗实体继续
+  承担玩家/mark 等物理槽位。
+- `MoveType=1` 常规摸牌按端点顺序精确移走牌顶/牌底明牌；`MoveType=18` 无 CardIDs 时只消费
+  匿名槽并跳过端点明牌，且规则不绑定某个 SpellID。
+- 上述“只消费匿名槽”只适用于明确的牌堆来源。`discard`、`process`、`exchange` 等非牌堆
+  公共区在无 CardIDs 时仍须按端点移除实际实体，包括已知牌；否则会遗留来源明牌并虚构
+  匿名 fallback。
+- Room/ledger 事务完成后，cohort 身份必须恰好位于 `unlocatedIdentities` 或
+  `suspendedKnownCards`，不能缺失或同时存在于两边。
+
+纯模型的历史推演与 oracle 边界仍归档于
+本地 [`plans/pile-generation-identity-pool-plan.md`](../../plans/pile-generation-identity-pool-plan.md)。
+
 ---
 
 ## 编写测试的约定
@@ -158,6 +219,10 @@ CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑�
 - 结构性优化导致数字下降：可更新快照，并在 PR 说明收益场景
 - 无关改动导致数字上升：先解释原因；不能无说明地 `-u`
 - 新增必要全量扫描：先问能否改增量；若必须全量，插桩 + 基线场景同步落地
+- `createTestRoom({ materializeDeckIdentities: false })` 才对齐生产 `Room.initDeck()` 的匿名牌堆；
+  `true` 仅是历史正 ID 暗槽对照。旧 cohort 的未物化身份应直接按最终 suspended 状态注册，
+  不进入只用于清理既有投影的通用脏事件流；已物化暗实体仍须匿名化并保留线性对照快照。
+  更新洗牌基线时同时断言 suspended 数量，避免通过少建展示实体获得虚假的遍历下降。
 
 领域风险细则仍以 [`card_tracker.md`](card_tracker.md) 的「风险与验证清单」为准。
 
@@ -167,7 +232,7 @@ CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑�
 
 ```text
 L0 静态检查     lint / typecheck
-L1 单元回归     tests/tracker + tests/utils
+L1 单元回归     tests/tracker + tests/contracts + tests/utils
 L2 构建产物     pnpm build / build:prod
 L3 手工注入验收 浏览器 / 微端真实页面
 ```
@@ -193,6 +258,8 @@ L3 手工注入验收 浏览器 / 微端真实页面
 - [ ] 摸牌、弃牌、置入装备/判定区后计数与展示正确
 - [ ] 暗牌移动后候选合理，不出现错误 owner 实锤
 - [ ] 洗牌后牌堆张数、顶底候选、暗标记账本不漂
+- [ ] 开局弃牌堆为空或等于整副卡池时，初洗不显示 suspended 身份
+- [ ] 后续部分弃牌真实洗回时，旧世代尚未出现身份进入现有公共候选展示；再次出现可恢复
 - [ ] 玩家来源明牌残留公共区时占位回补正确
 - [ ] 手牌暗置标记区的多选一/多选多场景保守可收敛
 - [ ] 对局结束或离桌后状态清理，不开下一局串数据

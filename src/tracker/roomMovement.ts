@@ -50,6 +50,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       expectedSlotsBySeat,
       resetKnownToUnknown = false,
       sourceCards,
+      postMovePublicCandidates,
       sourceEvent
     } = opt
 
@@ -102,6 +103,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       expectedSlotsBySeat,
       resetKnownToUnknown,
       sourceCards,
+      postMovePublicCandidates,
       sourceEvent,
       targetSeats,
       handMoveCount,
@@ -170,26 +172,26 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     } else if (typeof fromZone === 'string' && this.room.zones.has(fromZone)) {
       // 公共区来源按协议端点顺序物化，避免从别处搬运被提前占用的真实实体。
       const sourceZone = this.room.zones.get(fromZone)
-      const endpointCards = this.room.getPublicEndpointCards(
-        fromZone,
-        sourceZone?.cards.length ?? knownIDs.length,
-        fromPosition
+      const endpointCount = Math.max(
+        knownIDs.length,
+        Math.max(0, Math.floor(Number(context.cardCount) || 0))
       )
-      // 牌堆端点在洗牌后可能同时包含匿名槽和 reset() 后的正 ID 暗槽，两者都能被
-      // 本批明牌消费。同批 known ID 必须排除，否则前一张会把后一张的明确身份挤成 suspended。
-      const knownIDSet = new Set(knownIDs)
-      const availableTargets = endpointCards.filter(
-        (card) =>
-          isAnonymous(card) || (card.id > 0 && card.isKnown !== true && !knownIDSet.has(card.id))
-      )
-      const hiddenTargetCountBefore = availableTargets.length
+      // 只检查本次协议移动覆盖的物理范围，不能为了寻找匿名槽扫描整副牌堆。
+      // B13 等指定身份获取仍由 existingInSource 精确命中来源区中的同 ID 实体；只有身份尚未
+      // 定位时，才需要在这段协议端点范围内分配匿名物理槽。
+      const endpointCards = this.room.getPublicEndpointCards(fromZone, endpointCount, fromPosition)
+      // Phase 5 后公共 known 端点只有两种合法物理来源：端点中已经存在的同 ID 实体，
+      // 或没有真实身份的匿名槽。其它正 ID 即使 isKnown=false，也不能被本批身份覆盖。
+      // endpointCards 已按协议范围截取，因此不能跳过一个正 ID 暗端点去消费更深处匿名槽。
+      const availableTargets = endpointCards.filter(isAnonymous)
+      const anonymousTargetCountBefore = availableTargets.length
       const resolveAttempts: Record<string, unknown>[] = []
 
       context.knownCards = knownIDs
         .map((cardID) => {
           const existing = this.room.cardIndex.get(cardID)
           const existingInSource = Boolean(existing && sourceZone?.cards.includes(existing))
-          const hadHiddenTarget = !existingInSource && availableTargets.length > 0
+          const hadAnonymousTarget = !existingInSource && availableTargets.length > 0
           const target = existingInSource ? existing : availableTargets.shift()
           const ledgerBefore = {
             inCardIndex: this.room.cardIndex.has(cardID),
@@ -198,21 +200,18 @@ export class RoomMovement extends RoomMovementCandidateMethods {
             existingLocation: existing?.location ?? null,
             existingIsKnown: existing?.isKnown === true,
             existingInSource,
-            tookHiddenTarget: Boolean(target && target !== existing),
-            hiddenTargetID: target?.id ?? null,
-            remainingHiddenTargets: availableTargets.length
+            tookAnonymousTarget: Boolean(target && target !== existing && isAnonymous(target)),
+            targetEntityID: target?.entityID ?? null,
+            remainingAnonymousTargets: availableTargets.length
           }
           const materialized = this.room.materialize(cardID, target ?? null)
-          // 牌组外首次出现的身份不会消费正 ID 暗槽。此时把预取目标放回队首，
-          // 让同批后续的真实牌组身份仍能使用正确端点。
-          if (!materialized && !existing && target) {
-            availableTargets.unshift(target)
-          }
+          // 匿名端点按协议顺序一经分配就不回塞。正常情况下 materialize 必然成功；若身份
+          // 分区异常导致失败，保留该名额可避免后续 CardID 错占前一张牌的物理端点。
           const resolved = materialized ?? existing
           resolveAttempts.push({
             cardID,
             ...ledgerBefore,
-            hadHiddenTarget,
+            hadAnonymousTarget,
             materializeOk: Boolean(resolved),
             afterInCardIndex: this.room.cardIndex.has(cardID)
           })
@@ -228,8 +227,8 @@ export class RoomMovement extends RoomMovementCandidateMethods {
           missingIDs,
           fromZone,
           fromPosition,
-          hiddenTargetCountBefore,
-          hiddenTargetCountAfter: availableTargets.length,
+          anonymousTargetCountBefore,
+          anonymousTargetCountAfter: availableTargets.length,
           sourceZoneCards: (sourceZone?.cards ?? []).map((card) => ({
             id: card.id,
             entityID: card.entityID,
@@ -260,7 +259,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         missingIDs = knownIDs.filter((id) => !cardMap.has(id))
       }
     } else if (fromSeat !== null && !Number.isNaN(fromSeat) && fromSubZone) {
-      // 阶段 1 的玩家区既可能是匿名槽，也可能仍沿用真 ID 暗牌，两者统一由 materialize 收口。
+      // 玩家/mark 通用模型允许本机已知身份暂时保持暗状态，两类实体统一由 materialize 收口。
       // 手牌 known 禁止消费 mark:700 等占位；木马身份只在 mark 收敛/快照路径 materialize。
       const markSpellID = context.fromSpellID ?? context.spellID
 

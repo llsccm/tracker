@@ -1,4 +1,8 @@
-import { POSITION_BOTTOM, POSITION_TOP } from './candidate/cardPositions'
+import {
+  POSITION_BOTTOM,
+  POSITION_TOP,
+  insertCardsAtProtocolPosition
+} from './candidate/cardPositions'
 import type { Card } from './Card'
 import type { Room } from './Room'
 import type { PublicPosition, PublicZoneName } from './types'
@@ -71,7 +75,7 @@ export class Zone {
 
   /**
    * 向该区域放入一张或多张牌，并同步 Card.location 至当前公共区。
-   * @param position - 顶/底位置指示器
+   * @param position - 顶/底哨兵或从区域底端起算的协议精确插槽
    */
   add(nodes: Card | Card[], position: PublicPosition = POSITION_TOP): void {
     const cardsToAdd = Array.isArray(nodes) ? nodes : [nodes]
@@ -87,14 +91,8 @@ export class Zone {
       this.removeCard(card)
     })
 
-    if (position === POSITION_BOTTOM) {
-      // 插入到底部
-      this._orderedCards.splice(0, 0, ...[...cardsToAdd].reverse())
-    } else if (position === POSITION_TOP) {
-      // 插入到顶部
-      this._orderedCards.push(...cardsToAdd)
-    } else {
-      // 随机/无序：直接推入尾部
+    if (!insertCardsAtProtocolPosition(this._orderedCards, cardsToAdd, position)) {
+      // 随机、缺失或越界位置没有可复现的精确插槽，沿用原逻辑追加代表实体。
       this._orderedCards.push(...cardsToAdd)
     }
 
@@ -109,6 +107,7 @@ export class Zone {
   replaceAll(cards: Card[], position: PublicPosition = POSITION_TOP): void {
     const orderedCards = position === POSITION_BOTTOM ? [...cards].reverse() : [...cards]
     const incomingCards = new Set(orderedCards)
+    const currentCards = new Set(this._orderedCards)
 
     this.room.zones.forEach((zone) => {
       if (zone === this) return
@@ -122,7 +121,11 @@ export class Zone {
     })
 
     orderedCards.forEach((card) => {
-      card.moveToPublicZone(this.zoneID)
+      // 只有原本就在本区关系中且位置事实未变的牌才是纯重排；新牌与跨区牌仍走完整迁移。
+      // 对纯重排重复调用 moveToPublicZone 会把状态未变的剩余牌堆标脏，放大洗牌遍历量。
+      if (!currentCards.has(card) || card.location !== this.zoneID) {
+        card.moveToPublicZone(this.zoneID)
+      }
     })
 
     this._orderedCards = orderedCards

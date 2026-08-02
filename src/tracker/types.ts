@@ -38,6 +38,12 @@ export interface PublicCandidateReveal {
   count: number
 }
 
+/** 实体完成公共区移动后再附加的范围候选，避免物理代表槽被解释为精确位置。 */
+export interface PostMovePublicCandidate {
+  card: Card
+  candidate: PublicCandidate
+}
+
 export interface PlayerLocationCandidate extends SubZoneCandidate {
   type: 'player'
 }
@@ -124,6 +130,7 @@ export interface MoveOptions {
   resetKnownToUnknown?: boolean
   sourceCards?: Card[]
   publicCandidateReveal?: PublicCandidateReveal
+  postMovePublicCandidates?: PostMovePublicCandidate[]
   sourceEvent?: MoveSourceEvent
   [key: string]: unknown
 }

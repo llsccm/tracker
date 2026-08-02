@@ -1,4 +1,4 @@
-# `GsCRoleOptTargetNtf` / `PubGsCMoveCard`：观虚观看牌堆顶与目标手牌
+# `GsCRoleOptTargetNtf` / `PubGsCMoveCard`：观虚观看与交换牌堆顶、目标手牌
 
 ## 消息用途
 
@@ -89,6 +89,75 @@ ToZoneParam: 0
 
 这样观看 5 张后，牌堆展示仍应是“5 明 + 剩余暗”，而不是多出一张。
 
+## 目标视角的交换结算
+
+目标座位能看到自己换出的手牌和最终获得的牌堆牌，但牌堆侧整批移动仍可能不带
+`CardIDs`。以下实战序列中，1 号观察 6 号发动观虚，16 是 1 号换出的手牌，142 是从
+五张牌堆顶中选出的牌：
+
+| 阶段 | 来源                         | 目标                         | `CardCount` | `CardIDs` |
+| ---- | ---------------------------- | ---------------------------- | ----------: | --------- |
+| 1    | `255 / pile(1)`              | `6 / exchange(10)`           |           5 | `[]`      |
+| 2    | `1 / hand(5)`                | `1 / exchange(10)`           |           1 | `[16]`    |
+| 3    | `6 / exchange(10)`           | `1 / exchange(10)`           |           1 | `[142]`   |
+| 4    | `1 / exchange(10)`           | `6 / exchange(10)`           |           1 | `[16]`    |
+| 5    | `6 / exchange(10)`           | `255 / pile(1)`              |           5 | `[]`      |
+| 6    | `1 / exchange(10)`           | `1 / hand(5)`                |           1 | `[142]`   |
+
+结算后的确定事实：
+
+- 142 原本属于步骤 1 暂存的五张牌堆顶，最终进入 1 号手牌。
+- 16 在步骤 4 进入牌堆侧交换桶；步骤 5 的线协议 `CardIDs=[]` 仍保持为空，不把 16
+  回写成协议公开身份。
+- tracker 使用步骤 4 已记录的交换桶实体作为内部 `sourceCards`，按桶内 bottom-first 顺序
+  补齐步骤 5 的完整回堆序列。因此空 `CardIDs` 不能解释为“只移动匿名牌”。
+- `CardCount=5` 表示线协议声明的移动张数；`sourceCards` 只表示本地状态机使用的实体来源，
+  两者不能混为协议字段。
+
+桶间转移的 `ToPosition` 必须原样保留。该字段属于 `PubGsCMoveCard` 通用位置语义，详见
+[`move-position.md`](move-position.md)。另一个实测消息为：
+
+```text
+CardCount: 1
+CardIDs: [39]
+FromID: 3
+FromZone: 10
+MoveType: 11
+SpellID: 987
+ToID: 7
+ToPosition: 2
+ToZone: 10
+```
+
+普通非负小整数按目标有序区底 -> 顶顺序表示零基插槽；`ToPosition=2` 即从底部起算的
+第 3 个插槽，`ToPosition=0` 与 `POSITION_BOTTOM` 一致。五张牌场景中的索引 `2` 同时也是
+牌顶向内第 3 张；`POSITION_TOP` 也能确定插入牌顶。只有字段缺失、越界或为
+`POSITION_RANDOM` 时，才无法确定换入牌的具体槽位并降级为“牌顶前 N 张”范围候选。
+
+`exchange(10)` 在 Room 中是一个全局公共区，物理顺序不能表达协议里的两侧归属。观虚因此
+使用 `FromID/ToID` 维护两个逻辑交换桶：
+
+含 `CardIDs` 的分桶或桶间转移采用“只读预演、整批提交”：先验证每个身份是否能对应现有
+实体或匿名槽，并检查协议张数与桶容量；全部成立后才执行 `confirmKnown` / 身份物化。失败消息
+只清理对应技能批次或保持原桶，不得提前确认暗身份、占用匿名槽或改写身份账本。
+
+1. `1->10` 的五张牌堆顶登记到发动者桶 6，`5->10` 的目标手牌登记到目标桶 1。
+2. `10->10` 只在 `FromID` 对应的桶中选牌，再转入 `ToID` 对应的桶；若目标是牌堆侧，
+   复用通用 `insertCardsAtProtocolPosition()` 处理精确槽位，否则追加逻辑代表并记录范围不确定性。
+3. 若 `[142]` 尚在 `unlocatedIdentities`，直接物化到牌堆侧桶中的匿名实体；不能因为交换区
+   物理顶端碰巧是 16，就走 `known-fallback/createExternal`。
+4. `10->1` 与 `10->5` 分别按桶引用拆回；牌堆逻辑桶与公共 `Zone` 均按 bottom-first 保存，
+   空或不完整 `CardIDs` 回堆时直接传递同序 `sourceCards`。
+
+视角信息强度需要分开处理：发动者主视角若在 `10->1` 收到完整、无重复且覆盖整个回堆桶的
+`CardIDs`，该列表继续作为精确回堆信息，不再追加目标视角使用的范围候选，避免覆盖
+`handleRoleOptTargetNtf` 建立的精确牌顶。其它视角即使 `CardIDs` 为空，只要此前桶间转移带有
+有效小整数 `ToPosition`，仍能确定换入牌的具体位置；只有该位置证据也不可用时才附加
+“牌顶前 N 张”候选。移动协议输入摘要会保留 `ToPosition`，便于核对该判断所用的原始证据。
+
+该序列不是“双方整手互换”。即使目标当时恰好只有一张手牌，`987/988` 也会绕过通用
+`HandExchange` 账本，避免把最后的 `[142]` 回手误解释为原手牌批次返回。
+
 ## 相关技能
 
 - 权变：docs/protocols/GsCRoleOptTargetNtf-7011.md
@@ -100,7 +169,9 @@ ToZoneParam: 0
 - 观虚端点归一化：`src/handler/PubGsCMoveCard.js` 的 `normalizeMovePosition`
 - 同区展示识别：`src/tracker/MoveEventNormalizer.ts` 的 `isSameZoneShowEvent`
 - 公共区展示与玩家占用身份回收：`src/tracker/runtime/trackerController.ts`
+- 目标视角交换桶：`src/tracker/skill/GuanXu.ts`
 - 回归测试：
   - `tests/tracker/roleOptTargetNtf.test.ts`
   - `tests/tracker/pubGsCMoveCard.test.ts`
   - `tests/tracker/trackerController.test.ts`
+  - `tests/tracker/guanXuExchange.test.ts`

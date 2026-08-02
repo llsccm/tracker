@@ -1,7 +1,8 @@
 import { trackerLogger } from '@/utils/logger'
-import { POSITION_TOP } from '../candidate/cardPositions'
+import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
 import { getCompatibleMarkSpellIDs, type SpellIDInput } from '../candidate/markSpellID'
 import { isAnonymous, type Card } from '../Card'
+import { MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Zone } from '../Zone'
 import type {
   PlayerLocationCandidate,
@@ -26,6 +27,27 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
   ): Card[] {
     const sourceZone = this.room.getPublicZone(zoneID as PublicZoneName | null | undefined)
     return sourceZone?.remove(count, position) ?? []
+  }
+
+  /**
+   * 牌堆获得类协议未给 CardIDs 时只消费暗槽，不把已展示端点误当成被随机取得的牌。
+   * 非牌堆公共区不能走这里，否则全明牌来源会遗留原实体并触发匿名 fallback。
+   */
+  takeUnknownCardsFromPublicZone(
+    count: number,
+    zoneID: SourceZoneInput = 'pile',
+    position: PublicPosition = POSITION_TOP
+  ): Card[] {
+    const sourceZone = this.room.getPublicZone(zoneID as PublicZoneName | null | undefined)
+    if (!sourceZone || count <= 0) return []
+
+    const hiddenCards = sourceZone.cards.filter((card) => card.isKnown !== true)
+    const selected =
+      position === POSITION_BOTTOM
+        ? hiddenCards.slice(0, count)
+        : hiddenCards.slice(-count).reverse()
+    selected.forEach((card) => sourceZone.removeCard(card))
+    return selected
   }
 
   /**
@@ -729,7 +751,17 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       return [...selectedUnknownCards, ...knownCards]
     }
 
-    return this.takeCardsFromPublicZone(count, fromZone, fromPosition)
+    const moveType = Number(sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType)
+    const isPileSource = fromZone === 'pile' || Number(fromZone) === 1
+    const isRegularPileDraw = isPileSource && moveType === MOVE_TYPE.DRAW
+
+    // 常规摸牌与非牌堆公共区都必须按端点移动真实实体；只有牌堆的非标准无 ID 获取
+    // 才跳过已展示明牌，避免把本地端点顺序误当成服务器实际选择。
+    if (!isPileSource || isRegularPileDraw) {
+      return this.takeCardsFromPublicZone(count, fromZone, fromPosition)
+    }
+
+    return this.takeUnknownCardsFromPublicZone(count, fromZone, fromPosition)
   }
 
   /**

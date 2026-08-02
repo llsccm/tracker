@@ -140,7 +140,7 @@ const result = config
 - 修改文档无需运行构建测试。
 - 完成普通代码修改后运行：`pnpm lint` 与 `pnpm build`。
 - 修改 TypeScript 类型契约、`tsconfig*`、ESLint TypeScript 覆盖范围或 tracker 类型迁移相关代码后运行：`pnpm typecheck:tracker`；需要确认全仓类型入口时运行 `pnpm typecheck`。
-- 修改 `src/tracker/` 或 `tests/tracker/` 后额外运行：`pnpm test:tracker`。
+- 修改 `src/tracker/`、`tests/tracker/` 或 `tests/contracts/pile-identity/` 后额外运行：`pnpm test:tracker`。
 - 修改发布配置、打包参数、用户脚本元信息或记牌器核心高风险路径后，额外运行：`pnpm build:prod`。
 - 修改 `html/iframe.html` 后需确认远端部署与界面加载流程正常。
 - 重构阶段（保守重构 + 细粒度重构）已完成至 F-lite；新版记牌器重构主动接入已完成，完全从影子模式切换为主动运行模式，旧版写路径已从普通运行链路移除；`src/tracker/` 是当前唯一主动记牌器状态源；`src/` 下 `autoBot`、`autoTask`、`secKill`、`CDK`、`skinPaper`、`effectBlock`、`generalAppearance`、`layaWindow` 无残留。

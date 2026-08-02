@@ -77,6 +77,31 @@ function expectIdentityLedgerIntact(room: Room, expectedIdentityIDs: CardID[]): 
 }
 
 describe('身份账本守恒', () => {
+  it('正式牌堆身份断言拒绝正 ID 暗牌堆实体', () => {
+    const { room } = createTestRoom({
+      cardIDs: [1, 2, 3],
+      materializeDeckIdentities: false
+    })
+    const pile = room.zones.get('pile')!
+    const card = room.materialize(1, pile.cards.find(isAnonymous)!)!
+    room.applyPileIdentityReveal([1], 'pile')
+    card.isKnown = false
+    const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
+
+    try {
+      const issues = room.assertPileIdentityLedgerConsistency('test:hidden-pile-identity')
+
+      expect(issues).toContainEqual({
+        context: 'test:hidden-pile-identity',
+        reason: 'hidden-pile-identity',
+        cardID: 1
+      })
+      expect(issues.some(({ reason }) => reason === 'cohort-identity-not-unlocated')).toBe(false)
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   it('洗牌后身份全集仍可完整枚举', () => {
     const { room } = createTestRoom({
       cardIDs: [1, 2, 3, 4, 5, 6],
@@ -301,7 +326,7 @@ describe('身份账本守恒', () => {
     )
   })
 
-  it('未定位身份复用正 ID 暗牌堆槽后账本仍然守恒', () => {
+  it('suspended 身份接管匿名牌堆槽后账本仍然守恒', () => {
     const { room } = createTestRoom({
       cardIDs: [1, 2, 3, 4, 5, 6],
       seatIDs: [1],
@@ -322,9 +347,14 @@ describe('身份账本守恒', () => {
     })
     room.shufflePile({ cardCount: 4 })
 
-    // 洗牌后牌堆里存在 reset() 留下的正 ID 暗槽；明摸另一个未定位身份应复用该物理槽。
-    const hiddenSlot = pile.cards.find((card) => card.id > 0 && card.isKnown !== true)
-    expect(hiddenSlot).toBeDefined()
+    const hiddenSlot = pile.cards.at(-1)!
+    expect(hiddenSlot).toSatisfy(isAnonymous)
+    const suspendedIdentity = room.cardIndex.get(4)!
+    expect(suspendedIdentity).toMatchObject({
+      location: 'suspended',
+      isKnown: true,
+      suspended: true
+    })
 
     const pileCountBefore = pile.cards.length
     room.moveCards([4], 'player', {
@@ -336,6 +366,11 @@ describe('身份账本守恒', () => {
 
     // 物理槽守恒：身份绑定成功与否都必须消费恰好一个牌堆槽。
     expect(pile.cards).toHaveLength(pileCountBefore - 1)
+    expect(room.cardIndex.get(4)).toBe(suspendedIdentity)
+    expect(suspendedIdentity.location).toBe('player')
+    expect(suspendedIdentity.suspended).toBe(false)
+    expect(hiddenSlot).toSatisfy(isAnonymous)
+    expect(hiddenSlot.location).toBe('outside')
     expectIdentityLedgerIntact(room, [1, 2, 3, 4, 5, 6])
     expectConservationClean(room, 'test:reuse-hidden-slot')
   })

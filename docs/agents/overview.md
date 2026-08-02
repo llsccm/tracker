@@ -56,6 +56,7 @@
     - `helper/`：移动摘要、牌堆顺序。
     - `view/`：`index.ts`、`dirtyRenderState.ts`、`PlayerHandView.ts`、`QueryPanelView.ts`、`StatisticsView.ts`、`cardButton.ts`、`publicFieldCandidates.ts`。
   - `tests/tracker/`：Vitest 记牌器回归（导入边界、Controller、候选、索引、暗置标记、匿名实体、随机转移、脏渲染、遍历基线等）。
+  - `tests/contracts/pile-identity/`：不接生产状态的牌堆身份纯模型、oracle 与长期语义契约。
   - `src/config/`：远端配置解析：
     - `ConfigBase.js` / `ConfigManager.js`
     - `CardConfig.js` / `SkillsConfig.js` / `CharacterConfig.js` / `RoguelikeConfig.js` / `SpellExtendConfig.js`

@@ -50,7 +50,7 @@ describe('移动事件日志', () => {
     })
   })
 
-  it('控制器对牌堆 MoveType 18 使用特殊日志标题', () => {
+  it('控制器对牌堆 MoveType 18 使用特殊日志标题并保留 ToPosition', () => {
     const infoCalls: unknown[][] = []
     const logger: TrackerLogger = {
       debug() {},
@@ -72,8 +72,12 @@ describe('移动事件日志', () => {
       100
     )
     controller.initTrackerDeck([1, 2])
-    controller.syncTrackerMove(pileGainMove)
+    controller.syncTrackerMove({ ...pileGainMove, ToPosition: 2 })
 
-    expect(infoCalls.some(([label]) => label === '从牌堆获取牌')).toBe(true)
+    const protocolInput = infoCalls.find(([label]) => label === '从牌堆获取牌')
+    expect(protocolInput?.[1]).toMatchObject({
+      raw: { ToPosition: 2 },
+      patched: { ToPosition: 2 }
+    })
   })
 })

@@ -125,12 +125,14 @@ export class CardCounter {
       if (card.id > 0) this.registerIdentity(card.id)
       this.syncCardStatus(card)
       this.dirtyCards.delete(card)
+      this.advanceRoomCardCursor()
       return
     }
 
     if (card.id <= 0) {
       this.syncCardStatus(card)
       this.dirtyCards.delete(card)
+      this.advanceRoomCardCursor()
       return
     }
 
@@ -138,6 +140,7 @@ export class CardCounter {
 
     this.syncCardStatus(card)
     this.dirtyCards.delete(card)
+    this.advanceRoomCardCursor()
   }
 
   /**
@@ -214,11 +217,29 @@ export class CardCounter {
       this.roomCardCursor = 0
     }
 
-    const newCards = this.room.cards
-      .slice(this.roomCardCursor)
-      .filter((card) => !this.registeredCards.has(card))
+    const appendedCards = this.room.cards.slice(this.roomCardCursor)
+    if (appendedCards.length > 0) {
+      recordTraversal('cardCounter:collectNewRoomCards', appendedCards.length)
+    }
+    const newCards = appendedCards.filter((card) => !this.registeredCards.has(card))
     this.roomCardCursor = this.room.cards.length
     return newCards
+  }
+
+  /**
+   * createExternalCards 等入口会先把实体追加到 room.cards，再显式调用 addCard() 注册。
+   * 连续推进已经注册的尾部可避免下一次 update() 再扫描同一批实体；若出现乱序注册，
+   * 游标停在第一个未注册实体，仍由 collectNewRoomCards() 的保守路径补齐。
+   */
+  private advanceRoomCardCursor(): void {
+    if (this.roomCardCursor > this.room.cards.length) this.roomCardCursor = 0
+
+    while (
+      this.roomCardCursor < this.room.cards.length &&
+      this.registeredCards.has(this.room.cards[this.roomCardCursor])
+    ) {
+      this.roomCardCursor += 1
+    }
   }
 
   private createStatusIndex(): CardIDSet[] {
