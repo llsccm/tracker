@@ -866,6 +866,7 @@ function consumeBaselineHiddenHandSlot(state: BaselineModelState, cardID: CardID
  * 否则玩家暗区槽数与身份位置归因会在不同事件分支间漂移。
  */
 function moveBaselinePileTopSlotToHiddenHand(state: BaselineModelState): void {
+  if (state.pileSlots.length === 0) throw new Error('牌堆物理槽为空，无法从牌顶暗摸')
   const slot = state.pileSlots.pop() ?? null
   if (slot === null) {
     state.playerAnonSlotCount += 1

@@ -131,11 +131,13 @@ function resolveProtocolKnownCards(
     let commit: ProtocolKnownCardCommit | null = null
 
     if (!card) {
-      const target = anonymousTargets.shift() ?? null
+      // 先只窥探队首匿名槽，探测失败（null 或落在候选之外）时保留它给后续 CardID。
+      const target = anonymousTargets[0] ?? null
       const probedCard = room.probeMaterialize(cardID, target)
       if (probedCard && candidates.includes(probedCard)) {
         card = probedCard
         if (probedCard === target) {
+          anonymousTargets.shift()
           plannedCardsByID.set(cardID, probedCard)
           commit = { type: 'materialize', cardID, target: probedCard }
         } else {
@@ -302,6 +304,9 @@ function transferExchangeBucket(
   const selectedSet = new Set(selectedCards)
   sourceBucket.cards = sourceBucket.cards.filter((card) => !selectedSet.has(card))
   const targetIsPileBucket = Number(raw.ToID) === batch.pileBucketID
+  // 目标桶按存活实体过滤后再计算 ToPosition/插入，保证桶索引与 returnBucketToPile 的
+  // exchange 存活集合一致，避免残留实体让协议插槽算错落点。
+  targetBucket.cards = targetBucket.cards.filter((card) => card.location === 'exchange')
   const cardsToInsert = selectedCards.filter((card) => !targetBucket.cards.includes(card))
   const insertedAtExactPosition = targetIsPileBucket
     ? insertCardsAtProtocolPosition(targetBucket.cards, cardsToInsert, raw.ToPosition)
@@ -379,25 +384,23 @@ function returnBucketToHand(event: MoveEventDraft, room: Room, spellID: number):
   const batch = getBatch(room, spellID)
   const bucketKey = String(raw.FromID)
   const bucket = batch?.buckets[bucketKey]
-  if (!batch || !bucket) return event
+  // 牌堆逻辑桶只能整批回堆；异常协议若把牌堆桶回写玩家手牌，对称拒绝以免污染手牌区。
+  if (!batch || !bucket || Number(raw.FromID) === batch.pileBucketID) return event
 
   const cards = bucket.cards.filter((card) => card.location === 'exchange')
   if (cards.length !== getCount(event) || cards.length !== bucket.expectedCount) return event
 
-  const knownIDs = Array.from(
-    new Set([
-      ...getPositiveIDs(event.cardIDs ?? []),
-      ...cards.filter((card) => card.isKnown === true && card.id > 0).map((card) => card.id)
-    ])
-  )
-  const knownIDSet = new Set(knownIDs)
+  // 保留协议原始 cardIDs，本地推断来源只经 options.sourceCards 传递，不回写明牌列表。
+  const knownIDSet = new Set([
+    ...getPositiveIDs(event.cardIDs ?? []),
+    ...cards.filter((card) => card.isKnown === true && card.id > 0).map((card) => card.id)
+  ])
   const sourceCards = cards.filter((card) => !knownIDSet.has(card.id))
 
   delete batch.buckets[bucketKey]
   clearBatchIfEmpty(room, spellID, batch)
 
   return patchEvent(event, {
-    cardIDs: knownIDs,
     options: {
       ...(sourceCards.length > 0 ? { sourceCards } : {})
     }

@@ -949,7 +949,10 @@ describe('§5.3 批次边界事件回归', () => {
 
       const verdict = evaluateUnknownLocationProjection(
         getCohortUnknownLocationCandidateIDs(cohort),
-        getCohortUnknownLocationCandidateIDs(cohort),
+        new Set([
+          ...getCohortUnknownLocationCandidateIDs(cohort),
+          ...getCohortDefinitelyInPileIDs(cohort)
+        ]),
         oracle
       )
 
@@ -1032,13 +1035,10 @@ describe('固定 seed 属性序列', () => {
       return []
     }
 
-    /** 当前牌顶批次里仍可揭示的身份；空表示这一步不能做牌堆明摸。 */
-    const topCohortCandidates = (): CardID[] =>
-      topCohortCandidatesFromState(runCohortPoolModel(events))
-
     /** 搜牌事件故意选择仍有牌在堆、但不属于当前牌顶批次的候选身份。 */
-    const nonTopCohortCandidates = (): CardID[] => {
-      const cohortState = runCohortPoolModel(events)
+    const nonTopCohortCandidatesFromState = (
+      cohortState: ReturnType<typeof runCohortPoolModel>
+    ): CardID[] => {
       const topCandidates = new Set(topCohortCandidatesFromState(cohortState))
       const candidates = new Set<CardID>()
 
@@ -1055,10 +1055,12 @@ describe('固定 seed 属性序列', () => {
     }
 
     for (let step = 0; step < steps; step += 1) {
+      // 每步只重放一次批次模型，topCohort/nonTopCohort 两个候选集合都从这份共享状态派生。
+      const cohortState = runCohortPoolModel(events)
       // 一旦显式洗牌形成了仍在牌顶批次之外的可取身份，优先覆盖一次任意位置搜牌。
       // 这使固定 seed 集合稳定包含 B13，而不是把覆盖率寄托在短暂窗口内的随机 roll。
       if (!hasGeneratedGainFromPile && state.pileSlotCount > 0) {
-        const pool = nonTopCohortCandidates()
+        const pool = nonTopCohortCandidatesFromState(cohortState)
         if (pool.length > 0) {
           const cardID = pool[pick(pool.length)]
           events.push({ type: 'gainFromPile', cardIDs: [cardID] })
@@ -1082,7 +1084,7 @@ describe('固定 seed 属性序列', () => {
 
       if (roll < 42 && state.pileSlotCount > 0) {
         // 明摸：只能从牌顶批次取，否则是协议不可能产生的序列。
-        const pool = topCohortCandidates()
+        const pool = topCohortCandidatesFromState(cohortState)
         if (pool.length === 0) continue
 
         const cardID = pool[pick(pool.length)]
@@ -1094,7 +1096,7 @@ describe('固定 seed 属性序列', () => {
       }
 
       if (roll < 50 && state.pileSlotCount > 0) {
-        const pool = nonTopCohortCandidates()
+        const pool = nonTopCohortCandidatesFromState(cohortState)
         if (pool.length === 0) continue
 
         const cardID = pool[pick(pool.length)]
@@ -1192,10 +1194,21 @@ describe('固定 seed 属性序列', () => {
   }
 
   const SEEDS = [1, 7, 42, 101, 256, 1337, 20260731, 99991]
+  const SEQUENCE_STEPS = 40
+
+  // 各测试用例对同一 seed 反复调用 generateSequence(seed, 40)；缓存一次供整个 describe 复用。
+  const sequenceCache = new Map<number, PileGenerationEvent[]>()
+  const getSequence = (seed: number): PileGenerationEvent[] => {
+    const cached = sequenceCache.get(seed)
+    if (cached) return cached
+    const events = generateSequence(seed, SEQUENCE_STEPS)
+    sequenceCache.set(seed, events)
+    return events
+  }
 
   it('批次模型在所有 seed 下保持物理与基数守恒', () => {
     SEEDS.forEach((seed) => {
-      const events = generateSequence(seed, 40)
+      const events = getSequence(seed)
 
       events.forEach((_event, index) => {
         const slice = events.slice(0, index + 1)
@@ -1237,7 +1250,7 @@ describe('固定 seed 属性序列', () => {
 
   it('世代模型在所有 seed 下保持身份分区唯一', () => {
     SEEDS.forEach((seed) => {
-      const events = generateSequence(seed, 40)
+      const events = getSequence(seed)
 
       events.forEach((_event, index) => {
         const slice = events.slice(0, index + 1)
@@ -1264,7 +1277,7 @@ describe('固定 seed 属性序列', () => {
 
   it('基线模型在所有 seed 下保持物理守恒', () => {
     SEEDS.forEach((seed) => {
-      const events = generateSequence(seed, 40)
+      const events = getSequence(seed)
 
       events.forEach((_event, index) => {
         const slice = events.slice(0, index + 1)
@@ -1278,7 +1291,7 @@ describe('固定 seed 属性序列', () => {
 
   it('降级只由 RANDOM 或跨批次牌顶范围事件触发，且单调不减', () => {
     SEEDS.forEach((seed) => {
-      const events = generateSequence(seed, 40)
+      const events = getSequence(seed)
       withSequenceContext(seed, events, () => {
         let previous = 0
         events.forEach((event, index) => {
@@ -1308,7 +1321,7 @@ describe('固定 seed 属性序列', () => {
   it('生成器确实覆盖了全部事件类型', () => {
     const covered = new Set<string>()
     SEEDS.forEach((seed) => {
-      generateSequence(seed, 40).forEach((event) => covered.add(event.type))
+      getSequence(seed).forEach((event) => covered.add(event.type))
     })
 
     // 若某类事件从未被生成，上面的守恒断言就是空跑，必须暴露出来。
@@ -1474,7 +1487,10 @@ describe('§5.3 从牌堆任意位置获取牌（MoveType=18）', () => {
 
       const verdict = evaluateUnknownLocationProjection(
         getCohortUnknownLocationCandidateIDs(cohort),
-        getCohortUnknownLocationCandidateIDs(cohort),
+        new Set([
+          ...getCohortUnknownLocationCandidateIDs(cohort),
+          ...getCohortDefinitelyInPileIDs(cohort)
+        ]),
         oracle
       )
 

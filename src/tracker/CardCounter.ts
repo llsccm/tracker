@@ -119,24 +119,10 @@ export class CardCounter {
   addCard(card: Card): void {
     if (!card) return
 
-    const isNewCard = this.registerCard(card)
+    this.registerCard(card)
 
-    if (!isNewCard) {
-      if (card.id > 0) this.registerIdentity(card.id)
-      this.syncCardStatus(card)
-      this.dirtyCards.delete(card)
-      this.advanceRoomCardCursor()
-      return
-    }
-
-    if (card.id <= 0) {
-      this.syncCardStatus(card)
-      this.dirtyCards.delete(card)
-      this.advanceRoomCardCursor()
-      return
-    }
-
-    this.registerIdentity(card.id)
+    // 无论是否新增实体，身份登记的唯一条件都是正 ID；负 ID 占位不登记身份。
+    if (card.id > 0) this.registerIdentity(card.id)
 
     this.syncCardStatus(card)
     this.dirtyCards.delete(card)

@@ -8,7 +8,7 @@ import { createTestRoom } from './helpers/room'
 /**
  * 身份账本守恒回归。
  *
- * `Room.assertConservation()` 已经能识别 `identity-missing`（身份既不在 cardIDex 也不在
+ * `Room.assertConservation()` 已经能识别 `identity-missing`（身份既不在 cardIndex 也不在
  * unlocatedIdentities），但它只写 warn 日志。历史上 147 号身份就是这样从可枚举集合里
  * 永久漏出的：cardIndex 仍认为它已定位，CardCounter 却已把实体归为移出，
  * 于是后续洗牌既找不到它，也不会把它分类为活动 suspended。

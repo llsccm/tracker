@@ -12,7 +12,10 @@ let isPveRoguelike = false
 function scheduleCloseGameOverWindows() {
   if (closeGameOverWindowsTimer !== null) clearTimeout(closeGameOverWindowsTimer)
   closeGameOverWindowsTimer = null
-  if (!globalConfig.blockMvpSettlementSwitch) return
+  if (!globalConfig.blockMvpSettlementSwitch) {
+    cleanupGame()
+    return
+  }
 
   closeGameOverWindowsTimer = setTimeout(async () => {
     closeGameOverWindowsTimer = null

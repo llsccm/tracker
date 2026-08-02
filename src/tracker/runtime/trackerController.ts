@@ -350,6 +350,8 @@ export class TrackerController {
         )
         // 洗牌闭世代依赖账本提交结果，因此把同一条身份事件交给 Room，在物理区重建前提交；
         // 其它移动仍保持“先移动实体、再写账本”的普通后置流程。
+        // 注意：createPileIdentityMove 在 readyRoom.shufflePile 之前调用，因此
+        // visiblePileIdentityIDsAfter 及依赖 pileCountAfter 的取值都是事务开始、洗牌前的可见状态。
         const pileIdentityMove = this.createPileIdentityMove(
           patchedMsg,
           event,

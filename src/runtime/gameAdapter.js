@@ -489,10 +489,11 @@ export class GameRuntime {
 
   showName() {
     this.gamescene?.seatContainer?.seatUIs?.forEach(({ seat, otherTopManager }) => {
+      if (seat?.playerInfo?.ClientId >= 4e9) return
       otherTopManager?.createPlayerNameBg()
       otherTopManager?.createPlayerName()
       otherTopManager?.UpdatePlayerName(seat.playerInfo)
-      otherTopManager?.SetPlayNameVisible(seat?.playerInfo?.ClientId < 4e9)
+      otherTopManager?.SetPlayNameVisible(true)
       otherTopManager?.layout()
     })
   }
