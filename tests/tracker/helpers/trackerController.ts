@@ -1,4 +1,4 @@
-import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
+import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { TrackerController } from '@/tracker/runtime/trackerController'
 import type { RawMoveCardEvent, TrackerControllerOptions, TrackerView } from '@/tracker/types'
 import { createNoopGameState } from './noopRuntime'
@@ -78,7 +78,7 @@ export function returnToPileMove(overrides: RawMoveCardEvent = {}): RawMoveCardE
     FromZone: 5,
     ToZone: 1,
     ToID: 255,
-    ToPosition: POSITION_TOP + 1,
+    ToPosition: POSITION_RANDOM,
     MoveType: 19,
     ...overrides
   })

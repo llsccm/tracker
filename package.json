@@ -15,7 +15,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "typecheck:tracker": "tsc -p tsconfig.tracker.json",
-    "test:tracker": "vitest run tests/tracker"
+    "test:tracker": "vitest run tests/tracker tests/contracts/pile-identity"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

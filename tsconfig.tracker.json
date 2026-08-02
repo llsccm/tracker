@@ -5,6 +5,11 @@
     "checkJs": false,
     "noEmit": true
   },
-  "include": ["src/tracker/**/*.ts", "src/types/**/*.d.ts", "tests/tracker/**/*.ts"],
+  "include": [
+    "src/tracker/**/*.ts",
+    "src/types/**/*.d.ts",
+    "tests/tracker/**/*.ts",
+    "tests/contracts/pile-identity/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist", "coverage"]
 }

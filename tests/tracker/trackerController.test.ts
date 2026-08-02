@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
-import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
+import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { TrackerController } from '@/tracker/runtime/trackerController'
 import {
   createTrackerControllerHarness,
@@ -34,6 +34,80 @@ describe('TrackerController', () => {
 
     expect(addSpy).not.toHaveBeenCalled()
     expect(room.dirtyCardSeq).toBe(dirtyCardSeq)
+  })
+
+  it.each([POSITION_TOP, POSITION_RANDOM])(
+    'MoveType=18 匿名获得在来源位置 %s 跳过牌顶明牌，只消费暗槽',
+    (fromPosition) => {
+      const { controller } = createTrackerControllerHarness()
+      const seatID = 1
+
+      controller.initTrackerRoom()
+      controller.registerTrackerPlayers([{ SeatID: seatID, ClientID: 100 }], 100)
+      controller.initTrackerDeck([1, 2, 3, 4])
+      controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, [4])
+
+      const room = controller.getTrackerRoom()
+      const pile = room.zones.get('pile')
+      expect(pile.cards.at(-1)?.id).toBe(4)
+      expect(pile.cards.at(-1)?.isKnown).toBe(true)
+
+      controller.syncTrackerMove(
+        protocolMove({
+          CardIDs: [],
+          CardCount: 1,
+          FromPosition: fromPosition,
+          MoveType: 18,
+          SpellID: 9876,
+          ToID: seatID
+        })
+      )
+
+      expect(pile.cards).toHaveLength(3)
+      expect(pile.cards.at(-1)?.id).toBe(4)
+      expect(room.cardIndex.get(4).location).toBe('pile')
+      const handCards = room.cards.filter(
+        (card) => card.location === 'player' && card.subZone === 'hand' && card.seats.has(seatID)
+      )
+      expect(handCards).toHaveLength(1)
+      expect(handCards[0].isKnown).not.toBe(true)
+    }
+  )
+
+  it('MoveType=1 常规摸牌按牌顶顺序取走明牌与后续暗槽', () => {
+    const { controller } = createTrackerControllerHarness()
+    const seatID = 1
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: seatID, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2, 3, 4])
+    controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, [4])
+
+    const room = controller.getTrackerRoom()
+    const pile = room.zones.get('pile')
+    expect(pile.cards.at(-1)).toMatchObject({ id: 4, isKnown: true })
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 2,
+        FromPosition: POSITION_TOP,
+        MoveType: 1,
+        ToID: seatID
+      })
+    )
+
+    expect(pile.cards).toHaveLength(2)
+    expect(room.cardIndex.get(4)).toMatchObject({
+      location: 'player',
+      subZone: 'hand',
+      isKnown: true
+    })
+    const handCards = room.cards.filter(
+      (card) => card.location === 'player' && card.subZone === 'hand' && card.seats.has(seatID)
+    )
+    expect(handCards).toHaveLength(2)
+    expect(handCards.filter((card) => card.isKnown === true).map((card) => card.id)).toEqual([4])
   })
 
   it('嚣翻牌底明牌同步将已有卡牌定位到牌底且重复消息保持幂等', () => {
@@ -676,6 +750,14 @@ describe('TrackerController', () => {
     expect(pileCards).toHaveLength(cardIDs.length + 1)
     expect(pileCards.every((card) => card.id < 0 && card.entityID < 0)).toBe(true)
     expect(pileCards.every((card) => card.isKnown !== true)).toBe(true)
+    expect(room.pileIdentityLedger.getSnapshot().cohort.groups).toEqual([
+      {
+        generation: 0,
+        kind: 'all-in-pile',
+        cardIDs: [1, 7, 76, 79, 139],
+        remainingPileCount: 5
+      }
+    ])
     cardIDs.forEach((id) => {
       expect(room.cardIndex.has(id)).toBe(false)
       expect(room.unlocatedIdentities.has(id)).toBe(true)
@@ -762,6 +844,84 @@ describe('TrackerController', () => {
           card.seats.has(0)
       )
     ).toEqual([])
+  })
+
+  it('从12区获得60461并洗入弃牌后连续明摸保持牌堆张数', () => {
+    const { controller } = createTrackerControllerHarness()
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2, 3, 4, 5, 6])
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [60461],
+        CardCount: 1,
+        FromID: 255,
+        FromZone: 12,
+        MoveType: 19,
+        ToID: 0,
+        ToZone: 5
+      })
+    )
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [60461],
+        CardCount: 1,
+        FromID: 0,
+        FromZone: 5,
+        MoveType: 4,
+        ToID: 255,
+        ToZone: 2
+      })
+    )
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 2,
+        FromID: 255,
+        FromZone: 1,
+        MoveType: 1,
+        ToID: 0,
+        ToZone: 5
+      })
+    )
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [1, 2, 3],
+        CardCount: 3,
+        FromID: 255,
+        FromZone: 1,
+        MoveType: 4,
+        ToID: 255,
+        ToZone: 2
+      })
+    )
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 5,
+        FromID: 255,
+        FromZone: 2,
+        MoveType: 255,
+        ToID: 255,
+        ToZone: 9
+      })
+    )
+
+    controller.syncTrackerMove(protocolMove({ CardIDs: [4], CardCount: 1, ToID: 0 }))
+    controller.syncTrackerMove(protocolMove({ CardIDs: [5], CardCount: 1, ToID: 0 }))
+
+    const room = controller.getTrackerRoom()
+    const expectedIdentityIDs = new Set([1, 2, 3, 4, 5, 6, 60461])
+    const locatedIdentityIDs = new Set(room.cardIndex.keys())
+    expect(room.zones.get('pile').cards).toHaveLength(3)
+    expect(room.deckIdentities).toEqual(expectedIdentityIDs)
+    expect(
+      [...locatedIdentityIDs].filter((cardID) => room.unlocatedIdentities.has(cardID))
+    ).toEqual([])
+    expect(new Set([...locatedIdentityIDs, ...room.unlocatedIdentities])).toEqual(
+      expectedIdentityIDs
+    )
   })
 
   it('技能3571从牌堆揭示陈旧已知手牌时置换实体并保持牌堆数量', () => {

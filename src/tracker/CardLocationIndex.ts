@@ -129,6 +129,18 @@ export class CardLocationIndex {
   }
 
   /**
+   * 为全量 rebuild 之后动态创建的实体预先分配稳定顺序。
+   * 若等到首次脏事件才登记，顺序会取决于实体进入投影桶的先后；
+   * 全量 rebuild 却按 room.cards 创建顺序登记，两条路径随后就会产生不同桶顺序。
+   */
+  registerCard(card: Card): void {
+    if (this.cardOrder.has(card)) return
+
+    this.maxOrder += 1
+    this.cardOrder.set(card, this.maxOrder)
+  }
+
+  /**
    * 按 `Room.dirtyCardEvents` 游标增量更新受影响玩家桶与公共区桶。
    * @returns 是否走了增量路径；false 表示检测到游标断档并回退了全量 rebuild。
    */
@@ -410,8 +422,7 @@ export class CardLocationIndex {
     if (existing !== undefined) return existing
 
     // rebuild 之后新增（append 到 room.cards 末尾）的牌，顺序键单调递增即可保持追加序。
-    this.maxOrder += 1
-    this.cardOrder.set(card, this.maxOrder)
-    return this.maxOrder
+    this.registerCard(card)
+    return this.cardOrder.get(card) ?? this.maxOrder
   }
 }

@@ -31,6 +31,23 @@ describe('MoveEventNormalizer 当前行为', () => {
     expect(event.options.sourceEvent.raw).toBe(event.raw)
   })
 
+  it('保留普通小整数 ToPosition 交给协议位置层解析', () => {
+    const event = normalizeMoveEvent({
+      CardIDs: [39],
+      CardCount: 1,
+      FromID: 3,
+      FromZone: 10,
+      MoveType: 11,
+      SpellID: 987,
+      ToID: 7,
+      ToPosition: 2,
+      ToZone: 10
+    })
+
+    expect(event.options.position).toBe(2)
+    expect(event.options.sourceEvent.raw?.ToPosition).toBe(2)
+  })
+
   it('未知区域编号当前降级为 process 且不伪造手牌子区', () => {
     const raw = {
       CardIDs: [1],

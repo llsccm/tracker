@@ -30,20 +30,21 @@ export function sleep(time, value) {
 
 /**
  * 轮询等待 callback 返回真值。
- * times 为实际执行次数；每次执行前都会先延迟 interval，因此首次也不会立即执行。
+ * times 为实际执行次数；默认每次执行前都会先延迟 interval。
  *
  * @template T
  * @param {() => T | Promise<T>} callback
  * @param {number} [times=10]
  * @param {number} [interval=500]
+ * @param {{ immediate?: boolean }} [options]
  * @returns {Promise<T | undefined>}
  */
-export async function wait(callback, times = 10, interval = 500) {
+export async function wait(callback, times = 10, interval = 500, { immediate = false } = {}) {
   const total = Math.max(0, Math.floor(Number(times) || 0))
   let result
 
   for (let i = 0; i < total; i++) {
-    await sleep(interval)
+    if (!immediate || i > 0) await sleep(interval)
     result = await Promise.resolve(callback())
     if (result) return result
   }

@@ -7,6 +7,8 @@ const retainedLogicMessages = new Set([
   'MsgReconnectGame',
   'MsgHeartAliveRep',
   'decodeGameRecordInitInfo',
+  'ClientBindKeyRep',
+  'decodeSyncGameDataEvent',
 
   // 聊天输出/聊天消息兼容：仅保留消息文本过滤、房间号链接化与基础输出兼容。
   'decodeSSCChatmsgNtf',
@@ -15,6 +17,7 @@ const retainedLogicMessages = new Set([
   // 屏蔽特效
   'CClientGameRewardPointNTF',
   'ClientGeneralSkinRep',
+  'ClientChestOpenReplaceInfoNtf',
 
   // 山河图展示：仅绘制/隐藏山河图信息，不触发自动操作。
   'decodeRogueLikeDataSync',

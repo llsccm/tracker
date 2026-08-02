@@ -58,3 +58,7 @@ export function getCard(room: Room, id: number) {
   const target = room.zones.get('pile')?.cards.find(isAnonymous) ?? null
   return room.materialize(id, target)
 }
+
+export function getSuspendedIdentityIDs(room: Room): number[] {
+  return Array.from(room.suspendedKnownCards, (card) => card.id).sort((left, right) => left - right)
+}

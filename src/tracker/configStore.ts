@@ -25,6 +25,8 @@ export const ACTIVE_CONFIG_ENTRIES: readonly ConfigEntry[] = [
   ['effectBlockSwitch', 'EFFECT_BLOCK_SWITCH', false],
   ['blockKillEffectSwitch', 'BLOCK_KILL_EFFECT_SWITCH', false],
   ['blockSkinStateSwitch', 'BLOCK_SKIN_STATE_SWITCH', false],
+  ['skipAdWindowSwitch', 'SKIP_AD_WINDOW_SWITCH', true],
+  ['skipPackageWindowSwitch', 'SKIP_PACKAGE_WINDOW_SWITCH', true],
   ['blockMvpSettlementSwitch', 'BLOCK_MVP_SETTLEMENT_SWITCH', false]
 ]
 

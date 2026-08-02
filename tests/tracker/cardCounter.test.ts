@@ -76,6 +76,18 @@ describe('CardCounter 状态索引', () => {
     expect(room.counter.cardInstances[externalCard.id].status).toBe(CARD_INSTANCE_STATUS.REMOVED)
   })
 
+  it('显式注册追加实体后推进尾部游标，getter 不重复扫描已注册牌', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1] })
+
+    const { stats } = collectTraversalStats(() => {
+      const [externalCard] = room.createExternalCards([2], 1)
+      expect(room.counter.cardsByStatus[CARD_INSTANCE_STATUS.REMOVED]).toContain(externalCard)
+    })
+
+    expect(stats.sites.get('cardCounter:collectNewRoomCards')).toBeUndefined()
+    expect(stats.sites.get('cardCounter:update')).toBeUndefined()
+  })
+
   it('getter 刷新后仍保留通过 addCard 注册的非 room.cards 牌', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1] })
     const registeredCard = new Card(2, room)

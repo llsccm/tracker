@@ -47,19 +47,30 @@ export function drawCitiesUI(cities, _display) {
   }
 
   // 更新场景显示
-  wait(() => laya.find('SceneLayer', 'RogueSmallMapScene')).then((rogueScene) => {
+  wait(
+    () => {
+      const rogueScene = laya.find('SceneLayer', 'RogueSmallMapScene')
+      return rogueScene?.cityView ? rogueScene : undefined
+    },
+    10,
+    500,
+    { immediate: true }
+  ).then((rogueScene) => {
+    const cityView = rogueScene?.cityView
+    if (!cityView) return
+
     // 清理旧内容
-    for (let i = rogueScene?.cityView.numChildren - 1; i >= 0; i--) {
-      const child = rogueScene.cityView.getChildAt(i)
-      if (child.name === 'city' && rogueScene.cityView) {
-        rogueScene.cityView.removeChild(child)
+    for (let i = cityView.numChildren - 1; i >= 0; i--) {
+      const child = cityView.getChildAt(i)
+      if (child.name === 'city') {
+        cityView.removeChild(child)
       }
     }
 
     // 添加新内容
-    if (rogueScene?.cityView && cities) {
+    if (cities) {
       rogueMap.res.forEach(({ city }) => {
-        rogueScene.cityView.addChild(city)
+        cityView.addChild(city)
       })
     }
   })
@@ -263,7 +274,7 @@ const spellList = [
 
 function highlightedSkill(generalInfo, difficulty) {
   const difficultySpells = [
-    generalInfo.getspell_PT,
+    generalInfo.getspell,
     generalInfo.getspell_ZD,
     generalInfo.getspell_KN,
     generalInfo.getspell_EM,

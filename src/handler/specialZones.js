@@ -38,16 +38,6 @@ export function handleSpecialZones(context) {
     return finishHandledMove(context)
   }
 
-  // 手气卡放回牌堆
-  if (
-    context.FromZone == 5 &&
-    context.ToZone == 1 &&
-    context.SpellID == 0 &&
-    context.MoveType == 19
-  ) {
-    return finishHandledMove(context)
-  }
-
   // 弃牌堆 2 丢到洗牌堆 9
   if (context.FromZone == 2 && context.ToZone == 9 && context.MoveType == 255) {
     game.isPassed = false

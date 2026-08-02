@@ -157,6 +157,11 @@ function normalizeMovePosition({
     CardIDs = CardIDs.filter((id) => id != 4400 && id != 4401)
   }
 
+  // 手气卡返还的牌会重新混入牌堆，不能把协议/客户端代表位置当成牌顶事实。
+  if (FromZone == 5 && ToZone == 1 && SpellID == 0 && MoveType == 19) {
+    ToPosition = POSITION_RANDOM
+  }
+
   return { CardIDs, FromPosition, ToPosition }
 }
 

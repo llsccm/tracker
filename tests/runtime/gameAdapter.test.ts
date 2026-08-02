@@ -32,6 +32,7 @@ describe('GameRuntime', () => {
     const GetWindow = vi.fn((name: keyof typeof windows) => windows[name])
 
     runtime.class('WindowManager', false, { GetWindow })
+    vi.spyOn(runtime, 'find').mockReturnValue(null)
 
     expect(runtime.closeWindow('GameResultWindow')).toBe(true)
     expect(runtime.closeTianShu()).toBe(true)
@@ -46,5 +47,27 @@ describe('GameRuntime', () => {
     runtime.class('WindowManager', false, { GetWindow: () => ({}) })
 
     expect(runtime.closeWindow('GameResultWindow')).toBe(false)
+  })
+
+  it('优先使用管理器 GetWindow，并兼容非 Map 的窗口实例表与场景回退', () => {
+    const runtime = new GameRuntime()
+    const managedWindow = { Close: vi.fn() }
+    const cachedWindow = { Close: vi.fn() }
+    const fallbackWindow = { Close: vi.fn() }
+    const GetWindow = vi.fn((name: string) => (name === 'ManagedWindow' ? managedWindow : null))
+
+    runtime.class('WindowManager', false, {
+      GetWindow,
+      WindowInstanceDict: { CachedWindow: cachedWindow }
+    })
+    vi.spyOn(runtime, 'find').mockImplementation((_, name) =>
+      name === 'FallbackWindow' ? [null, fallbackWindow] : []
+    )
+
+    expect(runtime.GetWindow('ManagedWindow')).toBe(managedWindow)
+    expect(runtime.GetWindow('CachedWindow')).toBe(cachedWindow)
+    expect(runtime.GetWindow('FallbackWindow')).toBe(fallbackWindow)
+    expect(runtime.GetWindow('MissingWindow')).toBeNull()
+    expect(GetWindow).toHaveBeenCalledWith('ManagedWindow')
   })
 })

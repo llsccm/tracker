@@ -4,9 +4,9 @@ import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import { registerDefaultMoveEventHandlers } from '@/tracker/runtime/moveEventHandlers'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import type { TraversalStats } from '@/tracker/traversalStats'
-import { createTestRoom, getCard } from './helpers/room'
+import { createTestRoom, getCard, getSuspendedIdentityIDs } from './helpers/room'
 
-// 覆盖 plans/cards-traversal-optimization-final.md 第一节的四个基线场景。
+// 覆盖 Room 高频移动与收敛路径的遍历基线场景。
 // 快照数字是遍历量护栏：结构性优化（如 A1/E2）应使数字下降并用 `vitest run -u` 刷新，
 // 无关改动使数字上升时需要先解释再更新。
 const DECK_IDS = Array.from({ length: 40 }, (_, index) => index + 1)
@@ -25,6 +25,33 @@ function summarize(stats: TraversalStats) {
 
   summary.total = `visited=${totalVisited}`
   return summary
+}
+
+function createShuffleBaselineRoom(materializeDeckIdentities: boolean) {
+  const { room } = createTestRoom({
+    cardIDs: DECK_IDS,
+    seatIDs: [1, 2],
+    materializeDeckIdentities
+  })
+  room.moveCards([10, 11, 12], 'player', {
+    seatID: 1,
+    subZone: 'hand',
+    fromZone: 'pile',
+    cardCount: 3,
+    sourceEvent: { type: 'baseline:draw-before-discard' }
+  })
+  room.moveCards([10, 11, 12], 'discard', {
+    fromSeatID: 1,
+    fromSubZone: 'hand',
+    cardCount: 3,
+    sourceEvent: { type: 'baseline:discard' }
+  })
+
+  return {
+    room,
+    pileCount: room.zones.get('pile').cards.length,
+    discardCount: room.zones.get('discard').cards.length
+  }
 }
 
 describe('Room.cards 遍历基线', () => {
@@ -121,22 +148,10 @@ describe('Room.cards 遍历基线', () => {
   })
 
   it('洗牌：弃牌堆回收并按协议张数重建牌堆', () => {
-    const { room } = createTestRoom({ cardIDs: DECK_IDS, seatIDs: [1, 2] })
-    room.moveCards([10, 11, 12], 'player', {
-      seatID: 1,
-      subZone: 'hand',
-      fromZone: 'pile',
-      cardCount: 3,
-      sourceEvent: { type: 'baseline:draw-before-discard' }
-    })
-    room.moveCards([10, 11, 12], 'discard', {
-      fromSeatID: 1,
-      fromSubZone: 'hand',
-      cardCount: 3,
-      sourceEvent: { type: 'baseline:discard' }
-    })
-    const pileCount = room.zones.get('pile').cards.length
-    const discardCount = room.zones.get('discard').cards.length
+    // 生产 trackerController 只调用 Room.initDeck()，因此 false 才与实际匿名牌堆路径一致。
+    // 37 个旧 cohort 身份仍会创建 suspended 展示实体，但它们从未进入位置投影，直接按终态
+    // 注册即可；只有 3 张洗回牌需要匿名化并进入通用增量索引，因此四个消费者各访问 3 张。
+    const { room, pileCount, discardCount } = createShuffleBaselineRoom(false)
     expect(discardCount).toBe(3)
 
     const { stats } = collectTraversalStats(() => {
@@ -145,18 +160,46 @@ describe('Room.cards 遍历基线', () => {
 
     expect(room.zones.get('discard').cards).toHaveLength(0)
     expect(room.zones.get('pile').cards).toHaveLength(pileCount + 3)
+    expect(getSuspendedIdentityIDs(room)).toHaveLength(37)
     expect(summarize(stats)).toMatchInlineSnapshot(`
       {
-        "ambiguousKnownIndex:applyDirty": "calls=1 visited=0",
-        "cardCounter:update": "calls=1 visited=40",
+        "ambiguousKnownIndex:applyDirty": "calls=1 visited=3",
+        "cardCounter:update": "calls=1 visited=3",
         "handSlotCounts:collectBySeat": "calls=1 visited=0",
-        "locationIndex:applyDirty": "calls=1 visited=0",
+        "locationIndex:applyDirty": "calls=1 visited=3",
         "reconcileAnonymousHandCards:group": "calls=1 visited=0",
         "resolveConstraints:constraint1": "calls=1 visited=0",
         "resolveConstraints:constraint3:exclusion": "calls=1 visited=0",
-        "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=0",
-        "shufflePile:classify": "calls=1 visited=0",
-        "total": "visited=40",
+        "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=3",
+        "total": "visited=12",
+      }
+    `)
+  })
+
+  it('洗牌对照：已物化牌堆会额外匿名化旧身份实体', () => {
+    // true 是测试 helper 提供的历史对照路径，不是生产初始化方式。它还要匿名化牌堆中
+    // 37 个正 ID 暗实体；新 suspended 实体仍直接按终态注册，所以只有 40 个原实体进入索引。
+    const { room, pileCount, discardCount } = createShuffleBaselineRoom(true)
+    expect(discardCount).toBe(3)
+
+    const { stats } = collectTraversalStats(() => {
+      room.shufflePile({ cardCount: pileCount + discardCount })
+    })
+
+    expect(room.zones.get('discard').cards).toHaveLength(0)
+    expect(room.zones.get('pile').cards).toHaveLength(pileCount + 3)
+    expect(getSuspendedIdentityIDs(room)).toHaveLength(37)
+    expect(summarize(stats)).toMatchInlineSnapshot(`
+      {
+        "ambiguousKnownIndex:applyDirty": "calls=1 visited=40",
+        "cardCounter:update": "calls=1 visited=40",
+        "handSlotCounts:collectBySeat": "calls=1 visited=0",
+        "locationIndex:applyDirty": "calls=1 visited=40",
+        "reconcileAnonymousHandCards:group": "calls=1 visited=0",
+        "resolveConstraints:constraint1": "calls=1 visited=0",
+        "resolveConstraints:constraint3:exclusion": "calls=1 visited=0",
+        "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=40",
+        "total": "visited=160",
       }
     `)
   })

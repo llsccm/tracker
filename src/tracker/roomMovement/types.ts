@@ -4,6 +4,7 @@ import type {
   CardID,
   LocationCandidate,
   MoveSourceEvent,
+  PostMovePublicCandidate,
   PublicPosition,
   PublicZoneName,
   SeatID,
@@ -37,11 +38,13 @@ export interface RoomMovementOptions {
   cardCount?: number
   /** 协议手牌总数变化量；省略时沿用实际移动实体数 cardCount。 */
   handMoveCount?: number
+  moveType?: number | string
   position?: PublicPosition
   fromPosition?: PublicPosition
   expectedSlotsBySeat?: ExpectedSlotsBySeatInput
   resetKnownToUnknown?: boolean
   sourceCards?: Card[]
+  postMovePublicCandidates?: PostMovePublicCandidate[]
   sourceEvent?: MoveSourceEvent
   [key: string]: unknown
 }
@@ -58,11 +61,13 @@ export interface RoomMoveContext {
   fromSubZone: SubZone
   fromSpellID?: SpellID | null
   cardCount: number
+  moveType?: number | string
   position: PublicPosition
   fromPosition: PublicPosition
   expectedSlotsBySeat?: ExpectedSlotsBySeatInput
   resetKnownToUnknown: boolean
   sourceCards?: Card[]
+  postMovePublicCandidates?: PostMovePublicCandidate[]
   sourceEvent?: MoveSourceEvent
   targetSeats: SeatID[]
   handMoveCount: number
@@ -122,6 +127,7 @@ export interface TakeSourceCardsOptions {
   fromSpellID?: SpellID | null
   sourceCards?: Card[]
   sourceEvent?: MoveSourceEvent
+  moveType?: number | string
 }
 
 export interface RandomHandTransferCheckOptions {

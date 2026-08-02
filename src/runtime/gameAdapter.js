@@ -472,12 +472,28 @@ export class GameRuntime {
       })
   }
 
+  GetWindow(name) {
+    const manager = this.class('WindowManager')
+    const managedWindow = manager?.GetWindow?.(name)
+    if (managedWindow) return managedWindow
+
+    const instances = manager?.WindowInstanceDict
+    const cachedWindow =
+      typeof instances?.get == 'function' ? instances.get(name) : instances?.[name]
+    if (cachedWindow) return cachedWindow
+
+    const foundWindow = this.find('WindowLayer', name)
+    if (Array.isArray(foundWindow)) return foundWindow.find(Boolean) ?? null
+    return foundWindow ?? null
+  }
+
   showName() {
     this.gamescene?.seatContainer?.seatUIs?.forEach(({ seat, otherTopManager }) => {
+      if (seat?.playerInfo?.ClientId >= 4e9) return
       otherTopManager?.createPlayerNameBg()
       otherTopManager?.createPlayerName()
       otherTopManager?.UpdatePlayerName(seat.playerInfo)
-      otherTopManager?.SetPlayNameVisible(seat?.playerInfo?.ClientId < 4e9)
+      otherTopManager?.SetPlayNameVisible(true)
       otherTopManager?.layout()
     })
   }
@@ -516,7 +532,7 @@ export class GameRuntime {
    * @returns {boolean} 是否已找到并关闭窗口
    */
   closeWindow(name) {
-    const gameWindow = this.class('WindowManager')?.GetWindow?.(name)
+    const gameWindow = this.GetWindow(name)
     if (typeof gameWindow?.Close != 'function') return false
 
     gameWindow.Close()

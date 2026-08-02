@@ -3,7 +3,7 @@ import { SkillsConfig } from './SkillsConfig'
 import ConfigBase from './ConfigBase'
 import RoguelikeDifficultyVo from './vo/RoguelikeDifficultyVo'
 
-const ROGUE_LEVEL_KEYS = ['_PT', '_ZD', '_KN', '_EM', '_LY']
+const ROGUE_LEVEL_KEYS = ['', '_ZD', '_KN', '_EM', '_LY']
 const REWARD_QUALITY_NAMES = ['随机', '普通', '稀有', '史诗', '传说']
 const CARD_SUBTYPE_NAMES = { 6: '火杀', 7: '雷杀', 11: '冰杀', 12: '闪闪' }
 const CHOICE_REWARD_TYPE_NAMES = { 2: '战法', 3: '技能', 4: '手牌', 5: '装备' }
@@ -127,7 +127,7 @@ export class RoguelikeConfig extends ConfigBase {
 
   initDifficulties(difficulties) {
     for (const data of difficulties || []) {
-      if (!data || data.isopen != 1) continue
+      if (!data) continue
 
       const info = Object.assign(new RoguelikeDifficultyVo(), data)
       const sessionId = info.seasonID
