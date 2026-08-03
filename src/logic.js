@@ -1,4 +1,4 @@
-import { CardConfig, SpellExtendConfig } from './config'
+import { CardConfig } from './config'
 import { initFrame } from './dom'
 import { drawCard } from './draw'
 import { isRetainedLogicMessage } from './featureFlags'
@@ -16,21 +16,16 @@ import {
   handleTriggerSpellNew,
   handleUseSpell,
   hasRuntime,
-  showShanHeTuSponsorPrompt
+  showShanHeTuSponsorPrompt,
+  handleUpdateRoleDataExNtf
 } from './handler'
 import { handleRecordStartGame } from './handler/StartGame'
 import { laya } from './runtime/gameAdapter'
 import { Game, globalConfig, UI, user } from './tracker'
 import { tracker } from './tracker/runtime/browser'
-import {
-  getRenderedMainHandCardIDs,
-  subscribeRenderedMainHandCardIDs
-} from './tracker/view/PlayerHandView'
 import { setSuitRecord, wait } from './utils'
 import { addTooltip } from './utils/notification'
 import { handleBroadMsg } from './handler/chat'
-import { parsePeiXiuRoleData, solvePeiXiuRoleData } from './utils/peixiuRouteFeature'
-import { renderPeiXiuMapWindow, setPeiXiuMapWindowVisible } from './ui/PeiXiuMapWindow'
 
 const ALLOWED_CLASSES = new Set([
   'ClientLoginRep',
@@ -60,40 +55,6 @@ function revealCardsInProtocolZone(id, cardIDs, zone = PROTOCOL_HAND_ZONE, pos =
   tracker.revealTrackerCardsInZone({ id, zone, pos }, cardIDs)
 }
 
-/**
- * @returns {number[]|null}
- */
-function getRenderedHandSuitColors() {
-  const cardIDs = getRenderedMainHandCardIDs()
-  if (cardIDs === null) return null
-
-  const cardConfig = CardConfig.GetInstance()
-  return cardIDs
-    .map((id) => Number(cardConfig.getCardColor(id)))
-    .filter((color) => color >= 1 && color <= 4)
-}
-
-function refreshPeiXiuHandSuitColors() {
-  const state = Game.getSpellState(4022)
-  if (!state?.usesMainHandMirror || !state.result) return
-
-  const handSuitColors = getRenderedHandSuitColors()
-  if (handSuitColors === null) return
-  if (
-    Array.isArray(state.handSuitColors) &&
-    state.handSuitColors.length === handSuitColors.length &&
-    state.handSuitColors.every((color, index) => color === handSuitColors[index])
-  ) {
-    return
-  }
-
-  const nextState = { ...state, handSuitColors }
-  Game.setSpellState(4022, nextState)
-  renderPeiXiuMapWindow(nextState, SpellExtendConfig.GetInstance().PeiXiuBonus)
-}
-
-subscribeRenderedMainHandCardIDs(refreshPeiXiuHandSuitColors)
-
 /** 牌堆准备好了 */
 function readyTrackerGame(cardList = []) {
   const dictCard = CardConfig.GetInstance().cardIDsOrder.filter((id) => cardList.includes(id))
@@ -120,7 +81,7 @@ export function logic(msg) {
     if (msg.className === undefined && msg.ClassName === undefined) return
 
     const className = msg.ClassName || msg.className || msg.toString()
-    const { ProtoObj, SeatID, Datas } = msg
+    const { ProtoObj, SeatID } = msg
 
     if (!isRetainedLogicMessage(className)) return
 
@@ -360,94 +321,7 @@ export function logic(msg) {
 
       // 更新状态的消息
       case 'GsCUpdateRoleDataExNtf':
-        switch (msg.DataID) {
-          //出杀次数
-          case 1:
-            if (Game.currentID == SeatID && Array.isArray(Datas)) {
-              document.getElementById('sha').innerText = '剩余：' + Math.max(0, Datas[2] - Datas[1])
-            }
-            break
-
-          // OPT_DATA_ADD_NEW_SPELL 可用于注册战法
-          case 15:
-            if (SeatID !== undefined && SeatID == Game.myID && import.meta.env.DEV) {
-              // isReverse
-              const isSpecial = msg.Datas[3] > 0
-              // const speicalData = isSpecial ? [msg.Datas[3]] : []
-
-              const generalId = msg.Datas[0]
-              const skillCnt = msg.Datas[1]
-
-              // 截取索引 2 开始的数据；若 isSpecial 为 true，则排除原索引 3 的元素
-              const remaining = isSpecial
-                ? [...msg.Datas.slice(2, 3), ...msg.Datas.slice(4)]
-                : msg.Datas.slice(2)
-
-              const skillIds = remaining.slice(0, skillCnt)
-
-              if (generalId === 0 && Game.isShanHeTu) {
-                console.info('战法技能id: ', skillIds)
-              }
-            }
-
-            break
-
-          // 巧织 获得的牌
-          case 3544:
-            // Datas: [37, 0]
-            if (SeatID !== undefined && SeatID !== Game.myID && Array.isArray(Datas)) {
-              //
-            }
-
-            break
-
-          // 郭照 椒遇 选择的颜色
-          case 3571:
-            // Datas:[x] 1红2黑
-            if (Array.isArray(Datas)) {
-              const colors = Datas[0] == 1 ? [1, 2] : [3, 4]
-              Game.setSpellState(3571, new Set(colors))
-            }
-            break
-
-          // 尽览
-          case 4022:
-            if (Array.isArray(Datas)) {
-              const roleData = parsePeiXiuRoleData(Datas)
-              if (!roleData) break
-
-              const spellExtendConfig = SpellExtendConfig.GetInstance()
-              const mapConfig = spellExtendConfig.PeiXiuCellDic.get(roleData.mapId)
-              const solvedState = mapConfig ? solvePeiXiuRoleData(mapConfig, Datas) : null
-              const presetRoutes = spellExtendConfig.PeiXiuPresetRoutes.get(roleData.mapId) || []
-              const usesMainHandMirror =
-                Game.myID != null && SeatID != null && Number(Game.myID) === Number(SeatID)
-              const handSuitColors = usesMainHandMirror ? getRenderedHandSuitColors() : null
-
-              const state = solvedState
-                ? { ...solvedState, presetRoutes, handSuitColors, usesMainHandMirror }
-                : {
-                    ...roleData,
-                    result: null,
-                    presetRoutes,
-                    handSuitColors,
-                    usesMainHandMirror
-                  }
-
-              Game.setSpellState(4022, state)
-
-              if (state.result) {
-                renderPeiXiuMapWindow(state, spellExtendConfig.PeiXiuBonus)
-                setPeiXiuMapWindowVisible(Boolean(globalConfig.peiXiuMapSwitch))
-              }
-            }
-
-            break
-
-          default:
-            break
-        }
-
+        handleUpdateRoleDataExNtf(msg)
         break
 
       // TODO

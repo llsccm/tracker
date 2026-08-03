@@ -1,10 +1,76 @@
 import { describe, expect, it } from 'vitest'
 
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { registerDefaultMoveEventHandlers } from '../../src/tracker/runtime/moveEventHandlers'
+import decorateQiaoZhi from '../../src/tracker/skill/QiaoZhi'
+
+function createLegacyQiaoZhiHarness() {
+  return createTrackerControllerHarness({
+    registerMoveEventHandlers(room) {
+      registerDefaultMoveEventHandlers(room)
+      room.registerMoveEventHandler(3544, decorateQiaoZhi)
+    }
+  })
+}
 
 describe('巧织暗取牌推断', () => {
-  it('明弃未选牌后用展示牌差集确认暗取牌身份', () => {
+  it('默认移动链路不注册旧装饰器，3544 通知可直接物化暗取牌', () => {
     const { controller } = createTrackerControllerHarness()
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 300 }], 300)
+    controller.initTrackerDeck([37, 92])
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardCount: 2,
+        CardIDs: [37, 92],
+        FromID: 255,
+        FromZone: 1,
+        MoveType: 6,
+        SpellID: 3544,
+        ToID: 255,
+        ToZone: 8
+      })
+    )
+    controller.syncTrackerMove(
+      protocolMove({
+        CardCount: 1,
+        CardIDs: [],
+        FromID: 3544,
+        FromZone: 8,
+        MoveType: 18,
+        SpellID: 3544,
+        ToID: 3,
+        ToZone: 5
+      })
+    )
+
+    const room = controller.getTrackerRoom()
+    expect(room.skillState.has('qiaozhiSelection')).toBe(false)
+
+    controller.revealTrackerCards(
+      {
+        type: 'player',
+        seatID: 3,
+        handMoveCount: 0,
+        sourceEvent: {
+          type: 'qiaozhi:update-role-data',
+          label: 'GsCUpdateRoleDataExNtf:3544'
+        }
+      },
+      [37]
+    )
+
+    const revealedCard = room.cardIndex.get(37)!
+    expect(revealedCard.location).toBe('player')
+    expect(revealedCard.subZone).toBe('hand')
+    expect(revealedCard.seats.has(3)).toBe(true)
+    expect(revealedCard.isKnown).toBe(true)
+    expect(revealedCard.spellID).toBeNull()
+  })
+
+  it('明弃未选牌后用展示牌差集确认暗取牌身份', () => {
+    const { controller } = createLegacyQiaoZhiHarness()
     controller.initTrackerRoom()
     controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 300 }], 300)
     controller.initTrackerDeck([37, 92])
@@ -87,7 +153,7 @@ describe('巧织暗取牌推断', () => {
   })
 
   it('暗取协议已带正 CardIDs 时跳过差集推断（主视角可见）', () => {
-    const { controller } = createTrackerControllerHarness()
+    const { controller } = createLegacyQiaoZhiHarness()
     controller.initTrackerRoom()
     controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 300 }], 300)
     controller.initTrackerDeck([52, 77])
@@ -129,7 +195,7 @@ describe('巧织暗取牌推断', () => {
   })
 
   it('差集确认后的牌再暗置木马时不应残留巧织标记描述', () => {
-    const { controller } = createTrackerControllerHarness()
+    const { controller } = createLegacyQiaoZhiHarness()
     controller.initTrackerRoom()
     controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 300 }], 300)
     controller.initTrackerDeck([141, 75, 161])
