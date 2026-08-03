@@ -444,7 +444,7 @@ export function logic(msg) {
         break
 
       case 'ClientModifyTblsetingNtf':
-        console.info(msg)
+        if (import.meta.env.DEV) console.info(msg)
         break
 
       // 武将包开启后消息 用于关闭 GeneralOpenResultWindow

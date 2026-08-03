@@ -27,7 +27,11 @@ async function scheduleCloseGameOverWindows() {
 
   // 此时关闭战绩 山河图结算数据还不存在导致窗口空白
   const resultWin = await wait(() => getWindow('GameResultWindow'))
-  if (!resultWin) return
+  if (!resultWin) {
+    cleanupGame()
+    return
+  }
+
   // 等山河图结算窗口初始化
   if (Game.isShanHeTu) await wait(() => getWindow('RogueZhanJiWindow'))
   // 但是这样会关闭山河图结算
@@ -64,6 +68,12 @@ export function handleLeaveTable() {
 
 function cleanupGame() {
   gameOverCount = 0
+
+  if (gameOverFallbackTimer !== null) {
+    clearTimeout(gameOverFallbackTimer)
+    gameOverFallbackTimer = null
+  }
+
   document.querySelectorAll('.mizhu').forEach((e) => (e.style.display = 'none'))
   Game.isPassed = null
   Game.end()

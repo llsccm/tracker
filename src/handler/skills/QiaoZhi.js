@@ -2,9 +2,10 @@ import { tracker } from '@/tracker/runtime/browser'
 
 export function handleQiaoZhi(msg = {}, currentSeatID) {
   const seatID = Number(msg.SeatID)
+  const mySeatID = Number(currentSeatID)
 
   if (!Array.isArray(msg.Datas) || !Number.isInteger(seatID)) return
-  if (currentSeatID !== undefined && seatID === currentSeatID) return
+  if (Number.isInteger(mySeatID) && seatID === mySeatID) return
 
   // Datas: [CardID, 0]；巧织每次只获得一张牌，末项 0 是协议结束值。
   const cardID = Number(msg.Datas[0])

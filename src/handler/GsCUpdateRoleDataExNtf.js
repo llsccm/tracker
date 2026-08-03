@@ -21,6 +21,7 @@ export function handleUpdateRoleDataExNtf(msg) {
 
     // OPT_DATA_ADD_NEW_SPELL 可用于注册战法
     case 15:
+      if (!Array.isArray(Datas)) break
       if (SeatID !== undefined && SeatID == Game.myID && import.meta.env.DEV) {
         // isReverse
         const isSpecial = Datas[3] > 0
