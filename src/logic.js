@@ -358,8 +358,7 @@ export function logic(msg) {
         handleGamePhase(msg)
         break
 
-      // TODO 战法注册
-
+      // 更新状态的消息
       case 'GsCUpdateRoleDataExNtf':
         switch (msg.DataID) {
           //出杀次数
@@ -386,27 +385,28 @@ export function logic(msg) {
 
               const skillIds = remaining.slice(0, skillCnt)
 
-              if (generalId === 0) {
+              if (generalId === 0 && Game.isShanHeTu) {
                 console.info('战法技能id: ', skillIds)
               }
             }
 
             break
 
-          case 3571:
-            if (Array.isArray(Datas)) {
-              // 郭照 椒遇 Datas:[x] 1红2黑
-              const colors = Datas[0] == 1 ? [1, 2] : [3, 4]
+          // 巧织 获得的牌
+          case 3544:
+            // Datas: [37, 0]
+            if (SeatID !== undefined && SeatID !== Game.myID && Array.isArray(Datas)) {
+              //
+            }
 
-              const jiaoYuCards = Game.getSpellState(3571)
-              Game.setSpellState(
-                3571,
-                new Set(
-                  Array.from(jiaoYuCards || []).filter((id) =>
-                    colors.includes(CardConfig.GetInstance().getCard(id)?.color)
-                  )
-                )
-              )
+            break
+
+          // 郭照 椒遇 选择的颜色
+          case 3571:
+            // Datas:[x] 1红2黑
+            if (Array.isArray(Datas)) {
+              const colors = Datas[0] == 1 ? [1, 2] : [3, 4]
+              Game.setSpellState(3571, new Set(colors))
             }
             break
 
@@ -492,8 +492,10 @@ export function logic(msg) {
 
       case 'MsgNtfUseCardType':
         //使用虚拟/转化牌
-        if (msg.castSeatId == Game.myID && msg.useType == 1 && !msg.isSend)
-          Game.record({ use: msg.spellId }) // 战法计数
+        if (msg.castSeatId == Game.myID && msg.useType == 1 && !msg.isSend) {
+          // 战法计数
+          Game.record({ use: msg.spellId })
+        }
         break
 
       case 'PubGsCUseCard':
@@ -565,6 +567,10 @@ export function logic(msg) {
         wait(() => laya.blockPowerSlogan()).catch((err) => {
           console.error(err)
         })
+        break
+
+      case 'ClientModifyTblsetingNtf':
+        console.info(msg)
         break
 
       // 武将包开启后消息 用于关闭 GeneralOpenResultWindow

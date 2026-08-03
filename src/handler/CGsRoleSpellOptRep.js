@@ -83,7 +83,8 @@ export function handleRoleSpellOptRep(msg = {}) {
 
     // 郭照 椒遇
     case 3571:
-      if (Type === 10) Game.getSpellState(SpellID)?.add?.(Datas[0])
+      // 这里只有一张牌的消息 有一点点意义
+      // if (Type === 10) Game.getSpellState(SpellID)?.add?.(Datas[0])
       break
 
     // 裴秀地图结果暂由地图消息链消费。

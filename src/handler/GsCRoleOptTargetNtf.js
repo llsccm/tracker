@@ -245,9 +245,12 @@ export function handleRoleOptTargetNtf(msg) {
 
     // 郭照 椒遇
     case 3571:
-      if (Param == 0) {
-        Params.slice(1).forEach((id) => Game.getSpellState(SpellID)?.add?.(id))
-      }
+      // 这里数据不全 得四处拼接
+      // Params: [牌数, ...CardIDs]
+      // console.info(msg)
+      // if (Param == 0) {
+      //   Params.slice(1).forEach((id) => Game.getSpellState(SpellID)?.add?.(id))
+      // }
       break
 
     // 晋司马懿 雄志 权变
