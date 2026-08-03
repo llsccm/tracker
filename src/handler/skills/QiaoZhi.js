@@ -1,8 +1,12 @@
 import { tracker } from '@/tracker/runtime/browser'
 
 export function handleQiaoZhi(msg = {}, currentSeatID) {
-  const seatID = Number(msg.SeatID)
-  const mySeatID = Number(currentSeatID)
+  const seatID =
+    msg.SeatID === null || msg.SeatID === undefined ? Number.NaN : Number(msg.SeatID)
+  const mySeatID =
+    currentSeatID === null || currentSeatID === undefined
+      ? Number.NaN
+      : Number(currentSeatID)
 
   if (!Array.isArray(msg.Datas) || !Number.isInteger(seatID)) return
   if (Number.isInteger(mySeatID) && seatID === mySeatID) return
