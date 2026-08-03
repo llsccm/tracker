@@ -472,14 +472,13 @@ export class GameRuntime {
       })
   }
 
+  // 不能使用 WindowManager.GetWindow 此方法会找不到窗口会创建一个 造成污染
   GetWindow(name) {
     const manager = this.class('WindowManager')
-    const managedWindow = manager?.GetWindow?.(name)
-    if (managedWindow) return managedWindow
+    if (!manager) return null
 
-    const instances = manager?.WindowInstanceDict
-    const cachedWindow =
-      typeof instances?.get == 'function' ? instances.get(name) : instances?.[name]
+    const dict = manager?.WindowInstanceDict
+    const cachedWindow = dict?.get(name)
     if (cachedWindow) return cachedWindow
 
     const foundWindow = this.find('WindowLayer', name)
