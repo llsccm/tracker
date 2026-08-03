@@ -50,7 +50,7 @@ describe('GsCUpdateRoleDataExNtf 3544', () => {
     expect(revealTrackerCards).not.toHaveBeenCalled()
   })
 
-  it('主视角未确定时仍同步 0 号位消息', () => {
+  it('主视角未确定时不同步 0 号位消息', () => {
     const msg = {
       DataID: 3544,
       Datas: [37, 0],
@@ -59,6 +59,6 @@ describe('GsCUpdateRoleDataExNtf 3544', () => {
 
     handleQiaoZhi(msg, null)
 
-    expect(revealTrackerCards).toHaveBeenCalledOnce()
+    expect(revealTrackerCards).toHaveBeenCalledTimes(0)
   })
 })
