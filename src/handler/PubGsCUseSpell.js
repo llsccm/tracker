@@ -56,10 +56,10 @@ export function handleUseSpell(msg) {
       break
 
     case 3571:
-      // 郭照 椒遇
-      if (msg.EffectIndex === 1) {
-        Game.setSpellState(3571, new Set())
-      }
+      // 郭照 椒遇 现在会进入处理区 无需再创建空间存储
+      // if (msg.EffectIndex === 1) {
+      //   Game.setSpellState(3571, new Set())
+      // }
       break
 
     // 谋许攸 迁附 控顶

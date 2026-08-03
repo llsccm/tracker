@@ -1,5 +1,6 @@
 import { CardConfig } from '../config'
 import { drawChengXiang } from '../draw'
+import handleJiaoYu from './skills/JiaoYu'
 
 function handleChengXiang(context) {
   if (context.ToZone == 8 && context.MoveType == 6) {
@@ -75,21 +76,6 @@ function handleQingYiLianJu(context) {
   }
 }
 
-function handleJiaoYu(context) {
-  if (
-    context.FromZone == 8 &&
-    context.ToZone == 5 &&
-    context.MoveType == 8 &&
-    context.CardIDs.filter((id) => id > 0).length == 0
-  ) {
-    const spellCards = context.game.getSpellState(context.SpellID)
-    const spellCardIDs = Array.from(spellCards || [])
-    if (spellCardIDs.length) {
-      context.CardIDs.splice(0, Infinity, ...spellCardIDs)
-    }
-  }
-}
-
 function handleQianFu(context) {
   if (
     context.FromZone == 2 &&
@@ -120,6 +106,7 @@ export const spellEffectHandlers = new Map([
   // [7017, handleYanXi]
 ])
 
+// 使用已有信息修改 cardIDs 简单不用处理 真是一个好方法吗?
 export function applySpellEffect(context) {
   const handler = spellEffectHandlers.get(context.SpellID)
   if (!handler) return false

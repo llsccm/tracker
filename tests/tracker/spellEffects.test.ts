@@ -123,6 +123,122 @@ describe('技能副作用注册表', () => {
     expect(game.getSpellState(3157)).toBeUndefined()
   })
 
+  it('椒遇从无席位 mark 回手时按选择颜色补全其他视角的 CardIDs', () => {
+    const selectedCardIDs = [147, 148, 149, 150, 151]
+    const otherCardID = 152
+    const { controller } = createTrackerControllerHarness()
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 5, ClientID: 500 }], 500)
+    controller.initTrackerDeck([...selectedCardIDs, otherCardID])
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [...selectedCardIDs, otherCardID],
+        CardCount: 6,
+        FromZone: 1,
+        ToZone: 3,
+        ToID: 255,
+        MoveType: 6,
+        SpellID: 3571
+      })
+    )
+
+    const room = controller.getTrackerRoom()
+    selectedCardIDs.forEach((cardID, index) => {
+      room.cardIndex.get(cardID).color = index % 2 == 0 ? 1 : 2
+    })
+    room.cardIndex.get(otherCardID).color = 3
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 6,
+        FromID: 255,
+        FromZone: 3,
+        ToID: 255,
+        ToZone: 8,
+        MoveType: 6,
+        SpellID: 3571
+      })
+    )
+
+    const game = { ...createGameState({ 3571: new Set([1, 2]) }), room }
+    const context = createContext({
+      game,
+      CardIDs: [],
+      CardCount: 5,
+      FromID: 3571,
+      FromZone: 8,
+      ToID: 5,
+      ToZone: 5,
+      MoveType: 8,
+      SpellID: 3571
+    })
+
+    applySpellEffect(context)
+
+    expect([...context.CardIDs].sort((a, b) => a - b)).toEqual(selectedCardIDs)
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 5,
+        FromID: 3571,
+        FromZone: 8,
+        ToID: 5,
+        ToZone: 5,
+        MoveType: 8,
+        SpellID: 3571
+      }),
+      { CardIDs: context.CardIDs }
+    )
+
+    selectedCardIDs.forEach((cardID) => {
+      const card = room.cardIndex.get(cardID)
+      expect(card.location).toBe('player')
+      expect(card.subZone).toBe('hand')
+      expect(card.seats.has(5)).toBe(true)
+    })
+    const otherCard = room.cardIndex.get(otherCardID)
+    expect(otherCard.location).toBe('player')
+    expect(otherCard.subZone).toBe('mark')
+    expect(otherCard.spellID).toBe(3571)
+    expect(otherCard.seats.size).toBe(0)
+  })
+
+  it('椒遇颜色候选数与协议张数不一致时保持暗牌消息', () => {
+    const game = {
+      ...createGameState({ 3571: new Set([1, 2]) }),
+      room: {
+        refreshPlayerSnapshot: () => [
+          {
+            id: 147,
+            color: 1,
+            isKnown: true,
+            location: 'player',
+            subZone: 'mark',
+            spellID: 3571
+          }
+        ]
+      }
+    }
+    const context = createContext({
+      game,
+      CardIDs: [],
+      CardCount: 5,
+      FromID: 3571,
+      FromZone: 8,
+      ToZone: 5,
+      MoveType: 8,
+      SpellID: 3571
+    })
+
+    applySpellEffect(context)
+
+    expect(context.CardIDs).toEqual([])
+  })
+
   it('清议回填后经 tracker 同步，弃牌堆明牌进入目标手牌', () => {
     const { controller } = createTrackerControllerHarness()
     const cardIDs = [11, 12]

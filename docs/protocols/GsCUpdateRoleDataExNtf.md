@@ -1,8 +1,8 @@
-# `GsCUpdateRoleDataExNtf`：裴秀地图状态更新
+# `GsCUpdateRoleDataExNtf`：角色扩展数据更新
 
-## 消息用途
+## `DataID = 4022`：裴秀地图状态更新
 
-`DataID = 4022` 对应裴秀地图的实时状态更新。消息记录地图 ID、当前位置和已经绘制的
+消息记录地图 ID、当前位置和已经绘制的
 移动轨迹，可用于恢复当前地图状态并计算从当前位置开始的剩余最优路径。
 
 仅处理 `SeatID === Game.myID` 的己方消息。
@@ -91,6 +91,26 @@ Game.getSpellState(4022)
 
 地图配置尚未加载时仍保存协议字段，并将 `result` 设为 `null`。
 
+## `DataID = 3544`：巧织暗取牌
+
+巧织的 `PubGsCMoveCard` 在非主视角只提供暗取数量，实际获得的牌面通过角色扩展数据通知补充。
+通知只在目标不是当前主视角时消费，避免与主视角移动协议中已经携带的正 `CardIDs` 重复同步。
+
+### 数据结构
+
+```text
+Datas: [cardID, 0]
+```
+
+| 位置 | 字段 | 含义 |
+| ---: | --- | --- |
+| `0` | `cardID` | 巧织暗取到的牌 ID |
+| `1` | 截止符 | 固定为 `0`，表示本条数据结束 |
+
+处理入口为 `src/handler/skills/QiaoZhi.js` 的
+`handleQiaoZhiUpdateRoleData()`。它将 `cardID` 作为已知身份物化到 `SeatID` 的普通手牌，
+但不再次增加手牌总数；暗取数量已经由前置移动消息记录。
+
 ## 地图浮窗
 
 初始消息（例如 `[12, 18, 0, 0]`）会创建可拖动的 HTML 地图浮窗。棋盘为
@@ -104,6 +124,7 @@ Game.getSpellState(4022)
 ## 代码位置
 
 - 消息路由：`src/logic.js`
+- 3544 处理：`src/handler/skills/QiaoZhi.js`
 - 协议解析与路线求解：`src/utils/peixiuRouteFeature.js`
 - 地图浮窗：`src/ui/PeiXiuMapWindow.js`
 - 地图配置：`src/config/SpellExtendConfig.js`

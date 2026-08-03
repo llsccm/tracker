@@ -10,8 +10,11 @@ let isPveRoguelike = false
 
 // 应该存在一个更好的方法
 function scheduleCloseGameOverWindows() {
-  if (closeGameOverWindowsTimer !== null) clearTimeout(closeGameOverWindowsTimer)
-  closeGameOverWindowsTimer = null
+  if (closeGameOverWindowsTimer !== null) {
+    clearTimeout(closeGameOverWindowsTimer)
+    closeGameOverWindowsTimer = null
+  }
+
   if (!globalConfig.blockMvpSettlementSwitch) {
     cleanupGame()
     return
@@ -27,9 +30,13 @@ function scheduleCloseGameOverWindows() {
 
     // 此时关闭战绩 山河图结算数据还不存在导致窗口空白
     const resultWin = await wait(() => getWindow('GameResultWindow'))
-    if (!resultWin) return
+    if (!resultWin) {
+      cleanupGame()
+      return
+    }
+
     // 等山河图结算窗口初始化
-    if (isPveRoguelike) await wait(() => getWindow('RogueZhanJiWindow'))
+    // if (isPveRoguelike) await wait(() => getWindow('RogueZhanJiWindow'))
     // if (zhanJiWin) return
     resultWin.laterClose?.()
 
