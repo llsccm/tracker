@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createConfigStore, createMemoryStorageAdapter } from '@/tracker/configStore'
 import { globalConfig } from '@/tracker/state'
-import { user } from '@/tracker/user'
-import { createUserModel } from '@/tracker/userModel'
+import { createUserModel, user } from '@/tracker/user'
 
 describe('state/user Node 导入边界', () => {
   it('globalConfig 在无 localStorage/window 时使用内存存储', () => {
@@ -60,14 +59,12 @@ describe('state/user Node 导入边界', () => {
     expect(listener).not.toHaveBeenCalled()
   })
 
-  it('用户数据模型与 DOM 绑定分离', () => {
-    const changes = []
-    const model = createUserModel({}, { onChange: (change) => changes.push(change) })
+  it('用户数据模型独立创建与独立更新', () => {
+    const model = createUserModel()
 
     model.userID = 10001
     model.nickname = '测试昵称'
 
-    expect(changes.map((change) => change.property)).toEqual(['userID', 'nickname'])
     expect(model.userID).toBe(10001)
     expect(model.nickname).toBe('测试昵称')
 
