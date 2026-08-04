@@ -4,7 +4,6 @@ import { CardLocationIndex } from '@/tracker/CardLocationIndex'
 import { ConstraintGroup } from '@/tracker/ConstraintGroup'
 import { Room } from '@/tracker/Room'
 import { GameState } from '@/tracker/gameState'
-import type { RecordOptions } from '@/tracker/gameState'
 import { createNoopGameState } from './helpers/noopRuntime'
 
 class HookedGameState extends GameState {
@@ -20,10 +19,6 @@ class HookedGameState extends GameState {
 
   protected onStart(): void {
     this.events.push('start')
-  }
-
-  protected onRecord({ use = 0, mo = 0 }: RecordOptions): void {
-    this.events.push(`record:${use}:${mo}`)
   }
 }
 
@@ -79,7 +74,6 @@ describe('Room Node 导入边界', () => {
 
     expect(gameState.room).toBe(null)
     expect(gameState.seatIDs).toEqual([])
-    // expect(gameState.mySeats).toEqual([])
     expect(gameState.myID).toBeUndefined()
   })
 
@@ -91,7 +85,6 @@ describe('Room Node 导入边界', () => {
     gameState.start()
     gameState.setTurn(2)
     gameState.enter(0, 3)
-    gameState.record({ use: 1 })
 
     expect(gameState.turn).toBe(2)
     expect(gameState.round).toBe(1)
@@ -100,7 +93,7 @@ describe('Room Node 导入边界', () => {
 
     gameState.end()
 
-    expect(gameState.events).toEqual(['init', 'end', 'start', 'record:1:0', 'end'])
+    expect(gameState.events).toEqual(['init', 'end', 'start', 'end'])
     expect(gameState.isGameStart).toBe(false)
     expect(gameState.isPassed).toBe(true)
   })

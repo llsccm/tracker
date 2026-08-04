@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getReadyTrackerRoom, setTrackerMySeatID } = vi.hoisted(() => ({
+const { drawCounter, getReadyTrackerRoom, setTrackerMySeatID } = vi.hoisted(() => ({
+  drawCounter: vi.fn(),
   getReadyTrackerRoom: vi.fn(),
   setTrackerMySeatID: vi.fn()
 }))
@@ -9,6 +10,12 @@ vi.mock('../../src/tracker/runtime/browser', () => ({
   tracker: {
     getReadyTrackerRoom,
     setTrackerMySeatID
+  }
+}))
+
+vi.mock('@/runtime/gameAdapter', () => ({
+  laya: {
+    drawCounter
   }
 }))
 
@@ -31,7 +38,9 @@ function createRecordGame() {
     isRecord: true,
     isGameStart: true,
     isPassed: false,
-    myID: undefined as number | undefined,
+    get myID() {
+      return room.mySeatID
+    },
     room,
     record: vi.fn()
   }

@@ -1,6 +1,13 @@
 import { Game } from '@/tracker/Game'
 import { addTooltip } from '@/utils/notification'
 
+// 每回合都可以发动
+const ROUND_ZHAN_FA_IDS = new Set([
+  2100, 2101, 2108, 2109, 2110, 2312, 2313, 2317, 2319, 2320, 2321, 2322
+])
+// 手到擒来 多多益善 自己的回合结束才清空
+const SELF_TURN_ZHAN_FA_IDS = new Set([2079, 2080, 2081, 2082, 2083, 2084])
+
 /**
  * 方法重定义/热替换工具
  * 将对象上的原有方法备份为 __prop，并使用新描述符定义该属性
@@ -523,6 +530,93 @@ export class GameRuntime {
 
     this._powerSloganBlocked = true
     return true
+  }
+
+  /** 存战斗中所有战法实例 */
+  zhanfaMap = new Map()
+
+  ZHANFA = new Set([
+    13027, 13028, 13029, 13039, 13040, 13041, 13087, 13088, 13089, 13184, 13185, 13293, 13294,
+    13033, 13034, 13035, 13070, 13071, 13072, 13073, 13074, 13075, 13091, 13098
+  ])
+
+  shaCounter() {
+    const value = Game.spellSpace['三板斧'] % 3
+    const targetIds = [13033, 13034, 13035]
+
+    for (const id of targetIds) {
+      const zhanfa = this.zhanfaMap.get(id)
+      if (zhanfa) {
+        zhanfa.Value = value
+      }
+    }
+  }
+
+  useCounter() {
+    const value = Game.spellSpace['手到擒来']
+    const targetIds = [13070, 13071, 13072]
+
+    for (const id of targetIds) {
+      const zhanfa = this.zhanfaMap.get(id)
+      if (zhanfa) {
+        zhanfa.Value = value
+      }
+    }
+  }
+
+  drawCounter() {
+    const count = Game.spellSpace['神龙摆尾']
+    const times = Game.spellSpace['多多益善']
+
+    const shenlong1 = this.zhanfaMap.get(13091)
+    if (shenlong1) shenlong1.Value = count % 9
+
+    const shenlong2 = this.zhanfaMap.get(13098)
+    if (shenlong2) shenlong2.Value = count % 6
+
+    const targetIds = [13073, 13074, 13075]
+
+    for (const id of targetIds) {
+      const zhanfa = this.zhanfaMap.get(id)
+      if (zhanfa) {
+        zhanfa.Value = times
+      }
+    }
+  }
+
+  zhanfaCounter(SkillId) {
+    const zhanfa = this.zhanfaMap.get(SkillId)
+
+    if (!zhanfa) return
+    if (zhanfa.n === undefined) zhanfa.n = 0
+    zhanfa.Value = ++zhanfa.n
+  }
+
+  zhanfaRegister() {
+    this.gamescene?.SelfSeatUi?.zhanFaItems?.forEach((ui) => {
+      if (this.ZHANFA.has(ui.SkillId)) this.zhanfaMap.set(ui.SkillId, ui)
+    })
+  }
+
+  zhanfaReset() {
+    for (const [_, ui] of this.zhanfaMap) {
+      if (ui?.n !== undefined) ui.Value = ui.n = 0
+    }
+  }
+
+  resetRoundZhanFa(previousSeatID) {
+    for (const [_, ui] of this.zhanfaMap) {
+      // 每回合都可以发动
+      if (ui?.n !== undefined && ROUND_ZHAN_FA_IDS.has(ui.PlotID)) {
+        ui.Value = ui.n = 0
+      }
+
+      // 自己的回合结束才清空 手到擒来 多多益善
+      // 主视角下一个角色回合开始 代表主视角的回合已经结束
+      if (previousSeatID === Game.myID && SELF_TURN_ZHAN_FA_IDS.has(ui.PlotID)) {
+        ui.Value = 0
+      }
+    }
   }
 }
 

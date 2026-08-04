@@ -71,6 +71,8 @@ export class GameState {
   myGenerals: number[] = []
   /** 阵营 统率占位 替代mySeats */
   camps: number[] = []
+  // 目前没用 打算这里存筛选后的战法
+  zhanfaSet = new Set()
 
   constructor({ orderLabels = ORDER_LABELS }: { orderLabels?: string[] } = {}) {
     this.orderLabels = orderLabels
@@ -85,8 +87,6 @@ export class GameState {
   protected onEnd(): void {}
 
   protected onStart(): void {}
-
-  protected onRecord(_options: RecordOptions): void {}
 
   private resetSessionState(): void {
     this.turn = 0
@@ -139,6 +139,8 @@ export class GameState {
     this.size = undefined
     this.isDuanXian = false
     this.needShowName = false
+
+    this.zhanfaSet.clear()
   }
 
   getSeatUI(seatID: SeatID): SeatUIRuntime {
@@ -167,8 +169,7 @@ export class GameState {
   }
 
   init(): void {
-    this.resetSessionState()
-    this.resetRoomState()
+    this.reset()
     this.isGameStart = true
     this.isPassed = false
     this.onInit()
@@ -209,7 +210,7 @@ export class GameState {
       this.phase = 0
       // 国战乱击
       delete this.spellSpace[2143]
-      // 3271 也要删除吗
+      // 畜鸣 3271
     } else {
       this.phase++
     }
@@ -218,20 +219,29 @@ export class GameState {
   /** 每轮 */
   setTurn(turn: number): void {
     // 第一轮开始时 似乎比角色开始阶段还要晚一点
-    if (turn > 0) {
-      this.turn = turn
-      this.round = 0
+    this.turn = turn
+    this.round = 0
 
-      // 第一轮开始时 检测开始状态
-      // if (turn === 1) this.start()
+    // 第一轮开始时 检测开始状态
+    // if (turn === 1) this.start()
 
-      delete this.spellSpace[3090]
-      delete this.spellSpace[3821]
-    }
+    // 博图
+    delete this.spellSpace[3090]
+    // 顺机
+    // delete this.spellSpace[3821]
   }
 
-  record(options: RecordOptions = {}): void {
-    this.onRecord(options)
+  shaCounter() {
+    this.spellSpace['三板斧'] = (this.spellSpace['三板斧'] || 0) + 1
+  }
+
+  useCounter() {
+    this.spellSpace['手到擒来'] = (this.spellSpace['手到擒来'] || 0) + 1
+  }
+
+  drawCounter(count: number) {
+    this.spellSpace['神龙摆尾'] = (this.spellSpace['神龙摆尾'] || 0) + count
+    this.spellSpace['多多益善'] = (this.spellSpace['多多益善'] || 0) + 1
   }
 
   reset(): void {

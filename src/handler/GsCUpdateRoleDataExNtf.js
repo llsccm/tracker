@@ -19,11 +19,11 @@ export function handleUpdateRoleDataExNtf(msg) {
       }
       break
 
-    // OPT_DATA_ADD_NEW_SPELL 可用于注册战法
+    // OPT_DATA_ADD_NEW_SPELL 可用于注册战法 目前没用
     case 15:
       if (!Array.isArray(Datas)) break
       if (SeatID !== undefined && SeatID == Game.myID && import.meta.env.DEV) {
-        // isReverse
+        // isReverse 好像没什么用
         const isSpecial = Datas[3] > 0
         // const speicalData = isSpecial ? [msg.Datas[3]] : []
 
@@ -37,6 +37,9 @@ export function handleUpdateRoleDataExNtf(msg) {
 
         if (generalId === 0 && Game.isShanHeTu) {
           console.info('战法技能id: ', skillIds)
+          for (const skillId of skillIds) {
+            Game.zhanfaSet.add(skillId)
+          }
         }
       }
 
