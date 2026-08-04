@@ -37,7 +37,9 @@ export function handleUpdateRoleDataExNtf(msg) {
 
         if (generalId === 0 && Game.isShanHeTu) {
           console.info('战法技能id: ', skillIds)
-          Game.zhanfaSet.add(...skillIds)
+          for (const skillId of skillIds) {
+            Game.zhanfaSet.add(skillId)
+          }
         }
       }
 

@@ -71,7 +71,7 @@ export class GameState {
   myGenerals: number[] = []
   /** 阵营 统率占位 替代mySeats */
   camps: number[] = []
-  // 目前没用
+  // 目前没用 打算这里存筛选后的战法
   zhanfaSet = new Set()
 
   constructor({ orderLabels = ORDER_LABELS }: { orderLabels?: string[] } = {}) {

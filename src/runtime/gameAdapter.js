@@ -532,7 +532,7 @@ export class GameRuntime {
     return true
   }
 
-  /** 存战法实例 */
+  /** 存战斗中所有战法实例 */
   zhanfaMap = new Map()
 
   ZHANFA = new Set([
