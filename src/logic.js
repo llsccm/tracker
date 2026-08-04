@@ -4,7 +4,6 @@ import { drawCard } from './draw'
 import { isRetainedLogicMessage } from './featureFlags'
 import {
   handleChatMessage,
-  handleDoudizhuMessage,
   handleGameOver,
   handleGamePhase,
   handleGameTurn,
@@ -15,7 +14,6 @@ import {
   handleRoleOptTargetNtf,
   handleTriggerSpellNew,
   handleUseSpell,
-  hasRuntime,
   showShanHeTuSponsorPrompt,
   handleUpdateRoleDataExNtf
 } from './handler'
@@ -34,45 +32,14 @@ const ALLOWED_CLASSES = new Set([
   'ClientGuildMemberChangeNtf'
 ])
 
-const DOUDIZHU_MSGS = new Set([
-  'decodeMsgGameStart',
-  'decodeMsgBroadcastMoveCard',
-  'decodeSNoticeOp',
-  'MsgGameOver'
-])
+// const DOUDIZHU_MSGS = new Set([
+//   'decodeMsgGameStart',
+//   'decodeMsgBroadcastMoveCard',
+//   'decodeSNoticeOp',
+//   'MsgGameOver'
+// ])
 
 const ShanHeTu_regex = /\[\d+\]$/
-
-const PROTOCOL_HAND_ZONE = 5
-
-/**
- * @param {number|string} id
- * @param {number|number[]} cardIDs
- * @param {number} [zone]
- * @param {number} [pos]
- */
-function revealCardsInProtocolZone(id, cardIDs, zone = PROTOCOL_HAND_ZONE, pos = undefined) {
-  tracker.revealTrackerCardsInZone({ id, zone, pos }, cardIDs)
-}
-
-/** 牌堆准备好了 */
-function readyTrackerGame(cardList = []) {
-  const dictCard = CardConfig.GetInstance().cardIDsOrder.filter((id) => cardList.includes(id))
-  const paidui = dictCard.concat(cardList.filter((id) => !dictCard.includes(id))).filter(Boolean)
-
-  Game.isGuoZhan = cardList.includes(1150)
-  Game.isDouDiZhu = cardList.includes(13005)
-  Game.isShanHeTu = cardList.includes(20100)
-  // Game.isRoguelike1v1 = laya?.scene?.SceneName === 'RogueLike1v1Scene'
-  // Game.isSWJG = laya?.scene?.SceneName === 'SWJGScene'
-
-  delete Game.spellSpace[3338] // 百出 每局游戏归零
-
-  // laya.ged?.CloseWindow?.('CardConfigWindow')
-
-  Game.resetConfigHandCards()
-  tracker.initTrackerDeck(paidui)
-}
 
 export function logic(msg) {
   try {
@@ -85,7 +52,7 @@ export function logic(msg) {
 
     if (!isRetainedLogicMessage(className)) return
 
-    if (ALLOWED_CLASSES.has(className) && msg?.userID != user.userID) {
+    if (user.userID === 0 && ALLOWED_CLASSES.has(className)) {
       //渠道服没有localStorage.SGS_LASTLOGIN_ACCOUNT，而是localStorage.LastUserName
       const frameReady = initFrame()
       user.userID = msg.userID
@@ -104,25 +71,28 @@ export function logic(msg) {
         })
     }
 
-    if (typeof PUERTS_JS_RESOURCES !== 'undefined') {
-      if (!hasRuntime()) return
-      if (DOUDIZHU_MSGS.has(className)) handleDoudizhuMessage(msg)
-      return
-    }
+    // if (typeof PUERTS_JS_RESOURCES !== 'undefined') {
+    //   if (!hasRuntime()) return
+    //   if (DOUDIZHU_MSGS.has(className)) handleDoudizhuMessage(msg)
+    //   return
+    // }
 
     switch (className) {
       // 绑定码
       case 'ClientBindKeyRep':
-        // console.info(msg)
+        if (import.meta.env.DEV) console.info(msg)
         break
 
       // 收到此消息后会请求公告 可以尝试在此关闭 AdPushWindow
       case 'decodeSyncGameDataEvent':
         // 充值也会有此消息 但是暂无更好方案
         if (!globalConfig.skipAdWindowSwitch) break
-        wait(() => laya.closeWindow('AdPushWindow'), 2).catch((err) => {
-          console.error(err)
-        })
+        wait(() => laya.GetWindow('AdPushWindow'))
+          .then((win) => win?.Close())
+          .catch((err) => {
+            console.error(err)
+          })
+
         break
 
       // 断线重连
@@ -162,34 +132,30 @@ export function logic(msg) {
         // })
         break
 
+      // 用于判断模式 此消息会触发两次
       case 'decodeGameRecordInitInfo':
-        // 用于判断模式 此消息会触发两次
-        // console.info(msg)
+        if (import.meta.env.DEV) console.info(msg)
         Game.init()
+        if (!ProtoObj?.matchName) break
 
-        if (ProtoObj?.matchName === '斗地主') {
+        if (ProtoObj.matchName === '斗地主') {
           Game.isDouDiZhu = true
           Game.needShowName = true
           return
         }
 
-        if (ProtoObj?.matchName === '新欢乐排位') {
+        if (ProtoObj.matchName === '新欢乐排位' || ProtoObj.matchName.includes('cmk')) {
           Game.needShowName = true
           return
         }
 
-        if (ProtoObj?.matchName === '单骑无双') {
+        if (ProtoObj.matchName === '单骑无双') {
           Game.isRoguelike1v1 = true
           return
         }
 
         // 长安行[20610702]
-        if (ProtoObj?.matchName && ShanHeTu_regex.test(ProtoObj.matchName)) {
-          Game.isShanHeTu = true
-          return
-        }
-
-        if (ProtoObj?.matchName && ProtoObj?.matchName.includes('山河图')) {
+        if (ShanHeTu_regex.test(ProtoObj.matchName) || ProtoObj.matchName.includes('山河图')) {
           Game.isShanHeTu = true
           return
         }
@@ -228,22 +194,29 @@ export function logic(msg) {
           tracker.setTrackerMySeatID(SeatID)
         }
 
-        if (msg.StateID === 66) {
-          // 单骑玩家虎符数量
-        }
+        // 单骑玩家虎符数量
+        // if (msg.StateID === 66) {
+        //   //
+        // }
 
         break
 
-      /** 身份更新 */
+      // 身份更新 Type 1是分配 2是标记/广播
       case 'MsgGameShowFigure':
-        // Type 1是分配 2是标记/广播
         // Figure: 主公/地主是1 农民是3
         // 统率的主公可能不是先手 但是这里先不管
         // 斗地主全部都是 type1 不能用作主视角判断
-        if (msg.Type == 1) {
-          // console.info('座位: ' + SeatID + '的身份: ' + msg.Figure)
-          if (msg.Figure === 1) tracker.setTrackerFirstHand(SeatID)
-        }
+
+        // 假设主视角非主公
+        // 第一条收到 type2 的 主公信息
+        // 第二条收到 type1 的 自己阵营信息
+        // 后面会收到 type2 的 主公信息 或者 阵亡翻开身份
+        if (msg.Figure === 1) tracker.setTrackerFirstHand(SeatID)
+        // console.info('座位: ' + SeatID + '的身份: ' + msg.Figure)
+
+        // if (msg.Type == 1) {
+        //   //
+        // }
 
         break
 
@@ -279,9 +252,25 @@ export function logic(msg) {
         UI.friendGeneral = ProtoObj?.friendGeneral?.length ?? UI.friendGeneral
         break
 
+      //牌堆准备 比 GsCModifyUserseatNtf 晚
       case 'MsgGamePlayCardNtf':
-        //牌堆准备 比 GsCModifyUserseatNtf 晚
-        readyTrackerGame(msg.CardList)
+        {
+          const cardList = msg.CardList
+          const dictCard = CardConfig.GetInstance().cardIDsOrder.filter((id) =>
+            cardList.includes(id)
+          )
+          const paidui = dictCard
+            .concat(cardList.filter((id) => !dictCard.includes(id)))
+            .filter(Boolean)
+
+          Game.isGuoZhan = cardList.includes(1150)
+          Game.isDouDiZhu = cardList.includes(13005)
+          Game.isShanHeTu = cardList.includes(20100)
+
+          Game.resetConfigHandCards()
+          tracker.initTrackerDeck(paidui)
+        }
+
         break
 
       // 选择武将
@@ -359,9 +348,7 @@ export function logic(msg) {
         break
 
       case 'ClientHappyGetFriendHandcardRep':
-        //昭然
-        if (Game.getSeatUI(msg.seatId)?.seat?.HasSkill(769))
-          revealCardsInProtocolZone(msg.seatId, msg.Cards)
+        // 昭然 769 我不知道干嘛
         break
 
       case 'MsgNtfUseCardType':

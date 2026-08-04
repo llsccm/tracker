@@ -122,8 +122,10 @@ export function handleRoleOptTargetNtf(msg) {
     case 501:
     case 3437:
     case 3876:
-      if (Params?.length > 0 && targetSeatID !== undefined) {
-        if (targetSeatID !== 255) revealPlayerHandCards(targetSeatID, Params, { fullHand: true })
+    case 4025:
+      if (targetSeatID === undefined || targetSeatID === 255) break
+      if (Params?.length > 0) {
+        revealPlayerHandCards(targetSeatID, Params, { fullHand: true })
       }
       break
 
@@ -132,8 +134,9 @@ export function handleRoleOptTargetNtf(msg) {
     case 361:
     case 774:
     case 3310:
-      if (Param == 0 && Params?.length > 0 && targetSeatID !== undefined) {
-        if (targetSeatID !== 255) revealPlayerHandCards(targetSeatID, Params)
+      if (targetSeatID === undefined || targetSeatID === 255) break
+      if (Param == 0 && Params?.length > 0) {
+        revealPlayerHandCards(targetSeatID, Params)
       }
       break
 
@@ -146,17 +149,19 @@ export function handleRoleOptTargetNtf(msg) {
 
     // 王粲 散文
     case 898:
-      if (Param == 0 && Params?.length > 2 && SrcSeatID !== undefined) {
-        if (SrcSeatID !== 255) revealPlayerHandCards(SrcSeatID, Params.slice(1, Params[0] + 1))
+      if (SrcSeatID === undefined) break
+      if (Param == 0 && Params?.length > 2 && SrcSeatID !== 255) {
+        revealPlayerHandCards(SrcSeatID, Params.slice(1, Params[0] + 1))
       }
       break
 
     // 黄承彦 观虚
     case 987:
     case 988:
+      if (targetSeatID === undefined) break
       // 观虚牌堆全局可知游卡已修复 无需再判断主视角
       // 与观骨的差异 只展示牌堆 无目标角色手牌消息 所以需要在这里同步目标手牌
-      if (Param == 1 && Params?.length > 2 && targetSeatID !== undefined) {
+      if (Param == 1 && Params?.length > 2) {
         // Params: [牌堆张数, 手牌张数, ...牌堆顶, ...目标手牌]
         const pileCount = Number(Params[0]) || 0
         const handCount = Number(Params[1]) || 0
@@ -178,9 +183,7 @@ export function handleRoleOptTargetNtf(msg) {
     // 周群 天候
     case 3903:
       // Type 28/29 的有效牌面只下发给发动者；其他角色只会收到 Params 为空数组的消息。
-      if (targetSeatID != 255 || Param != 0) {
-        break
-      }
+      if (targetSeatID != 255 || Param != 0) break
 
       // Params: [牌堆观看数, 手牌数, ...牌堆顶, ...主视角手牌]
       if (Type == 28 && Params?.length > 2) {
@@ -211,10 +214,11 @@ export function handleRoleOptTargetNtf(msg) {
 
     // 族钟繇 诫厉
     case 3483:
+      if (targetSeatID === undefined) break
       // 目前全局不可知
       // 同样只展示牌堆 目标角色手牌需要在这里同步
       // Params: [pileCount, handCount, ...pileTopCardIDs, ...handCardIDs]
-      if (Param == 1 && Params?.length > 0 && targetSeatID !== undefined) {
+      if (Param == 1 && Params?.length > 0) {
         const pileCount = Number(Params[0]) || 0
         const handCount = Number(Params[1]) || 0
 
@@ -283,9 +287,11 @@ export function handleRoleOptTargetNtf(msg) {
     case 3641:
       // 关闭其他视角的天书窗口
       if (Type == 67 && SeatID !== Game.myID) {
-        wait(() => laya.closeTianShu()).catch((err) => {
-          console.error(err)
-        })
+        wait(() => laya.GetWindow('TianShuWindow'))
+          .then((win) => win.Close?.())
+          .catch((err) => {
+            console.error(err)
+          })
       }
 
       break

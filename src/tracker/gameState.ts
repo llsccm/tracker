@@ -207,8 +207,9 @@ export class GameState {
       this.currentID = seat
       this.round++
       this.phase = 0
-      // 此处应该补注释
-      ;[2143, 3271, 3659].forEach((id) => delete this.spellSpace[id])
+      // 国战乱击
+      delete this.spellSpace[2143]
+      // 3271 也要删除吗
     } else {
       this.phase++
     }
