@@ -524,23 +524,6 @@ export class GameRuntime {
     this._powerSloganBlocked = true
     return true
   }
-
-  /**
-   * 通过游戏窗口管理器获取并关闭窗口
-   * @param {string} name 窗口类名
-   * @returns {boolean} 是否已找到并关闭窗口
-   */
-  closeWindow(name) {
-    const gameWindow = this.GetWindow(name)
-    if (typeof gameWindow?.Close != 'function') return false
-
-    gameWindow.Close()
-    return true
-  }
-
-  closeTianShu() {
-    return this.closeWindow('TianShuWindow')
-  }
 }
 
 /**

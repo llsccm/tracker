@@ -9,25 +9,6 @@ function handleChengXiang(context) {
   }
 }
 
-function handleJieWu(context) {
-  if (context.MoveType == 21) {
-    const spellCards = context.game.ensureSpellState(context.SpellID, () => [])
-    spellCards.push(context.CardIDs.find((id) => id > 0))
-  }
-}
-
-function handleZhuoHun(context) {
-  const { game } = context
-
-  if (context.FromZone == 5 && context.FromID == game.myID) {
-    const state =
-      game.spellSpace[3821] || (game.spellSpace[3821] = { used: new Set(), pending: [] })
-    state.pending = context.CardIDs.filter((id) => id > 0)
-      .map((cardId) => CardConfig.GetInstance().getCard(cardId)?.name || '')
-      .filter(Boolean)
-  }
-}
-
 function handleZuoLian(context) {
   const { game } = context
 
@@ -95,8 +76,6 @@ export const spellEffectHandlers = new Map([
   [3492, handleChengXiang],
   // [3033, handleJiZhan],
   // [3329, handleHeZhong],
-  [3659, handleJieWu],
-  [3821, handleZhuoHun],
   [3488, handleZuoLian],
   [3157, handleQingYiLianJu],
   [3511, handleQingYiLianJu],
