@@ -1,12 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-interface ZhanFaItem {
-  PlotID: number
-  Value: number
-  n?: number
-}
-
-const { Game, getElementById, scheduleTrackerRender, zhanFaItems } = vi.hoisted(() => ({
+const { Game, getElementById, scheduleTrackerRender } = vi.hoisted(() => ({
   Game: {
     currentID: 1 as number | undefined,
     myID: 1 as number | undefined,
@@ -14,8 +8,7 @@ const { Game, getElementById, scheduleTrackerRender, zhanFaItems } = vi.hoisted(
     enter: vi.fn<(round: number, seatID: number) => void>()
   },
   getElementById: vi.fn(),
-  scheduleTrackerRender: vi.fn(),
-  zhanFaItems: [] as ZhanFaItem[]
+  scheduleTrackerRender: vi.fn()
 }))
 
 vi.mock('@/tracker', () => ({ Game }))
@@ -24,9 +17,7 @@ vi.mock('@/tracker/runtime/browser', () => ({
 }))
 vi.mock('@/runtime/gameAdapter', () => ({
   laya: {
-    gamescene: {
-      SelfSeatUi: { zhanFaItems }
-    }
+    resetRoundZhanFa: vi.fn()
   }
 }))
 
@@ -45,7 +36,6 @@ describe('GsCGamephaseNtf', () => {
       Game.phase = round === SeatRoundState.INIT ? 0 : Game.phase + 1
     })
     scheduleTrackerRender.mockReset()
-    zhanFaItems.length = 0
 
     elements.clear()
     elements.set('phrase', { innerHTML: '', innerText: '' })
@@ -72,21 +62,10 @@ describe('GsCGamephaseNtf', () => {
     expect(SeatRoundState.GetRoundStateName(round)).toBe(expectedName)
   })
 
-  it('回合初始化后清理结果 DOM，并按上一行动玩家重置战法', () => {
-    zhanFaItems.push(
-      { PlotID: 2100, Value: 3, n: 3 },
-      { PlotID: 2079, Value: 4 },
-      { PlotID: 9999, Value: 5, n: 5 }
-    )
-
+  it('回合初始化后清理结果 DOM', () => {
     handleGamePhase({ Round: SeatRoundState.INIT, SeatID: 2 })
 
     expect(Game.enter).toHaveBeenCalledWith(SeatRoundState.INIT, 2)
-    expect(zhanFaItems).toEqual([
-      { PlotID: 2100, Value: 0, n: 0 },
-      { PlotID: 2079, Value: 0 },
-      { PlotID: 9999, Value: 5, n: 5 }
-    ])
     expect(elements.get('phrase')?.innerText).toBe('回合开始时 (0)')
     expect(elements.get('suit')?.innerText).toBe('')
     expect(elements.get('result')?.innerHTML).toBe('')
@@ -94,11 +73,8 @@ describe('GsCGamephaseNtf', () => {
   })
 
   it('阶段推进使用协议阶段名称，并保留回合结果', () => {
-    zhanFaItems.push({ PlotID: 2100, Value: 3, n: 3 })
-
     handleGamePhase({ Round: SeatRoundState.START, SeatID: 2 })
 
-    expect(zhanFaItems).toEqual([{ PlotID: 2100, Value: 3, n: 3 }])
     expect(elements.get('phrase')?.innerText).toBe('开始阶段 (1)')
     expect(elements.get('suit')?.innerText).toBe('suit')
     expect(elements.get('result')?.innerHTML).toBe('待清理')

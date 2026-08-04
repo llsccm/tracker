@@ -1,17 +1,9 @@
-import { laya } from '../runtime/gameAdapter'
 import { CharacterConfig } from '@/config/CharacterConfig'
 import { UI } from './state'
 import { GameState } from './gameState'
 import { trackerLogger } from '@/utils/logger'
-import type { RecordOptions } from './gameState'
 import type { SeatID } from './types'
 import type { Player } from './Player'
-
-interface ZhanFaItem {
-  PlotID: number
-  Value: number
-  n?: number
-}
 
 class BrowserGameState extends GameState {
   constructor() {
@@ -110,30 +102,6 @@ class BrowserGameState extends GameState {
     const seatIDs = this.room?.seatIDs ?? []
     const mySeatID = this.room?.mySeatID ?? undefined
     trackerLogger.info('GameState 游戏开始', { seatIDs, mySeatID })
-  }
-
-  protected onRecord({ use = 0, mo = 0 }: RecordOptions): void {
-    const items = laya.gamescene?.SelfSeatUi?.zhanFaItems as ZhanFaItem[] | undefined
-    if (!items?.length) return
-
-    this.spellSpace['神龙摆尾'] = (this.spellSpace['神龙摆尾'] || 0) + mo
-    this.spellSpace['多多益善'] = (this.spellSpace['多多益善'] || 0) + (mo ? 1 : 0)
-    this.spellSpace['手到擒来'] = (this.spellSpace['手到擒来'] || 0) + (use ? 1 : 0)
-    this.spellSpace['三板斧'] = (this.spellSpace['三板斧'] || 0) + (use === 1 ? 1 : 0)
-
-    items.forEach((ui) => {
-      if ([2042, 2043, 2044].includes(ui.PlotID)) {
-        ui.Value = this.spellSpace['三板斧'] % 3
-      } else if (ui.PlotID === 2143) {
-        ui.Value = this.spellSpace['神龙摆尾'] % 6
-      } else if (ui.PlotID === 2104) {
-        ui.Value = this.spellSpace['神龙摆尾'] % 9
-      } else if ([2079, 2080, 2081].includes(ui.PlotID)) {
-        ui.Value = this.spellSpace['手到擒来']
-      } else if ([2082, 2083, 2084].includes(ui.PlotID)) {
-        ui.Value = this.spellSpace['多多益善']
-      }
-    })
   }
 }
 

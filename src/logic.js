@@ -1,6 +1,5 @@
 import { CardConfig } from './config'
 import { initFrame } from './dom'
-import { drawCard } from './draw'
 import { isRetainedLogicMessage } from './featureFlags'
 import {
   handleChatMessage,
@@ -15,13 +14,14 @@ import {
   handleTriggerSpellNew,
   handleUseSpell,
   showShanHeTuSponsorPrompt,
-  handleUpdateRoleDataExNtf
+  handleUpdateRoleDataExNtf,
+  handleUseCard
 } from './handler'
 import { handleRecordStartGame } from './handler/StartGame'
 import { laya } from './runtime/gameAdapter'
 import { Game, globalConfig, UI, user } from './tracker'
 import { tracker } from './tracker/runtime/browser'
-import { setSuitRecord, wait } from './utils'
+import { wait } from './utils'
 import { addTooltip } from './utils/notification'
 import { handleBroadMsg } from './handler/chat'
 
@@ -316,30 +316,7 @@ export function logic(msg) {
       // TODO
       case 'GsCUpdateHpNtf': {
         // recordHpColorChange(msg)
-
-        if (
-          msg.SpellID == 3821 &&
-          msg.MurderSeatID == Game.myID &&
-          Number(msg.Damage) > 0 &&
-          !msg.isTreatment
-        ) {
-          const state =
-            Game.spellSpace[3821] || (Game.spellSpace[3821] = { used: new Set(), pending: [] })
-          const handNames = new Set(
-            (laya.gamescene?.SelfSeatUi?.cardContainer?.cardUis || [])
-              .map((ui) => {
-                const cardId = Number(ui?.Card?.CardId ?? 0)
-                return CardConfig.GetInstance().getCard(cardId)?.name || ''
-              })
-              .filter(Boolean)
-          )
-          //
-          ;(state.pending || []).forEach((name) => {
-            if (name && !handNames.has(name)) state.used.add(name)
-          })
-          state.pending = []
-        }
-
+        // 顺机
         break
       }
 
@@ -359,27 +336,9 @@ export function logic(msg) {
         }
         break
 
+      //使用卡牌
       case 'PubGsCUseCard':
-        //使用卡牌
-
-        if (SeatID == Game.myID && msg.useType == 1 && !msg.isSend) {
-          // 战法计数
-          Game.record({ use: msg.spellID })
-        }
-
-        if (Game.myID == SeatID) drawCard([msg.CardID])
-
-        // 权变花色 官方已实现 这里废弃
-
-        if (
-          Game.currentID == SeatID &&
-          Game.getSeatUI(Game.currentID)?.seat?.HasSkill(491) &&
-          msg.useType == 1 &&
-          !msg.isSend
-        ) {
-          setSuitRecord(CardConfig.GetInstance().getCard(msg.CardID).cn)
-        }
-
+        handleUseCard(msg)
         break
 
       case 'PubGsCUseSpell':

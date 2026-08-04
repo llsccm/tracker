@@ -1,11 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-interface ZhanFaItem {
-  PlotID: number
-  Value: number
-  n?: number
-}
-
 const {
   Game,
   hideSelfOrderContainer,
@@ -13,9 +7,12 @@ const {
   scheduleTrackerRender,
   showOrderContainers,
   UI,
-  zhanFaItems
+  zhanfaRegister,
+  zhanfaReset
 } = vi.hoisted(() => {
-  const zhanFaItems: ZhanFaItem[] = []
+  const zhanfaRegister = vi.fn()
+  const zhanfaReset = vi.fn()
+
   return {
     Game: {
       size: 4,
@@ -25,14 +22,14 @@ const {
     drawSeatUIs: vi.fn(),
     hideSelfOrderContainer: vi.fn(),
     laya: {
-      gamescene: {
-        SelfSeatUi: { zhanFaItems }
-      }
+      zhanfaRegister,
+      zhanfaReset
     },
     scheduleTrackerRender: vi.fn(),
     showOrderContainers: vi.fn(),
     UI: { firstUpdateSeatUI: false },
-    zhanFaItems
+    zhanfaRegister,
+    zhanfaReset
   }
 })
 
@@ -56,8 +53,9 @@ describe('MsgGameTurnNtf', () => {
     hideSelfOrderContainer.mockReset()
     scheduleTrackerRender.mockReset()
     showOrderContainers.mockReset()
+    zhanfaRegister.mockReset()
+    zhanfaReset.mockReset()
     UI.firstUpdateSeatUI = false
-    zhanFaItems.length = 0
   })
 
   afterEach(() => {
@@ -65,35 +63,26 @@ describe('MsgGameTurnNtf', () => {
   })
 
   it('首轮消息隐藏主视角并显示已定位座位，同时重置轮战法状态', () => {
-    zhanFaItems.push(
-      { PlotID: 2036, Value: 2, n: 2 },
-      { PlotID: 2301, Value: 4, n: 4 },
-      { PlotID: 9999, Value: 6, n: 6 }
-    )
     UI.firstUpdateSeatUI = true
 
     handleGameTurn({ TurnCnt: 1 })
 
+    expect(zhanfaRegister).toHaveBeenCalledOnce()
     expect(hideSelfOrderContainer).toHaveBeenCalledWith(2)
     expect(showOrderContainers).toHaveBeenCalledOnce()
     expect(Game.setTurn).toHaveBeenCalledWith(1)
-    expect(zhanFaItems).toEqual([
-      { PlotID: 2036, Value: 0, n: 0 },
-      { PlotID: 2301, Value: 0, n: 0 },
-      { PlotID: 9999, Value: 6, n: 6 }
-    ])
+    expect(zhanfaReset).toHaveBeenCalledOnce()
     expect(scheduleTrackerRender).toHaveBeenCalledOnce()
   })
 
   it('普通轮次不重复清理首轮座位覆盖，但仍重置轮战法状态', () => {
-    zhanFaItems.push({ PlotID: 2036, Value: 2, n: 2 })
-
     handleGameTurn({ TurnCnt: 2 })
 
+    expect(zhanfaRegister).not.toHaveBeenCalled()
     expect(hideSelfOrderContainer).not.toHaveBeenCalled()
     expect(showOrderContainers).not.toHaveBeenCalled()
     expect(Game.setTurn).toHaveBeenCalledWith(2)
-    expect(zhanFaItems).toEqual([{ PlotID: 2036, Value: 0, n: 0 }])
+    expect(zhanfaReset).toHaveBeenCalledOnce()
     expect(scheduleTrackerRender).toHaveBeenCalledOnce()
   })
 
@@ -101,6 +90,8 @@ describe('MsgGameTurnNtf', () => {
     handleGameTurn({ TurnCnt: '1' })
     handleGameTurn({ TurnCnt: Number.NaN })
 
+    expect(zhanfaRegister).not.toHaveBeenCalled()
+    expect(zhanfaReset).not.toHaveBeenCalled()
     expect(hideSelfOrderContainer).not.toHaveBeenCalled()
     expect(Game.setTurn).not.toHaveBeenCalled()
     expect(scheduleTrackerRender).not.toHaveBeenCalled()

@@ -65,6 +65,7 @@ export function handleLeaveTable() {
 function cleanupGame() {
   document.querySelectorAll('.mizhu').forEach((e) => (e.style.display = 'none'))
   Game.isPassed = null
+  laya.zhanfaMap.clear()
   Game.end()
   destroyPeiXiuMapWindow()
   // 重置 UI

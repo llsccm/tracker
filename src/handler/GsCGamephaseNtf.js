@@ -2,11 +2,6 @@ import { Game } from '@/tracker'
 import { tracker } from '@/tracker/runtime/browser'
 import { laya } from '@/runtime/gameAdapter'
 
-const ROUND_ZHAN_FA_IDS = new Set([
-  2100, 2101, 2108, 2109, 2110, 2312, 2313, 2317, 2319, 2320, 2321, 2322
-])
-const SELF_TURN_ZHAN_FA_IDS = new Set([2079, 2080, 2081, 2082, 2083, 2084])
-
 export class SeatRoundState {
   static INIT = 0
   static START = 1
@@ -50,23 +45,12 @@ export function handleGamePhase(msg) {
   Game.enter(Round, SeatID)
 
   if (Round === SeatRoundState.INIT) {
-    resetRoundZhanFa(previousSeatID)
+    laya.resetRoundZhanFa(previousSeatID)
     clearRoundResult()
   }
 
   updateRoundStateLabel(Round)
   tracker.scheduleTrackerRender()
-}
-
-function resetRoundZhanFa(previousSeatID) {
-  laya.gamescene?.SelfSeatUi?.zhanFaItems?.forEach((ui) => {
-    if (ui?.n !== undefined && ROUND_ZHAN_FA_IDS.has(ui.PlotID)) {
-      ui.Value = ui.n = 0
-    }
-    if (previousSeatID === Game.myID && SELF_TURN_ZHAN_FA_IDS.has(ui.PlotID)) {
-      ui.Value = 0
-    }
-  })
 }
 
 function clearRoundResult() {
