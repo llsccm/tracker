@@ -256,6 +256,11 @@ export function logic(msg) {
       case 'MsgGamePlayCardNtf':
         {
           const cardList = msg.CardList
+          if (!Array.isArray(cardList) || cardList.length === 0) {
+            console.warn('[logic] MsgGamePlayCardNtf 缺少 CardList，跳过牌堆初始化')
+            break
+          }
+
           const dictCard = CardConfig.GetInstance().cardIDsOrder.filter((id) =>
             cardList.includes(id)
           )
@@ -329,19 +334,15 @@ export function logic(msg) {
         break
 
       case 'MsgNtfUseCardType':
-        //使用虚拟/转化牌
-        if (msg.castSeatId == Game.myID && msg.useType == 1 && !msg.isSend) {
-          // 战法计数
-          if (msg.spellID === 1) {
-            Game.shaCounter()
-            laya.shaCounter()
-          }
-
-          if (msg.spellID) {
-            Game.useCounter()
-            laya.useCounter()
-          }
-        }
+        handleUseCard(
+          {
+            SeatID: Number(msg.castSeatId),
+            useType: msg.useType,
+            isSend: msg.isSend,
+            spellID: msg.spellID ?? msg.spellId
+          },
+          { shouldDrawCard: false }
+        )
         break
 
       //使用卡牌

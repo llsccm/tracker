@@ -16,7 +16,10 @@ export function handleUpdateRoleDataExNtf(msg) {
     //出杀次数
     case 1:
       if (Game.currentID == SeatID && Array.isArray(Datas)) {
-        document.getElementById('sha').innerText = '剩余：' + Math.max(0, Datas[2] - Datas[1])
+        const shaElement = document.getElementById('sha')
+        if (shaElement) {
+          shaElement.innerText = '剩余：' + Math.max(0, Datas[2] - Datas[1])
+        }
       }
       break
 

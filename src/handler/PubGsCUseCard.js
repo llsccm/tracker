@@ -4,7 +4,7 @@ import { laya } from '@/runtime/gameAdapter'
 import { Game } from '@/tracker'
 // import { setSuitRecord } from '@/utils'
 
-export function handleUseCard(msg) {
+export function handleUseCard(msg, { shouldDrawCard = true } = {}) {
   const { SeatID } = msg
 
   // 渐营
@@ -19,7 +19,7 @@ export function handleUseCard(msg) {
 
   if (SeatID !== Game.myID) return
 
-  drawCard([msg.CardID])
+  if (shouldDrawCard) drawCard([msg.CardID])
 
   // 战法计数
   if (msg.useType == 1 && !msg.isSend) {

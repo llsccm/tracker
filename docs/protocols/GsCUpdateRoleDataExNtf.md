@@ -108,7 +108,7 @@ Datas: [cardID, 0]
 | `1` | 截止符 | 固定为 `0`，表示本条数据结束 |
 
 处理入口为 `src/handler/skills/QiaoZhi.js` 的
-`handleQiaoZhiUpdateRoleData()`。它将 `cardID` 作为已知身份物化到 `SeatID` 的普通手牌，
+`handleQiaoZhi()`。它将 `cardID` 作为已知身份物化到 `SeatID` 的普通手牌，
 但不再次增加手牌总数；暗取数量已经由前置移动消息记录。
 
 ## 地图浮窗
