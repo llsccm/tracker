@@ -7,6 +7,7 @@ import {
 import { renderPeiXiuMapWindow, setPeiXiuMapWindowVisible } from '@/ui/PeiXiuMapWindow'
 import { parsePeiXiuRoleData, solvePeiXiuRoleData } from '@/utils/peixiuRouteFeature'
 import { handleQiaoZhi } from './skills/QiaoZhi'
+import { laya } from '@/runtime/gameAdapter'
 
 // GsCUpdateRoleDataExNtf
 export function handleUpdateRoleDataExNtf(msg) {
@@ -22,7 +23,7 @@ export function handleUpdateRoleDataExNtf(msg) {
     // OPT_DATA_ADD_NEW_SPELL 可用于注册战法 目前没用
     case 15:
       if (!Array.isArray(Datas)) break
-      if (SeatID !== undefined && SeatID == Game.myID && import.meta.env.DEV) {
+      if (SeatID !== undefined && SeatID == Game.myID) {
         // isReverse 好像没什么用
         const isSpecial = Datas[3] > 0
         // const speicalData = isSpecial ? [msg.Datas[3]] : []
@@ -36,13 +37,39 @@ export function handleUpdateRoleDataExNtf(msg) {
         const skillIds = remaining.slice(0, skillCnt)
 
         if (generalId === 0 && Game.isShanHeTu) {
-          console.info('战法技能id: ', skillIds)
+          // console.info('战法技能id: ', skillIds)
           for (const skillId of skillIds) {
             Game.zhanfaSet.add(skillId)
           }
         }
+
+        // 获得新技能得重建缓存
+        if (Game.turn >= 1 && (Game.isShanHeTu || Game.isRoguelike1v1)) {
+          setTimeout(() => {
+            laya.zhanfaRegister()
+          }, 0)
+        }
       }
 
+      break
+
+    case 16:
+      if (!Array.isArray(Datas)) break
+      if (SeatID !== undefined && SeatID == Game.myID) {
+        if (Game.turn >= 1 && (Game.isShanHeTu || Game.isRoguelike1v1)) {
+          setTimeout(() => {
+            laya.zhanfaRegister()
+          }, 0)
+        }
+      }
+      break
+
+    // OPT_DATA_UPDATE_NEW_SPELL
+    case 17:
+      if (!Array.isArray(Datas)) break
+      if (SeatID !== undefined && SeatID == Game.myID && import.meta.env.DEV) {
+        console.info(msg)
+      }
       break
 
     // 巧织 获得的牌
