@@ -18,14 +18,13 @@ import { isPileSingleCardShow, MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Room } from '../Room'
 import { recordTraversal } from '../traversalStats'
 import type { PlayerLocationCandidate, SeatID } from '../types'
-import { getCount, getRaw, hasPositiveID } from './moveEventUtils'
+import { getCount, getRaw, hasPositiveID, type MoveEventDraft, patchEvent } from './moveEventUtils'
 
 export const TIAN_HOU_SPELL_ID = 3903
 export const TIAN_HOU_STATE_KEY = 'tianHouExchange'
 
 const TIAN_HOU_VIEW_COUNT = 3
 
-type MoveEventDraft = any
 type TianHouPhase = 'pile-staged' | 'hand-staged' | 'hand-returned' | 'awaiting-reveal'
 
 type TianHouBatch = {
@@ -48,18 +47,6 @@ type TianHouBatch = {
 
 type TianHouRoomState = {
   batch: TianHouBatch | null
-}
-
-function patchEvent(event: MoveEventDraft, patch: any = {}): MoveEventDraft {
-  return {
-    ...event,
-    ...patch,
-    cardIDs: patch.cardIDs ?? event.cardIDs,
-    options: {
-      ...event.options,
-      ...(patch.options ?? {})
-    }
-  }
 }
 
 function getStateReadonly(room: Room): TianHouRoomState | null {

@@ -332,7 +332,15 @@ export function logic(msg) {
         //使用虚拟/转化牌
         if (msg.castSeatId == Game.myID && msg.useType == 1 && !msg.isSend) {
           // 战法计数
-          Game.record({ use: msg.spellId })
+          if (msg.spellID === 1) {
+            Game.shaCounter()
+            laya.shaCounter()
+          }
+
+          if (msg.spellID) {
+            Game.useCounter()
+            laya.useCounter()
+          }
         }
         break
 

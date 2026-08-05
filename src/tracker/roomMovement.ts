@@ -181,10 +181,14 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       // 只检查本次协议移动覆盖的物理范围，不能为了寻找匿名槽扫描整副牌堆。
       // B13 等指定身份获取仍由 existingInSource 精确命中来源区中的同 ID 实体；只有身份尚未
       // 定位时，才需要在这段协议端点范围内分配匿名物理槽。
-      const endpointCards = this.room.getPublicEndpointCards(fromZone, endpointCount, fromPosition)
-      // Phase 5 后公共 known 端点只有两种合法物理来源：端点中已经存在的同 ID 实体，
-      // 或没有真实身份的匿名槽。其它正 ID 即使 isKnown=false，也不能被本批身份覆盖。
-      // endpointCards 已按协议范围截取，因此不能跳过一个正 ID 暗端点去消费更深处匿名槽。
+      // RANDOM 牌堆来源没有可观察的物理端点。此时从任意匿名槽中选择代表，避免牌顶
+      // 已有公开明牌时误判来源实体缺失并 createExternal；其它公共区仍严格按端点解析。
+      const endpointCards =
+        fromZone === 'pile' && this.normalizePublicPosition(fromPosition) === 'random'
+          ? (sourceZone?.cards ?? []).filter(isAnonymous).slice(-endpointCount).reverse()
+          : this.room.getPublicEndpointCards(fromZone, endpointCount, fromPosition)
+      // Phase 5 后公共 known 只有两种合法物理来源：来源区已经存在的同 ID 实体，或没有
+      // 真实身份的匿名槽。TOP/BOTTOM 仍限于协议端点；RANDOM 没有端点事实，只枚举匿名代表。
       const availableTargets = endpointCards.filter(isAnonymous)
       const anonymousTargetCountBefore = availableTargets.length
       const resolveAttempts: Record<string, unknown>[] = []

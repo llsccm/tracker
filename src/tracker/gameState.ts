@@ -43,8 +43,11 @@ export class GameState {
   isPassed = true
   seatUIs: SeatUIRuntime[] = []
   declare orderLabels: string[]
+  /** 轮次 */
   declare turn: number
+  /** 更像是行动过的回合数 */
   declare round: number
+  /** 用于记录当前回合阶段 */
   declare phase: number
   declare spellSpace: Record<string | number, number>
   declare configHandCards: unknown[]
@@ -218,8 +221,9 @@ export class GameState {
 
   /** 每轮 */
   setTurn(turn: number): void {
-    // 第一轮开始时 似乎比角色开始阶段还要晚一点
+    // 当收到第一轮消息时 round 是 1
     this.turn = turn
+    // 这里重置成0 或许不是很对
     this.round = 0
 
     // 第一轮开始时 检测开始状态

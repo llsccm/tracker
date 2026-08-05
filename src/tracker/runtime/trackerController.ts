@@ -854,6 +854,7 @@ export class TrackerController {
       FromZone: msg.FromZone,
       FromID: msg.FromID,
       FromZoneParam: msg.FromZoneParam,
+      FromPosition: msg.FromPosition,
       ToZone: msg.ToZone,
       ToID: msg.ToID,
       ToZoneParam: msg.ToZoneParam,

@@ -296,6 +296,15 @@ export function handleRoleOptTargetNtf(msg) {
 
       break
 
+    // 佐练
+    // case 3488:
+    //   // Param: 0
+    //   // Params: [3, 20, 2, 90, 1, 22, 0, 39, 6, 110]
+    //   if (Type == 28) {
+    //     //
+    //   }
+    //   break
+
     default:
       break
   }
