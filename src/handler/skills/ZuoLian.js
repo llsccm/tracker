@@ -15,12 +15,19 @@ export default function handleZuoLian(context) {
 
   // 从手牌中移动到交换区
   if (context.FromZone === 5 && context.ToZone === 10 && context.MoveType === 11) {
-    if (!context.CardIDs.some((id) => id > 0)) {
-      const spellState = game.ensureSpellState(context.SpellID, () => ({}))
+    const spellState = game.ensureSpellState(context.SpellID, () => ({}))
+    const knownCardID = context.CardIDs.find((id) => id > 0)
+    const cardID = knownCardID || spellState[context.FromID]
 
-      context.CardIDs[0] = spellState[context.FromID] || 0
-      spellState.stack = context.CardIDs[0]
+    delete spellState[context.FromID]
+
+    if (!(cardID > 0)) {
+      delete spellState.stack
+      return
     }
+
+    if (!knownCardID) context.CardIDs[0] = cardID
+    spellState.stack = cardID
 
     return
   }
@@ -31,13 +38,10 @@ export default function handleZuoLian(context) {
     (context.ToZone === 1 || context.ToZone === 2) &&
     context.MoveType === 11
   ) {
-    if (!context.CardIDs.some((id) => id > 0)) {
-      const spellState = game.getSpellState(context.SpellID)
-      context.CardIDs[0] = spellState?.stack || 0
+    const spellState = game.getSpellState(context.SpellID)
+    const cardID = spellState?.stack
 
-      if (spellState) {
-        delete spellState.stack
-      }
-    }
+    if (!context.CardIDs.some((id) => id > 0) && cardID > 0) context.CardIDs[0] = cardID
+    if (spellState) delete spellState.stack
   }
 }

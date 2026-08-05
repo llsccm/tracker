@@ -90,6 +90,7 @@ describe('技能副作用注册表', () => {
 
     expect(toStack.CardIDs).toEqual([42])
     expect((game.getSpellState(3488) as { stack?: number }).stack).toBe(42)
+    expect((game.getSpellState(3488) as Record<number, number>)[3]).toBeUndefined()
 
     const fromStack = createContext({
       game,
@@ -103,6 +104,101 @@ describe('技能副作用注册表', () => {
     applySpellEffect(fromStack)
 
     expect(fromStack.CardIDs).toEqual([42])
+    expect((game.getSpellState(3488) as { stack?: number }).stack).toBeUndefined()
+  })
+
+  it('佐练已知牌进入交换区后，暗牌返回牌堆时回填并清理状态', () => {
+    const game = createGameState()
+
+    applySpellEffect(
+      createContext({
+        game,
+        SpellID: 3488,
+        CardIDs: [42],
+        FromID: 3,
+        FromZone: 5,
+        ToZone: 5,
+        MoveType: 21
+      })
+    )
+
+    const toStack = createContext({
+      game,
+      SpellID: 3488,
+      CardIDs: [42],
+      FromID: 3,
+      FromZone: 5,
+      ToZone: 10,
+      MoveType: 11
+    })
+
+    applySpellEffect(toStack)
+
+    const spellState = game.getSpellState(3488) as { stack?: number; 3?: number }
+    expect(spellState.stack).toBe(42)
+    expect(spellState[3]).toBeUndefined()
+
+    const fromStack = createContext({
+      game,
+      SpellID: 3488,
+      CardIDs: [0],
+      FromZone: 10,
+      ToZone: 1,
+      MoveType: 11
+    })
+
+    applySpellEffect(fromStack)
+
+    expect(fromStack.CardIDs).toEqual([42])
+    expect(spellState.stack).toBeUndefined()
+  })
+
+  it('佐练全程未知时保持暗牌 CardIDs，不回填 0', () => {
+    const game = createGameState({ 3488: { stack: 99 } })
+    const toStack = createContext({
+      game,
+      SpellID: 3488,
+      CardIDs: [],
+      FromID: 3,
+      FromZone: 5,
+      ToZone: 10,
+      MoveType: 11
+    })
+
+    applySpellEffect(toStack)
+
+    expect(toStack.CardIDs).toEqual([])
+    expect(game.getSpellState(3488)).toEqual({})
+
+    const fromStack = createContext({
+      game,
+      SpellID: 3488,
+      CardIDs: [],
+      FromZone: 10,
+      ToZone: 1,
+      MoveType: 11
+    })
+
+    applySpellEffect(fromStack)
+
+    expect(fromStack.CardIDs).toEqual([])
+    expect((game.getSpellState(3488) as { stack?: number }).stack).toBeUndefined()
+  })
+
+  it('佐练已知牌返回牌堆时保留 CardIDs 并清理 stack', () => {
+    const game = createGameState({ 3488: { stack: 42 } })
+    const fromStack = createContext({
+      game,
+      SpellID: 3488,
+      CardIDs: [84],
+      FromZone: 10,
+      ToZone: 1,
+      MoveType: 11
+    })
+
+    applySpellEffect(fromStack)
+
+    expect(fromStack.CardIDs).toEqual([84])
     expect((game.getSpellState(3488) as { stack?: number }).stack).toBeUndefined()
   })
 
