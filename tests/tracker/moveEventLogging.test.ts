@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { POSITION_RANDOM } from '@/tracker/candidate/cardPositions'
 import {
   MOVE_TYPE,
   getMoveTypeLabel,
@@ -50,7 +51,7 @@ describe('移动事件日志', () => {
     })
   })
 
-  it('控制器对牌堆 MoveType 18 使用特殊日志标题并保留 ToPosition', () => {
+  it('控制器对牌堆 MoveType 18 使用特殊日志标题并保留来源与目标位置', () => {
     const infoCalls: unknown[][] = []
     const logger: TrackerLogger = {
       debug() {},
@@ -72,12 +73,16 @@ describe('移动事件日志', () => {
       100
     )
     controller.initTrackerDeck([1, 2])
-    controller.syncTrackerMove({ ...pileGainMove, ToPosition: 2 })
+    controller.syncTrackerMove({
+      ...pileGainMove,
+      FromPosition: POSITION_RANDOM,
+      ToPosition: 2
+    })
 
     const protocolInput = infoCalls.find(([label]) => label === '从牌堆获取牌')
     expect(protocolInput?.[1]).toMatchObject({
-      raw: { ToPosition: 2 },
-      patched: { ToPosition: 2 }
+      raw: { FromPosition: POSITION_RANDOM, ToPosition: 2 },
+      patched: { FromPosition: POSITION_RANDOM, ToPosition: 2 }
     })
   })
 })

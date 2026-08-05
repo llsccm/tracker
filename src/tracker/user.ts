@@ -1,5 +1,19 @@
-import { createUserModel } from './userModel'
+export interface UserData {
+  userID: number
+  nickname: string
+  [key: string]: unknown
+}
 
-const user = createUserModel()
+export const DEFAULT_USER_DATA: UserData = {
+  userID: 0,
+  nickname: ''
+}
 
-export { user }
+export function createUserModel(initialData: Partial<UserData> = {}): UserData {
+  return {
+    ...DEFAULT_USER_DATA,
+    ...initialData
+  }
+}
+
+export const user = createUserModel()

@@ -1,6 +1,7 @@
 import { CardConfig } from '../config'
 import { tracker } from '../tracker/runtime/browser'
 import { POSITION_RANDOM } from '../tracker/candidate/cardPositions'
+import { laya } from '@/runtime/gameAdapter'
 
 const excludeNames = new Set(['乐', '兵', '闪电'])
 const shaNames = new Set(['杀', '火杀', '雷杀', '冰杀'])
@@ -92,7 +93,7 @@ export function handleGameFlowState(context) {
 
     // 录像无法依赖用户 UUID 确定主视角；首次摸到明牌的座位即为录像主视角。
     // 22 使用其他方式确认主视角
-    if (game.isRecord && game.room?.mySeatID === undefined && isFaceUpDraw) {
+    if (game.isRecord && game.myID === undefined && isFaceUpDraw) {
       tracker.setTrackerMySeatID(context.ToID)
     }
 
@@ -109,7 +110,8 @@ export function handleGameFlowState(context) {
 
     // 正常摸牌时，仅累计主视角的战法摸牌计数。
     if (game.myID !== undefined && context.ToID === game.myID && game.turn > 0) {
-      game.record({ mo: context.CardCount })
+      game.drawCounter(context.CardCount)
+      laya.drawCounter()
     }
   }
 

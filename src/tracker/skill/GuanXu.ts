@@ -10,13 +10,11 @@ import { POSITION_TOP, insertCardsAtProtocolPosition } from '../candidate/cardPo
 import { createPublicCandidate } from '../candidate/publicCandidate'
 import { MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Room } from '../Room'
-import { getCount, getRaw } from './moveEventUtils'
+import { getCount, getPositiveIDs, getRaw, type MoveEventDraft, patchEvent } from './moveEventUtils'
 
 export const GUAN_XU_STATE_KEY = 'guanXuExchange'
 
 const GUAN_XU_SPELL_IDS = new Set([987, 988])
-
-type MoveEventDraft = any
 
 type GuanXuBucket = {
   cards: Card[]
@@ -54,22 +52,6 @@ type ProtocolKnownCardResolution = {
 type KnownMoveSelection = {
   cards: Card[]
   knownResolution: ProtocolKnownCardResolution
-}
-
-function patchEvent(event: MoveEventDraft, patch: any = {}): MoveEventDraft {
-  return {
-    ...event,
-    ...patch,
-    cardIDs: patch.cardIDs ?? event.cardIDs,
-    options: {
-      ...event.options,
-      ...(patch.options ?? {})
-    }
-  }
-}
-
-function getPositiveIDs(cardIDs: any[] = []): number[] {
-  return cardIDs.map(Number).filter((cardID) => cardID > 0)
 }
 
 function getState(room: Room): GuanXuRoomState {

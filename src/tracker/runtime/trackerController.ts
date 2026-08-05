@@ -39,6 +39,8 @@ interface RevealTarget {
   spellID?: SpellID | string | null
   fullHand?: boolean
   handCount?: number | string
+  // 协议已经通过其它消息同步过手牌数量时，只补充已知身份，不重复增加手牌总数。
+  handMoveCount?: number
   zoneName?: PublicZoneName
   position?: PublicPosition
   // 已在公共区中的牌是否也需要重新定位到指定端点。
@@ -644,6 +646,7 @@ export class TrackerController {
           subZone,
           spellID: target.spellID ?? null,
           cardCount: ids.length,
+          handMoveCount: target.handMoveCount,
           sourceEvent: target.sourceEvent ?? {
             type: 'revealCards',
             raw: { target, cardIDs: ids }
@@ -851,6 +854,7 @@ export class TrackerController {
       FromZone: msg.FromZone,
       FromID: msg.FromID,
       FromZoneParam: msg.FromZoneParam,
+      FromPosition: msg.FromPosition,
       ToZone: msg.ToZone,
       ToID: msg.ToID,
       ToZoneParam: msg.ToZoneParam,

@@ -16,8 +16,8 @@ export function handleUseSpell(msg) {
   }
 
   switch (SpellID) {
+    // 博图计数器
     case 3090:
-      // 博图计数器
       if (SeatID === Game.currentID && msg.EffectIndex === 1) {
         const prev = Number(Game.spellSpace[3090]) || 0
         Game.spellSpace[3090] = prev + 1
@@ -56,10 +56,10 @@ export function handleUseSpell(msg) {
       break
 
     case 3571:
-      // 郭照 椒遇
-      if (msg.EffectIndex === 1) {
-        Game.setSpellState(3571, new Set())
-      }
+      // 郭照 椒遇 现在会进入处理区 无需再创建空间存储
+      // if (msg.EffectIndex === 1) {
+      //   Game.setSpellState(3571, new Set())
+      // }
       break
 
     // 谋许攸 迁附 控顶
@@ -83,13 +83,7 @@ export function handleUseSpell(msg) {
     case 13293:
     case 13294: // 削命 谋命
       if (SeatID === Game.myID) {
-        const zhanfa = laya.gamescene?.SelfSeatUi?.zhanFaItems?.find(
-          (item) => item.SkillId === SpellID
-        )
-
-        if (!zhanfa) break
-        if (zhanfa.n === undefined) zhanfa.n = 0
-        zhanfa.Value = ++zhanfa.n
+        laya.zhanfaCounter(SpellID)
       }
 
       break

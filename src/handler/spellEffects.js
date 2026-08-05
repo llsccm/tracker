@@ -1,62 +1,12 @@
 import { CardConfig } from '../config'
 import { drawChengXiang } from '../draw'
+import handleJiaoYu from './skills/JiaoYu'
+import handleZuoLian from './skills/ZuoLian'
 
 function handleChengXiang(context) {
   if (context.ToZone == 8 && context.MoveType == 6) {
     const arr = context.CardIDs.map((id) => CardConfig.GetInstance().getCardNumber(id))
     drawChengXiang(arr, context.SpellID == 3492)
-  }
-}
-
-function handleJieWu(context) {
-  if (context.MoveType == 21) {
-    const spellCards = context.game.ensureSpellState(context.SpellID, () => [])
-    spellCards.push(context.CardIDs.find((id) => id > 0))
-  }
-}
-
-function handleZhuoHun(context) {
-  const { game } = context
-
-  if (context.FromZone == 5 && context.FromID == game.myID) {
-    const state =
-      game.spellSpace[3821] || (game.spellSpace[3821] = { used: new Set(), pending: [] })
-    state.pending = context.CardIDs.filter((id) => id > 0)
-      .map((cardId) => CardConfig.GetInstance().getCard(cardId)?.name || '')
-      .filter(Boolean)
-  }
-}
-
-function handleZuoLian(context) {
-  const { game } = context
-
-  if (context.FromZone === 5 && context.ToZone === 5 && context.MoveType === 21) {
-    const positiveIDs = context.CardIDs.filter((id) => id > 0)
-
-    if (positiveIDs.length === 1) {
-      const spellState = game.ensureSpellState(context.SpellID, () => ({}))
-      spellState[context.FromID] = positiveIDs[0]
-    }
-  } else if (context.FromZone === 5 && context.ToZone === 10 && context.MoveType === 11) {
-    if (!context.CardIDs.some((id) => id > 0)) {
-      const spellState = game.ensureSpellState(context.SpellID, () => ({}))
-
-      context.CardIDs[0] = spellState[context.FromID] || 0
-      spellState.stack = context.CardIDs[0]
-    }
-  } else if (
-    context.FromZone === 10 &&
-    (context.ToZone === 1 || context.ToZone === 2) &&
-    context.MoveType === 11
-  ) {
-    if (!context.CardIDs.some((id) => id > 0)) {
-      const spellState = game.getSpellState(context.SpellID)
-      context.CardIDs[0] = spellState?.stack || 0
-
-      if (spellState) {
-        delete spellState.stack
-      }
-    }
   }
 }
 
@@ -72,21 +22,6 @@ function handleQingYiLianJu(context) {
       context.CardIDs[i] = id
     })
     context.game.deleteSpellState(context.SpellID)
-  }
-}
-
-function handleJiaoYu(context) {
-  if (
-    context.FromZone == 8 &&
-    context.ToZone == 5 &&
-    context.MoveType == 8 &&
-    context.CardIDs.filter((id) => id > 0).length == 0
-  ) {
-    const spellCards = context.game.getSpellState(context.SpellID)
-    const spellCardIDs = Array.from(spellCards || [])
-    if (spellCardIDs.length) {
-      context.CardIDs.splice(0, Infinity, ...spellCardIDs)
-    }
   }
 }
 
@@ -109,8 +44,6 @@ export const spellEffectHandlers = new Map([
   [3492, handleChengXiang],
   // [3033, handleJiZhan],
   // [3329, handleHeZhong],
-  [3659, handleJieWu],
-  [3821, handleZhuoHun],
   [3488, handleZuoLian],
   [3157, handleQingYiLianJu],
   [3511, handleQingYiLianJu],
@@ -120,6 +53,7 @@ export const spellEffectHandlers = new Map([
   // [7017, handleYanXi]
 ])
 
+// 使用已有信息修改 cardIDs 简单不用处理 真是一个好方法吗?
 export function applySpellEffect(context) {
   const handler = spellEffectHandlers.get(context.SpellID)
   if (!handler) return false

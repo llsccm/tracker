@@ -55,25 +55,29 @@ export function drawCitiesUI(cities, _display) {
     10,
     500,
     { immediate: true }
-  ).then((rogueScene) => {
-    const cityView = rogueScene?.cityView
-    if (!cityView) return
+  )
+    .then((rogueScene) => {
+      const cityView = rogueScene?.cityView
+      if (!cityView) return
 
-    // 清理旧内容
-    for (let i = cityView.numChildren - 1; i >= 0; i--) {
-      const child = cityView.getChildAt(i)
-      if (child.name === 'city') {
-        cityView.removeChild(child)
+      // 清理旧内容
+      for (let i = cityView.numChildren - 1; i >= 0; i--) {
+        const child = cityView.getChildAt(i)
+        if (child.name === 'city') {
+          cityView.removeChild(child)
+        }
       }
-    }
 
-    // 添加新内容
-    if (cities) {
-      rogueMap.res.forEach(({ city }) => {
-        cityView.addChild(city)
-      })
-    }
-  })
+      // 添加新内容
+      if (cities) {
+        rogueMap.res.forEach(({ city }) => {
+          cityView.addChild(city)
+        })
+      }
+    })
+    .catch((err) => {
+      console.error(err)
+    })
 }
 
 // 样式常量

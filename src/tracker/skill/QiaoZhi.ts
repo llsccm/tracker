@@ -1,8 +1,6 @@
 import { trackerLogger } from '@/utils/logger'
 import type { Room } from '../Room'
-import { getCount, getRaw } from './moveEventUtils'
-
-type MoveEventDraft = any
+import { getCount, getPositiveIDs, getRaw, type MoveEventDraft } from './moveEventUtils'
 
 const QIAO_ZHI_SPELL_ID = 3544
 const QIAO_ZHI_SELECTION_STATE_KEY = 'qiaozhiSelection'
@@ -11,10 +9,6 @@ interface QiaoZhiSelectionState {
   displayedCardIDs: number[]
   selectedCount: number
   targetSeatID: number | null
-}
-
-function getPositiveIDs(cardIDs: any[] = []): number[] {
-  return Array.from(new Set(cardIDs.map((id) => Number(id) || 0).filter((id) => id > 0)))
 }
 
 function recordDisplayedCards(event: MoveEventDraft, room: Room): void {
