@@ -1,27 +1,16 @@
 import { POSITION_RANDOM } from '../candidate/cardPositions'
 import { trackerLogger } from '@/utils/logger'
 import type { Room } from '../Room'
-import { getCount, getRaw, hasPositiveID } from './moveEventUtils'
-
-type MoveEventDraft = any
+import {
+  getCount,
+  getRaw,
+  hasPositiveID,
+  nextGroupID,
+  type MoveEventDraft,
+  patchEvent
+} from './moveEventUtils'
 
 const SI_QI_SPELL_ID = 3543
-
-function patchEvent(event: MoveEventDraft, sourceCards: any[], combinationID: string) {
-  return {
-    ...event,
-    cardIDs: event.cardIDs,
-    options: {
-      ...event.options,
-      sourceCards,
-      combinationID
-    }
-  }
-}
-
-function nextGroupID(room: Room): string {
-  return `siqi_candidate_${SI_QI_SPELL_ID}_${++room.constraintGroupSeq}`
-}
 
 export default function decorateSiQi(event: MoveEventDraft, room: Room): MoveEventDraft {
   const raw = getRaw(event)
@@ -51,7 +40,12 @@ export default function decorateSiQi(event: MoveEventDraft, room: Room): MoveEve
 
   if (selectedCards.length === 0) return event
 
-  const decorated = patchEvent(event, selectedCards, nextGroupID(room))
+  const decorated = patchEvent(event, {
+    options: {
+      sourceCards: selectedCards,
+      combinationID: nextGroupID(room, SI_QI_SPELL_ID, 'siqi_candidate')
+    }
+  })
 
   trackerLogger.debug('思泣来源牌推断', {
     cardCount,

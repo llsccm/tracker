@@ -37,9 +37,14 @@ import type {
   SubZone
 } from '../types'
 import { recordTraversal } from '../traversalStats'
-
-/** 兼容旧导出名；整手交换已不再绑定单一技能 ID。 */
-export const HAND_EXCHANGE_SPELL_ID = 121
+import {
+  getCount,
+  getPositiveIDs,
+  getRaw,
+  type MoveEventDraft,
+  nextGroupID,
+  patchEvent
+} from './moveEventUtils'
 
 /**
  * 房间级 skillState key。
@@ -47,8 +52,6 @@ export const HAND_EXCHANGE_SPELL_ID = 121
  * 按 SpellID 隔离，避免两个交换技能并发时串批。
  */
 export const HAND_EXCHANGE_STATE_KEY = 'handExchangeBatches'
-
-type MoveEventDraft = any
 
 /** 某座位进交换区时登记的一整批手牌实体。 */
 type HandExchangeBatch = {
@@ -91,35 +94,6 @@ type HandExchangeRoomState = {
   bySpell: Record<string, HandExchangeSpellState>
   /** 仅用于生成全局唯一 batchID 的自增序号；批次与候选均已按 SpellID 隔离。 */
   nextBatchSeq: number
-}
-
-function getRaw(event: MoveEventDraft): any {
-  return event.raw ?? event.options?.sourceEvent?.raw ?? {}
-}
-
-function getCount(event: MoveEventDraft): number {
-  return Math.max(0, Number(event.cardCount ?? event.options?.cardCount ?? 0))
-}
-
-/** 协议 CardIDs 中的正 ID；0 / 负数 / 非法值不参与 known 对齐。 */
-function getPositiveIDs(cardIDs: any[] = []): number[] {
-  return Array.from(new Set(cardIDs.map((id) => Number(id) || 0).filter((id) => id > 0)))
-}
-
-function patchEvent(event: MoveEventDraft, patch: any = {}): MoveEventDraft {
-  return {
-    ...event,
-    ...patch,
-    cardIDs: patch.cardIDs ?? event.cardIDs,
-    options: {
-      ...event.options,
-      ...(patch.options ?? {})
-    }
-  }
-}
-
-function nextGroupID(room: Room, spellID: number | string, label: string): string {
-  return `${label}_${spellID}_${++room.constraintGroupSeq}`
 }
 
 function resolveSpellID(event: MoveEventDraft): number {

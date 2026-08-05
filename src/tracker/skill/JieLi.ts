@@ -1,16 +1,16 @@
-import { POSITION_BOTTOM, POSITION_TOP, POSITION_RANDOM } from '../candidate/cardPositions'
-import type { MoveEventDraft } from '../runtime/moveEventHandlers'
-import {
-  getRaw,
-  hasPositiveID,
-  patchEvent,
-  getTopFirstCards,
-  nextGroupID,
-  getEventSourceCards,
-  createSourcePatch,
-  getCount
-} from '../runtime/moveEventHandlers'
+import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '../candidate/cardPositions'
 import type { Room } from '../Room'
+import {
+  createSourcePatch,
+  getCount,
+  getEventSourceCards,
+  getRaw,
+  getTopFirstCards,
+  hasPositiveID,
+  nextGroupID,
+  patchEvent,
+  type MoveEventDraft
+} from '../skill/moveEventUtils'
 
 // 族钟繇【诫厉】：历史装饰器，当前不要挂到主动路径。
 // 已观测实战与下列假设不一致：
