@@ -3,24 +3,8 @@ import { Card } from '@/tracker/Card'
 import { CardLocationIndex } from '@/tracker/CardLocationIndex'
 import { ConstraintGroup } from '@/tracker/ConstraintGroup'
 import { Room } from '@/tracker/Room'
-import { GameState } from '@/tracker/gameState'
+import { GameState } from '@/tracker/Game'
 import { createNoopGameState } from './helpers/noopRuntime'
-
-class HookedGameState extends GameState {
-  events: string[] = []
-
-  protected onInit(): void {
-    this.events.push('init')
-  }
-
-  protected onEnd(): void {
-    this.events.push('end')
-  }
-
-  protected onStart(): void {
-    this.events.push('start')
-  }
-}
 
 describe('Room Node 导入边界', () => {
   it('不依赖浏览器全局对象也能导入并创建房间', () => {
@@ -77,8 +61,22 @@ describe('Room Node 导入边界', () => {
     expect(gameState.myID).toBeUndefined()
   })
 
-  it('GameState 统一状态流并通过生命周期钩子扩展运行时行为', () => {
-    const gameState = new HookedGameState()
+  it('GameState 更新武将后通知注入的展示监听器', () => {
+    const gameState = new GameState({ orderLabels: ['', '甲', '乙'] })
+    const room = new Room({ gameState })
+    room.registerPlayers([{ seat_id: 2, user_temp_id: 100 }], 100)
+    let renderedLabel = ''
+
+    gameState.setGeneralChangeListener((player, orderLabels) => {
+      renderedLabel = `${player.generals.join(',')}|${orderLabels[player.fixedViewId ?? 1]}`
+    })
+    gameState.setGeneral(2, 101)
+
+    expect(renderedLabel).toBe('101|甲')
+  })
+
+  it('GameState 统一状态流管理', () => {
+    const gameState = new GameState()
 
     gameState.init()
     gameState.end()
@@ -93,7 +91,6 @@ describe('Room Node 导入边界', () => {
 
     gameState.end()
 
-    expect(gameState.events).toEqual(['init', 'end', 'start', 'end'])
     expect(gameState.isGameStart).toBe(false)
     expect(gameState.isPassed).toBe(true)
   })

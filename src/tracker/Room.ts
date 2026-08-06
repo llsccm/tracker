@@ -2,7 +2,7 @@ import { Card, hasRealIdentity, isAnonymous } from './Card'
 import { Player } from './Player'
 import { Zone } from './Zone'
 import { CardCounter } from './CardCounter'
-import { GameState } from './gameState'
+import { GameState } from './Game'
 import { AmbiguousKnownIndex } from './AmbiguousKnownIndex'
 import { CardLocationIndex } from './CardLocationIndex'
 import {

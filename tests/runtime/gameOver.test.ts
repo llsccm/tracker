@@ -5,12 +5,15 @@ const {
   Game,
   globalConfig,
   laya,
+  mvpWindow,
   querySelectorAll,
   resetSeatUIs,
+  resultWindow,
   tracker
 } = vi.hoisted(() => ({
   destroyPeiXiuMapWindow: vi.fn(),
   Game: {
+    isShanHeTu: false,
     isPassed: true as boolean | null,
     end: vi.fn()
   },
@@ -18,10 +21,21 @@ const {
     blockMvpSettlementSwitch: true
   },
   laya: {
-    closeWindow: vi.fn<(name: string) => boolean>()
+    GetWindow: vi.fn(),
+    zhanfaMap: {
+      clear: vi.fn()
+    }
+  },
+  mvpWindow: {
+    visible: true,
+    laterClose: vi.fn()
   },
   querySelectorAll: vi.fn<() => { style: { display: string } }[]>(),
   resetSeatUIs: vi.fn(),
+  resultWindow: {
+    visible: true,
+    laterClose: vi.fn()
+  },
   tracker: {
     destroyTrackerRoom: vi.fn()
   }
@@ -39,63 +53,78 @@ describe('MsgGameOver', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
+    Game.isShanHeTu = false
     Game.isPassed = true
     globalConfig.blockMvpSettlementSwitch = true
-    laya.closeWindow.mockReturnValue(true)
+    laya.GetWindow.mockImplementation((name) => {
+      if (name === 'GameResultWindow') return resultWindow
+      if (name === 'GameMvpWindow') return mvpWindow
+      return null
+    })
     querySelectorAll.mockReturnValue([{ style: { display: 'block' } }])
     vi.stubGlobal('document', { querySelectorAll })
   })
 
   afterEach(() => {
-    vi.runOnlyPendingTimers()
+    vi.clearAllTimers()
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })
 
-  it('重复结束消息刷新定时器，并从最后一次消息开始延迟关闭', () => {
-    laya.closeWindow.mockReturnValueOnce(true).mockReturnValueOnce(false)
-
+  it('重复结束消息刷新定时器，并从最后一次消息开始等待结算窗口', async () => {
     handleGameOver()
 
-    vi.advanceTimersByTime(300)
+    await vi.advanceTimersByTimeAsync(300)
     handleGameOver()
 
-    vi.advanceTimersByTime(200)
-    expect(laya.closeWindow).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(499)
+    expect(laya.GetWindow).not.toHaveBeenCalled()
 
-    vi.advanceTimersByTime(299)
-    expect(laya.closeWindow).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(laya.GetWindow).not.toHaveBeenCalled()
 
-    vi.advanceTimersByTime(1)
-    expect(laya.closeWindow.mock.calls).toEqual([['GameResultWindow'], ['GameMvpWindow']])
+    await vi.advanceTimersByTimeAsync(500)
+    expect(laya.GetWindow).toHaveBeenCalledWith('GameResultWindow')
+    expect(resultWindow.laterClose).toHaveBeenCalledOnce()
+    expect(mvpWindow.laterClose).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect(laya.GetWindow.mock.calls).toEqual([['GameResultWindow'], ['GameMvpWindow']])
+    expect(mvpWindow.laterClose).toHaveBeenCalledOnce()
+    expect(Game.end).toHaveBeenCalledOnce()
   })
 
-  it('结果窗口关闭失败时不再关闭 MVP 窗口', () => {
-    laya.closeWindow.mockReturnValue(false)
+  it('未找到结果窗口时重试后清理且不查询 MVP 窗口', async () => {
+    laya.GetWindow.mockReturnValue(null)
 
     handleGameOver()
-    vi.advanceTimersByTime(500)
+    await vi.advanceTimersByTimeAsync(5500)
 
-    expect(laya.closeWindow).toHaveBeenCalledOnce()
-    expect(laya.closeWindow).toHaveBeenCalledWith('GameResultWindow')
+    expect(laya.GetWindow).toHaveBeenCalledTimes(10)
+    expect(laya.GetWindow).toHaveBeenCalledWith('GameResultWindow')
+    expect(resultWindow.laterClose).not.toHaveBeenCalled()
+    expect(mvpWindow.laterClose).not.toHaveBeenCalled()
+    expect(Game.end).toHaveBeenCalledOnce()
   })
 
-  it('关闭设置未开启时取消待执行的窗口关闭任务', () => {
+  it('关闭设置未开启时取消待执行任务并立即清理', async () => {
     handleGameOver()
-    vi.advanceTimersByTime(300)
+    await vi.advanceTimersByTimeAsync(300)
 
     globalConfig.blockMvpSettlementSwitch = false
     handleGameOver()
-    vi.advanceTimersByTime(500)
 
-    expect(laya.closeWindow).not.toHaveBeenCalled()
+    expect(laya.GetWindow).not.toHaveBeenCalled()
+    expect(laya.zhanfaMap.clear).toHaveBeenCalledOnce()
+    expect(Game.end).toHaveBeenCalledOnce()
   })
 
   it('离桌只清理对局，不安排结算窗口关闭', () => {
     handleLeaveTable()
-    vi.advanceTimersByTime(500)
 
-    expect(laya.closeWindow).not.toHaveBeenCalled()
+    expect(laya.GetWindow).not.toHaveBeenCalled()
+    expect(laya.zhanfaMap.clear).toHaveBeenCalledOnce()
     expect(Game.end).toHaveBeenCalledOnce()
     expect(destroyPeiXiuMapWindow).toHaveBeenCalledOnce()
     expect(resetSeatUIs).toHaveBeenCalledOnce()
