@@ -838,6 +838,44 @@
       display: flex;
     }
 
+    .protocol-recorder-controls {
+      width: 100%;
+    }
+
+    .protocol-recorder-actions {
+      display: flex;
+      gap: 6px;
+      padding: 0 10px;
+    }
+
+    .protocol-recorder-button {
+      flex: 1;
+      height: 24px;
+      color: var(--text-gold);
+      background: var(--bg-primary);
+      border: 1px solid var(--text-gold);
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .protocol-recorder-button:disabled {
+      color: #777;
+      border-color: #777;
+      cursor: not-allowed;
+    }
+
+    .protocol-recorder-status {
+      width: 100%;
+      margin-top: 4px;
+      color: var(--text-gold);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .protocol-recorder-status[data-recording='true'] {
+      color: #ff7b54;
+    }
+
     .switch {
       position: relative;
       display: block;
@@ -1789,6 +1827,46 @@
               <span class="slider"></span>
               <span class="status"></span>
             </label>
+          </div>
+        </div>
+        <div class="protocol-recorder-controls" id="protocolRecorderControls">
+          <div class="switch-container-row">
+            <div
+              class="switch-container"
+              data-tooltip="仅在本次页面手动开启；只保存影响记牌器的协议，不记录时间"
+            >
+              <span class="explanation">协议录制</span>
+              <label class="switch">
+                <input id="protocolRecordSwitch" type="checkbox" />
+                <span class="slider"></span>
+                <span class="status"></span>
+              </label>
+            </div>
+          </div>
+          <div class="protocol-recorder-actions">
+            <button
+              class="protocol-recorder-button"
+              id="protocolRecordExport"
+              type="button"
+              disabled
+            >
+              导出协议
+            </button>
+            <button
+              class="protocol-recorder-button"
+              id="protocolRecordClear"
+              type="button"
+              disabled
+            >
+              清空记录
+            </button>
+          </div>
+          <div
+            class="protocol-recorder-status"
+            id="protocolRecordStatus"
+            data-recording="false"
+          >
+            未录制
           </div>
         </div>
       </div>
