@@ -50,7 +50,7 @@ function scheduleCloseGameOverWindows() {
     }
 
     cleanupGame()
-  }, 500)
+  }, 1000)
 }
 
 export function handleGameOver() {
