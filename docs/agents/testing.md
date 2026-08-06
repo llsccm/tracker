@@ -14,6 +14,7 @@
 - 覆盖率配置：默认关注 `src/tracker/**/*.{js,ts}`，排除 `src/tracker/view/**`
 - 现状：
   - 已有较完整的记牌器单元/回归：`tests/tracker/`
+  - 协议回放诊断独立放在：`tests/replay/tracker/`
   - 牌堆身份纯模型契约独立放在：`tests/contracts/pile-identity/`
   - 已有少量运行时与外围工具测试：`tests/runtime/`、`tests/utils/peixiuRouteFeature.test.js`
   - **没有**通用 `pnpm test` 脚本；`pnpm test:tracker` 同时运行 tracker 回归与牌堆身份契约
@@ -25,6 +26,7 @@
 | ------------------------ | ----------------------------------------------------- |
 | `tests/tracker/`         | Room 移动、候选、收敛、Controller、脏渲染、遍历基线等 |
 | `tests/tracker/helpers/` | 测试夹具与 noop runtime/view                          |
+| `tests/replay/tracker/`  | 独立的协议 JSONL 重建、诊断与真实录制回放入口         |
 | `tests/contracts/pile-identity/` | 牌堆身份纯模型、真实牌序 oracle 与长期语义契约 |
 | `tests/runtime/`         | 宿主运行时适配、窗口关闭与对局结束 UI 生命周期        |
 | `tests/utils/`           | 非 tracker 工具逻辑，如裴秀路线                       |
@@ -49,7 +51,9 @@
 
 ```sh
 pnpm test:tracker
+pnpm test:replay
 pnpm typecheck:tracker
+pnpm typecheck:replay
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -70,6 +74,26 @@ pnpm exec vitest run
 pnpm exec vitest run tests/tracker/locationCandidates.test.ts
 pnpm exec vitest run -t "shuffle"
 ```
+
+### 协议回放（仅 Node/Vitest）
+
+协议录制文件只在测试环境中回放，不提供浏览器按钮，也不会把历史协议注入真实对局。回放器会新建隔离的
+`GameState` 与 `TrackerController`，按 `seq` 重建 Room、玩家、牌堆、移动、看牌和关键技能状态，并在
+每条协议后检查身份账本、公共区槽位、增量索引、模糊索引与玩家快照。
+
+本地录制统一放在 Git 忽略目录 `replays/tracker/`。默认文件名为
+`replays/tracker/tracker-protocols.jsonl`，放好文件后直接运行 `pnpm replay:tracker`。
+
+可选环境变量：
+
+- `DXC_TRACKER_PROTOCOL_FILE`：覆盖默认 JSONL 路径，用于回放其它录制文件。
+- `DXC_TRACKER_CURRENT_USER_ID`：录像无法从协议确定主视角时，显式指定当前用户 ID。
+- `DXC_TRACKER_REPLAY_TRACE=1`：输出每条协议应用后的状态，适合查找首次推断偏差；录制较长时输出会很大。
+
+回放遇到首个异常会立即停止，并输出失败 `seq`、`className`、原始 `payload`、前置协议上下文，以及
+失败前后的 Room/玩家/牌堆/约束摘要。若录制从对局中途开始，缺少座位或牌堆初始化协议时会明确报告
+“录制可能开始过晚”。没有抛异常但需要验证推断结果时，可在 Vitest 回归中导入
+`tests/replay/tracker/helpers/protocolReplay`，对回放后的 Room 或报告快照编写领域断言。
 
 - 更新遍历基线快照（仅在解释清楚数字变化后）：
 
@@ -94,6 +118,7 @@ Windows 本机执行时遵循 [`commands.md`](commands.md) 与 Serena 本机记�
 | 仅文档 / 注释                                              | 无需构建与测试                                                  |
 | 普通 `src/` 代码（非 tracker 高风险）                      | `pnpm lint` + `pnpm build`                                      |
 | `src/tracker/`、`tests/tracker/` 或 `tests/contracts/pile-identity/` | `pnpm lint` + `pnpm build` + `pnpm test:tracker`        |
+| `tests/replay/tracker/` 或协议回放驱动                     | `pnpm test:replay` + `pnpm typecheck:replay`                    |
 | TS 类型契约、`tsconfig*`、ESLint TS 覆盖、tracker 类型迁移 | `pnpm typecheck:tracker`；需要确认全仓入口时再 `pnpm typecheck` |
 | `tests/utils/` 或非 tracker 测试                           | `pnpm exec vitest run`（或对应文件）+ 适用 lint/build           |
 | 发布配置、打包参数、用户脚本元信息、核心协议高风险路径     | 额外 `pnpm build:prod`                                          |

@@ -1,4 +1,8 @@
-import { projectTrackerProtocol, shouldRecordTrackerProtocol } from './protocolRecordingRules'
+import {
+  projectTrackerProtocol,
+  shouldRecordTrackerProtocol,
+  type TrackerProtocolRecordingContext
+} from './protocolRecordingRules'
 
 export interface RecordedTrackerProtocol {
   seq: number
@@ -78,8 +82,11 @@ export async function initializeProtocolRecording(): Promise<ProtocolRecordingSt
   return getProtocolRecordingStatus()
 }
 
-export function recordTrackerProtocol(message: unknown): void {
-  if (!active || !shouldRecordTrackerProtocol(message)) return
+export function recordTrackerProtocol(
+  message: unknown,
+  context: TrackerProtocolRecordingContext = {}
+): void {
+  if (!active || !shouldRecordTrackerProtocol(message, context)) return
 
   try {
     const projected = projectTrackerProtocol(message)

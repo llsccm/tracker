@@ -24,6 +24,133 @@ describe('tracker protocol recording rules', () => {
   })
 
   it('按协议字段进一步过滤混合用途消息', () => {
+    const mainSeatContext = { mySeatID: 6 }
+
+    expect(
+      shouldRecordTrackerProtocol(
+        {
+          className: 'PubGsCUseCard',
+          SeatID: 6,
+          useType: 1,
+          isSend: 0,
+          spellID: 1
+        },
+        mainSeatContext
+      )
+    ).toBe(true)
+    expect(
+      shouldRecordTrackerProtocol(
+        {
+          className: 'PubGsCUseCard',
+          SeatID: 4,
+          useType: 1,
+          isSend: 0,
+          spellID: 1
+        },
+        mainSeatContext
+      )
+    ).toBe(false)
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'PubGsCUseCard',
+        SeatID: 6,
+        useType: 0,
+        isSend: 1,
+        spellID: 0
+      })
+    ).toBe(false)
+
+    expect(
+      shouldRecordTrackerProtocol(
+        { className: 'PubGsCUseSpell', SpellID: 3090, SeatID: 4, EffectIndex: 1 },
+        { currentSeatID: 4 }
+      )
+    ).toBe(true)
+    expect(
+      shouldRecordTrackerProtocol(
+        { className: 'PubGsCUseSpell', SpellID: 3090, SeatID: 6, EffectIndex: 1 },
+        { currentSeatID: 4 }
+      )
+    ).toBe(false)
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'PubGsCUseSpell',
+        SpellID: 3750,
+        EffectIndex: 2,
+        DestSeatIDs: []
+      })
+    ).toBe(true)
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'PubGsCUseSpell',
+        SpellID: 3750,
+        EffectIndex: 2,
+        DestSeatIDs: [6]
+      })
+    ).toBe(false)
+    expect(shouldRecordTrackerProtocol({ className: 'PubGsCUseSpell', SpellID: 4022 })).toBe(false)
+
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'PubGsCMoveCard',
+        CardCount: 1,
+        MoveType: 1,
+        ToZone: 5,
+        isSend: 0
+      })
+    ).toBe(true)
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'PubGsCMoveCard',
+        CardCount: 0,
+        MoveType: 1,
+        ToZone: 5,
+        isSend: 0
+      })
+    ).toBe(false)
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'PubGsCMoveCard',
+        CardCount: 1,
+        MoveType: 1,
+        ToZone: 5,
+        isSend: 1
+      })
+    ).toBe(false)
+
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'CGsRoleSpellOptRep',
+        SpellID: 7009,
+        Type: 30,
+        Datas: [1, 2]
+      })
+    ).toBe(true)
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'CGsRoleSpellOptRep',
+        SpellID: 7009,
+        Type: 30,
+        Datas: []
+      })
+    ).toBe(false)
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'GsCRoleOptTargetNtf',
+        SpellID: 4,
+        targetSeatID: 6,
+        Params: [1]
+      })
+    ).toBe(true)
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'GsCRoleOptTargetNtf',
+        SpellID: 4,
+        targetSeatID: 6,
+        Params: []
+      })
+    ).toBe(false)
+
     expect(shouldRecordTrackerProtocol({ className: 'GsCUpdateRoleDataNtf', StateID: 58 })).toBe(
       true
     )
@@ -38,20 +165,33 @@ describe('tracker protocol recording rules', () => {
       false
     )
 
-    expect(shouldRecordTrackerProtocol({ className: 'GsCRoleOptTargetNtf', SpellID: 987 })).toBe(
-      true
-    )
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'GsCRoleOptTargetNtf',
+        SpellID: 987,
+        targetSeatID: 6,
+        Param: 1,
+        Params: [1, 0, 2]
+      })
+    ).toBe(true)
     expect(shouldRecordTrackerProtocol({ className: 'GsCRoleOptTargetNtf', SpellID: 4021 })).toBe(
       false
     )
 
-    expect(shouldRecordTrackerProtocol({ className: 'CGsRoleSpellOptRep', SpellID: 7009 })).toBe(
-      true
-    )
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'CGsRoleSpellOptRep',
+        SpellID: 7009,
+        Type: 30,
+        Datas: [1]
+      })
+    ).toBe(true)
     expect(shouldRecordTrackerProtocol({ className: 'CGsRoleSpellOptRep', SpellID: 4022 })).toBe(
       false
     )
-    expect(shouldRecordTrackerProtocol({ className: 'CGsRoleSpellOptRep', Type: 72 })).toBe(true)
+    expect(
+      shouldRecordTrackerProtocol({ className: 'CGsRoleSpellOptRep', Type: 72, Datas: [1] })
+    ).toBe(true)
   })
 })
 
@@ -98,7 +238,8 @@ describe('tracker protocol projection', () => {
       receviedStatus: 3,
       sendStatus: 3,
       timestamp: 7000,
-      userID: 0
+      userID: 0,
+      _className_: 'PubGsCMoveCard'
     })
 
     expect(projectTrackerProtocol(message)).toEqual({
@@ -106,7 +247,6 @@ describe('tracker protocol projection', () => {
       payload: {
         CardCount: 4,
         CardIDs: [0, 0, 0, 0],
-        DataCount: 0,
         FromID: 255,
         FromPosition: 65280,
         FromZone: 1,
@@ -114,6 +254,7 @@ describe('tracker protocol projection', () => {
         MoveType: 1,
         SpellID: 0,
         SrcSeatID: 7,
+        isSend: 0,
         ToID: 7,
         ToPosition: 65280,
         ToZone: 5,
@@ -161,7 +302,7 @@ describe('tracker protocol projection', () => {
     })
   })
 
-  it('只在实际使用 isSend 的协议中保留该字段', () => {
+  it('只在处理或回放实际使用 isSend 的协议中保留该字段', () => {
     expect(
       projectTrackerProtocol({
         className: 'MsgNtfUseCardType',
@@ -178,7 +319,7 @@ describe('tracker protocol projection', () => {
       projectTrackerProtocol({ className: 'PubGsCMoveCard', isSend: 0, CardIDs: [1] })
     ).toEqual({
       className: 'PubGsCMoveCard',
-      payload: { CardIDs: [1] }
+      payload: { isSend: 0, CardIDs: [1] }
     })
   })
 })
@@ -223,5 +364,38 @@ describe('tracker protocol recorder', () => {
         '{"seq":2,"className":"MsgGameTurnNtf","payload":{"Turn":1}}\n'
     )
     expect(serialized).not.toContain('timestamp')
+  })
+
+  it('录制时按主视角过滤不会改变记牌状态的出牌消息', async () => {
+    startProtocolRecording()
+    recordTrackerProtocol(
+      {
+        className: 'PubGsCUseCard',
+        SeatID: 4,
+        useType: 1,
+        isSend: 0,
+        spellID: 1
+      },
+      { mySeatID: 6 }
+    )
+    recordTrackerProtocol(
+      {
+        className: 'PubGsCUseCard',
+        SeatID: 6,
+        useType: 1,
+        isSend: 0,
+        spellID: 1
+      },
+      { mySeatID: 6 }
+    )
+    await stopProtocolRecording()
+
+    expect(getProtocolRecordingSnapshot()).toEqual([
+      {
+        seq: 1,
+        className: 'PubGsCUseCard',
+        payload: { SeatID: 6, useType: 1, isSend: 0, spellID: 1 }
+      }
+    ])
   })
 })

@@ -52,7 +52,7 @@ export function logic(msg) {
     const { ProtoObj, SeatID } = msg
 
     // 录制器有独立的记牌协议规则，需先于功能白名单执行，以保留路由遗漏现场。
-    recordTrackerProtocol(msg)
+    recordTrackerProtocol(msg, { mySeatID: Game.myID, currentSeatID: Game.currentID })
 
     if (!isRetainedLogicMessage(className)) return
 

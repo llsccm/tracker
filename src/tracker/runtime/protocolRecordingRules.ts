@@ -3,8 +3,16 @@ export interface ProjectedTrackerProtocol {
   payload: Record<string, unknown>
 }
 
+export interface TrackerProtocolRecordingContext {
+  mySeatID?: number
+  currentSeatID?: number
+}
+
 type ProtocolObject = Record<string, unknown>
-type ProtocolPredicate = (message: ProtocolObject) => boolean
+type ProtocolPredicate = (
+  message: ProtocolObject,
+  context: TrackerProtocolRecordingContext
+) => boolean
 
 const ALWAYS_RECORDED_CLASSES = new Set([
   'MsgReconnectGame',
@@ -18,11 +26,7 @@ const ALWAYS_RECORDED_CLASSES = new Set([
   'GsCGamephaseNtf',
   'MsgGameRoundNtf',
   'MsgGameOver',
-  'ClientLeavetableRep',
-  'MsgNtfUseCardType',
-  'PubGsCUseCard',
-  'PubGsCUseSpell',
-  'PubGsCMoveCard'
+  'ClientLeavetableRep'
 ])
 
 // Prettier 会压缩数字列表，但项目 ESLint 要求长数组逐项换行。
@@ -52,19 +56,20 @@ const ROLE_OPT_TARGET_SPELL_IDS = new Set([
   4025
 ])
 
-const ROLE_SPELL_OPT_SPELL_IDS = new Set([2022, 3336, 3659, 3744, 3868, 7009])
 const TRACKER_ROLE_DATA_EX_IDS = new Set([3544, 3571])
+const TRACKER_USE_SPELL_IDS = new Set([3090, 3138, 3157, 3161, 3185, 3193, 3511, 3750])
 
 const CONDITIONAL_RECORDING_RULES: Record<string, ProtocolPredicate> = {
+  MsgNtfUseCardType: shouldRecordCounterUseCard,
+  PubGsCUseCard: shouldRecordCounterUseCard,
+  PubGsCUseSpell: shouldRecordUseSpell,
+  PubGsCMoveCard: shouldRecordMoveCard,
   GsCUpdateRoleDataNtf: (message) => readNumberField(message, 'StateID') === 58,
   MsgGameShowFigure: (message) => readNumberField(message, 'Figure') === 1,
   GsCUpdateRoleDataExNtf: (message) =>
     TRACKER_ROLE_DATA_EX_IDS.has(readNumberField(message, 'DataID') ?? -1),
-  GsCRoleOptTargetNtf: (message) =>
-    ROLE_OPT_TARGET_SPELL_IDS.has(readNumberField(message, 'SpellID') ?? -1),
-  CGsRoleSpellOptRep: (message) =>
-    readNumberField(message, 'Type') === 72 ||
-    ROLE_SPELL_OPT_SPELL_IDS.has(readNumberField(message, 'SpellID') ?? -1)
+  GsCRoleOptTargetNtf: shouldRecordRoleOptTarget,
+  CGsRoleSpellOptRep: shouldRecordRoleSpellOpt
 }
 
 const ROOT_IGNORED_FIELDS = new Set([
@@ -72,11 +77,14 @@ const ROOT_IGNORED_FIELDS = new Set([
   'CardSpell',
   'ClassName',
   'Data',
+  'DataCount',
   'FItem',
   'ProtoObj',
   'Spell',
+  '_className_',
   'className',
   'data',
+  'data_count',
   'errCode',
   'errMsg',
   'fromSocket2',
@@ -96,7 +104,8 @@ const ROOT_IGNORED_FIELDS = new Set([
 
 const ROOT_FIELD_EXCEPTIONS = new Map([
   ['MsgNtfUseCardType', new Set(['isSend'])],
-  ['PubGsCUseCard', new Set(['isSend'])]
+  ['PubGsCUseCard', new Set(['isSend'])],
+  ['PubGsCMoveCard', new Set(['isSend'])]
 ])
 
 const NESTED_IGNORED_FIELDS = new Set(['timestamp'])
@@ -104,16 +113,158 @@ const TRACKER_SEAT_INFO_FIELDS = ['SeatID', 'seat_id', 'user_temp_id', 'ClientID
 const OMITTED = Symbol('omitted')
 const MAX_PROTOCOL_DEPTH = 20
 
-export function shouldRecordTrackerProtocol(message: unknown): boolean {
+export function shouldRecordTrackerProtocol(
+  message: unknown,
+  context: TrackerProtocolRecordingContext = {}
+): boolean {
   if (!isProtocolObject(message)) return false
 
   const className = getProtocolClassName(message)
   if (!className) return false
 
   const conditionalRule = CONDITIONAL_RECORDING_RULES[className]
-  if (conditionalRule) return conditionalRule(message)
+  if (conditionalRule) return conditionalRule(message, context)
 
   return ALWAYS_RECORDED_CLASSES.has(className)
+}
+
+function shouldRecordCounterUseCard(
+  message: ProtocolObject,
+  context: TrackerProtocolRecordingContext
+): boolean {
+  const useType = readNumberField(message, 'useType')
+  const spellID = readNumberField(message, 'spellID') ?? readNumberField(message, 'spellId') ?? 0
+  if (useType !== 1 || Boolean(readProtocolField(message, 'isSend')) || spellID <= 0) return false
+
+  if (context.mySeatID === undefined) return true
+  const seatID =
+    readNumberField(message, 'SeatID') ?? readNumberField(message, 'castSeatId') ?? undefined
+  return seatID === context.mySeatID
+}
+
+function shouldRecordUseSpell(
+  message: ProtocolObject,
+  context: TrackerProtocolRecordingContext
+): boolean {
+  const spellID = readNumberField(message, 'SpellID') ?? -1
+  if (!TRACKER_USE_SPELL_IDS.has(spellID)) return false
+
+  switch (spellID) {
+    case 3090:
+      if (readNumberField(message, 'EffectIndex') !== 1) return false
+      return (
+        context.currentSeatID === undefined ||
+        readNumberField(message, 'SeatID') === context.currentSeatID
+      )
+
+    case 3157:
+    case 3511:
+      return readArrayField(message, 'CardIDs').some((cardID) => Number(cardID) > 0)
+
+    case 3750:
+      return (
+        readNumberField(message, 'EffectIndex') === 2 &&
+        readArrayField(message, 'DestSeatIDs').length === 0
+      )
+
+    default:
+      return true
+  }
+}
+
+function shouldRecordMoveCard(message: ProtocolObject): boolean {
+  return !(
+    readNumberField(message, 'CardCount') === 0 ||
+    readNumberField(message, 'MoveType') === 0 ||
+    readNumberField(message, 'ToZone') === 11 ||
+    Boolean(readProtocolField(message, 'isSend'))
+  )
+}
+
+function shouldRecordRoleSpellOpt(message: ProtocolObject): boolean {
+  const datas = readArrayField(message, 'Datas')
+  if (datas.length === 0) return false
+
+  const type = readNumberField(message, 'Type')
+  if (type === 72) return true
+
+  switch (readNumberField(message, 'SpellID')) {
+    case 2022:
+    case 3659:
+      return true
+    case 3744:
+      return type !== 73
+    case 3336:
+    case 3868:
+      return type === 50
+    case 7009:
+      return type === 30
+    default:
+      return false
+  }
+}
+
+function shouldRecordRoleOptTarget(message: ProtocolObject): boolean {
+  const spellID = readNumberField(message, 'SpellID') ?? -1
+  if (!ROLE_OPT_TARGET_SPELL_IDS.has(spellID)) return false
+
+  const params = readArrayField(message, 'Params')
+  const param = readNumberField(message, 'Param')
+  const type = readNumberField(message, 'Type')
+  const targetSeatID = readNumberField(message, 'targetSeatID')
+  const srcSeatID = readNumberField(message, 'SrcSeatID')
+
+  switch (spellID) {
+    case 4:
+    case 5:
+    case 357:
+    case 372:
+    case 501:
+    case 811:
+    case 921:
+    case 3119:
+    case 3437:
+    case 3876:
+    case 4025:
+      return targetSeatID !== undefined && targetSeatID !== 255 && params.length > 0
+
+    case 361:
+    case 774:
+    case 851:
+    case 3310:
+      return targetSeatID !== undefined && targetSeatID !== 255 && param === 0 && params.length > 0
+
+    case 943:
+      return param === 0 && params.length === 1
+
+    case 898:
+      return srcSeatID !== undefined && srcSeatID !== 255 && param === 0 && params.length > 2
+
+    case 987:
+    case 988:
+      return targetSeatID !== undefined && param === 1 && params.length > 2
+
+    case 2900:
+      return targetSeatID !== undefined && type === 28 && params.length >= 3
+
+    case 3483:
+      return targetSeatID !== undefined && param === 1 && params.length > 0
+
+    case 3903:
+      return (
+        targetSeatID === 255 &&
+        param === 0 &&
+        ((type === 28 && params.length > 2) || (type === 29 && params.length === 4))
+      )
+
+    default:
+      return false
+  }
+}
+
+function readArrayField(message: ProtocolObject, key: string): unknown[] {
+  const value = readProtocolField(message, key)
+  return Array.isArray(value) ? value : []
 }
 
 export function projectTrackerProtocol(message: unknown): ProjectedTrackerProtocol | null {

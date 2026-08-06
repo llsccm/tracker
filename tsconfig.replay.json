@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "checkJs": false,
+    "noEmit": true
+  },
+  "include": [
+    "src/tracker/**/*.ts",
+    "src/types/**/*.d.ts",
+    "tests/replay/tracker/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist", "coverage"]
+}
