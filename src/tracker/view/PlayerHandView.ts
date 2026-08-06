@@ -79,10 +79,10 @@ export function updateSeatLabel(
   orderLabels: readonly string[]
 ): void {
   const fixedViewId = player.fixedViewId ?? 1
-  const seatDiv = doc.getElementById(String(fixedViewId))
-  if (!seatDiv) return
+  const container = doc.getElementById('playerHand' + fixedViewId)
+  if (!container) return
 
-  seatDiv.style.setProperty('--No-content', `"${formatPlayerSeatLabel(player, { orderLabels })}"`)
+  container.style.setProperty('--No-content', `"${formatPlayerSeatLabel(player, { orderLabels })}"`)
 }
 
 /**
