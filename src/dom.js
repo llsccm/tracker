@@ -16,6 +16,7 @@ import {
 } from './ui/lifecycle'
 import { addSeatUI } from './ui/seatOverlay'
 import { createMainShell } from './ui/shell'
+import { bindPeiXiuHandSuitColorRefresh } from './ui/PeiXiuHandMirror'
 import { loadInterfaceHtml } from './utils/htmlResource'
 import { addTooltip } from './utils/notification'
 import { setPeiXiuMapWindowVisible } from './ui/PeiXiuMapWindow'
@@ -93,6 +94,7 @@ export async function initFrame(force = false) {
     addSeatUI(globalConfig)
     // addDynamicBG()
     await addFrame()
+    bindPeiXiuHandSuitColorRefresh()
 
     globalState.isFrameAdd = true
 

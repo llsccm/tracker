@@ -1,7 +1,8 @@
 import { SkillsConfig } from '@/config'
 import { getPanelContentInner } from '@/ui/frameContent'
-import { Game, UI } from '../index'
+import { Game } from '../index'
 import { getPileDisplayCards } from '../helper/pileOrder'
+import { formatPlayerSeatLabel, getDisplayIdLabel } from '../helper/seatLabel'
 import { createCardButton, createUnknownButton } from './cardButton'
 import { getPublicFieldCandidateCards } from './publicFieldCandidates'
 import type { Card } from '../Card'
@@ -71,6 +72,19 @@ function createPlayerHandContainer(doc: Document, displayID: number): HTMLElemen
   return container
 }
 
+/** 将玩家武将名和顺位标签写入座位覆盖层。 */
+export function updateSeatLabel(
+  doc: Document,
+  player: Pick<Player, 'fixedViewId' | 'generals'>,
+  orderLabels: readonly string[]
+): void {
+  const fixedViewId = player.fixedViewId ?? 1
+  const seatDiv = doc.getElementById(String(fixedViewId))
+  if (!seatDiv) return
+
+  seatDiv.style.setProperty('--No-content', `"${formatPlayerSeatLabel(player, { orderLabels })}"`)
+}
+
 /**
  * 渲染单个玩家的武将手牌明牌区：确定明牌 + 模糊明牌(候选席位角标) + 标记牌(按技能分组)
  * 容器 #playerHand<order+1> 内的 .order-body，按 syncViewGroups 稳定顺序重建
@@ -129,10 +143,6 @@ export function renderPlayerHand(doc: Document, player: Player): void {
 
 function getPlayerHandPanel(doc: Document): HTMLElement | null {
   return getPanelContentInner(doc.getElementById('button')) as HTMLElement | null
-}
-
-function getDisplayIdLabel(displayID: number): string {
-  return UI.ORDER_LABELS[displayID] ?? String(displayID)
 }
 
 /**
