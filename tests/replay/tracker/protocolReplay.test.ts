@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
+import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
+import { normalizeTrackerMovePosition } from '@/tracker/runtime/protocolRules'
 import {
   formatTrackerProtocolReplayReport,
   parseTrackerProtocolJsonl,
@@ -106,6 +107,8 @@ describe('tracker protocol replay', () => {
     expect(report.success).toBe(false)
     expect(report.failure).toMatchObject({ seq: 3, className: 'MsgGamePlayCardNtf' })
     expect(report.failure?.message).toContain('回放一致性检查失败')
+    expect(report.failure?.stateBefore.room?.deckReady).toBe(false)
+    expect(report.failure?.stateAfter.room?.deckReady).toBe(true)
   })
 
   it('SpellID=713 的剔除下标越界时停止回放', () => {
@@ -123,6 +126,25 @@ describe('tracker protocol replay', () => {
 
     expect(report.success).toBe(false)
     expect(report.failure?.message).toContain('SpellID=713 移动协议剔除下标 99 越界')
+  })
+
+  it('回魂牌回牌堆时按原始牌顶位置过滤牌面', () => {
+    const normalized = normalizeTrackerMovePosition({
+      CardIDs: [4400, 7],
+      CardCount: 2,
+      FromID: 4,
+      FromZone: 5,
+      FromPosition: POSITION_TOP,
+      ToID: 255,
+      ToZone: 1,
+      ToPosition: POSITION_TOP,
+      MoveType: 19,
+      SpellID: 0,
+      isGuoZhan: false
+    })
+
+    expect(normalized.CardIDs).toEqual([7])
+    expect(normalized.ToPosition).toBe(POSITION_RANDOM)
   })
 
   it('一致性检查读取玩家快照而不推进快照游标', () => {
@@ -152,10 +174,23 @@ describe('tracker protocol replay', () => {
     expect(report.finalState.room?.zones.pile.count).toBe(3)
   })
 
+  it('默认只保留最终快照，按需开启时才保留逐条快照', () => {
+    const report = new TrackerProtocolReplayer({ currentUserID: 101 }).replay(openingRecords())
+    expect(report.steps.every((step) => step.state === undefined)).toBe(true)
+    expect(report.finalState.room).not.toBeNull()
+
+    const tracedReport = new TrackerProtocolReplayer({
+      currentUserID: 101,
+      captureStepStates: true
+    }).replay(openingRecords())
+    expect(tracedReport.steps.every((step) => step.state !== undefined)).toBe(true)
+  })
+
   it('成功报告只汇总身份候选数量而不展开完整卡牌列表', () => {
     const report = new TrackerProtocolReplayer({ currentUserID: 101 }).replay(openingRecords())
     expect(report.success).toBe(true)
     const output = formatTrackerProtocolReplayReport(report)
+    expect(output).toContain('"candidateCount": 4')
     expect(output).not.toContain('"cardIDs":')
   })
 })

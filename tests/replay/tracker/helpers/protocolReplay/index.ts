@@ -21,13 +21,8 @@ export type { TrackerProtocolReplayStep } from './types'
 export type { TrackerReplaySnapshot } from './types'
 
 const DEFAULT_CONTEXT_SIZE = 5
-const INDEX_REBUILD_PROTOCOLS = new Set([
-  'MsgGamePlayCardNtf',
-  'CGsRoleSpellOptRep',
-  'GsCRoleOptTargetNtf',
-  'GsCUpdateRoleDataExNtf',
-  'PubGsCMoveCard'
-])
+const INDEX_REBUILD_PROTOCOLS = new Set(['MsgGamePlayCardNtf', 'PubGsCMoveCard'])
+const ROOM_DESTROY_PROTOCOLS = new Set(['MsgGameOver', 'ClientLeavetableRep'])
 
 export class TrackerProtocolReplayer {
   readonly gameState: GameState
@@ -36,9 +31,11 @@ export class TrackerProtocolReplayer {
   private readonly context: TrackerProtocolReplayContext
   private readonly contextSize: number
   private readonly captureStepStates: boolean
+  private readonly replayOptions: TrackerProtocolReplayOptions
   private replayed = false
 
   constructor(options: TrackerProtocolReplayOptions = {}) {
+    this.replayOptions = options
     this.gameState = new GameState()
     this.controller = new TrackerController({
       ...options.controllerOptions,
@@ -68,36 +65,41 @@ export class TrackerProtocolReplayer {
       ignored: 0,
       partial: 0
     }
-    let previousState = createTrackerReplaySnapshot(
-      this.gameState,
-      this.controller.getTrackerRoom()
-    )
-    let lastActiveState: TrackerReplaySnapshot | null = previousState.room ? previousState : null
+    let lastActiveState: TrackerReplaySnapshot | null = null
 
     for (let index = 0; index < records.length; index += 1) {
       const record = records[index]
-      const stateBefore = previousState
+      const captureStepState = this.captureStepStates
+      const stateBefore =
+        captureStepState || ROOM_DESTROY_PROTOCOLS.has(record.className)
+          ? createTrackerReplaySnapshot(this.gameState, this.controller.getTrackerRoom())
+          : null
+      if (stateBefore?.room && ROOM_DESTROY_PROTOCOLS.has(record.className)) {
+        lastActiveState = stateBefore
+      }
 
       try {
         const result = applyTrackerReplayProtocol(this.context, record)
         const roomAfter = this.controller.getTrackerRoom()
+        const shouldRebuildIndexes =
+          result.status !== 'ignored' && INDEX_REBUILD_PROTOCOLS.has(record.className)
         if (roomAfter?.isDeckReady) {
           assertTrackerReplayConsistency(roomAfter, `${record.seq}:${record.className}`, {
-            checkIndexes:
-              result.status !== 'ignored' && INDEX_REBUILD_PROTOCOLS.has(record.className)
+            checkIndexes: shouldRebuildIndexes
           })
         }
 
-        const stateAfter = createTrackerReplaySnapshot(this.gameState, roomAfter)
-        if (stateAfter.room) lastActiveState = stateAfter
-        previousState = stateAfter
+        const stateAfter = captureStepState
+          ? createTrackerReplaySnapshot(this.gameState, roomAfter)
+          : null
+        if (stateAfter?.room) lastActiveState = stateAfter
         counts[result.status] += 1
         steps.push({
           seq: record.seq,
           className: record.className,
           status: result.status,
           note: result.note,
-          state: this.captureStepStates ? stateAfter : undefined
+          state: stateAfter ?? undefined
         })
       } catch (error) {
         const stateAfter = createTrackerReplaySnapshot(
@@ -105,6 +107,10 @@ export class TrackerProtocolReplayer {
           this.controller.getTrackerRoom()
         )
         if (stateAfter.room) lastActiveState = stateAfter
+        const failureStateBefore = stateBefore ?? this.createFailureStateBefore(records, index)
+        if (!stateAfter.room && failureStateBefore.room) {
+          lastActiveState = failureStateBefore
+        }
         return {
           success: false,
           applied: counts.applied,
@@ -119,12 +125,15 @@ export class TrackerProtocolReplayer {
             payload: record.payload,
             message: getErrorMessage(error),
             context: records.slice(Math.max(0, index - this.contextSize), index + 1),
-            stateBefore,
+            stateBefore: failureStateBefore,
             stateAfter
           }
         }
       }
     }
+
+    const finalState = createTrackerReplaySnapshot(this.gameState, this.controller.getTrackerRoom())
+    if (finalState.room) lastActiveState = finalState
 
     return {
       success: true,
@@ -132,8 +141,23 @@ export class TrackerProtocolReplayer {
       ignored: counts.ignored,
       partial: counts.partial,
       steps,
-      finalState: previousState,
+      finalState,
       lastActiveState
+    }
+  }
+
+  private createFailureStateBefore(
+    records: RecordedTrackerProtocol[],
+    index: number
+  ): TrackerReplaySnapshot {
+    try {
+      const prefixReplayer = new TrackerProtocolReplayer({
+        ...this.replayOptions,
+        captureStepStates: false
+      })
+      return prefixReplayer.replay(records.slice(0, index)).finalState
+    } catch {
+      return createTrackerReplaySnapshot(this.gameState, this.controller.getTrackerRoom())
     }
   }
 }

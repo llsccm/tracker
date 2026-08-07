@@ -172,7 +172,7 @@ export function normalizeTrackerMovePosition({
   }
 
   // 手牌中不处理回魂
-  if (ToZone === 1 && ToID === 255 && toPosition === POSITION_TOP) {
+  if (ToZone === 1 && ToID === 255 && ToPosition === POSITION_TOP) {
     cardIDs = cardIDs.filter((cardID) => cardID !== 4400 && cardID !== 4401)
   }
 

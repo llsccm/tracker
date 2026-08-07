@@ -2,6 +2,7 @@ import { CardConfig } from '../config'
 // import { laya } from '../runtime/gameAdapter'
 import { Game } from '../tracker'
 import { tracker } from '../tracker/runtime/browser'
+import { POSITION_TOP } from '../tracker/candidate/cardPositions'
 import {
   normalizeTrackerMovePosition,
   prepareTrackerMoveCardIDs
@@ -44,6 +45,16 @@ export function handleMoveCard(msg) {
     console.error(msg)
   }
 
+  const specialEquipmentCards =
+    CardCount === 4 &&
+    FromZone === 1 &&
+    FromPosition === POSITION_TOP + 1 &&
+    ToZone === 5 &&
+    SpellID === 0 &&
+    MoveType === 1 &&
+    CardIDs.length === CardCount &&
+    CardIDs.every((id) => CardConfig.GetInstance().getCard(id)?.type == 8)
+
   // 2. 位置归一化
   const normalizedMove = normalizeTrackerMovePosition({
     CardIDs,
@@ -57,7 +68,7 @@ export function handleMoveCard(msg) {
     MoveType,
     SpellID,
     isGuoZhan: Game.isGuoZhan,
-    specialEquipmentCards: CardIDs.every((id) => CardConfig.GetInstance().getCard(id)?.type == 8)
+    specialEquipmentCards
   })
 
   CardIDs = normalizedMove.CardIDs
