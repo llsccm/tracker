@@ -2,10 +2,10 @@ import {
   POSITION_BOTTOM,
   POSITION_RANDOM,
   POSITION_TOP
-} from '../../../../../src/tracker/candidate/cardPositions'
-import type { GameState } from '../../../../../src/tracker/Game'
-import type { Room } from '../../../../../src/tracker/Room'
-import type { RawMoveCardEvent } from '../../../../../src/tracker/types'
+} from '@/tracker/candidate/cardPositions'
+import type { GameState } from '@/tracker/Game'
+import type { Room } from '@/tracker/Room'
+import type { RawMoveCardEvent } from '@/tracker/types'
 import type {
   ApplyTrackerProtocolResult,
   RecordedTrackerProtocol,

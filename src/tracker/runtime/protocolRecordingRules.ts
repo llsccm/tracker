@@ -29,6 +29,9 @@ const ALWAYS_RECORDED_CLASSES = new Set([
   'ClientLeavetableRep'
 ])
 
+// 对局结束只作为生命周期事件回放；结算明细既不参与记牌，也不参与推断。
+const EMPTY_PAYLOAD_CLASSES = new Set(['ClientLeavetableRep', 'MsgGameOver', 'MsgReconnectGame'])
+
 // Prettier 会压缩数字列表，但项目 ESLint 要求长数组逐项换行。
 // prettier-ignore
 const ROLE_OPT_TARGET_SPELL_IDS = new Set([
@@ -107,6 +110,60 @@ const ROOT_FIELD_EXCEPTIONS = new Map([
   ['PubGsCUseCard', new Set(['isSend'])],
   ['PubGsCMoveCard', new Set(['isSend'])]
 ])
+
+const ROOT_FIELD_ALLOWLISTS: Record<string, ReadonlySet<string>> = {
+  GsCFirstPhaseRole: new Set(['SeatID']),
+  GsCGamephaseNtf: new Set(['Round', 'SeatID']),
+  GsCGuoZhanSetCharacter: new Set(['GeneralData', 'SeatID']),
+  GsCUpdateRoleDataExNtf: new Set(['DataID', 'Datas', 'SeatID']),
+  GsCUpdateRoleDataNtf: new Set(['SeatID', 'StateID']),
+  MsgGamePlayCardNtf: new Set(['CardList']),
+  MsgGameRoundNtf: new Set(['isPassed']),
+  MsgGameShowFigure: new Set(['Figure', 'SeatID']),
+  MsgGameTurnNtf: new Set(['TurnCnt']),
+  MsgNtfUseCardType: new Set(['castSeatId', 'isSend', 'spellID', 'spellId', 'useType']),
+  PubGsCMoveCard: new Set([
+    'CardCount',
+    'CardIDs',
+    'FromID',
+    'FromPosition',
+    'FromZone',
+    'FromZoneParam',
+    'MoveType',
+    'SpellID',
+    'SrcSeatID',
+    'ToID',
+    'ToPosition',
+    'ToZone',
+    'ToZoneParam',
+    'isSend'
+  ]),
+  PubGsCUseCard: new Set(['SeatID', 'isSend', 'spellID', 'useType']),
+  PubGsCUseSpell: new Set([
+    'CardIDs',
+    'DestSeatIDs',
+    'EffectIndex',
+    'SeatID',
+    'SpellID',
+    'SrcSeatID'
+  ]),
+  SmsgGameSetCharacter: new Set(['Infos']),
+  CGsRoleSpellOptRep: new Set(['Datas', 'SeatID', 'SpellID', 'Type']),
+  GsCRoleOptTargetNtf: new Set([
+    'Param',
+    'Params',
+    'SeatID',
+    'SpellID',
+    'SrcSeatID',
+    'Type',
+    'targetSeatID'
+  ])
+}
+
+const NESTED_FIELD_ALLOWLISTS: Record<string, ReadonlySet<string>> = {
+  'GsCGuoZhanSetCharacter.GeneralData': new Set(['cardID', 'index']),
+  'SmsgGameSetCharacter.Infos': new Set(['CharacterID', 'SeatID'])
+}
 
 const NESTED_IGNORED_FIELDS = new Set(['timestamp'])
 const TRACKER_SEAT_INFO_FIELDS = ['SeatID', 'seat_id', 'user_temp_id', 'ClientID']
@@ -273,6 +330,10 @@ export function projectTrackerProtocol(message: unknown): ProjectedTrackerProtoc
   const className = getProtocolClassName(message)
   if (!className) return null
 
+  if (EMPTY_PAYLOAD_CLASSES.has(className)) {
+    return { className, payload: {} }
+  }
+
   const payload = collectRootPayload(message, className)
   appendRequiredNestedPayload(message, className, payload)
 
@@ -290,16 +351,40 @@ export function getProtocolClassName(message: ProtocolObject): string | null {
 function collectRootPayload(message: ProtocolObject, className: string): Record<string, unknown> {
   const payload: Record<string, unknown> = {}
   const exceptions = ROOT_FIELD_EXCEPTIONS.get(className)
+  const allowedFields = ROOT_FIELD_ALLOWLISTS[className]
 
   for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(message))) {
     if (!descriptor.enumerable || !('value' in descriptor)) continue
+    if (allowedFields && !allowedFields.has(key)) continue
     if (ROOT_IGNORED_FIELDS.has(key) && !exceptions?.has(key)) continue
 
     const value = cloneProtocolValue(descriptor.value)
     if (value !== OMITTED) payload[key] = value
   }
 
+  applyNestedFieldProjections(className, payload)
   return payload
+}
+
+function applyNestedFieldProjections(className: string, payload: Record<string, unknown>): void {
+  for (const [fieldPath, allowedFields] of Object.entries(NESTED_FIELD_ALLOWLISTS)) {
+    const [targetClassName, fieldName] = fieldPath.split('.')
+    if (targetClassName !== className) continue
+
+    const values = payload[fieldName]
+    if (!Array.isArray(values)) continue
+    payload[fieldName] = values.map((value) => projectNestedRecord(value, allowedFields))
+  }
+}
+
+function projectNestedRecord(value: unknown, allowedFields: ReadonlySet<string>): unknown {
+  if (!isProtocolObject(value)) return value
+
+  const projected: Record<string, unknown> = {}
+  for (const field of allowedFields) {
+    if (Object.prototype.hasOwnProperty.call(value, field)) projected[field] = value[field]
+  }
+  return projected
 }
 
 function appendRequiredNestedPayload(

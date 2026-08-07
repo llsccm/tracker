@@ -1,5 +1,5 @@
-import { GameState } from '../../../../../src/tracker/Game'
-import { TrackerController } from '../../../../../src/tracker/runtime/trackerController'
+import { GameState } from '@/tracker/Game'
+import { TrackerController } from '@/tracker/runtime/trackerController'
 import { applyTrackerReplayProtocol } from './handlers'
 import { parseTrackerProtocolJsonl } from './parser'
 import { assertTrackerReplayConsistency, createTrackerReplaySnapshot } from './snapshot'

@@ -264,6 +264,72 @@ describe('tracker protocol projection', () => {
     expect(getterCalls).toBe(0)
   })
 
+  it('对局结束只保留生命周期事件，不保存结算明细或时间', () => {
+    expect(
+      projectTrackerProtocol({
+        className: 'MsgGameOver',
+        time: 104,
+        round: 4,
+        Result: 2,
+        Players: [{ SeatID: 4, SelfResult: { Result: 1 } }],
+        SelfResult: { SeatID: 6, Result: 0 }
+      })
+    ).toEqual({
+      className: 'MsgGameOver',
+      payload: {}
+    })
+  })
+
+  it('已支持回放协议只保留处理器读取的业务字段', () => {
+    expect(
+      projectTrackerProtocol({
+        className: 'MsgGamePlayCardNtf',
+        Param: 0,
+        cardCount: 2,
+        CardList: [1, 2]
+      })
+    ).toEqual({
+      className: 'MsgGamePlayCardNtf',
+      payload: { CardList: [1, 2] }
+    })
+
+    expect(
+      projectTrackerProtocol({
+        className: 'PubGsCUseSpell',
+        SpellID: 3157,
+        SeatID: 6,
+        SrcSeatID: 6,
+        CardIDs: [1],
+        EffectIndex: 1,
+        DestSeatIDs: [],
+        Params: [99],
+        GeneralID: 123
+      })
+    ).toEqual({
+      className: 'PubGsCUseSpell',
+      payload: {
+        SpellID: 3157,
+        SeatID: 6,
+        SrcSeatID: 6,
+        CardIDs: [1],
+        EffectIndex: 1,
+        DestSeatIDs: []
+      }
+    })
+
+    expect(
+      projectTrackerProtocol({
+        className: 'SmsgGameSetCharacter',
+        Count: 1,
+        SetCharacterParam: 0,
+        Infos: [{ SeatID: 6, CharacterID: 606, Country: 1 }]
+      })
+    ).toEqual({
+      className: 'SmsgGameSetCharacter',
+      payload: { Infos: [{ SeatID: 6, CharacterID: 606 }] }
+    })
+  })
+
   it('为录像开局保留处理器实际读取的 seatinfo', () => {
     const message = {
       className: 'decodeGsClientUserSeatFlagNtf',
@@ -340,7 +406,7 @@ describe('tracker protocol recorder', () => {
     startProtocolRecording()
     recordTrackerProtocol({ className: 'decodeSSCChatmsgNtf', Content: 'ignored' })
     recordTrackerProtocol({ className: 'PubGsCMoveCard', CardIDs: [1], timestamp: 2 })
-    recordTrackerProtocol({ className: 'MsgGameTurnNtf', Turn: 1, timestamp: 3 })
+    recordTrackerProtocol({ className: 'MsgGameTurnNtf', TurnCnt: 1, timestamp: 3 })
     await stopProtocolRecording()
     recordTrackerProtocol({ className: 'PubGsCMoveCard', CardIDs: [2] })
 
@@ -354,14 +420,14 @@ describe('tracker protocol recorder', () => {
       {
         seq: 2,
         className: 'MsgGameTurnNtf',
-        payload: { Turn: 1 }
+        payload: { TurnCnt: 1 }
       }
     ])
 
     const serialized = serializeProtocolRecording(recording)
     expect(serialized).toBe(
       '{"seq":1,"className":"PubGsCMoveCard","payload":{"CardIDs":[1]}}\n' +
-        '{"seq":2,"className":"MsgGameTurnNtf","payload":{"Turn":1}}\n'
+        '{"seq":2,"className":"MsgGameTurnNtf","payload":{"TurnCnt":1}}\n'
     )
     expect(serialized).not.toContain('timestamp')
   })

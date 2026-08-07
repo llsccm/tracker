@@ -10,9 +10,7 @@ import {
 
 describe('tracker protocol replay runner', () => {
   it('从 JSONL 重建记牌器状态', async () => {
-    const absolutePath = resolve(
-      env.DXC_TRACKER_PROTOCOL_FILE ?? 'replays/tracker/tracker-protocols.jsonl'
-    )
+    const absolutePath = resolve(env.DXC_TRACKER_PROTOCOL_FILE ?? 'replays/tracker-protocols.jsonl')
     const source = await readReplayFile(absolutePath)
     const currentUserID = readOptionalInteger('DXC_TRACKER_CURRENT_USER_ID')
     const replayer = new TrackerProtocolReplayer({

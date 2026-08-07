@@ -1,9 +1,9 @@
-import { AmbiguousKnownIndex } from '../../../../../src/tracker/AmbiguousKnownIndex'
-import { CardLocationIndex } from '../../../../../src/tracker/CardLocationIndex'
-import type { ConstraintGroup } from '../../../../../src/tracker/ConstraintGroup'
-import type { GameState } from '../../../../../src/tracker/Game'
-import type { Player } from '../../../../../src/tracker/Player'
-import type { Room } from '../../../../../src/tracker/Room'
+import { AmbiguousKnownIndex } from '@/tracker/AmbiguousKnownIndex'
+import { CardLocationIndex } from '@/tracker/CardLocationIndex'
+import type { ConstraintGroup } from '@/tracker/ConstraintGroup'
+import type { GameState } from '@/tracker/Game'
+import type { Player } from '@/tracker/Player'
+import type { Room } from '@/tracker/Room'
 import type {
   TrackerReplayConstraintSnapshot,
   TrackerReplayPlayerSnapshot,

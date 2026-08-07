@@ -81,8 +81,8 @@ pnpm exec vitest run -t "shuffle"
 `GameState` 与 `TrackerController`，按 `seq` 重建 Room、玩家、牌堆、移动、看牌和关键技能状态，并在
 每条协议后检查身份账本、公共区槽位、增量索引、模糊索引与玩家快照。
 
-本地录制统一放在 Git 忽略目录 `replays/tracker/`。默认文件名为
-`replays/tracker/tracker-protocols.jsonl`，放好文件后直接运行 `pnpm replay:tracker`。
+本地录制统一放在 Git 忽略目录 `replays/`。默认文件名为
+`replays/tracker-protocols.jsonl`，放好文件后直接运行 `pnpm replay:tracker`。
 
 可选环境变量：
 

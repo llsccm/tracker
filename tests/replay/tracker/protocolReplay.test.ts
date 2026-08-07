@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { POSITION_TOP } from '../../../src/tracker/candidate/cardPositions'
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import {
   formatTrackerProtocolReplayReport,
   parseTrackerProtocolJsonl,

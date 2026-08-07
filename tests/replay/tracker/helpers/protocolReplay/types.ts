@@ -1,7 +1,7 @@
-import type { GameState } from '../../../../../src/tracker/Game'
-import type { Room } from '../../../../../src/tracker/Room'
-import type { TrackerController } from '../../../../../src/tracker/runtime/trackerController'
-import type { TrackerControllerOptions } from '../../../../../src/tracker/types'
+import type { GameState } from '@/tracker/Game'
+import type { Room } from '@/tracker/Room'
+import type { TrackerController } from '@/tracker/runtime/trackerController'
+import type { TrackerControllerOptions } from '@/tracker/types'
 
 export interface RecordedTrackerProtocol {
   seq: number
