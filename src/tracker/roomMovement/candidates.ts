@@ -466,7 +466,13 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
     let changed = false
 
     this.room.constraintGroups.forEach((group) => {
-      if (!Array.from(group.cards).some((card) => cardSet.has(card))) return
+      let hasMatchingCard = false
+      for (const card of group.cards) {
+        if (!cardSet.has(card)) continue
+        hasMatchingCard = true
+        break
+      }
+      if (!hasMatchingCard) return
 
       const hasLocationConstraints =
         group.expectedSlotsByLocation.size > 0 || group.expectedSlotsBySubZone.size > 0
