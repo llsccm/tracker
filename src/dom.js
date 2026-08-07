@@ -3,6 +3,7 @@ import { ConfigManager } from './config/ConfigManager'
 import { clearZoneMirrors, drawMiZhu, drawSeatUIs } from './draw'
 import { Game, globalConfig, globalState, UI } from './tracker'
 import { setTrackerSeatUIReader, tracker } from './tracker/runtime/browser'
+import { stopProtocolRecording } from './tracker/runtime/protocolRecorder'
 import { drawCitiesUI } from './ui/CitiesUI'
 import { bindDelegatedTooltips } from './ui/domHelpers'
 import { addDragHint, initDragElement } from './ui/drag'
@@ -17,6 +18,10 @@ import {
 import { addSeatUI } from './ui/seatOverlay'
 import { createMainShell } from './ui/shell'
 import { bindPeiXiuHandSuitColorRefresh } from './ui/PeiXiuHandMirror'
+import {
+  bindProtocolRecorderControls,
+  unbindProtocolRecorderControls
+} from './ui/protocolRecorderControls'
 import { loadInterfaceHtml } from './utils/htmlResource'
 import { addTooltip } from './utils/notification'
 import { setPeiXiuMapWindowVisible } from './ui/PeiXiuMapWindow'
@@ -41,6 +46,8 @@ export function Init() {
 }
 
 export function Exit() {
+  unbindProtocolRecorderControls()
+  void stopProtocolRecording()
   return cleanupLifecycle({ resize, scheduleSetGameSize, SGSresize, globalState })
 }
 
@@ -556,6 +563,8 @@ function buttonClick() {
       }
     }
   }
+
+  bindProtocolRecorderControls()
 }
 
 function expandJiePanel(options = {}) {

@@ -838,6 +838,45 @@
       display: flex;
     }
 
+    .protocol-recorder-controls {
+      width: 100%;
+      margin-top: 14px;
+    }
+
+    .protocol-recorder-actions {
+      display: flex;
+      gap: 6px;
+      padding: 0 10px;
+    }
+
+    .protocol-recorder-button {
+      flex: 1;
+      height: 24px;
+      color: var(--text-gold);
+      background: var(--bg-primary);
+      border: 1px solid var(--text-gold);
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .protocol-recorder-button:disabled {
+      color: #777;
+      border-color: #777;
+      cursor: not-allowed;
+    }
+
+    .protocol-recorder-status {
+      width: 100%;
+      margin-top: 4px;
+      color: var(--text-gold);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .protocol-recorder-status[data-recording='true'] {
+      color: #ff7b54;
+    }
+
     .switch {
       position: relative;
       display: block;
@@ -1790,6 +1829,45 @@
               <span class="status"></span>
             </label>
           </div>
+          <div
+            class="switch-container"
+            data-tooltip="仅在本次开启；只保存牌局协议"
+          >
+            <label class="explanation" for="protocolRecordSwitch">协议录制</label>
+            <label class="switch">
+              <input id="protocolRecordSwitch" type="checkbox" />
+              <span class="slider"></span>
+              <span class="status"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="protocol-recorder-controls" id="protocolRecorderControls">
+        <div class="protocol-recorder-actions">
+          <button
+            class="protocol-recorder-button"
+            id="protocolRecordExport"
+            type="button"
+            disabled
+          >
+            导出协议
+          </button>
+          <button
+            class="protocol-recorder-button"
+            id="protocolRecordClear"
+            type="button"
+            disabled
+          >
+            清空记录
+          </button>
+        </div>
+        <div
+          class="protocol-recorder-status"
+          id="protocolRecordStatus"
+          data-recording="false"
+          aria-live="polite"
+        >
+          未录制
         </div>
       </div>
       <div class="width"></div>
@@ -1807,11 +1885,11 @@
   <dialog id="blockEffectDialog">
     <div class="dialog-header">
       <h3>屏蔽设置</h3>
-      <button class="dialog-close-btn" type="button">×</button>
+      <button class="dialog-close-btn" type="button" aria-label="关闭">x</button>
     </div>
     <div class="dialog-content">
       <div class="switch-container-row">
-        <div class="switch-container" data-tooltip="屏蔽牌局击杀特效动画">
+        <div class="switch-container" data-tooltip="屏蔽击杀动画">
           <span class="explanation">屏蔽击杀</span>
           <label class="switch">
             <input id="blockKillEffectSwitch" type="checkbox" />
@@ -1820,7 +1898,7 @@
         </div>
       </div>
       <div class="switch-container-row" style="margin-top: 8px">
-        <div class="switch-container" data-tooltip="屏蔽他人动态表现">
+        <div class="switch-container" data-tooltip="屏蔽他人动态皮肤">
           <span class="explanation">屏蔽动态</span>
           <label class="switch">
             <input id="blockSkinStateSwitch" type="checkbox" />
@@ -1829,7 +1907,7 @@
         </div>
       </div>
       <div class="switch-container-row" style="margin-top: 8px">
-        <div class="switch-container" data-tooltip="自动关闭登录后弹出的广告窗口">
+        <div class="switch-container" data-tooltip="自动关闭广告窗口">
           <span class="explanation">屏蔽广告</span>
           <label class="switch">
             <input id="skipAdWindowSwitch" type="checkbox" />
@@ -1838,7 +1916,7 @@
         </div>
       </div>
       <div class="switch-container-row" style="margin-top: 8px">
-        <div class="switch-container" data-tooltip="自动关闭武将包开启后的结果动画窗口">
+        <div class="switch-container" data-tooltip="自动关闭武将包开启结果">
           <span class="explanation">屏蔽开包动画</span>
           <label class="switch">
             <input id="skipPackageWindowSwitch" type="checkbox" />
@@ -1847,7 +1925,7 @@
         </div>
       </div>
       <div class="switch-container-row" style="margin-top: 8px">
-        <div class="switch-container" data-tooltip="自动关闭牌局结果与MVP结算窗口">
+        <div class="switch-container" data-tooltip="自动关闭牌局结算与MVP窗口">
           <span class="explanation">屏蔽MVP结算</span>
           <label class="switch">
             <input id="blockMvpSettlementSwitch" type="checkbox" />
