@@ -1,24 +1,16 @@
-import {
-  POSITION_BOTTOM,
-  POSITION_RANDOM,
-  POSITION_TOP
-} from '@/tracker/candidate/cardPositions'
+import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import type { GameState } from '@/tracker/Game'
 import type { Room } from '@/tracker/Room'
+import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
+import {
+  FULL_HAND_ROLE_OPT_SPELL_IDS,
+  normalizeTrackerMovePosition,
+  PARTIAL_HAND_ROLE_OPT_SPELL_IDS,
+  prepareTrackerMoveCardIDs,
+  shouldRevealAsFullHand
+} from '@/tracker/runtime/protocolRules'
 import type { RawMoveCardEvent } from '@/tracker/types'
-import type {
-  ApplyTrackerProtocolResult,
-  RecordedTrackerProtocol,
-  TrackerProtocolReplayContext
-} from './types'
-
-const PILE_SAME_ZONE_SHOW_SPELL_IDS = new Set([7011, 987, 988])
-const PILE_RANDOM_AS_TOP_SPELL_IDS = new Set([3208])
-const YANXI_DRAW_SPELL_IDS = new Set([7016, 7017])
-const FULL_HAND_ROLE_OPT_SPELL_IDS = new Set([
-  4, 5, 357, 372, 501, 811, 921, 3119, 3437, 3876, 4025
-])
-const PARTIAL_HAND_ROLE_OPT_SPELL_IDS = new Set([361, 774, 851, 3310])
+import type { ApplyTrackerProtocolResult, TrackerProtocolReplayContext } from './types'
 
 interface ReplayMoveContext {
   game: GameState
@@ -602,7 +594,15 @@ function applyJieLi(
 
   if (pileCount > 0) revealPileCards(context, record, params.slice(2, 2 + pileCount))
   if (handCount > 0 && targetSeatID !== 255) {
-    const fullHand = shouldRevealAsFullHand(room, targetSeatID, handCount)
+    const player = room.getPlayer(targetSeatID)
+    const localHandCount = room.playerCardsSnapshot.filter(
+      (card) => card.subZone === 'hand' && card.seats.has(Number(targetSeatID))
+    ).length
+    const fullHand = shouldRevealAsFullHand({
+      handCount,
+      observedHandCount: player?.hasObservedHandCount ? player.observedHandCount : null,
+      localHandCount
+    })
     revealPlayerCards(
       context,
       record,
@@ -661,36 +661,31 @@ function applyMoveCard(
 ): ApplyTrackerProtocolResult {
   requireReadyRoom(context, record, '同步移动协议')
   const move = readMove(record)
-  if (
-    move.CardCount === 0 ||
-    move.MoveType === 0 ||
-    move.ToZone === 11 ||
-    isTruthyProtocol(record.payload.isSend)
-  ) {
+  const notes: string[] = []
+  const prepared = prepareTrackerMoveCardIDs({
+    CardIDs: move.CardIDs,
+    CardCount: move.CardCount,
+    MoveType: move.MoveType,
+    ToZone: move.ToZone,
+    SpellID: move.SpellID,
+    isSend: isTruthyProtocol(record.payload.isSend)
+  })
+  if (prepared.shouldReturn) {
     return ignored('与生产处理器一致跳过空移动、无效区或发送侧消息')
   }
 
-  const notes: string[] = []
-  let cardIDs = [...move.CardIDs]
-  if (move.SpellID === 713 && move.MoveType === 21 && move.CardCount === cardIDs.length - 2) {
-    const index = cardIDs.splice(0, 1)[0]
-    cardIDs.splice(index, 1)
-  }
-
-  const knownCount = cardIDs.filter((cardID) => cardID > 0).length
-  if (knownCount !== move.CardCount && knownCount !== 0) {
-    cardIDs = []
+  if (prepared.mixedVisibility) {
     notes.push('明暗牌混合已按生产逻辑降级为全暗移动')
   }
 
-  const normalized = normalizeMovePosition(context.gameState, {
+  const normalized = normalizeTrackerMovePosition({
     ...move,
-    CardIDs: cardIDs
+    CardIDs: prepared.CardIDs,
+    isGuoZhan: context.gameState.isGuoZhan
   })
-  cardIDs = normalized.CardIDs
   const moveContext: ReplayMoveContext = {
     game: context.gameState,
-    CardIDs: cardIDs,
+    CardIDs: normalized.CardIDs,
     CardCount: move.CardCount,
     FromID: move.FromID,
     FromZone: move.FromZone,
@@ -721,88 +716,6 @@ function applyMoveCard(
   })
 
   return notes.length > 0 ? partial(notes.join('；')) : applied()
-}
-
-function normalizeMovePosition(game: GameState, move: RawMoveCardEvent & { CardIDs: number[] }) {
-  let cardIDs = [...move.CardIDs]
-  let fromPosition = Number(move.FromPosition)
-  let toPosition = Number(move.ToPosition)
-  const fromID = Number(move.FromID)
-  const fromZone = Number(move.FromZone)
-  const toID = Number(move.ToID)
-  const toZone = Number(move.ToZone)
-  const moveType = Number(move.MoveType)
-  const spellID = Number(move.SpellID)
-  const cardCount = Number(move.CardCount)
-
-  if (
-    fromID === 255 &&
-    fromZone === 1 &&
-    toID === 255 &&
-    toZone === 1 &&
-    moveType === 21 &&
-    PILE_SAME_ZONE_SHOW_SPELL_IDS.has(spellID)
-  ) {
-    fromPosition = POSITION_TOP
-    toPosition = POSITION_TOP
-  }
-
-  if (
-    fromZone === 1 &&
-    fromPosition === POSITION_RANDOM &&
-    PILE_RANDOM_AS_TOP_SPELL_IDS.has(spellID)
-  ) {
-    fromPosition = POSITION_TOP
-  }
-
-  if (fromZone === 1 && fromPosition === POSITION_RANDOM && moveType === 13 && cardCount === 1) {
-    fromPosition = POSITION_TOP
-  }
-  if (
-    fromZone === 1 &&
-    fromPosition === POSITION_RANDOM &&
-    toZone === 4 &&
-    moveType === 8 &&
-    spellID === 795 &&
-    cardCount === 1
-  ) {
-    fromPosition = POSITION_TOP
-  }
-  if (
-    fromZone === 1 &&
-    fromPosition === POSITION_RANDOM &&
-    toZone === 5 &&
-    spellID === 3101 &&
-    cardCount === 1
-  ) {
-    fromPosition = POSITION_BOTTOM
-  }
-  if (
-    fromZone === 1 &&
-    fromPosition === POSITION_RANDOM &&
-    toZone === 5 &&
-    !game.isGuoZhan &&
-    YANXI_DRAW_SPELL_IDS.has(spellID) &&
-    cardCount === 1
-  ) {
-    fromPosition = POSITION_TOP
-  }
-  if (
-    toZone === 1 &&
-    toID === 255 &&
-    toPosition === POSITION_TOP &&
-    cardIDs.some((cardID) => cardID === 4400 || cardID === 4401)
-  ) {
-    toPosition = POSITION_RANDOM
-  }
-  if (toZone === 1 && toID === 255 && toPosition === POSITION_TOP) {
-    cardIDs = cardIDs.filter((cardID) => cardID !== 4400 && cardID !== 4401)
-  }
-  if (fromZone === 5 && toZone === 1 && spellID === 0 && moveType === 19) {
-    toPosition = POSITION_RANDOM
-  }
-
-  return { CardIDs: cardIDs, FromPosition: fromPosition, ToPosition: toPosition }
 }
 
 function applySpecialZoneState(context: ReplayMoveContext): boolean {
@@ -1031,17 +944,6 @@ function revealPlayerCards(
 ): void {
   requireReadyRoom(context, record, '揭示玩家手牌')
   context.controller.revealTrackerCards({ type: 'player', seatID, ...options }, cardIDs)
-}
-
-function shouldRevealAsFullHand(room: Room, seatID: number, handCount: number): boolean {
-  if (handCount <= 0) return false
-  const player = room.getPlayer(seatID)
-  if (player?.hasObservedHandCount) return handCount === Number(player.observedHandCount)
-
-  const handCards = room
-    .refreshPlayerSnapshot()
-    .filter((card) => card.subZone === 'hand' && card.seats.has(Number(seatID)))
-  return handCards.length > 0 && handCount === handCards.length
 }
 
 function readMove(record: RecordedTrackerProtocol) {

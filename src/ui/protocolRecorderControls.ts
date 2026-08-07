@@ -54,9 +54,18 @@ function handleRecordingSwitchChange(): void {
     return
   }
 
-  void stopProtocolRecording().then(({ count }) => {
-    addTooltip(`已停止协议录制，共保存 ${count} 条`, 'acTooltip', 4000)
-  })
+  void stopProtocolRecording()
+    .then(({ count }) => {
+      addTooltip(`已停止协议录制，共保存 ${count} 条`, 'acTooltip', 4000)
+    })
+    .catch((error) => {
+      console.warn('[protocol-recorder] 停止协议录制失败', error)
+      try {
+        addTooltip('停止协议录制失败，请查看控制台', 'acTooltip', 4000)
+      } catch (tooltipError) {
+        console.warn('[protocol-recorder] 停止录制失败提示未能显示', tooltipError)
+      }
+    })
 }
 
 async function handleExportClick(): Promise<void> {
@@ -84,6 +93,11 @@ function renderProtocolRecordingStatus(status: ProtocolRecordingStatus): void {
 
   if (status.active) {
     statusElement.textContent = `录制中：${status.count} 条`
+    return
+  }
+
+  if (status.limitReached) {
+    statusElement.textContent = `已达上限：${status.count} 条`
     return
   }
 

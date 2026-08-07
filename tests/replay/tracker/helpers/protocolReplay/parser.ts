@@ -1,4 +1,4 @@
-import type { RecordedTrackerProtocol } from './types'
+import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 
 const RECORD_FIELDS = new Set(['seq', 'className', 'payload'])
 

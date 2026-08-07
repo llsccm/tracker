@@ -13,6 +13,7 @@ export interface RecordedTrackerProtocol {
 export interface ProtocolRecordingStatus {
   active: boolean
   count: number
+  limitReached: boolean
 }
 
 type StatusListener = (status: ProtocolRecordingStatus) => void
@@ -21,9 +22,11 @@ const DATABASE_NAME = 'dxc-tracker-protocol-recording'
 const DATABASE_VERSION = 1
 const RECORD_STORE_NAME = 'records'
 const DOWNLOAD_FILE_NAME = 'tracker-protocols.jsonl'
+export const MAX_PROTOCOL_RECORDS = 10_000
 
 let active = false
 let sequence = 0
+let limitReached = false
 let records: RecordedTrackerProtocol[] = []
 let pendingRecords: RecordedTrackerProtocol[] = []
 let flushScheduled = false
@@ -38,6 +41,7 @@ export function startProtocolRecording(): ProtocolRecordingStatus {
   loadGeneration++
   active = true
   sequence = 0
+  limitReached = false
   records = []
   pendingRecords = []
   flushScheduled = false
@@ -58,6 +62,7 @@ export async function clearProtocolRecording(): Promise<ProtocolRecordingStatus>
   loadGeneration++
   active = false
   sequence = 0
+  limitReached = false
   records = []
   pendingRecords = []
   flushScheduled = false
@@ -76,8 +81,9 @@ export async function initializeProtocolRecording(): Promise<ProtocolRecordingSt
     return getProtocolRecordingStatus()
   }
 
-  records = storedRecords
+  records = storedRecords.slice(0, MAX_PROTOCOL_RECORDS)
   sequence = records.at(-1)?.seq ?? 0
+  limitReached = storedRecords.length >= MAX_PROTOCOL_RECORDS
   notifyStatusListeners()
   return getProtocolRecordingStatus()
 }
@@ -99,7 +105,13 @@ export function recordTrackerProtocol(
 
     records.push(record)
     pendingRecords.push(record)
-    schedulePendingRecordFlush()
+    if (records.length >= MAX_PROTOCOL_RECORDS) {
+      active = false
+      limitReached = true
+      flushPendingRecords()
+    } else {
+      schedulePendingRecordFlush()
+    }
     notifyStatusListeners()
   } catch (error) {
     console.warn('[protocol-recorder] 协议录制失败，已跳过当前消息', error)
@@ -124,7 +136,7 @@ export function serializeProtocolRecording(recording: RecordedTrackerProtocol[])
 }
 
 export function getProtocolRecordingStatus(): ProtocolRecordingStatus {
-  return { active, count: records.length }
+  return { active, count: records.length, limitReached }
 }
 
 export function getProtocolRecordingSnapshot(): RecordedTrackerProtocol[] {
@@ -198,7 +210,9 @@ async function readStoredRecords(): Promise<RecordedTrackerProtocol[]> {
     const request = transaction.objectStore(RECORD_STORE_NAME).getAll()
     request.onsuccess = () => {
       const storedRecords = request.result as RecordedTrackerProtocol[]
-      resolve(storedRecords.sort((left, right) => left.seq - right.seq))
+      resolve(
+        storedRecords.sort((left, right) => left.seq - right.seq).slice(0, MAX_PROTOCOL_RECORDS)
+      )
     }
     request.onerror = () => reject(request.error)
   })
@@ -217,22 +231,48 @@ function openDatabase(): Promise<IDBDatabase | null> {
   if (databasePromise) return databasePromise
   if (typeof indexedDB === 'undefined') return Promise.resolve(null)
 
-  databasePromise = new Promise((resolve) => {
-    const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION)
-
-    request.onupgradeneeded = () => {
-      const database = request.result
-      if (!database.objectStoreNames.contains(RECORD_STORE_NAME)) {
-        database.createObjectStore(RECORD_STORE_NAME, { keyPath: 'seq' })
-      }
-    }
-
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => resolve(null)
-    request.onblocked = () => resolve(null)
+  let resolveDatabase: (database: IDBDatabase | null) => void = () => undefined
+  const openPromise = new Promise<IDBDatabase | null>((resolve) => {
+    resolveDatabase = resolve
   })
+  databasePromise = openPromise
 
-  return databasePromise
+  let request: IDBOpenDBRequest
+  try {
+    request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION)
+  } catch {
+    databasePromise = null
+    resolveDatabase(null)
+    return openPromise
+  }
+
+  let settled = false
+  const resolveFailure = () => {
+    if (settled) return
+    settled = true
+    if (databasePromise === openPromise) databasePromise = null
+    resolveDatabase(null)
+  }
+
+  request.onupgradeneeded = () => {
+    const database = request.result
+    if (!database.objectStoreNames.contains(RECORD_STORE_NAME)) {
+      database.createObjectStore(RECORD_STORE_NAME, { keyPath: 'seq' })
+    }
+  }
+
+  request.onsuccess = () => {
+    if (settled) {
+      request.result.close()
+      return
+    }
+    settled = true
+    resolveDatabase(request.result)
+  }
+  request.onerror = resolveFailure
+  request.onblocked = resolveFailure
+
+  return openPromise
 }
 
 function waitForTransaction(transaction: IDBTransaction): Promise<void> {

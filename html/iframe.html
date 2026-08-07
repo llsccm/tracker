@@ -1833,7 +1833,7 @@
             class="switch-container"
             data-tooltip="仅在本次开启；只保存牌局协议"
           >
-            <span class="explanation">协议录制</span>
+            <label class="explanation" for="protocolRecordSwitch">协议录制</label>
             <label class="switch">
               <input id="protocolRecordSwitch" type="checkbox" />
               <span class="slider"></span>
@@ -1865,6 +1865,7 @@
           class="protocol-recorder-status"
           id="protocolRecordStatus"
           data-recording="false"
+          aria-live="polite"
         >
           未录制
         </div>
@@ -1884,7 +1885,7 @@
   <dialog id="blockEffectDialog">
     <div class="dialog-header">
       <h3>屏蔽设置</h3>
-      <button class="dialog-close-btn" type="button">x</button>
+      <button class="dialog-close-btn" type="button" aria-label="关闭">x</button>
     </div>
     <div class="dialog-content">
       <div class="switch-container-row">

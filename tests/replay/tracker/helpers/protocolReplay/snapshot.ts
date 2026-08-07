@@ -35,7 +35,11 @@ export function createTrackerReplaySnapshot(
   }
 }
 
-export function assertTrackerReplayConsistency(room: Room, context: string): void {
+export function assertTrackerReplayConsistency(
+  room: Room,
+  context: string,
+  options: { checkIndexes?: boolean } = {}
+): void {
   if (!room.isDeckReady) return
 
   const issues: unknown[] = []
@@ -53,7 +57,7 @@ export function assertTrackerReplayConsistency(room: Room, context: string): voi
   )
   issues.push(...room.publicZones.getPublicZoneConsistencyIssues())
   collectIdentityIssues(room, issues)
-  collectIndexIssues(room, issues)
+  if (options.checkIndexes !== false) collectIndexIssues(room, issues)
   collectPlayerSnapshotIssues(room, issues)
 
   if (issues.length === 0) return
@@ -225,7 +229,7 @@ function collectIndexIssues(room: Room, issues: unknown[]): void {
 }
 
 function collectPlayerSnapshotIssues(room: Room, issues: unknown[]): void {
-  const snapshot = room.refreshPlayerSnapshot()
+  const snapshot = room.playerCardsSnapshot
   const current = room.cards.filter((card) => card.location === 'player')
   const matches =
     snapshot.length === current.length && snapshot.every((card, index) => card === current[index])

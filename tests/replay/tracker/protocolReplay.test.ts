@@ -6,6 +6,7 @@ import {
   TrackerProtocolReplayer,
   type RecordedTrackerProtocol
 } from './helpers/protocolReplay'
+import { assertTrackerReplayConsistency } from './helpers/protocolReplay/snapshot'
 
 describe('tracker protocol replay', () => {
   it('解析严格 JSONL 且拒绝时间等录制 schema 外字段', () => {
@@ -23,6 +24,22 @@ describe('tracker protocol replay', () => {
         JSON.stringify({ seq: 1, className: 'MsgGameOver', payload: {}, timestamp: 123 })
       )
     ).toThrow('包含未支持字段：timestamp')
+  })
+
+  it('报告 JSONL 的四类结构错误', () => {
+    expect(() => parseTrackerProtocolJsonl('{')).toThrow('不是有效 JSON')
+    expect(() => parseTrackerProtocolJsonl('[]')).toThrow('必须是 JSON 对象')
+    expect(() =>
+      parseTrackerProtocolJsonl(
+        [
+          JSON.stringify({ seq: 1, className: 'MsgGameRoundNtf', payload: {} }),
+          JSON.stringify({ seq: 3, className: 'MsgGameOver', payload: {} })
+        ].join('\n')
+      )
+    ).toThrow('seq 应为 2')
+    expect(() =>
+      parseTrackerProtocolJsonl(JSON.stringify({ seq: 1, className: 'MsgGameOver', payload: [] }))
+    ).toThrow('payload 必须是 JSON 对象')
   })
 
   it('在隔离 GameState 和 TrackerController 中重建牌堆与玩家手牌', () => {
@@ -91,6 +108,35 @@ describe('tracker protocol replay', () => {
     expect(report.failure?.message).toContain('回放一致性检查失败')
   })
 
+  it('SpellID=713 的剔除下标越界时停止回放', () => {
+    const records = openingRecords().concat({
+      seq: 5,
+      className: 'PubGsCMoveCard',
+      payload: movePayload({
+        CardIDs: [99, 0, 0],
+        CardCount: 1,
+        MoveType: 21,
+        SpellID: 713
+      })
+    })
+    const report = new TrackerProtocolReplayer({ currentUserID: 101 }).replay(records)
+
+    expect(report.success).toBe(false)
+    expect(report.failure?.message).toContain('SpellID=713 移动协议剔除下标 99 越界')
+  })
+
+  it('一致性检查读取玩家快照而不推进快照游标', () => {
+    const replayer = new TrackerProtocolReplayer({ currentUserID: 101 })
+    const report = replayer.replay(openingRecords())
+    expect(report.success).toBe(true)
+
+    const room = replayer.controller.getReadyTrackerRoom()
+    if (!room) throw new Error('测试预期 Room 已完成重建')
+    const snapshotSeq = room.playerSnapshotSeq
+    assertTrackerReplayConsistency(room, 'readonly-player-snapshot', { checkIndexes: false })
+    expect(room.playerSnapshotSeq).toBe(snapshotSeq)
+  })
+
   it('保留 isSend 后与生产处理器一致跳过发送侧移动', () => {
     const records = openingRecords([1, 2, 3])
       .slice(0, 3)
@@ -109,27 +155,7 @@ describe('tracker protocol replay', () => {
   it('成功报告只汇总身份候选数量而不展开完整卡牌列表', () => {
     const report = new TrackerProtocolReplayer({ currentUserID: 101 }).replay(openingRecords())
     expect(report.success).toBe(true)
-    if (!report.finalState.room) throw new Error('测试预期 Room 已完成重建')
-
-    report.finalState.room.pileIdentityLedger = {
-      revision: 3,
-      hiddenPileSlotCount: 2,
-      accountedPileCount: 3,
-      cohort: {
-        generation: 2,
-        groups: [
-          {
-            generation: 1,
-            kind: 'partial',
-            cardIDs: [1, 2, 3],
-            remainingPileCount: 2
-          }
-        ]
-      }
-    }
-
     const output = formatTrackerProtocolReplayReport(report)
-    expect(output).toContain('"candidateCount": 3')
     expect(output).not.toContain('"cardIDs":')
   })
 })

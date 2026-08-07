@@ -1,10 +1,10 @@
 import { GameState } from '@/tracker/Game'
+import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 import { TrackerController } from '@/tracker/runtime/trackerController'
 import { applyTrackerReplayProtocol } from './handlers'
 import { parseTrackerProtocolJsonl } from './parser'
 import { assertTrackerReplayConsistency, createTrackerReplaySnapshot } from './snapshot'
 import type {
-  RecordedTrackerProtocol,
   TrackerProtocolReplayContext,
   TrackerProtocolReplayOptions,
   TrackerProtocolReplayReport,
@@ -13,7 +13,7 @@ import type {
 } from './types'
 
 export { parseTrackerProtocolJsonl } from './parser'
-export type { RecordedTrackerProtocol } from './types'
+export type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 export type { TrackerProtocolReplayFailure } from './types'
 export type { TrackerProtocolReplayOptions } from './types'
 export type { TrackerProtocolReplayReport } from './types'
@@ -21,6 +21,13 @@ export type { TrackerProtocolReplayStep } from './types'
 export type { TrackerReplaySnapshot } from './types'
 
 const DEFAULT_CONTEXT_SIZE = 5
+const INDEX_REBUILD_PROTOCOLS = new Set([
+  'MsgGamePlayCardNtf',
+  'CGsRoleSpellOptRep',
+  'GsCRoleOptTargetNtf',
+  'GsCUpdateRoleDataExNtf',
+  'PubGsCMoveCard'
+])
 
 export class TrackerProtocolReplayer {
   readonly gameState: GameState
@@ -61,23 +68,29 @@ export class TrackerProtocolReplayer {
       ignored: 0,
       partial: 0
     }
-    let lastActiveState: TrackerReplaySnapshot | null = null
+    let previousState = createTrackerReplaySnapshot(
+      this.gameState,
+      this.controller.getTrackerRoom()
+    )
+    let lastActiveState: TrackerReplaySnapshot | null = previousState.room ? previousState : null
 
     for (let index = 0; index < records.length; index += 1) {
       const record = records[index]
-      const roomBefore = this.controller.getTrackerRoom()
-      const stateBefore = createTrackerReplaySnapshot(this.gameState, roomBefore)
-      if (stateBefore.room) lastActiveState = stateBefore
+      const stateBefore = previousState
 
       try {
         const result = applyTrackerReplayProtocol(this.context, record)
         const roomAfter = this.controller.getTrackerRoom()
         if (roomAfter?.isDeckReady) {
-          assertTrackerReplayConsistency(roomAfter, `${record.seq}:${record.className}`)
+          assertTrackerReplayConsistency(roomAfter, `${record.seq}:${record.className}`, {
+            checkIndexes:
+              result.status !== 'ignored' && INDEX_REBUILD_PROTOCOLS.has(record.className)
+          })
         }
 
         const stateAfter = createTrackerReplaySnapshot(this.gameState, roomAfter)
         if (stateAfter.room) lastActiveState = stateAfter
+        previousState = stateAfter
         counts[result.status] += 1
         steps.push({
           seq: record.seq,
@@ -119,7 +132,7 @@ export class TrackerProtocolReplayer {
       ignored: counts.ignored,
       partial: counts.partial,
       steps,
-      finalState: createTrackerReplaySnapshot(this.gameState, this.controller.getTrackerRoom()),
+      finalState: previousState,
       lastActiveState
     }
   }
@@ -233,9 +246,9 @@ function compactPileIdentityLedger(value: unknown): unknown {
       ? (snapshot.cohort as Record<string, unknown>)
       : null
   const groups = Array.isArray(cohort?.groups)
-    ? cohort.groups.map((value) => {
-        if (!value || typeof value !== 'object' || Array.isArray(value)) return value
-        const group = value as Record<string, unknown>
+    ? cohort.groups.map((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return item
+        const group = item as Record<string, unknown>
         return {
           generation: group.generation,
           kind: group.kind,

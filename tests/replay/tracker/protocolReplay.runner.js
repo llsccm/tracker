@@ -21,9 +21,14 @@ describe('tracker protocol replay runner', () => {
     const formatted = formatTrackerProtocolReplayReport(report)
 
     stdout.write(`${formatted}\n`)
-    if (!report.success) throw new Error(formatted)
+    if (!report.success) throw new Error(formatFailureSummary(report.failure))
   })
 })
+
+function formatFailureSummary(failure) {
+  if (!failure) return '记牌器协议回放失败'
+  return `记牌器协议回放失败：seq=${failure.seq} className=${failure.className} 原因=${failure.message}`
+}
 
 async function readReplayFile(filePath) {
   try {

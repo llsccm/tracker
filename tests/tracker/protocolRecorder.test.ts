@@ -3,10 +3,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   clearProtocolRecording,
   getProtocolRecordingSnapshot,
+  MAX_PROTOCOL_RECORDS,
   recordTrackerProtocol,
   serializeProtocolRecording,
   startProtocolRecording,
-  stopProtocolRecording
+  stopProtocolRecording,
+  subscribeProtocolRecordingStatus,
+  type ProtocolRecordingStatus
 } from '@/tracker/runtime/protocolRecorder'
 import {
   projectTrackerProtocol,
@@ -463,5 +466,25 @@ describe('tracker protocol recorder', () => {
         payload: { SeatID: 6, useType: 1, isSend: 0, spellID: 1 }
       }
     ])
+  })
+
+  it('达到最大条数后自动停止并通过状态监听器提示', async () => {
+    const statuses: ProtocolRecordingStatus[] = []
+    const unsubscribe = subscribeProtocolRecordingStatus((status) => statuses.push(status))
+
+    startProtocolRecording()
+    for (let index = 0; index <= MAX_PROTOCOL_RECORDS; index += 1) {
+      recordTrackerProtocol({ className: 'MsgGameTurnNtf', TurnCnt: index })
+    }
+    await stopProtocolRecording()
+    await Promise.resolve()
+    unsubscribe()
+
+    expect(getProtocolRecordingSnapshot()).toHaveLength(MAX_PROTOCOL_RECORDS)
+    expect(statuses.at(-1)).toEqual({
+      active: false,
+      count: MAX_PROTOCOL_RECORDS,
+      limitReached: true
+    })
   })
 })

@@ -75,6 +75,18 @@ pnpm exec vitest run tests/tracker/locationCandidates.test.ts
 pnpm exec vitest run -t "shuffle"
 ```
 
+- 更新遍历基线快照（仅在解释清楚数字变化后）：
+
+```sh
+pnpm exec vitest run tests/tracker/traversalBaseline.test.ts -u
+```
+
+- 覆盖率（可选，关注 tracker 核心）：
+
+```sh
+pnpm exec vitest run --coverage
+```
+
 ### 协议回放（仅 Node/Vitest）
 
 协议录制文件只在测试环境中回放，不提供浏览器按钮，也不会把历史协议注入真实对局。回放器会新建隔离的
@@ -94,18 +106,6 @@ pnpm exec vitest run -t "shuffle"
 失败前后的 Room/玩家/牌堆/约束摘要。若录制从对局中途开始，缺少座位或牌堆初始化协议时会明确报告
 “录制可能开始过晚”。没有抛异常但需要验证推断结果时，可在 Vitest 回归中导入
 `tests/replay/tracker/helpers/protocolReplay`，对回放后的 Room 或报告快照编写领域断言。
-
-- 更新遍历基线快照（仅在解释清楚数字变化后）：
-
-```sh
-pnpm exec vitest run tests/tracker/traversalBaseline.test.ts -u
-```
-
-- 覆盖率（可选，关注 tracker 核心）：
-
-```sh
-pnpm exec vitest run --coverage
-```
 
 Windows 本机执行时遵循 [`commands.md`](commands.md) 与 Serena 本机记忆；仓库文档不绑定具体 Shell 细节。
 

@@ -1,13 +1,9 @@
 import type { GameState } from '@/tracker/Game'
-import type { Room } from '@/tracker/Room'
+import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 import type { TrackerController } from '@/tracker/runtime/trackerController'
 import type { TrackerControllerOptions } from '@/tracker/types'
 
-export interface RecordedTrackerProtocol {
-  seq: number
-  className: string
-  payload: Record<string, unknown>
-}
+export type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 
 export type TrackerProtocolReplayStatus = 'applied' | 'ignored' | 'partial'
 
@@ -133,8 +129,4 @@ export interface TrackerProtocolReplayContext {
 export interface ApplyTrackerProtocolResult {
   status: TrackerProtocolReplayStatus
   note?: string
-}
-
-export function getReplayRoom(context: TrackerProtocolReplayContext): Room | null {
-  return context.controller.getTrackerRoom()
 }
