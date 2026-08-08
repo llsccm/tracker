@@ -325,7 +325,11 @@ export class PileIdentityLedger {
     this.commit(`reveal:${reveal.location}`, () => {
       normalizeIDs(reveal.cardIDs).forEach((cardID) => {
         if (reveal.location === 'pile') this.revealIdentityInPileInternal(cardID)
-        else this.revealIdentityOutsidePileInternal(cardID)
+        else {
+          this.revealIdentityOutsidePileInternal(cardID)
+          // 外部揭示确认该身份已经离开精确弃牌位置；缺少前置移动的兼容路径依赖此收口。
+          this.knownDiscardIdentityIDs.delete(cardID)
+        }
       })
       this.reconcilePileCountInternal(reveal.pileCountAfter)
       this.previousDiscardCount = normalizeCount(reveal.discardCountAfter)
@@ -464,11 +468,8 @@ export class PileIdentityLedger {
 
     if (anonymousDiscardCount > 0) {
       // 匿名弃牌洗回后无法区分新旧世代边界，只保留“总共有多少暗身份在牌堆”。
+      // 这是协议信息不足造成的正常降级；后续仍由物理牌堆张数核对，不作为账本异常告警。
       this.degradeToSingleCohortInternal(pileCountAfter)
-      this.warn('anonymous-discard-shuffle', {
-        anonymousDiscardCount,
-        pileCountAfter
-      })
       return
     }
 

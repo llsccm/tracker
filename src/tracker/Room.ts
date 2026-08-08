@@ -50,6 +50,26 @@ interface AnonymizeLocatedIdentityOptions {
   preservePlacement?: boolean
 }
 
+interface PendingDiscardGain {
+  seatID: SeatID
+  cards: Card[]
+  sourceEvent?: MoveOptions['sourceEvent']
+}
+
+export type PendingDiscardGainSettlement = 'settled' | 'duplicate' | 'missing' | 'invalid'
+
+/**
+ * 3709 的当前列表可能移除已经不再持有的旧牌。只返回当前快照中尚未确认的牌，
+ * 删除和列表顺序变化均由通用移动路径处理。
+ */
+function getGuiFuRevealDelta(
+  previousCardIDs: readonly CardID[],
+  receivedCardIDs: readonly CardID[]
+): CardID[] {
+  const previousCardIDSet = new Set(previousCardIDs)
+  return receivedCardIDs.filter((cardID) => !previousCardIDSet.has(cardID))
+}
+
 interface ShufflePileOptions {
   cardCount?: number | null
   /** Controller 归一化后的同一条洗牌事件，由 Room 在物理重建前提交给身份账本。 */
@@ -134,6 +154,10 @@ export class Room {
   declare movement: RoomMovement
   declare pileIdentityLedger: PileIdentityLedger
   declare game: GameState
+  /** 3709 等待相邻角色数据提供 CardID 的匿名手牌 FIFO。 */
+  declare pendingDiscardGains: PendingDiscardGain[]
+  /** 3709 最近一次已接受的当前角色数据快照，按座位保留一份用于识别旧尾部和重复通知。 */
+  declare guiFuRevealSnapshots: Map<SeatID, CardID[]>
   /** 计数器 */
   declare counter: CardCounter
 
@@ -177,6 +201,8 @@ export class Room {
     this.playerCardsSnapshotSet = new Set()
     this.playerSnapshotSeq = -1
     this.playerSnapshotOrder = new Map()
+    this.pendingDiscardGains = []
+    this.guiFuRevealSnapshots = new Map()
 
     // 7. 挂载 Room 行为模块，保留 Room 作为稳定公开入口
     this.publicZones = new RoomPublicZones(this)
@@ -208,6 +234,8 @@ export class Room {
     this.unlocatedIdentities = new Set(cardIDs.filter((id) => id > 0))
     this.deckIdentities = new Set(this.unlocatedIdentities)
     this.anonymousEntitySeq = -1
+    this.pendingDiscardGains = []
+    this.guiFuRevealSnapshots.clear()
 
     // 牌堆只保存匿名物理槽，真实身份在揭示前统一留在 unlocatedIdentities。
     const pile = this.zones.get('pile')
@@ -316,6 +344,301 @@ export class Room {
     } catch (error) {
       trackerLogger.warn('牌堆身份账本揭示更新失败', { error, cardIDs, location })
     }
+  }
+
+  /**
+   * 取得 3709 当前角色数据相对于上次快照的新增 CardID。
+   *
+   * 旧身份可以从列表中删除，列表顺序变化也不影响差量识别。该方法只读，供没有弃牌堆
+   * pending 时的兼容回退使用；真正接受快照仍由 settlePendingDiscardGain 完成。
+   */
+  getGuiFuRevealDelta(seatID: SeatID, cardIDs: readonly CardID[]): CardID[] {
+    const normalizedSeatID = Number(seatID)
+    const normalizedCardIDs = cardIDs.map(Number)
+    if (
+      !Number.isInteger(normalizedSeatID) ||
+      normalizedSeatID === 255 ||
+      normalizedCardIDs.length === 0 ||
+      normalizedCardIDs.some((cardID) => !Number.isInteger(cardID) || cardID <= 0) ||
+      new Set(normalizedCardIDs).size !== normalizedCardIDs.length
+    ) {
+      return []
+    }
+
+    const previousCardIDs = this.getActiveGuiFuRevealSnapshot(normalizedSeatID)
+    if (!previousCardIDs) return normalizedCardIDs
+    return getGuiFuRevealDelta(previousCardIDs, normalizedCardIDs)
+  }
+
+  private getActiveGuiFuRevealSnapshot(seatID: SeatID): CardID[] | undefined {
+    const snapshot = this.guiFuRevealSnapshots.get(seatID)
+    if (!snapshot) return undefined
+
+    return snapshot.filter((cardID) => {
+      const card = this.cardIndex.get(cardID)
+      return card?.location === 'player' && card.subZone === 'hand' && card.seats.has(seatID)
+    })
+  }
+
+  /**
+   * 记录“已用匿名手牌占位、等待角色数据确认弃牌身份”的一次获得。
+   *
+   * 当前只由 3709 使用。第一条移动不消费弃牌堆；FIFO 只保存后续需要替换的匿名
+   * 手牌实体。协议保证移动与角色数据相邻，因此队列出现积压时只告警，不做恢复事务。
+   */
+  registerPendingDiscardGain(
+    seatID: SeatID,
+    cards: readonly Card[],
+    sourceEvent?: MoveOptions['sourceEvent']
+  ): boolean {
+    const normalizedSeatID = Number(seatID)
+    const uniqueCards = Array.from(new Set(cards)).filter(Boolean)
+    if (
+      !Number.isInteger(normalizedSeatID) ||
+      normalizedSeatID === 255 ||
+      uniqueCards.length === 0 ||
+      uniqueCards.length !== cards.length
+    ) {
+      trackerLogger.warn('诡伏匿名获得未进入待结算 FIFO：座位或匿名槽无效', {
+        seatID,
+        cardCount: cards.length,
+        uniqueCardCount: uniqueCards.length,
+        sourceEvent
+      })
+      return false
+    }
+
+    const hasInvalidCard = uniqueCards.some(
+      (card) =>
+        card.location !== 'player' ||
+        card.subZone !== 'hand' ||
+        card.seats.has(normalizedSeatID) !== true ||
+        !isAnonymous(card)
+    )
+    if (hasInvalidCard) {
+      trackerLogger.warn('诡伏匿名获得未进入待结算 FIFO：手牌占位状态不完整', {
+        seatID: normalizedSeatID,
+        cardIDs: uniqueCards.map((card) => card.id),
+        cards: uniqueCards.map((card) => ({
+          id: card.id,
+          entityID: card.entityID,
+          location: card.location,
+          subZone: card.subZone,
+          isKnown: card.isKnown,
+          seats: Array.from(card.seats, Number)
+        })),
+        sourceEvent
+      })
+      return false
+    }
+
+    if (this.pendingDiscardGains.length > 0) {
+      const head = this.pendingDiscardGains[0]
+      trackerLogger.warn('诡伏移动与角色数据未相邻，待结算 FIFO 已出现积压', {
+        pendingCount: this.pendingDiscardGains.length,
+        headSeatID: head.seatID,
+        headCardCount: head.cards.length,
+        nextSeatID: normalizedSeatID,
+        nextCardCount: uniqueCards.length,
+        headSourceEvent: head.sourceEvent,
+        sourceEvent
+      })
+    }
+
+    this.pendingDiscardGains.push({
+      seatID: normalizedSeatID,
+      cards: uniqueCards,
+      sourceEvent
+    })
+    return true
+  }
+
+  /**
+   * 以 3709 角色数据结算前置匿名弃牌获得。
+   *
+   * 角色数据是按座位维护的当前快照，不是只描述本次移动。只消费快照中尚未确认的
+   * 新 CardID，并按 FIFO 顺序替换匿名手牌占位；pending 顺序异常时保留状态并告警。
+   */
+  settlePendingDiscardGain(
+    seatID: SeatID,
+    cardIDs: readonly CardID[],
+    sourceEvent?: MoveOptions['sourceEvent']
+  ): PendingDiscardGainSettlement {
+    const normalizedSeatID = Number(seatID)
+    const normalizedCardIDs = cardIDs.map(Number)
+    if (
+      !Number.isInteger(normalizedSeatID) ||
+      normalizedSeatID === 255 ||
+      normalizedCardIDs.length === 0 ||
+      normalizedCardIDs.some((cardID) => !Number.isInteger(cardID) || cardID <= 0) ||
+      new Set(normalizedCardIDs).size !== normalizedCardIDs.length
+    ) {
+      return 'invalid'
+    }
+
+    const previousCardIDs = this.getActiveGuiFuRevealSnapshot(normalizedSeatID) ?? []
+    const newCardIDs = getGuiFuRevealDelta(previousCardIDs, normalizedCardIDs)
+    const pending = this.pendingDiscardGains[0]
+    if (!pending) {
+      this.guiFuRevealSnapshots.set(normalizedSeatID, normalizedCardIDs.slice())
+      if (newCardIDs.length === 0) return 'duplicate'
+
+      // 兼容前置移动缺失或牌堆来源的角色数据；调用方随后只回退同步 newCardIDs。
+      return 'missing'
+    }
+
+    if (newCardIDs.length === 0) {
+      this.guiFuRevealSnapshots.set(normalizedSeatID, normalizedCardIDs.slice())
+      return 'duplicate'
+    }
+
+    if (pending.seatID !== normalizedSeatID) {
+      trackerLogger.warn('诡伏角色数据与待结算 FIFO 队首座位不一致', {
+        pendingSeatID: pending.seatID,
+        receivedSeatID: normalizedSeatID,
+        pendingCardCount: pending.cards.length,
+        receivedCardCount: normalizedCardIDs.length,
+        cardIDs: normalizedCardIDs,
+        pendingSourceEvent: pending.sourceEvent,
+        sourceEvent
+      })
+      return 'invalid'
+    }
+
+    const discard = this.zones.get('discard')
+    const sourceCards = newCardIDs.map((cardID) => this.cardIndex.get(cardID))
+    const hasInvalidSource = sourceCards.some(
+      (card) =>
+        !card ||
+        card.location !== 'discard' ||
+        card.isKnown !== true ||
+        discard?.cards.includes(card) !== true
+    )
+    if (!discard || hasInvalidSource) {
+      trackerLogger.warn('诡伏弃牌堆来源角色数据中的身份无法定位，待结算 FIFO 保持不变', {
+        seatID: normalizedSeatID,
+        cardIDs: newCardIDs,
+        sourceCards: sourceCards.map((card, index) => ({
+          cardID: newCardIDs[index],
+          entityID: card?.entityID ?? null,
+          location: card?.location ?? null,
+          isKnown: card?.isKnown === true,
+          inDiscard: card ? discard?.cards.includes(card) === true : false
+        })),
+        pendingSourceEvent: pending.sourceEvent,
+        sourceEvent
+      })
+      return 'invalid'
+    }
+
+    const allocations: {
+      pending: PendingDiscardGain
+      cards: Card[]
+      cardIDs: CardID[]
+    }[] = []
+    let allocatedCount = 0
+    for (const candidate of this.pendingDiscardGains) {
+      if (allocatedCount >= newCardIDs.length) break
+
+      if (candidate.seatID !== normalizedSeatID) {
+        trackerLogger.warn('诡伏角色数据与待结算 FIFO 队列顺序不一致', {
+          pendingSeatID: candidate.seatID,
+          receivedSeatID: normalizedSeatID,
+          pendingCardCount: candidate.cards.length,
+          receivedCardCount: newCardIDs.length,
+          cardIDs: newCardIDs,
+          pendingSourceEvent: candidate.sourceEvent,
+          sourceEvent
+        })
+        return 'invalid'
+      }
+
+      const count = Math.min(candidate.cards.length, newCardIDs.length - allocatedCount)
+      if (count <= 0) continue
+
+      const cards = candidate.cards.slice(0, count)
+      const hasInvalidCard = cards.some(
+        (card) =>
+          card.location !== 'player' ||
+          card.subZone !== 'hand' ||
+          card.seats.has(normalizedSeatID) !== true ||
+          !isAnonymous(card)
+      )
+      if (hasInvalidCard) {
+        trackerLogger.warn('诡伏待结算 FIFO 已不再对应匿名手牌槽', {
+          seatID: normalizedSeatID,
+          cardIDs: newCardIDs,
+          pendingCards: candidate.cards.map((card) => ({
+            id: card.id,
+            entityID: card.entityID,
+            location: card.location,
+            subZone: card.subZone,
+            isKnown: card.isKnown,
+            seats: Array.from(card.seats, Number)
+          })),
+          pendingSourceEvent: candidate.sourceEvent,
+          sourceEvent
+        })
+        return 'invalid'
+      }
+
+      allocations.push({
+        pending: candidate,
+        cards,
+        cardIDs: newCardIDs.slice(allocatedCount, allocatedCount + count)
+      })
+      allocatedCount += count
+    }
+
+    if (allocatedCount !== newCardIDs.length) {
+      trackerLogger.warn('诡伏角色数据新增身份超过待结算 FIFO 槽位', {
+        seatID: normalizedSeatID,
+        pendingCardCount: this.pendingDiscardGains.reduce(
+          (count, item) => count + item.cards.length,
+          0
+        ),
+        receivedCardCount: newCardIDs.length,
+        cardIDs: newCardIDs,
+        pendingSourceEvent: pending.sourceEvent,
+        sourceEvent
+      })
+      return 'invalid'
+    }
+
+    allocations.forEach(({ pending: allocation, cards, cardIDs }) => {
+      this.removeCardsFromConstraintGroups(cards)
+      cards.forEach((card) => card.moveToPublicZone('outside'))
+
+      // 前置移动已经增加手牌总数；这里只用真实弃牌实体替换新增的匿名手牌槽。
+      this.moveCards(cardIDs, 'player', {
+        seatID: normalizedSeatID,
+        fromZone: 'discard',
+        subZone: 'hand',
+        spellID: cards[0]?.spellID ?? null,
+        cardCount: cardIDs.length,
+        handMoveCount: 0,
+        moveType: allocation.sourceEvent?.moveType,
+        sourceEvent: sourceEvent ?? allocation.sourceEvent
+      })
+
+      this.applyPileIdentityMove({
+        eventType: 'moveKnown',
+        fromZone: 2,
+        toZone: 5,
+        cardIDs,
+        cardCount: cardIDs.length,
+        pileCountBefore: this.zones.get('pile')?.cards.length ?? 0,
+        moveType: allocation.sourceEvent?.moveType,
+        spellID: cards[0]?.spellID ?? null
+      })
+      allocation.cards.splice(0, cards.length)
+    })
+
+    this.guiFuRevealSnapshots.set(normalizedSeatID, normalizedCardIDs.slice())
+    while (this.pendingDiscardGains[0]?.cards.length === 0) {
+      this.pendingDiscardGains.shift()
+    }
+    return 'settled'
   }
 
   /**
@@ -2054,6 +2377,8 @@ export class Room {
     this.cardIndex.clear()
     this.unlocatedIdentities.clear()
     this.deckIdentities.clear()
+    this.pendingDiscardGains = []
+    this.guiFuRevealSnapshots.clear()
     this.anonymousEntitySeq = -1
     this.isDeckReady = false
     this.seatIDs = []

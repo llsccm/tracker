@@ -62,6 +62,8 @@ pnpm build:prod
 
 补充：
 
+- 回放测试默认不执行。只有用户明确要求时，才运行 `pnpm test:replay`、`pnpm typecheck:replay`、`pnpm replay:tracker` 或 `tests/replay/` 下的相关测试；普通任务按 tracker、类型、lint 和构建范围选择验证命令。
+
 - 跑全部 Vitest 匹配文件（含 `tests/utils`）：
 
 ```sh
@@ -118,7 +120,7 @@ Windows 本机执行时遵循 [`commands.md`](commands.md) 与 Serena 本机记�
 | 仅文档 / 注释                                              | 无需构建与测试                                                  |
 | 普通 `src/` 代码（非 tracker 高风险）                      | `pnpm lint` + `pnpm build`                                      |
 | `src/tracker/`、`tests/tracker/` 或 `tests/contracts/pile-identity/` | `pnpm lint` + `pnpm build` + `pnpm test:tracker`        |
-| `tests/replay/tracker/` 或协议回放驱动                     | `pnpm test:replay` + `pnpm typecheck:replay`                    |
+| `tests/replay/tracker/` 或协议回放驱动（用户明确要求时）   | `pnpm test:replay` + `pnpm typecheck:replay`                    |
 | TS 类型契约、`tsconfig*`、ESLint TS 覆盖、tracker 类型迁移 | `pnpm typecheck:tracker`；需要确认全仓入口时再 `pnpm typecheck` |
 | `tests/utils/` 或非 tracker 测试                           | `pnpm exec vitest run`（或对应文件）+ 适用 lint/build           |
 | 发布配置、打包参数、用户脚本元信息、核心协议高风险路径     | 额外 `pnpm build:prod`                                          |

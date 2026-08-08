@@ -10,6 +10,7 @@ import {
   shouldRevealAsFullHand
 } from '@/tracker/runtime/protocolRules'
 import type { RawMoveCardEvent } from '@/tracker/types'
+import { parseGuiFuCardIDs } from '@/handler/skills/GuiFu'
 import type { ApplyTrackerProtocolResult, TrackerProtocolReplayContext } from './types'
 
 interface ReplayMoveContext {
@@ -624,6 +625,46 @@ function applyRoleDataEx(
   if (dataID === 3571) {
     if (datas.length === 0) return ignored('椒遇颜色通知未携带颜色')
     context.gameState.setSpellState(3571, new Set(datas[0] === 1 ? [1, 2] : [3, 4]))
+    return applied()
+  }
+
+  if (dataID === 3709) {
+    const cardIDs = parseGuiFuCardIDs(datas)
+    if (cardIDs.length === 0) return ignored('3709 身份通知未携带完整 CardIDs')
+    const seatID = requireInteger(record, 'SeatID')
+    const mySeatID = context.gameState.myID
+    if (mySeatID === undefined) {
+      throw prerequisiteError(record, '诡伏身份通知需要先确定主视角座位')
+    }
+    if (seatID === mySeatID) return ignored('主视角已从移动协议获知诡伏牌面')
+    requireReadyRoom(context, record, '物化诡伏获得牌')
+    const sourceEvent = {
+      type: 'role-data-3709' as const,
+      label: 'GsCUpdateRoleDataExNtf:3709',
+      raw: record.payload
+    }
+    // missing 分支会推进当前快照，必须在结算前取得回退所需的新增前缀。
+    const revealCardIDs = context.controller.getTrackerGuiFuRevealDelta(seatID, cardIDs)
+    const settlement = context.controller.settleTrackerPendingDiscardGain(
+      seatID,
+      cardIDs,
+      sourceEvent
+    )
+    if (settlement === 'missing' && revealCardIDs.length > 0) {
+      context.controller.revealTrackerCards(
+        {
+          type: 'player',
+          seatID,
+          fromSeatID: seatID,
+          fromZone: null,
+          fromSubZone: 'hand',
+          subZone: 'hand',
+          handMoveCount: 0,
+          sourceEvent
+        },
+        revealCardIDs
+      )
+    }
     return applied()
   }
 

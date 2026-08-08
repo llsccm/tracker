@@ -36,6 +36,7 @@
 | 文档                                                     | DataID | 场景             | 关键识别                                             |
 | -------------------------------------------------------- | -----: | ---------------- | ---------------------------------------------------- |
 | [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `3544` | 巧织暗取牌       | `Datas=[cardID,0]`；非主视角将牌面物化到目标普通手牌 |
+| [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `3709` | 诡伏弃牌堆随机获得 | `Datas=[count,...cardIDs,...]`；非主视角延迟到角色数据再移动真实弃牌 |
 | [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `4022` | 裴秀地图状态更新 | `Datas=[mapID,currentCell,historyCount,...]`，仅己方 |
 
 ## 相关代码入口
@@ -43,7 +44,7 @@
 | 协议 / 模式              | 处理入口                                | 状态 / 装饰                                             |
 | ------------------------ | --------------------------------------- | ------------------------------------------------------- |
 | `GsCRoleOptTargetNtf`    | `src/handler/GsCRoleOptTargetNtf.js`    | `tracker.revealTrackerCards` / `Room.getSkillState`     |
-| `GsCUpdateRoleDataExNtf` | `src/handler/GsCUpdateRoleDataExNtf.js` | 巧织 3544 / 裴秀 4022 状态更新                    |
+| `GsCUpdateRoleDataExNtf` | `src/handler/GsCUpdateRoleDataExNtf.js` | 巧织 3544 / 诡伏 3709 / 裴秀 4022 状态更新 |
 | `PubGsCMoveCard`         | `src/handler/PubGsCMoveCard.js`         | `src/tracker/MoveEventNormalizer.ts` → `Room.moveCards` |
 | 整手交换                 | 经 `decorateGenericMove`                | `src/tracker/skill/HandExchange.ts`                     |
 | 诫厉交换（历史，未挂载） | -                                       | `src/tracker/skill/JieLi.ts`（暂不注册）                |

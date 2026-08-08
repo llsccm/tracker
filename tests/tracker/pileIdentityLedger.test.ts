@@ -57,6 +57,46 @@ describe('PileIdentityLedger', () => {
     expect(warnings).toEqual([])
   })
 
+  it('匿名弃牌洗回只降级 cohort，不报告账本异常', () => {
+    const warnings: Record<string, unknown>[] = []
+    const ledger = new PileIdentityLedger({
+      onWarning: (_message, detail) => warnings.push(detail)
+    })
+    ledger.initialize([1, 2, 3, 4])
+
+    applyMove(ledger, {
+      eventType: 'drawUnknown',
+      fromZone: 1,
+      toZone: 5,
+      cardIDs: [],
+      cardCount: 1,
+      pileCountAfter: 3
+    })
+    applyMove(
+      ledger,
+      {
+        eventType: 'discardUnknown',
+        fromZone: 5,
+        toZone: 2,
+        cardIDs: [],
+        cardCount: 1,
+        pileCountAfter: 3
+      },
+      1
+    )
+    applyMove(ledger, {
+      eventType: 'shuffleDiscardIntoPile',
+      fromZone: 2,
+      toZone: 9,
+      cardIDs: [],
+      cardCount: 4,
+      pileCountAfter: 4
+    })
+
+    expect(ledger.getSnapshot().accountedPileCount).toBe(4)
+    expect(warnings).toEqual([])
+  })
+
   it('开局整副牌暂存弃牌堆时恢复 generation 0 而不滚动世代', () => {
     const ledger = new PileIdentityLedger()
     ledger.initialize([1, 2, 3, 4])

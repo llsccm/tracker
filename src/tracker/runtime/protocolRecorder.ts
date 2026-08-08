@@ -82,7 +82,7 @@ export async function initializeProtocolRecording(): Promise<ProtocolRecordingSt
   }
 
   records = storedRecords.slice(0, MAX_PROTOCOL_RECORDS)
-  sequence = records.at(-1)?.seq ?? 0
+  sequence = records[records.length - 1]?.seq ?? 0
   limitReached = storedRecords.length >= MAX_PROTOCOL_RECORDS
   notifyStatusListeners()
   return getProtocolRecordingStatus()

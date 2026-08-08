@@ -11,7 +11,7 @@ import {
   getProtocolPublicZone,
   isProtocolPlayerZone
 } from '../protocolZones'
-import { Room } from '../Room'
+import { Room, type PendingDiscardGainSettlement } from '../Room'
 import type {
   CardID,
   MoveOptions,
@@ -167,6 +167,20 @@ export class TrackerController {
 
   getTrackerRoom(): Room | null {
     return this.trackerRoom
+  }
+
+  /** 取得 3709 当前角色数据相对于最近快照的新增 CardID。 */
+  getTrackerGuiFuRevealDelta(seatID: SeatID, cardIDs: CardID[] | CardID = []): CardID[] {
+    const ids = this.normalizeIDs(cardIDs).filter((id) => id > 0)
+    const readyRoom = this.getReadyTrackerRoom()
+    if (!readyRoom) return ids
+
+    try {
+      return readyRoom.getGuiFuRevealDelta(seatID, ids)
+    } catch (error) {
+      this.controllerLogger.warn('诡伏当前角色数据增量查询失败', { error, seatID, cardIDs: ids })
+      return ids
+    }
   }
 
   isTrackerReady(): boolean {
@@ -640,7 +654,7 @@ export class TrackerController {
 
         readyRoom.moveCards(ids, 'player', {
           seatID,
-          fromSeatID: target.fromSeatID ?? seatID,
+          fromSeatID: target.fromSeatID ?? (target.fromZone == null ? seatID : undefined),
           fromZone: target.fromZone ?? null,
           fromSubZone: target.fromSubZone ?? subZone,
           subZone,
@@ -671,6 +685,28 @@ export class TrackerController {
       this.controllerView.scheduleRender()
     } catch (e) {
       this.onError('[Refactor] 明牌同步失败:', e, { target, cardIDs: ids })
+    }
+  }
+
+  /** 结算“匿名弃牌获得 -> 角色数据给出 CardID”的两阶段协议。 */
+  settleTrackerPendingDiscardGain(
+    seatID: SeatID,
+    cardIDs: CardID[] | CardID = [],
+    sourceEvent?: MoveOptions['sourceEvent']
+  ): PendingDiscardGainSettlement {
+    const readyRoom = this.getReadyTrackerRoom()
+    if (!readyRoom) return 'missing'
+
+    const ids = this.normalizeIDs(cardIDs).filter((id) => id > 0)
+    if (ids.length === 0) return 'invalid'
+
+    try {
+      const result = readyRoom.settlePendingDiscardGain(seatID, ids, sourceEvent)
+      if (result === 'settled') this.controllerView.scheduleRender()
+      return result
+    } catch (error) {
+      this.controllerLogger.warn('弃牌堆待回填身份结算失败', { error, seatID, cardIDs: ids })
+      return 'invalid'
     }
   }
 

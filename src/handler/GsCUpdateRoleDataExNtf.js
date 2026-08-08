@@ -4,6 +4,7 @@ import { renderPeiXiuMapWindow, setPeiXiuMapWindowVisible } from '@/ui/PeiXiuMap
 import { getRenderedPeiXiuHandSuitColors } from '@/ui/PeiXiuHandMirror'
 import { parsePeiXiuRoleData, solvePeiXiuRoleData } from '@/utils/peixiuRouteFeature'
 import { handleQiaoZhi } from './skills/QiaoZhi'
+import { handleGuiFu } from './skills/GuiFu'
 import { laya } from '@/runtime/gameAdapter'
 
 // GsCUpdateRoleDataExNtf
@@ -76,6 +77,11 @@ export function handleUpdateRoleDataExNtf(msg) {
     case 3544:
       // 其他视角的移动协议只有暗牌数量，3544 通知补充实际 CardID；主视角已从移动协议获知。
       handleQiaoZhi(msg, Game.myID)
+      break
+
+    // 诡伏：非主视角先收到匿名移动，角色数据随后补充实际牌面。
+    case 3709:
+      handleGuiFu(msg, Game.myID)
       break
 
     // 郭照 椒遇 选择的颜色

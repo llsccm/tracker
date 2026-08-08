@@ -59,7 +59,7 @@ const ROLE_OPT_TARGET_SPELL_IDS = new Set([
   4025
 ])
 
-const TRACKER_ROLE_DATA_EX_IDS = new Set([3544, 3571])
+const TRACKER_ROLE_DATA_EX_IDS = new Set([3544, 3571, 3709])
 const TRACKER_USE_SPELL_IDS = new Set([3090, 3138, 3157, 3161, 3185, 3193, 3511, 3750])
 
 const CONDITIONAL_RECORDING_RULES: Record<string, ProtocolPredicate> = {
