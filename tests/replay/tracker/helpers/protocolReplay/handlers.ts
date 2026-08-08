@@ -643,14 +643,17 @@ function applyRoleDataEx(
       label: 'GsCUpdateRoleDataExNtf:3709',
       raw: record.payload
     }
-    // missing 分支会推进当前快照，必须在结算前取得回退所需的新增前缀。
-    const revealCardIDs = context.controller.getTrackerGuiFuRevealDelta(seatID, cardIDs)
     const settlement = context.controller.settleTrackerPendingDiscardGain(
       seatID,
       cardIDs,
       sourceEvent
     )
-    if (settlement === 'missing' && revealCardIDs.length > 0) {
+    // invalid 表示本条录制无法安全消费当前 FIFO；回放继续保留现场，但不能宣称完整应用。
+    if (settlement.result === 'invalid') {
+      return partial('3709 身份通知无法与待结算获得牌匹配')
+    }
+    // missing 已经推进 3709 快照，必须使用结算返回的差量，不能在此重新查询。
+    if (settlement.result === 'missing' && settlement.newCardIDs.length > 0) {
       context.controller.revealTrackerCards(
         {
           type: 'player',
@@ -662,7 +665,7 @@ function applyRoleDataEx(
           handMoveCount: 0,
           sourceEvent
         },
-        revealCardIDs
+        settlement.newCardIDs
       )
     }
     return applied()

@@ -190,6 +190,36 @@ describe('PileIdentityLedger integration', () => {
     expect(room.assertPileIdentityLedgerConsistency('test:explicit-reveal')).toEqual([])
   })
 
+  it('弃牌区重复明示不会撤销已知弃牌身份', () => {
+    const { controller } = createTrackerControllerHarness()
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2, 3])
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [1],
+        CardCount: 1,
+        FromZone: 1,
+        FromPosition: POSITION_TOP,
+        MoveType: 4,
+        ToZone: 2
+      })
+    )
+
+    const room = controller.getTrackerRoom()
+    const discard = room.zones.get('discard')!
+    const discardCard = room.cardIndex.get(1)
+    expect(discard.cards).toContain(discardCard)
+    expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([1])
+
+    // public 只是明示目标，已有实体会继续停在 discard；账本必须读取同步后的实际位置。
+    controller.revealTrackerCards({ type: 'public', zoneName: 'discard' }, [1])
+
+    expect(discard.cards).toContain(discardCard)
+    expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([1])
+    expect(room.assertPileIdentityLedgerConsistency('test:discard-repeat-reveal')).toEqual([])
+  })
+
   it('思泣将已知弃牌移回牌堆时保持 Room 与 ledger 身份分区一致', () => {
     const { controller } = createTrackerControllerHarness()
     controller.initTrackerRoom()

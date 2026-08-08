@@ -329,6 +329,39 @@ describe('PileIdentityLedger', () => {
     })
   })
 
+  it('明牌揭示只有在身份确实离开弃牌堆时才撤销弃牌记录', () => {
+    const ledger = new PileIdentityLedger()
+    ledger.initialize([1, 2, 3])
+    applyMove(
+      ledger,
+      {
+        eventType: 'discardKnown',
+        fromZone: 1,
+        toZone: 2,
+        cardIDs: [1],
+        cardCount: 1,
+        pileCountAfter: 2
+      },
+      1
+    )
+
+    ledger.applyReveal({
+      cardIDs: [1],
+      location: 'discard',
+      pileCountAfter: 2,
+      discardCountAfter: 1
+    })
+    expect(ledger.getSnapshot().knownDiscardIdentityIDs).toEqual([1])
+
+    ledger.applyReveal({
+      cardIDs: [1],
+      location: 'outside',
+      pileCountAfter: 2,
+      discardCountAfter: 0
+    })
+    expect(ledger.getSnapshot().knownDiscardIdentityIDs).toEqual([])
+  })
+
   it('常规匿名摸牌分别扣除牌顶明牌身份与暗槽', () => {
     const ledger = new PileIdentityLedger()
     ledger.initialize([1])

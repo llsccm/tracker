@@ -43,14 +43,23 @@ export function handleGuiFu(msg = {}, currentSeatID) {
     label: 'GsCUpdateRoleDataExNtf:3709',
     raw: msg
   }
-  // settle 可能在 missing 分支推进快照，因此必须在结算前取得回退所需的新增牌。
-  const revealCardIDs =
-    typeof tracker.getTrackerGuiFuRevealDelta === 'function'
-      ? tracker.getTrackerGuiFuRevealDelta(seatID, cardIDs)
-      : cardIDs
-  const settlement = tracker.settleTrackerPendingDiscardGain(seatID, cardIDs, sourceEvent)
+  const canSettlePending = typeof tracker.settleTrackerPendingDiscardGain === 'function'
+  const canDiffSnapshot = typeof tracker.getTrackerGuiFuRevealDelta === 'function'
+  const canRevealCards = typeof tracker.revealTrackerCards === 'function'
 
-  if (settlement === 'missing' && revealCardIDs.length > 0) {
+  // 新版结算会在返回前接受 3709 快照，因此必须直接使用它随结果返回的 newCardIDs。
+  // 只有结算入口缺失的旧运行时才先调用只读差量接口，避免快照推进后丢失回退身份。
+  const settlement = canSettlePending
+    ? tracker.settleTrackerPendingDiscardGain(seatID, cardIDs, sourceEvent)
+    : {
+        result: 'missing',
+        newCardIDs: canDiffSnapshot ? tracker.getTrackerGuiFuRevealDelta(seatID, cardIDs) : cardIDs
+      }
+  const revealCardIDs = Array.isArray(settlement?.newCardIDs) ? settlement.newCardIDs : []
+
+  // missing 同时覆盖“没有弃牌 pending”和“牌堆来源与 pending 交错”；两者都只补充新增身份，
+  // 不重复增加前置移动已经记入的手牌数量。方法缺失时静默降级，避免影响协议主处理链。
+  if (settlement?.result === 'missing' && revealCardIDs.length > 0 && canRevealCards) {
     tracker.revealTrackerCards(
       {
         type: 'player',

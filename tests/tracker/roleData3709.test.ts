@@ -1,30 +1,45 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { handleGuiFu, parseGuiFuCardIDs, ROLE_DATA_3709 } from '@/handler/skills/GuiFu'
+import { isAnonymous } from '@/tracker/Card'
 import { trackerLogger } from '@/utils/logger'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
 
-const { getTrackerGuiFuRevealDelta, revealTrackerCards, settleTrackerPendingDiscardGain } =
-  vi.hoisted(() => ({
-    getTrackerGuiFuRevealDelta: vi.fn(),
-    revealTrackerCards: vi.fn(),
-    settleTrackerPendingDiscardGain: vi.fn()
-  }))
-
-vi.mock('@/tracker/runtime/browser', () => ({
-  tracker: {
+const {
+  getTrackerGuiFuRevealDelta,
+  revealTrackerCards,
+  settleTrackerPendingDiscardGain,
+  trackerMock
+} = vi.hoisted(() => {
+  const getTrackerGuiFuRevealDelta = vi.fn()
+  const revealTrackerCards = vi.fn()
+  const settleTrackerPendingDiscardGain = vi.fn()
+  return {
     getTrackerGuiFuRevealDelta,
     revealTrackerCards,
-    settleTrackerPendingDiscardGain
+    settleTrackerPendingDiscardGain,
+    trackerMock: {
+      getTrackerGuiFuRevealDelta,
+      revealTrackerCards,
+      settleTrackerPendingDiscardGain
+    }
   }
+})
+
+vi.mock('@/tracker/runtime/browser', () => ({
+  tracker: trackerMock
 }))
 
 describe('GsCUpdateRoleDataExNtf 3709', () => {
   beforeEach(() => {
+    // 个别用例会删除方法模拟旧运行时；每次恢复完整 tracker 表面后再重置调用记录。
+    trackerMock.getTrackerGuiFuRevealDelta = getTrackerGuiFuRevealDelta
+    trackerMock.revealTrackerCards = revealTrackerCards
+    trackerMock.settleTrackerPendingDiscardGain = settleTrackerPendingDiscardGain
     revealTrackerCards.mockClear()
     getTrackerGuiFuRevealDelta.mockReset()
     getTrackerGuiFuRevealDelta.mockImplementation((_seatID, cardIDs) => cardIDs)
     settleTrackerPendingDiscardGain.mockReset()
-    settleTrackerPendingDiscardGain.mockReturnValue('settled')
+    settleTrackerPendingDiscardGain.mockReturnValue({ result: 'settled', newCardIDs: [] })
   })
 
   it('按数量读取角色数据中的 CardID', () => {
@@ -55,7 +70,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
   })
 
   it('没有待结算记录时回退到普通明牌同步', () => {
-    settleTrackerPendingDiscardGain.mockReturnValue('missing')
+    settleTrackerPendingDiscardGain.mockReturnValue({ result: 'missing', newCardIDs: [132] })
     const msg = { Datas: [1, 132, 0], SeatID: 2 }
 
     expect(handleGuiFu(msg, 1)).toEqual([132])
@@ -78,14 +93,37 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
     )
   })
 
-  it('兼容回退只同步当前角色数据的新增牌', () => {
-    settleTrackerPendingDiscardGain.mockReturnValue('missing')
-    getTrackerGuiFuRevealDelta.mockReturnValue([2])
+  it('兼容回退直接使用结算返回的新增牌', () => {
+    settleTrackerPendingDiscardGain.mockReturnValue({ result: 'missing', newCardIDs: [2] })
     const msg = { Datas: [2, 2, 132, 0], SeatID: 2 }
 
     expect(handleGuiFu(msg, 1)).toEqual([2, 132])
+    expect(getTrackerGuiFuRevealDelta).not.toHaveBeenCalled()
+    expect(revealTrackerCards).toHaveBeenCalledWith(expect.objectContaining({ seatID: 2 }), [2])
+  })
+
+  it('结算方法缺失时才使用只读快照差量', () => {
+    Reflect.deleteProperty(trackerMock, 'settleTrackerPendingDiscardGain')
+    getTrackerGuiFuRevealDelta.mockReturnValue([2])
+
+    expect(handleGuiFu({ Datas: [2, 2, 132, 0], SeatID: 2 }, 1)).toEqual([2, 132])
     expect(getTrackerGuiFuRevealDelta).toHaveBeenCalledWith(2, [2, 132])
     expect(revealTrackerCards).toHaveBeenCalledWith(expect.objectContaining({ seatID: 2 }), [2])
+  })
+
+  it('结算与差量方法同时缺失时使用本次角色数据降级', () => {
+    Reflect.deleteProperty(trackerMock, 'settleTrackerPendingDiscardGain')
+    Reflect.deleteProperty(trackerMock, 'getTrackerGuiFuRevealDelta')
+
+    expect(handleGuiFu({ Datas: [1, 132, 0], SeatID: 2 }, 1)).toEqual([132])
+    expect(revealTrackerCards).toHaveBeenCalledWith(expect.objectContaining({ seatID: 2 }), [132])
+  })
+
+  it('普通明牌方法缺失时保留角色数据主处理链', () => {
+    settleTrackerPendingDiscardGain.mockReturnValue({ result: 'missing', newCardIDs: [132] })
+    Reflect.deleteProperty(trackerMock, 'revealTrackerCards')
+
+    expect(handleGuiFu({ Datas: [1, 132, 0], SeatID: 2 }, 1)).toEqual([132])
   })
 
   it('弃牌堆随机获得先保留全部槽，角色数据到达后才移动真实牌', () => {
@@ -143,7 +181,9 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
     expect(anonymousHand[0].isKnown).toBe(false)
     expect(room.assertPileIdentityLedgerConsistency('3709-before-role-data')).toEqual([])
 
-    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [201])).toBe('invalid')
+    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [201])).toMatchObject({
+      result: 'invalid'
+    })
     expect(room.pendingDiscardGains).toHaveLength(1)
     expect(discard.cards.map((card) => card.id)).toEqual(beforeIDs)
     expect(anonymousHand[0].isKnown).toBe(false)
@@ -154,7 +194,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
         type: 'role-data-3709',
         label: 'GsCUpdateRoleDataExNtf:3709'
       })
-    ).toBe('settled')
+    ).toEqual({ result: 'settled', newCardIDs: [actualID] })
 
     expect(discard.cards.map((card) => card.id)).toEqual(
       beforeIDs.filter((cardID) => cardID !== actualID)
@@ -207,7 +247,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
         type: 'role-data-3709',
         label: 'GsCUpdateRoleDataExNtf:3709'
       })
-    ).toBe('missing')
+    ).toEqual({ result: 'missing', newCardIDs: [132] })
     controller.revealTrackerCards(
       {
         type: 'player',
@@ -252,7 +292,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
         type: 'role-data-3709',
         label: 'GsCUpdateRoleDataExNtf:3709'
       })
-    ).toBe('missing')
+    ).toEqual({ result: 'missing', newCardIDs: [1] })
     controller.revealTrackerCards(
       {
         type: 'player',
@@ -278,6 +318,93 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
         .map((card) => card.id)
         .sort((a, b) => a - b)
     ).toEqual([1, 132])
+  })
+
+  it('弃牌 pending 与牌堆获得交错时先回退牌堆身份并保留 FIFO', () => {
+    const { controller } = createTrackerControllerHarness()
+    const mainSeatID = 1
+    const targetSeatID = 2
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers(
+      [
+        { SeatID: mainSeatID, ClientID: 100 },
+        { SeatID: targetSeatID, ClientID: 200 }
+      ],
+      100
+    )
+    controller.initTrackerDeck([10, 20, 30])
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [10],
+        CardCount: 1,
+        FromZone: 1,
+        ToZone: 2,
+        ToID: 255,
+        MoveType: 4
+      })
+    )
+
+    // 第一条匿名获得来自弃牌堆，会登记 pending；第二条来自牌堆，只留下额外匿名手牌槽。
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 1,
+        FromZone: 2,
+        FromPosition: 65282,
+        ToID: targetSeatID,
+        ToZone: 5,
+        MoveType: 18,
+        SpellID: ROLE_DATA_3709
+      })
+    )
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 1,
+        FromZone: 1,
+        FromPosition: 65280,
+        ToID: targetSeatID,
+        ToZone: 5,
+        MoveType: 18,
+        SpellID: ROLE_DATA_3709
+      })
+    )
+
+    const room = controller.getTrackerRoom()!
+    const pendingCard = room.pendingDiscardGains[0].cards[0]
+    const pileSettlement = controller.settleTrackerPendingDiscardGain(targetSeatID, [20])
+    expect(pileSettlement).toEqual({ result: 'missing', newCardIDs: [20] })
+    expect(room.pendingDiscardGains).toHaveLength(1)
+
+    controller.revealTrackerCards(
+      {
+        type: 'player',
+        seatID: targetSeatID,
+        fromSeatID: targetSeatID,
+        fromZone: null,
+        fromSubZone: 'hand',
+        subZone: 'hand',
+        handMoveCount: 0
+      },
+      pileSettlement.newCardIDs
+    )
+    expect(pendingCard).toSatisfy(isAnonymous)
+
+    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [20, 10])).toEqual({
+      result: 'settled',
+      newCardIDs: [10]
+    })
+    expect(room.pendingDiscardGains).toHaveLength(0)
+    expect(
+      room.cards
+        .filter(
+          (card) =>
+            card.location === 'player' && card.subZone === 'hand' && card.seats.has(targetSeatID)
+        )
+        .map((card) => card.id)
+        .sort((left, right) => left - right)
+    ).toEqual([10, 20])
   })
 
   it('主视角携带 CardIDs 时沿用普通弃牌堆移动', () => {
@@ -368,7 +495,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
         type: 'role-data-3709',
         label: 'GsCUpdateRoleDataExNtf:3709'
       })
-    ).toBe('settled')
+    ).toEqual({ result: 'settled', newCardIDs: [2, 132] })
 
     const hand = room.cards.filter(
       (card) =>
@@ -430,7 +557,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
         type: 'role-data-3709',
         label: 'GsCUpdateRoleDataExNtf:3709'
       })
-    ).toBe('settled')
+    ).toEqual({ result: 'settled', newCardIDs: [actualID] })
 
     expect(discard.cards.map((card) => card.id)).toEqual(
       beforeMove.filter((cardID) => cardID !== actualID)
@@ -483,15 +610,15 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
       )
 
     move()
-    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [discardIDs[0]])).toBe(
-      'settled'
+    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [discardIDs[0]])).toMatchObject(
+      { result: 'settled' }
     )
     expect(discard.cards.map((card) => card.id)).toEqual([discardIDs[1]])
 
     move()
     expect(
       controller.settleTrackerPendingDiscardGain(targetSeatID, [discardIDs[1], discardIDs[0]])
-    ).toBe('settled')
+    ).toMatchObject({ result: 'settled' })
 
     expect(discard.cards).toHaveLength(0)
     const hand = room.cards.filter(
@@ -545,7 +672,9 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
       })
     )
 
-    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [actualID])).toBe('settled')
+    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [actualID])).toMatchObject({
+      result: 'settled'
+    })
     const discardAfterFirstReveal = discard.cards.map((card) => card.id)
     const handAfterFirstReveal = room.cards
       .filter(
@@ -554,7 +683,10 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
       )
       .map((card) => card.id)
 
-    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [actualID])).toBe('duplicate')
+    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [actualID])).toEqual({
+      result: 'duplicate',
+      newCardIDs: []
+    })
     expect(discard.cards.map((card) => card.id)).toEqual(discardAfterFirstReveal)
     expect(
       room.cards
@@ -607,10 +739,15 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
           SpellID: ROLE_DATA_3709
         })
       )
-      expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [2, 132])).toBe('settled')
+      expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [2, 132])).toMatchObject({
+        result: 'settled'
+      })
 
       const discardBeforeShortSnapshot = discard.cards.map((card) => card.id)
-      expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [2])).toBe('duplicate')
+      expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [2])).toEqual({
+        result: 'duplicate',
+        newCardIDs: []
+      })
       expect(discard.cards.map((card) => card.id)).toEqual(discardBeforeShortSnapshot)
       expect(warn).not.toHaveBeenCalledWith('诡伏角色数据累计 ID 尾部不一致', expect.anything())
 
@@ -640,9 +777,9 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
         })
       )
       const newCardID = discard.cards[0].id
-      expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [newCardID, 2])).toBe(
-        'settled'
-      )
+      expect(
+        controller.settleTrackerPendingDiscardGain(targetSeatID, [newCardID, 2])
+      ).toMatchObject({ result: 'settled' })
       expect(room.cardIndex.get(newCardID)?.location).toBe('player')
       expect(room.cardIndex.get(132)?.location).toBe('discard')
     } finally {
@@ -691,7 +828,9 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
         SpellID: ROLE_DATA_3709
       })
     )
-    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [firstID])).toBe('settled')
+    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [firstID])).toMatchObject({
+      result: 'settled'
+    })
 
     controller.syncTrackerMove(
       protocolMove({
@@ -722,7 +861,9 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
     const nextID = discard.cards[0].id
 
     expect(room.getGuiFuRevealDelta(targetSeatID, [nextID])).toEqual([nextID])
-    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [nextID])).toBe('settled')
+    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [nextID])).toMatchObject({
+      result: 'settled'
+    })
     expect(room.pendingDiscardGains).toHaveLength(0)
     expect(room.cardIndex.get(nextID)?.location).toBe('player')
   })
@@ -768,15 +909,15 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
       })
     )
 
-    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [discardIDs[0]])).toBe(
-      'settled'
+    expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [discardIDs[0]])).toMatchObject(
+      { result: 'settled' }
     )
     expect(discard.cards.map((card) => card.id)).toEqual([discardIDs[1]])
     expect(room.pendingDiscardGains).toHaveLength(1)
 
     expect(
       controller.settleTrackerPendingDiscardGain(targetSeatID, [discardIDs[1], discardIDs[0]])
-    ).toBe('settled')
+    ).toMatchObject({ result: 'settled' })
     expect(discard.cards).toHaveLength(0)
     expect(room.pendingDiscardGains).toHaveLength(0)
   })
@@ -823,9 +964,9 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
           SpellID: ROLE_DATA_3709
         })
       )
-      expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [discardIDs[0]])).toBe(
-        'settled'
-      )
+      expect(
+        controller.settleTrackerPendingDiscardGain(targetSeatID, [discardIDs[0]])
+      ).toMatchObject({ result: 'settled' })
 
       controller.syncTrackerMove(
         protocolMove({
@@ -843,7 +984,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
 
       expect(
         controller.settleTrackerPendingDiscardGain(targetSeatID, [discardIDs[0], discardIDs[1]])
-      ).toBe('settled')
+      ).toMatchObject({ result: 'settled' })
       expect(room.pendingDiscardGains).toHaveLength(0)
       expect(discard.cards.map((card) => card.id)).toEqual(
         discardBefore.filter((cardID) => cardID !== discardIDs[1])
@@ -903,9 +1044,9 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
 
       expect(room.pendingDiscardGains).toHaveLength(2)
       expect(discard.cards.map((card) => card.id)).toEqual(discardIDs)
-      expect(controller.settleTrackerPendingDiscardGain(secondTargetSeatID, [discardIDs[1]])).toBe(
-        'invalid'
-      )
+      expect(
+        controller.settleTrackerPendingDiscardGain(secondTargetSeatID, [discardIDs[1]])
+      ).toMatchObject({ result: 'invalid' })
       expect(room.pendingDiscardGains).toHaveLength(2)
       expect(warn).toHaveBeenCalledWith(
         '诡伏角色数据与待结算 FIFO 队首座位不一致',
@@ -915,12 +1056,12 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
         })
       )
 
-      expect(controller.settleTrackerPendingDiscardGain(firstTargetSeatID, [discardIDs[0]])).toBe(
-        'settled'
-      )
-      expect(controller.settleTrackerPendingDiscardGain(secondTargetSeatID, [discardIDs[1]])).toBe(
-        'settled'
-      )
+      expect(
+        controller.settleTrackerPendingDiscardGain(firstTargetSeatID, [discardIDs[0]])
+      ).toMatchObject({ result: 'settled' })
+      expect(
+        controller.settleTrackerPendingDiscardGain(secondTargetSeatID, [discardIDs[1]])
+      ).toMatchObject({ result: 'settled' })
       expect(room.pendingDiscardGains).toHaveLength(0)
       expect(discard.cards).toHaveLength(0)
     } finally {

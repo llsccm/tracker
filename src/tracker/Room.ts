@@ -9,6 +9,7 @@ import {
   PileIdentityLedger,
   type PileIdentityConsistencyIssue,
   type PileIdentityLedgerMove,
+  type PileIdentityRevealLocation,
   type PileIdentityShuffleTransition
 } from './PileIdentityLedger'
 import { normalizePublicPosition } from './candidate/publicCandidate'
@@ -56,13 +57,20 @@ interface PendingDiscardGain {
   sourceEvent?: MoveOptions['sourceEvent']
 }
 
-export type PendingDiscardGainSettlement = 'settled' | 'duplicate' | 'missing' | 'invalid'
+export type PendingDiscardGainSettlementResult = 'settled' | 'duplicate' | 'missing' | 'invalid'
+
+export interface PendingDiscardGainSettlement {
+  /** pending 是否完成结算；`missing` 由调用方走普通明牌同步，`invalid` 不推进状态。 */
+  result: PendingDiscardGainSettlementResult
+  /** 相对于结算前有效快照的新增身份；快照推进后调用方不能再重新计算该差量。 */
+  newCardIDs: CardID[]
+}
 
 /**
- * 3709 的当前列表可能移除已经不再持有的旧牌。只返回当前快照中尚未确认的牌，
- * 删除和列表顺序变化均由通用移动路径处理。
+ * 3709 上报的是“当前仍持有的身份集合”，不是只追加的事件日志。这里按集合求差，
+ * 只返回本次快照中新出现的身份；旧牌删除和列表顺序变化均由通用移动路径处理。
  */
-function getGuiFuRevealDelta(
+function diffGuiFuRevealSnapshot(
   previousCardIDs: readonly CardID[],
   receivedCardIDs: readonly CardID[]
 ): CardID[] {
@@ -332,15 +340,53 @@ export class Room {
     return anonymizedIdentityIDs
   }
 
-  applyPileIdentityReveal(cardIDs: readonly CardID[], location: 'pile' | 'outside'): void {
+  /**
+   * 将明牌同步后的实体位置投影给身份账本。
+   *
+   * `outside` 不是协议区名，而是“确认已离开牌堆和弃牌堆”的账本语义；公共区展示
+   * 可能因为实体仍在 discard/process 而跳过物理搬运，所以这里必须依据同步后的实际
+   * Card.location 分组，不能把所有非 pile 调用统一标成 outside。
+   * 第二参数仅作为实体尚未物化时的兼容提示；一旦 Card 存在，实际位置始终优先。
+   */
+  applyPileIdentityReveal(cardIDs: readonly CardID[], location?: PileIdentityRevealLocation): void {
     try {
-      this.pileIdentityLedger.applyReveal({
-        cardIDs,
-        location,
-        pileCountAfter: this.zones.get('pile')?.cards.length ?? 0,
-        discardCountAfter: this.zones.get('discard')?.cards.length ?? 0
+      const normalizedCardIDs = cardIDs.map(Number).filter((cardID) => cardID > 0)
+      // 保持固定分组顺序，便于每个账本事务独立对账并输出稳定的诊断上下文。
+      const revealGroups: [PileIdentityRevealLocation, CardID[]][] = [
+        ['pile', []],
+        ['discard', []],
+        ['outside', []]
+      ]
+      const groupByLocation = new Map(revealGroups)
+      normalizedCardIDs.forEach((cardID) => {
+        const actualLocation = this.cardIndex.get(cardID)?.location
+        // 协议目标只是“在哪里展示”，不一定触发物理搬运；同步完成后的 Card.location
+        // 才能证明该身份是否仍在弃牌堆，并决定洗牌时是否继续计入已知弃牌身份。
+        const revealLocation: PileIdentityRevealLocation | undefined =
+          actualLocation === 'pile'
+            ? 'pile'
+            : actualLocation === 'discard'
+              ? 'discard'
+              : actualLocation
+                ? 'outside'
+                : location
+        if (!revealLocation) {
+          // 没有实体也没有调用方位置证据时，跳过比猜成 outside 更安全；解析入口已有缺失诊断。
+          return
+        }
+        groupByLocation.get(revealLocation)!.push(cardID)
       })
-      this.assertPileIdentityLedgerConsistency(`reveal:${location}`)
+
+      for (const [revealLocation, groupedCardIDs] of revealGroups) {
+        if (groupedCardIDs.length === 0) continue
+        this.pileIdentityLedger.applyReveal({
+          cardIDs: groupedCardIDs,
+          location: revealLocation,
+          pileCountAfter: this.zones.get('pile')?.cards.length ?? 0,
+          discardCountAfter: this.zones.get('discard')?.cards.length ?? 0
+        })
+        this.assertPileIdentityLedgerConsistency(`reveal:${revealLocation}`)
+      }
     } catch (error) {
       trackerLogger.warn('牌堆身份账本揭示更新失败', { error, cardIDs, location })
     }
@@ -367,13 +413,14 @@ export class Room {
 
     const previousCardIDs = this.getActiveGuiFuRevealSnapshot(normalizedSeatID)
     if (!previousCardIDs) return normalizedCardIDs
-    return getGuiFuRevealDelta(previousCardIDs, normalizedCardIDs)
+    return diffGuiFuRevealSnapshot(previousCardIDs, normalizedCardIDs)
   }
 
   private getActiveGuiFuRevealSnapshot(seatID: SeatID): CardID[] | undefined {
     const snapshot = this.guiFuRevealSnapshots.get(seatID)
     if (!snapshot) return undefined
 
+    // 快照中的旧牌可能已通过普通移动离开手牌；过滤后再求差，允许同一身份日后重新获得。
     return snapshot.filter((cardID) => {
       const card = this.cardIndex.get(cardID)
       return card?.location === 'player' && card.subZone === 'hand' && card.seats.has(seatID)
@@ -381,10 +428,43 @@ export class Room {
   }
 
   /**
+   * 判断角色数据前是否已经出现未登记进弃牌 FIFO 的匿名手牌槽。
+   *
+   * 仅“身份仍在 unlocatedIdentities”不足以证明它来自牌堆，因为任意尚未出现的牌都满足
+   * 该条件；额外匿名槽才是非弃牌来源移动已经发生的物理证据。这样既允许牌堆获得与
+   * discard pending 交错，又不会把没有对应手牌槽的错误 CardID 当作合法回退。
+   */
+  private hasUntrackedGuiFuAnonymousHandSlots(seatID: SeatID, requiredCount: number): boolean {
+    if (requiredCount <= 0) return false
+
+    const pendingCards = new Set(
+      this.pendingDiscardGains
+        .filter((pending) => pending.seatID === seatID)
+        .flatMap((pending) => pending.cards)
+    )
+    let availableCount = 0
+    for (const card of this.refreshPlayerSnapshot()) {
+      if (
+        card.subZone !== 'hand' ||
+        card.seats.has(seatID) !== true ||
+        !isAnonymous(card) ||
+        pendingCards.has(card)
+      ) {
+        continue
+      }
+
+      availableCount += 1
+      if (availableCount >= requiredCount) return true
+    }
+
+    return false
+  }
+
+  /**
    * 记录“已用匿名手牌占位、等待角色数据确认弃牌身份”的一次获得。
    *
    * 当前只由 3709 使用。第一条移动不消费弃牌堆；FIFO 只保存后续需要替换的匿名
-   * 手牌实体。协议保证移动与角色数据相邻，因此队列出现积压时只告警，不做恢复事务。
+   * 手牌实体。牌堆来源的同技能移动不会进入该 FIFO，因此角色数据到达前允许两类来源交错。
    */
   registerPendingDiscardGain(
     seatID: SeatID,
@@ -458,6 +538,9 @@ export class Room {
    *
    * 角色数据是按座位维护的当前快照，不是只描述本次移动。只消费快照中尚未确认的
    * 新 CardID，并按 FIFO 顺序替换匿名手牌占位；pending 顺序异常时保留状态并告警。
+   *
+   * 返回值同时携带结算前求出的 newCardIDs：`missing` 会接受并推进快照，再由调用方用
+   * 这份差量走普通手牌揭示；`invalid` 则既不消费 FIFO，也不接受本次快照。
    */
   settlePendingDiscardGain(
     seatID: SeatID,
@@ -473,23 +556,34 @@ export class Room {
       normalizedCardIDs.some((cardID) => !Number.isInteger(cardID) || cardID <= 0) ||
       new Set(normalizedCardIDs).size !== normalizedCardIDs.length
     ) {
-      return 'invalid'
+      return { result: 'invalid', newCardIDs: [] }
     }
 
     const previousCardIDs = this.getActiveGuiFuRevealSnapshot(normalizedSeatID) ?? []
-    const newCardIDs = getGuiFuRevealDelta(previousCardIDs, normalizedCardIDs)
+    const newCardIDs = diffGuiFuRevealSnapshot(previousCardIDs, normalizedCardIDs)
     const pending = this.pendingDiscardGains[0]
     if (!pending) {
       this.guiFuRevealSnapshots.set(normalizedSeatID, normalizedCardIDs.slice())
-      if (newCardIDs.length === 0) return 'duplicate'
+      if (newCardIDs.length === 0) return { result: 'duplicate', newCardIDs }
 
       // 兼容前置移动缺失或牌堆来源的角色数据；调用方随后只回退同步 newCardIDs。
-      return 'missing'
+      return { result: 'missing', newCardIDs }
     }
 
     if (newCardIDs.length === 0) {
       this.guiFuRevealSnapshots.set(normalizedSeatID, normalizedCardIDs.slice())
-      return 'duplicate'
+      return { result: 'duplicate', newCardIDs }
+    }
+
+    // pending 只登记弃牌堆来源。如果新增身份仍未定位，且手中确有不属于 FIFO 的额外匿名槽，
+    // 则牌堆获得已经与 discard pending 交错；保留 FIFO，并交给普通明牌路径物化这些身份。
+    const hasUnlocatedSourceIDs = newCardIDs.every((cardID) => this.unlocatedIdentities.has(cardID))
+    if (
+      hasUnlocatedSourceIDs &&
+      this.hasUntrackedGuiFuAnonymousHandSlots(normalizedSeatID, newCardIDs.length)
+    ) {
+      this.guiFuRevealSnapshots.set(normalizedSeatID, normalizedCardIDs.slice())
+      return { result: 'missing', newCardIDs }
     }
 
     if (pending.seatID !== normalizedSeatID) {
@@ -502,7 +596,7 @@ export class Room {
         pendingSourceEvent: pending.sourceEvent,
         sourceEvent
       })
-      return 'invalid'
+      return { result: 'invalid', newCardIDs }
     }
 
     const discard = this.zones.get('discard')
@@ -528,7 +622,7 @@ export class Room {
         pendingSourceEvent: pending.sourceEvent,
         sourceEvent
       })
-      return 'invalid'
+      return { result: 'invalid', newCardIDs }
     }
 
     const allocations: {
@@ -536,6 +630,7 @@ export class Room {
       cards: Card[]
       cardIDs: CardID[]
     }[] = []
+    // 先完成整段 FIFO 的配额规划和状态校验，再统一修改实体；任何 invalid 都不会留下半结算状态。
     let allocatedCount = 0
     for (const candidate of this.pendingDiscardGains) {
       if (allocatedCount >= newCardIDs.length) break
@@ -550,7 +645,7 @@ export class Room {
           pendingSourceEvent: candidate.sourceEvent,
           sourceEvent
         })
-        return 'invalid'
+        return { result: 'invalid', newCardIDs }
       }
 
       const count = Math.min(candidate.cards.length, newCardIDs.length - allocatedCount)
@@ -579,7 +674,7 @@ export class Room {
           pendingSourceEvent: candidate.sourceEvent,
           sourceEvent
         })
-        return 'invalid'
+        return { result: 'invalid', newCardIDs }
       }
 
       allocations.push({
@@ -602,20 +697,21 @@ export class Room {
         pendingSourceEvent: pending.sourceEvent,
         sourceEvent
       })
-      return 'invalid'
+      return { result: 'invalid', newCardIDs }
     }
 
-    allocations.forEach(({ pending: allocation, cards, cardIDs }) => {
+    allocations.forEach(({ pending: allocation, cards, cardIDs: allocatedCardIDs }) => {
       this.removeCardsFromConstraintGroups(cards)
       cards.forEach((card) => card.moveToPublicZone('outside'))
 
-      // 前置移动已经增加手牌总数；这里只用真实弃牌实体替换新增的匿名手牌槽。
-      this.moveCards(cardIDs, 'player', {
+      // allocatedCardIDs 与本次 cards 切片一一对应。前置移动已经增加手牌总数；这里仅用
+      // 真实弃牌实体替换这些匿名手牌槽，因此 handMoveCount 必须保持为 0。
+      this.moveCards(allocatedCardIDs, 'player', {
         seatID: normalizedSeatID,
         fromZone: 'discard',
         subZone: 'hand',
         spellID: cards[0]?.spellID ?? null,
-        cardCount: cardIDs.length,
+        cardCount: allocatedCardIDs.length,
         handMoveCount: 0,
         moveType: allocation.sourceEvent?.moveType,
         sourceEvent: sourceEvent ?? allocation.sourceEvent
@@ -625,8 +721,8 @@ export class Room {
         eventType: 'moveKnown',
         fromZone: 2,
         toZone: 5,
-        cardIDs,
-        cardCount: cardIDs.length,
+        cardIDs: allocatedCardIDs,
+        cardCount: allocatedCardIDs.length,
         pileCountBefore: this.zones.get('pile')?.cards.length ?? 0,
         moveType: allocation.sourceEvent?.moveType,
         spellID: cards[0]?.spellID ?? null
@@ -638,7 +734,7 @@ export class Room {
     while (this.pendingDiscardGains[0]?.cards.length === 0) {
       this.pendingDiscardGains.shift()
     }
-    return 'settled'
+    return { result: 'settled', newCardIDs }
   }
 
   /**
