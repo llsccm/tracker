@@ -34,9 +34,13 @@
 
 ## 检索与文件查看
 
-- 文件与文本检索优先使用可用 MCP 工具；需要终端检索时，可用环境中优先使用 `rg --files` 与 `rg "关键词"`。
-- 若 `rg` 或其他外部检索工具不可用、被系统拦截或输出异常，读取 `mem:local_environment` 中记录的本机等价命令，不要把该回退写法固化进仓库文档。
-- 查看文件时优先使用 MCP 或编辑器能力；需要终端读取时，同样按本机 Shell 的等价命令执行。
+- 代码/文档的粗粒度文件与文本发现优先使用 `rg --files`、`rg "关键词"`；需要理解 TypeScript/JavaScript
+  符号、方法体或引用关系时，优先使用 Serena 的 overview/find_symbol/find_referencing_symbols。
+- `rg` 与 Serena 都不适合、不可用或输出异常时，才退回 PowerShell 原生命令；回退写法读取
+  `mem:local_environment`，不要把某台机器的 Shell 细节固化进仓库文档。
+- 读取代码时不要为了“已知路径”直接用 PowerShell 整文件扫过大文件；先用 `rg` 缩小范围，再用 Serena
+  读取需要的符号。读取 Markdown、配置或 Serena 无法解析的文件时，才使用带 `-Encoding UTF8` 的
+  PowerShell `Get-Content`。
 
 ---
 

@@ -1,5 +1,5 @@
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
   resolve: {
@@ -10,6 +10,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.{js,ts}'],
+    exclude: [...configDefaults.exclude, 'tests/replay/**'],
     coverage: {
       include: ['src/tracker/**/*.{js,ts}'],
       exclude: ['src/tracker/view/**']

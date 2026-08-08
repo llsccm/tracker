@@ -2,7 +2,9 @@
 
 > 当你需要为改动选择验证命令、补充回归测试、理解现有测试布局，或做手工验收时，请阅读本文档。
 >
-> 记牌器领域风险与特殊边界见 [`card_tracker.md`](card_tracker.md)；命令执行细节见 [`commands.md`](commands.md)。
+> 记牌器领域风险与特殊边界见 [`card_tracker.md`](card_tracker.md)；开发 API 速查见
+> [`tracker_api.md`](tracker_api.md)；命令执行细节见 [`commands.md`](commands.md)。协议回放只在任务明确涉及
+> 回放时阅读 [`replay.md`](replay.md)。
 
 ---
 
@@ -10,11 +12,11 @@
 
 - 测试运行器：Vitest（`vitest.config.js`）
 - 环境：`node`
-- 包含范围：`tests/**/*.test.{js,ts}`
+- 默认包含范围：`tests/**/*.test.{js,ts}`，但排除 `tests/replay/**`
 - 覆盖率配置：默认关注 `src/tracker/**/*.{js,ts}`，排除 `src/tracker/view/**`
 - 现状：
   - 已有较完整的记牌器单元/回归：`tests/tracker/`
-  - 协议回放诊断独立放在：`tests/replay/tracker/`
+  - 协议回放诊断独立放在：`tests/replay/tracker/`（按需，详见 [`replay.md`](replay.md)）
   - 牌堆身份纯模型契约独立放在：`tests/contracts/pile-identity/`
   - 已有少量运行时与外围工具测试：`tests/runtime/`、`tests/utils/peixiuRouteFeature.test.js`
   - **没有**通用 `pnpm test` 脚本；`pnpm test:tracker` 同时运行 tracker 回归与牌堆身份契约
@@ -26,7 +28,7 @@
 | ------------------------ | ----------------------------------------------------- |
 | `tests/tracker/`         | Room 移动、候选、收敛、Controller、脏渲染、遍历基线等 |
 | `tests/tracker/helpers/` | 测试夹具与 noop runtime/view                          |
-| `tests/replay/tracker/`  | 独立的协议 JSONL 重建、诊断与真实录制回放入口         |
+| `tests/replay/tracker/`  | 按需加载的协议 JSONL 重建、诊断与真实录制回放入口（见 `replay.md`） |
 | `tests/contracts/pile-identity/` | 牌堆身份纯模型、真实牌序 oracle 与长期语义契约 |
 | `tests/runtime/`         | 宿主运行时适配、窗口关闭与对局结束 UI 生命周期        |
 | `tests/utils/`           | 非 tracker 工具逻辑，如裴秀路线                       |
@@ -51,20 +53,18 @@
 
 ```sh
 pnpm test:tracker
-pnpm test:replay
 pnpm typecheck:tracker
-pnpm typecheck:replay
 pnpm typecheck
 pnpm lint
 pnpm build
 pnpm build:prod
 ```
 
-补充：
+补充：协议回放文档、测试目录和命令采用渐进式披露。只有用户明确要求或任务确实涉及回放时，才阅读
+[`replay.md`](replay.md) 与 [`tests/replay/README.md`](../../tests/replay/README.md)，并运行
+`pnpm test:replay`、`pnpm typecheck:replay` 或 `pnpm replay:tracker`。
 
-- 回放测试默认不执行。只有用户明确要求时，才运行 `pnpm test:replay`、`pnpm typecheck:replay`、`pnpm replay:tracker` 或 `tests/replay/` 下的相关测试；普通任务按 tracker、类型、lint 和构建范围选择验证命令。
-
-- 跑全部 Vitest 匹配文件（含 `tests/utils`）：
+- 跑全部默认 Vitest 匹配文件（含 `tests/utils`，不含 `tests/replay`）：
 
 ```sh
 pnpm exec vitest run
@@ -89,27 +89,11 @@ pnpm exec vitest run tests/tracker/traversalBaseline.test.ts -u
 pnpm exec vitest run --coverage
 ```
 
-### 协议回放（仅 Node/Vitest）
+### 协议回放（按需）
 
-协议录制文件只在测试环境中回放，不提供浏览器按钮，也不会把历史协议注入真实对局。回放器会新建隔离的
-`GameState` 与 `TrackerController`，按 `seq` 重建 Room、玩家、牌堆、移动、看牌和关键技能状态，并在
-每条协议后检查身份账本、公共区槽位、增量索引、模糊索引与玩家快照。
-
-本地录制统一放在 Git 忽略目录 `replays/`。默认文件名为
-`replays/tracker-protocols.jsonl`，放好文件后直接运行 `pnpm replay:tracker`。
-
-可选环境变量：
-
-- `DXC_TRACKER_PROTOCOL_FILE`：覆盖默认 JSONL 路径，用于回放其它录制文件。
-- `DXC_TRACKER_CURRENT_USER_ID`：录像无法从协议确定主视角时，显式指定当前用户 ID。
-- `DXC_TRACKER_REPLAY_TRACE=1`：输出每条协议应用后的状态，适合查找首次推断偏差；录制较长时输出会很大。
-
-回放遇到首个异常会立即停止，并输出失败 `seq`、`className`、原始 `payload`、前置协议上下文，以及
-失败前后的 Room/玩家/牌堆/约束摘要。若录制从对局中途开始，缺少座位或牌堆初始化协议时会明确报告
-“录制可能开始过晚”。没有抛异常但需要验证推断结果时，可在 Vitest 回归中导入
-`tests/replay/tracker/helpers/protocolReplay`，对回放后的 Room 或报告快照编写领域断言。
-
-Windows 本机执行时遵循 [`commands.md`](commands.md) 与 Serena 本机记忆；仓库文档不绑定具体 Shell 细节。
+协议回放只在 Node/Vitest 中运行，且与普通 tracker 回归隔离。目录地图、JSONL 格式、环境变量、诊断流程
+和回放专用验证命令统一收录在 [`replay.md`](replay.md)；测试目录就地入口是
+[`tests/replay/README.md`](../../tests/replay/README.md)。普通任务到此为止，不继续读取回放 helper。
 
 ---
 
@@ -120,14 +104,16 @@ Windows 本机执行时遵循 [`commands.md`](commands.md) 与 Serena 本机记�
 | 仅文档 / 注释                                              | 无需构建与测试                                                  |
 | 普通 `src/` 代码（非 tracker 高风险）                      | `pnpm lint` + `pnpm build`                                      |
 | `src/tracker/`、`tests/tracker/` 或 `tests/contracts/pile-identity/` | `pnpm lint` + `pnpm build` + `pnpm test:tracker`        |
-| `tests/replay/tracker/` 或协议回放驱动（用户明确要求时）   | `pnpm test:replay` + `pnpm typecheck:replay`                    |
+| `tests/replay/tracker/` 或协议回放驱动（仅在任务明确涉及时） | 先读 [`replay.md`](replay.md)，再运行 `pnpm test:replay` + `pnpm typecheck:replay` |
 | TS 类型契约、`tsconfig*`、ESLint TS 覆盖、tracker 类型迁移 | `pnpm typecheck:tracker`；需要确认全仓入口时再 `pnpm typecheck` |
 | `tests/utils/` 或非 tracker 测试                           | `pnpm exec vitest run`（或对应文件）+ 适用 lint/build           |
 | 发布配置、打包参数、用户脚本元信息、核心协议高风险路径     | 额外 `pnpm build:prod`                                          |
 | 修改 `html/iframe.html` / 远端配置加载                     | 本地 dev 注入验收 + 确认远端部署流程                            |
 | Serena 记忆                                                | `serena memories check`                                         |
 
-CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑：`lint`、`typecheck`、`test:tracker`、`build`；`main` 的 push 额外 `build:prod`。本地提交前尽量对齐，避免只靠 CI 兜底。
+CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑：`lint`、默认 `typecheck`、
+`test:tracker`、`build`；`main` 的 push 额外 `build:prod`。默认 TypeScript/Vitest 范围不加载
+`tests/replay/`，回放改动需显式补跑 [`replay.md`](replay.md) 中的专用命令。
 
 ---
 
@@ -159,14 +145,10 @@ CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑�
 - 远端 `Config_w.sgs` / HTML 资源加载
 - 录像 UI 与宿主页面耦合行为
 
-### 匿名槽回放决策记录
+### 匿名槽回放决策记录（按需）
 
-匿名槽阶段 0/1 的 G0、G1 回放采集已经结束，最终决定为 NO-GO / 收缩：保留匿名牌堆，不推进
-阶段 2–7。临时浏览器回放探针与固定 G0 五站点 schema 已从运行时移除。
-
-历史决策、阶段 0 冲突基线与阶段 1 对照数据已合并到本地归档
-[`plans/anonymous-entity-and-slot.md`](../../plans/anonymous-entity-and-slot.md)
-（该目录被 `.gitignore` 忽略）。通用性能变更仍必须使用
+匿名槽阶段 0/1 的 G0、G1 回放采集与 NO-GO / 收缩结论属于回放历史，不是普通 tracker 测试的前置知识。
+需要查看历史证据时阅读 [`replay.md`](replay.md) 中的决策摘要及其本地归档链接；通用性能变更仍必须使用
 `recordTraversal(...)` 和 `tests/tracker/traversalBaseline.test.ts` 维护自动化遍历护栏。
 
 ### 牌堆身份纯模型
@@ -344,6 +326,8 @@ L3 手工注入验收 浏览器 / 微端真实页面
 
 - [`conventions.md`](conventions.md)：何时 lint/build/typecheck，以及 PR 验证写法
 - [`card_tracker.md`](card_tracker.md)：记牌器风险清单与领域回归重点
+- [`tracker_api.md`](tracker_api.md)：手牌读取、明牌/牌堆揭示、移动与实体补建速查
+- [`replay.md`](replay.md)：协议回放专用文档（按需）
 - [`lifecycle.md`](lifecycle.md)：开局、移动、结束等运行时路径
 - [`environment.md`](environment.md)：脚本与环境入口
 - [`commands.md`](commands.md)：终端执行约定

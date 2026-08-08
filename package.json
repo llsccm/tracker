@@ -17,7 +17,7 @@
     "typecheck:tracker": "tsc -p tsconfig.tracker.json",
     "typecheck:replay": "tsc -p tsconfig.replay.json",
     "test:tracker": "vitest run tests/tracker tests/contracts/pile-identity",
-    "test:replay": "vitest run tests/replay/tracker --exclude tests/replay/tracker/protocolReplay.runner.js",
+    "test:replay": "vitest run --config vitest.replay.tests.config.js",
     "replay:tracker": "vitest run --config vitest.replay.config.js"
   },
   "devDependencies": {

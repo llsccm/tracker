@@ -24,3 +24,5 @@
 - `html/iframe.html` 是界面 HTML 源文件，部署到远端后由脚本运行时加载。
 
 - 测试策略、补测约定与手工验收见 [testing.md](testing.md)。
+- 记牌器常用方法调用速查见 [tracker_api.md](tracker_api.md)。
+- 协议回放文档与 `tests/replay/` 仅在任务明确涉及回放时读取，见 [replay.md](replay.md)。
