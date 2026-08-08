@@ -164,6 +164,9 @@ describe('tracker protocol recording rules', () => {
     expect(shouldRecordTrackerProtocol({ className: 'GsCUpdateRoleDataExNtf', DataID: 3544 })).toBe(
       true
     )
+    expect(shouldRecordTrackerProtocol({ className: 'GsCUpdateRoleDataExNtf', DataID: 3709 })).toBe(
+      true
+    )
     expect(shouldRecordTrackerProtocol({ className: 'GsCUpdateRoleDataExNtf', DataID: 4022 })).toBe(
       false
     )

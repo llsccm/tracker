@@ -78,9 +78,17 @@ export interface PileIdentityLedgerMoveResult {
   shuffleTransition?: PileIdentityShuffleTransition
 }
 
+/**
+ * 明牌同步完成后，身份相对于牌堆账本的确定位置。
+ *
+ * `discard` 必须与 `outside` 分开：两者都不再属于牌堆 cohort，但只有前者会在下一次
+ * 弃牌洗回时参与已知身份统计；`outside` 仅表示已有实体证明确实离开了牌堆和弃牌堆。
+ */
+export type PileIdentityRevealLocation = 'pile' | 'discard' | 'outside'
+
 export interface PileIdentityLedgerReveal {
   cardIDs: readonly CardID[]
-  location: 'pile' | 'outside'
+  location: PileIdentityRevealLocation
   pileCountAfter: number
   discardCountAfter: number
 }
@@ -324,8 +332,21 @@ export class PileIdentityLedger {
   applyReveal(reveal: PileIdentityLedgerReveal): void {
     this.commit(`reveal:${reveal.location}`, () => {
       normalizeIDs(reveal.cardIDs).forEach((cardID) => {
-        if (reveal.location === 'pile') this.revealIdentityInPileInternal(cardID)
-        else this.revealIdentityOutsidePileInternal(cardID)
+        if (reveal.location === 'pile') {
+          // 牌堆内揭示只把身份从匿名 cohort 提升为已知牌堆身份，不改变物理牌堆数量。
+          this.revealIdentityInPileInternal(cardID)
+          return
+        }
+
+        // discard / outside 都已离开牌堆候选集合；差别只在是否仍是可枚举的弃牌身份。
+        this.revealIdentityOutsidePileInternal(cardID)
+        if (reveal.location === 'discard') {
+          this.knownDiscardIdentityIDs.add(cardID)
+          return
+        }
+
+        // 只有实体位置明确落在 pile、discard 之外时，才有证据撤销已知弃牌身份。
+        this.knownDiscardIdentityIDs.delete(cardID)
       })
       this.reconcilePileCountInternal(reveal.pileCountAfter)
       this.previousDiscardCount = normalizeCount(reveal.discardCountAfter)
@@ -464,11 +485,8 @@ export class PileIdentityLedger {
 
     if (anonymousDiscardCount > 0) {
       // 匿名弃牌洗回后无法区分新旧世代边界，只保留“总共有多少暗身份在牌堆”。
+      // 这是协议信息不足造成的正常降级；后续仍由物理牌堆张数核对，不作为账本异常告警。
       this.degradeToSingleCohortInternal(pileCountAfter)
-      this.warn('anonymous-discard-shuffle', {
-        anonymousDiscardCount,
-        pileCountAfter
-      })
       return
     }
 
