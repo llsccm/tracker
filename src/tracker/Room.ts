@@ -701,6 +701,7 @@ export class Room {
     }
 
     allocations.forEach(({ pending: allocation, cards, cardIDs: allocatedCardIDs }) => {
+      const allocationSpellID = cards[0]?.spellID ?? null
       this.removeCardsFromConstraintGroups(cards)
       cards.forEach((card) => card.moveToPublicZone('outside'))
 
@@ -710,7 +711,7 @@ export class Room {
         seatID: normalizedSeatID,
         fromZone: 'discard',
         subZone: 'hand',
-        spellID: cards[0]?.spellID ?? null,
+        spellID: allocationSpellID,
         cardCount: allocatedCardIDs.length,
         handMoveCount: 0,
         moveType: allocation.sourceEvent?.moveType,
@@ -725,7 +726,7 @@ export class Room {
         cardCount: allocatedCardIDs.length,
         pileCountBefore: this.zones.get('pile')?.cards.length ?? 0,
         moveType: allocation.sourceEvent?.moveType,
-        spellID: cards[0]?.spellID ?? null
+        spellID: allocationSpellID
       })
       allocation.cards.splice(0, cards.length)
     })

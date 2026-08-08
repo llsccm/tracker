@@ -35,7 +35,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
     trackerMock.getTrackerGuiFuRevealDelta = getTrackerGuiFuRevealDelta
     trackerMock.revealTrackerCards = revealTrackerCards
     trackerMock.settleTrackerPendingDiscardGain = settleTrackerPendingDiscardGain
-    revealTrackerCards.mockClear()
+    revealTrackerCards.mockReset()
     getTrackerGuiFuRevealDelta.mockReset()
     getTrackerGuiFuRevealDelta.mockImplementation((_seatID, cardIDs) => cardIDs)
     settleTrackerPendingDiscardGain.mockReset()
