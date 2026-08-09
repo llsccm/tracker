@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+// 用 Vite 的 `?raw` 读取 fixture，避免在被 tsconfig.replay.json 类型检查的测试里引入 node 内置模块。
+import fixtureSource from './fixtures/hand-transfer-reveal-retransfer.jsonl?raw'
 import {
   expectCardSeatsAt,
   formatTrackerProtocolReplayReport,
@@ -14,7 +14,6 @@ import {
  * 该组合路径曾经让旧约束组在收敛时误删卡牌 10 的 7 号位候选，
  * 单测没有覆盖完整事件序列，所以这里用最小真实录制 + 领域断言守住。
  */
-const FIXTURE = 'tests/replay/tracker/fixtures/hand-transfer-reveal-retransfer.jsonl'
 const WATCHED_CARDS = [10, 129]
 const EXPECTED_SEATS = [2, 7]
 
@@ -87,5 +86,5 @@ describe('真实录制回放：连续整手转移 + 中途揭示', () => {
 })
 
 function readFixture() {
-  return parseTrackerProtocolJsonl(readFileSync(resolve(FIXTURE), 'utf8'))
+  return parseTrackerProtocolJsonl(fixtureSource)
 }

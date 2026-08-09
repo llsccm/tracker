@@ -19,7 +19,7 @@ describe('tracker protocol replay runner', () => {
     const replayer = new TrackerProtocolReplayer({
       currentUserID: readOptionalInteger('DXC_TRACKER_CURRENT_USER_ID'),
       mode: trace ? 'deep' : readMode(),
-      toSeq: readOptionalInteger('DXC_TRACKER_REPLAY_TO_SEQ'),
+      toSeq: readOptionalPositiveInteger('DXC_TRACKER_REPLAY_TO_SEQ'),
       watchCardIDs: readOptionalIntegerList('DXC_TRACKER_REPLAY_WATCH_CARDS'),
       watchSeatIDs: readOptionalIntegerList('DXC_TRACKER_REPLAY_WATCH_SEATS'),
       captureFullSnapshots: trace
@@ -72,12 +72,22 @@ function readOptionalInteger(name) {
   return parsed
 }
 
+// seq 从 1 开始；toSeq=0 或负数会让整份录制被跳过，那是配置错误而不是“回放通过”。
+function readOptionalPositiveInteger(name) {
+  const parsed = readOptionalInteger(name)
+  if (parsed !== undefined && parsed <= 0) throw new Error(`${name} 必须是正整数`)
+  return parsed
+}
+
 function readOptionalIntegerList(name) {
   const value = env[name]
   if (value === undefined || value.trim() === '') return undefined
 
   return value.split(',').map((item) => {
-    const parsed = Number(item.trim())
+    const text = item.trim()
+    // 不能直接交给 Number()：空串和纯空白都会被静默转成 0，导致多出一个不存在的 ID。
+    if (text === '') throw new Error(`${name} 存在空列表项，请检查多余的逗号`)
+    const parsed = Number(text)
     if (!Number.isInteger(parsed)) throw new Error(`${name} 必须是逗号分隔的整数列表`)
     return parsed
   })

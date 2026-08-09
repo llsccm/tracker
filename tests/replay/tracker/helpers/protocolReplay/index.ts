@@ -4,6 +4,7 @@ import { TrackerController } from '@/tracker/runtime/trackerController'
 import { ReplayAssertionRunner, type ReplayAssertionViolation } from './assertions'
 import { applyTrackerReplayProtocol } from './handlers'
 import { ReplayMetrics } from './metrics'
+import { normalizeNonNegative, normalizePositive } from './normalize'
 import { parseTrackerProtocolJsonl } from './parser'
 import { assertTrackerReplayConsistency, createTrackerReplaySnapshot } from './snapshot'
 import type {
@@ -452,14 +453,6 @@ function mergeSorted(target: number[], values: number[] | undefined): void {
     if (!target.includes(value)) target.push(value)
   })
   target.sort((left, right) => left - right)
-}
-
-function normalizePositive(value: number | undefined, fallback: number): number {
-  return Number.isInteger(value) && Number(value) > 0 ? Number(value) : fallback
-}
-
-function normalizeNonNegative(value: number | undefined, fallback: number): number {
-  return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : fallback
 }
 
 function formatControllerError(message: string, details: unknown[]): string {

@@ -25,17 +25,6 @@ export interface ReplayMetricsSnapshot {
   counters: Record<string, number>
 }
 
-const PHASES: ReplayMetricPhase[] = [
-  'parse',
-  'apply',
-  'consistency',
-  'indexRebuild',
-  'snapshot',
-  'watch',
-  'assert',
-  'format'
-]
-
 export class ReplayMetrics implements ReplayMetricsSink {
   private readonly timings = new Map<string, number>()
   private readonly counters = new Map<string, number>()
@@ -49,7 +38,7 @@ export class ReplayMetrics implements ReplayMetricsSink {
     this.counters.set(name, (this.counters.get(name) ?? 0) + delta)
   }
 
-  /** 覆盖式写入（用于 max 类指标）。 */
+  /** 取最大值写入：只有新值更大时才覆盖，用于 max 类指标。 */
   observeMax(name: string, value: number): void {
     const current = this.counters.get(name)
     if (current === undefined || value > current) this.counters.set(name, value)
@@ -65,10 +54,10 @@ export class ReplayMetrics implements ReplayMetricsSink {
   }
 
   getSnapshot(): ReplayMetricsSnapshot {
+    // 直接遍历实际记录到的阶段（按首次出现顺序），避免另立一份白名单后漏掉新增阶段。
     const timings: Record<string, number> = {}
-    PHASES.forEach((phase) => {
-      const value = this.timings.get(phase)
-      if (value !== undefined) timings[phase] = round(value)
+    this.timings.forEach((value, phase) => {
+      timings[phase] = round(value)
     })
     timings.wallClock = round(performance.now() - this.createdAt)
 

@@ -83,6 +83,32 @@ describe('回放诊断：解析、指标、watch 与断言', () => {
     expect(report.diagnostics.watchStats.watchedCards).toBeGreaterThan(0)
   })
 
+  it('换局重建 Room 后重置每局采集状态，不把上一局的候选串进新局', () => {
+    const secondGame = drawRecords().map((record) => ({ ...record, seq: record.seq + 5 }))
+    const report = new TrackerProtocolReplayer({
+      currentUserID: 101,
+      watchCardIDs: [1]
+    }).replay(drawRecords().concat(secondGame))
+
+    const afterRebuild = report.diagnostics.cardChanges.filter((change) => change.seq > 5)
+    expect(afterRebuild).toHaveLength(1)
+    // 新局第一条变化必须以“无前置状态”起算；否则会拿上一局的 seats 做 diff，凭空报出一次移除。
+    expect(afterRebuild[0].previous).toBeNull()
+    expect(afterRebuild[0].removedSeats).toEqual([])
+    expect(afterRebuild[0].next?.seats).toEqual([1])
+  })
+
+  it('提前停机时未执行的 final 断言计为违反，而不是当作通过', () => {
+    const report = new TrackerProtocolReplayer({
+      currentUserID: 101,
+      assertions: [expectCardSeatsAt(5, 1, [2]), expectCardSeatsAt('final', 1, [1])]
+    }).replay(drawRecords())
+
+    expect(report.success).toBe(false)
+    expect(report.diagnostics.violations).toHaveLength(2)
+    expect(report.diagnostics.violations[1]?.message).toContain('final 断言没有执行')
+  })
+
   it('领域断言在 seq 与 final 两种时机都会被求值', () => {
     const passing = new TrackerProtocolReplayer({
       currentUserID: 101,

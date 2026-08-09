@@ -19,6 +19,13 @@ export type TrackerProtocolReplayStatus = 'applied' | 'ignored' | 'partial'
  */
 export type TrackerProtocolReplayMode = 'fast' | 'watch' | 'deep'
 
+/**
+ * 停机策略。
+ *
+ * 只作用于**语义违反**（断言）：`never` 表示收集全部违反、不提前停机。
+ * **结构错误不受此选项影响**：协议无法应用或一致性检查抛出时，
+ * 后续回放状态已不可信，任何取值都会立刻终止并给出 `failure`。
+ */
 export type TrackerProtocolReplayStopOn =
   | 'first-semantic-mismatch'
   | 'first-structural-error'

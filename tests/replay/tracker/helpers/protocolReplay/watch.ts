@@ -3,6 +3,7 @@ import type { Card } from '@/tracker/Card'
 import type { ConstraintGroup } from '@/tracker/ConstraintGroup'
 import type { Room } from '@/tracker/Room'
 import { NOOP_REPLAY_METRICS, type ReplayMetricsSink } from './metrics'
+import { normalizePositive } from './normalize'
 
 /** 单次协议前后可观察到的 watched card 状态。 */
 export interface ReplayWatchedCardState {
@@ -100,6 +101,8 @@ export class ReplayWatchTracker {
   private readonly provenanceSignatures = new Map<string, string>()
   private readonly changes: ReplayCardChange[] = []
 
+  /** 当前采集绑定的 Room；换局会重建 Room，必须据此重置每局状态。 */
+  private currentRoom: Room | null = null
   private dirtyCursor = 0
   private droppedChanges = 0
   private droppedProvenance = 0
@@ -120,6 +123,7 @@ export class ReplayWatchTracker {
 
   /** 协议应用前调用：只记录 dirtyCardEvents 游标，不做扫描。 */
   beginProtocol(room: Room | null): void {
+    this.adoptRoom(room)
     this.dirtyCursor = room?.dirtyCardSeq ?? 0
   }
 
@@ -129,6 +133,8 @@ export class ReplayWatchTracker {
 
     const startedAt = performance.now()
     try {
+      // 本条协议自己换了 Room（重建开局）时，新 Room 的全部事件都属于这条协议。
+      if (this.adoptRoom(room)) this.dirtyCursor = 0
       if (!room) return []
 
       const watched = this.resolveWatchedCards(room)
@@ -167,6 +173,25 @@ export class ReplayWatchTracker {
     } finally {
       this.metrics.add('watch', performance.now() - startedAt)
     }
+  }
+
+  /**
+   * 换局（`initTrackerRoom` 重建 Room）时丢弃上一局的每局状态。
+   *
+   * 不重置的话：`previousStates` 会让新局第一条协议与旧局状态相比；
+   * `dirtyCardSeq` 与 `constraintGroupSeq` 都从头计数，旧局的 `group_N`
+   * 会被误当成新局同名组的历史，`createdAtSeq` 直接串局。
+   * watch 配置、`stickyCardIDs` 与跨局的变化日志是关注点本身，保留不动。
+   * 返回是否发生了切换，由调用方决定新的 `dirtyCursor` 语义。
+   */
+  private adoptRoom(room: Room | null): boolean {
+    if (room === this.currentRoom) return false
+
+    this.currentRoom = room
+    this.previousStates.clear()
+    this.provenance.clear()
+    this.provenanceSignatures.clear()
+    return true
   }
 
   getChanges(): ReplayCardChange[] {
@@ -265,7 +290,6 @@ export class ReplayWatchTracker {
       existing.invalidatedAtSeq = null
       if (this.provenanceSignatures.get(id) === signature) return
       this.provenanceSignatures.set(id, signature)
-      existing.lastUpdatedAtSeq = seq
       Object.assign(existing, createProvenance(id, existing.createdAtSeq, group), {
         lastUpdatedAtSeq: seq,
         invalidatedAtSeq: null
@@ -381,6 +405,8 @@ function formatReason(detail: Record<string, unknown>): string {
 
 function isSameWatchedState(left: ReplayWatchedCardState, right: ReplayWatchedCardState): boolean {
   return (
+    // 匿名槽被 materializeIdentity 就地升级时只有 entityID 变化，必须算作一次可观察变化。
+    left.entityID === right.entityID &&
     left.location === right.location &&
     left.subZone === right.subZone &&
     left.isKnown === right.isKnown &&
@@ -422,6 +448,3 @@ function sameNumbers(left: number[], right: number[]): boolean {
   return left.length === right.length && left.every((item, index) => item === right[index])
 }
 
-function normalizePositive(value: number | undefined, fallback: number): number {
-  return Number.isInteger(value) && Number(value) > 0 ? Number(value) : fallback
-}

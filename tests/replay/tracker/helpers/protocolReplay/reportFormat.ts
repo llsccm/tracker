@@ -1,4 +1,5 @@
 import type { ReplayAssertionViolation } from './assertions'
+import { normalizePositive } from './normalize'
 import type {
   RecordedTrackerProtocol,
   TrackerProtocolReplayCausalClosure,
@@ -248,10 +249,6 @@ function formatEntries(values: Record<string, number>): string {
   const entries = Object.entries(values)
   if (entries.length === 0) return '(空)'
   return entries.map(([key, value]) => `${key}=${value}`).join(' ')
-}
-
-function normalizePositive(value: number | undefined, fallback: number): number {
-  return Number.isInteger(value) && Number(value) > 0 ? Number(value) : fallback
 }
 
 function stringifyInline(value: unknown): string {

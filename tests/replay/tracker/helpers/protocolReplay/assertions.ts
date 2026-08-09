@@ -71,7 +71,10 @@ export class ReplayAssertionRunner {
     return this.run(this.final, context)
   }
 
-  /** 从未被求值的定点断言（对应 seq 未出现或回放提前停止）。 */
+  /**
+   * 从未被求值的断言：定点断言对应的 seq 没出现，或回放提前停止导致 `final` 断言没跑。
+   * 这些必须计为违反，否则“回放没报错”会被误读成“断言都通过了”。
+   */
   collectUnevaluated(lastSeq: number, className: string): ReplayAssertionViolation[] {
     const violations: ReplayAssertionViolation[] = []
     this.bySeq.forEach((assertions, seq) => {
@@ -84,6 +87,16 @@ export class ReplayAssertionRunner {
           message: `断言未被求值：回放中没有出现 seq=${seq}（最后处理到 seq=${lastSeq}）`,
           cardIDs: assertion.cardIDs ?? []
         })
+      })
+    })
+    this.final.forEach((assertion) => {
+      if (this.evaluated.has(assertion)) return
+      violations.push({
+        seq: lastSeq,
+        className,
+        label: assertion.label,
+        message: `断言未被求值：回放在 seq=${lastSeq} 提前停止，final 断言没有执行`,
+        cardIDs: assertion.cardIDs ?? []
       })
     })
     return violations
