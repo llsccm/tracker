@@ -6,8 +6,10 @@ export function parseTrackerProtocolJsonl(source: string): RecordedTrackerProtoc
   if (typeof source !== 'string') throw new TypeError('协议回放输入必须是 JSONL 字符串')
 
   const records: RecordedTrackerProtocol[] = []
-  const lines = source.replace(/^\uFEFF/, '').split(/\r?\n/)
-  let expectedSeq = 1
+  const lines = stripBom(source).split(/\r?\n/)
+  // 允许首条 seq 不是 1，这样按区间截取出来的片段可以直接回放；
+  // 片段内部仍要求严格连续，缺条会被立刻发现。
+  let expectedSeq: number | null = null
 
   lines.forEach((line, index) => {
     if (line.trim() === '') return
@@ -16,7 +18,7 @@ export function parseTrackerProtocolJsonl(source: string): RecordedTrackerProtoc
     const parsed = parseJsonLine(line, lineNumber)
     const record = validateRecord(parsed, lineNumber, expectedSeq)
     records.push(record)
-    expectedSeq += 1
+    expectedSeq = record.seq + 1
   })
 
   if (records.length === 0) throw new Error('协议回放文件为空')
@@ -33,7 +35,7 @@ function parseJsonLine(line: string, lineNumber: number): unknown {
   }
 }
 
-function validateRecord(value: unknown, lineNumber: number, expectedSeq: number) {
+function validateRecord(value: unknown, lineNumber: number, expectedSeq: number | null) {
   if (!isRecord(value)) throw new Error(`协议回放文件第 ${lineNumber} 行必须是 JSON 对象`)
 
   const extraFields = Object.keys(value).filter((field) => !RECORD_FIELDS.has(field))
@@ -47,7 +49,7 @@ function validateRecord(value: unknown, lineNumber: number, expectedSeq: number)
     throw new Error(`协议回放文件第 ${lineNumber} 行 seq 必须是正整数`)
   }
 
-  if (Number(value.seq) !== expectedSeq) {
+  if (expectedSeq !== null && Number(value.seq) !== expectedSeq) {
     throw new Error(
       `协议回放文件第 ${lineNumber} 行 seq 应为 ${expectedSeq}，实际为 ${String(value.seq)}`
     )
@@ -66,6 +68,10 @@ function validateRecord(value: unknown, lineNumber: number, expectedSeq: number)
     className: value.className,
     payload: value.payload
   }
+}
+
+function stripBom(source: string): string {
+  return source.charCodeAt(0) === 0xfeff ? source.slice(1) : source
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -4,6 +4,7 @@ import type { ConstraintGroup } from '@/tracker/ConstraintGroup'
 import type { GameState } from '@/tracker/Game'
 import type { Player } from '@/tracker/Player'
 import type { Room } from '@/tracker/Room'
+import { NOOP_REPLAY_METRICS, type ReplayMetricsSink } from './metrics'
 import type {
   TrackerReplayConstraintSnapshot,
   TrackerReplayPlayerSnapshot,
@@ -38,10 +39,11 @@ export function createTrackerReplaySnapshot(
 export function assertTrackerReplayConsistency(
   room: Room,
   context: string,
-  options: { checkIndexes?: boolean } = {}
+  options: { checkIndexes?: boolean; metrics?: ReplayMetricsSink } = {}
 ): void {
   if (!room.isDeckReady) return
 
+  const metrics = options.metrics ?? NOOP_REPLAY_METRICS
   const issues: unknown[] = []
   const pileCount = room.zones.get('pile')?.cards.length ?? 0
   const suspendedIdentityIDs = new Set(
@@ -57,8 +59,9 @@ export function assertTrackerReplayConsistency(
   )
   issues.push(...room.publicZones.getPublicZoneConsistencyIssues())
   collectIdentityIssues(room, issues)
-  if (options.checkIndexes !== false) collectIndexIssues(room, issues)
+  if (options.checkIndexes !== false) collectIndexIssues(room, issues, metrics)
   collectPlayerSnapshotIssues(room, issues)
+  metrics.count('consistencyChecks')
 
   if (issues.length === 0) return
   throw new Error(`回放一致性检查失败（${context}）：${JSON.stringify(issues)}`)
@@ -208,7 +211,10 @@ function collectIdentityIssues(room: Room, issues: unknown[]): void {
   })
 }
 
-function collectIndexIssues(room: Room, issues: unknown[]): void {
+function collectIndexIssues(room: Room, issues: unknown[], metrics: ReplayMetricsSink): void {
+  // 影子索引重建是回放里最贵的诊断动作，必须进入性能统计而不是静默执行。
+  const startedAt = performance.now()
+
   const locationShadow = new CardLocationIndex()
   locationShadow.rebuild(room, { record: false })
   if (
@@ -226,6 +232,9 @@ function collectIndexIssues(room: Room, issues: unknown[]): void {
   ) {
     issues.push({ type: 'ambiguous-known-index-mismatch' })
   }
+
+  metrics.count('indexShadowRebuilds', 2)
+  metrics.add('indexRebuild', performance.now() - startedAt)
 }
 
 function collectPlayerSnapshotIssues(room: Room, issues: unknown[]): void {

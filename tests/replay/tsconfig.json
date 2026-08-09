@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.replay.json",
+  "compilerOptions": {
+    "baseUrl": "../.."
+  }
+}
