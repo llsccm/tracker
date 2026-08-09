@@ -88,7 +88,7 @@ describe('tracker protocol replay', () => {
       className: 'PubGsCMoveCard',
       payload: movePayload({ CardIDs: [1], CardCount: 1, ToID: 1 })
     }
-    const report = new TrackerProtocolReplayer().replay([record])
+    const report = new TrackerProtocolReplayer({ captureFullSnapshots: true }).replay([record])
 
     expect(report.success).toBe(false)
     expect(report.failure).toMatchObject({
@@ -100,6 +100,19 @@ describe('tracker protocol replay', () => {
     expect(report.failure?.message).toContain('录制可能开始过晚')
   })
 
+  it('默认不为失败点重复回放前缀，只有开启完整快照才给出失败前状态', () => {
+    const records = openingRecords([1, 1]).slice(0, 3)
+    const lean = new TrackerProtocolReplayer({ currentUserID: 101 }).replay(records)
+    expect(lean.success).toBe(false)
+    expect(lean.failure?.stateBefore).toBeNull()
+
+    const detailed = new TrackerProtocolReplayer({
+      currentUserID: 101,
+      captureFullSnapshots: true
+    }).replay(records)
+    expect(detailed.failure?.stateBefore?.room?.deckReady).toBe(false)
+  })
+
   it('每条协议后运行一致性检查并停在首个身份账本错误', () => {
     const records = openingRecords([1, 1]).slice(0, 3)
     const report = new TrackerProtocolReplayer({ currentUserID: 101 }).replay(records)
@@ -107,7 +120,6 @@ describe('tracker protocol replay', () => {
     expect(report.success).toBe(false)
     expect(report.failure).toMatchObject({ seq: 3, className: 'MsgGamePlayCardNtf' })
     expect(report.failure?.message).toContain('回放一致性检查失败')
-    expect(report.failure?.stateBefore.room?.deckReady).toBe(false)
     expect(report.failure?.stateAfter.room?.deckReady).toBe(true)
   })
 

@@ -650,7 +650,7 @@ function applyRoleDataEx(
     )
     // invalid 表示本条录制无法安全消费当前 FIFO；回放继续保留现场，但不能宣称完整应用。
     if (settlement.result === 'invalid') {
-      return partial('3709 身份通知无法与待结算获得牌匹配')
+      return partial('3709 身份通知无法与待结算获得牌匹配', { cardIDs, seatIDs: [seatID] })
     }
     // missing 已经推进 3709 快照，必须使用结算返回的差量，不能在此重新查询。
     if (settlement.result === 'missing' && settlement.newCardIDs.length > 0) {
@@ -1098,6 +1098,12 @@ function ignored(note: string): ApplyTrackerProtocolResult {
   return { status: 'ignored', note }
 }
 
-function partial(note: string): ApplyTrackerProtocolResult {
-  return { status: 'partial', note }
+function partial(
+  note: string,
+  affected: { cardIDs?: number[]; seatIDs?: number[] } = {}
+): ApplyTrackerProtocolResult {
+  const result: ApplyTrackerProtocolResult = { status: 'partial', note }
+  if (affected.cardIDs?.length) result.affectedCardIDs = affected.cardIDs.slice()
+  if (affected.seatIDs?.length) result.affectedSeatIDs = affected.seatIDs.slice()
+  return result
 }
