@@ -22,14 +22,16 @@ import type {
 import { ReplayWatchTracker } from './watch'
 
 export { parseTrackerProtocolJsonl } from './parser'
-export {expectCardIncludesSeatsAt,
+export {
+  expectCardIncludesSeatsAt,
   expectCardLocationCandidatesAt,
-  expectCardSeatsAt} from './assertions'
+  expectCardSeatsAt
+} from './assertions'
 export type { ReplayAssertion, ReplayAssertionViolation } from './assertions'
 export { formatTrackerProtocolReplayReport } from './reportFormat'
 export type { FormatTrackerProtocolReplayOptions } from './reportFormat'
 export type { ReplayCardChange, ReplayConstraintProvenance } from './watch'
-export type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
+export type { RecordedTrackerProtocol } from './types'
 export type { TrackerProtocolReplayCausalClosure } from './types'
 export type { TrackerProtocolReplayDiagnostics } from './types'
 export type { TrackerProtocolReplayFailure } from './types'
@@ -99,10 +101,14 @@ export class TrackerProtocolReplayer {
     const assertions = options.assertions ?? []
     this.assertions = new ReplayAssertionRunner(assertions)
     this.stopOn =
-      options.stopOn ?? (assertions.length > 0 ? 'first-semantic-mismatch' : 'first-structural-error')
+      options.stopOn ??
+      (assertions.length > 0 ? 'first-semantic-mismatch' : 'first-structural-error')
     this.watch = new ReplayWatchTracker({
       // 断言关注的卡牌自动进入 watch 集合，否则首错时拿不到因果闭包。
-      cardIDs: [...(options.watchCardIDs ?? []), ...assertions.flatMap((item) => item.cardIDs ?? [])],
+      cardIDs: [
+        ...(options.watchCardIDs ?? []),
+        ...assertions.flatMap((item) => item.cardIDs ?? [])
+      ],
       seatIDs: options.watchSeatIDs,
       changeLimit: options.changeLimit,
       metrics: this.metrics
@@ -114,7 +120,11 @@ export class TrackerProtocolReplayer {
     this.replayed = true
 
     const steps: TrackerProtocolReplayStep[] = []
-    const counts: Record<TrackerProtocolReplayStatus, number> = { applied: 0, ignored: 0, partial: 0 }
+    const counts: Record<TrackerProtocolReplayStatus, number> = {
+      applied: 0,
+      ignored: 0,
+      partial: 0
+    }
     const nonApplied = new Map<string, TrackerProtocolReplayNonApplied>()
     const violations: ReplayAssertionViolation[] = []
     const taintReasons: string[] = []
@@ -411,7 +421,12 @@ export function replayTrackerProtocolJsonl(
 function recordNonApplied(
   target: Map<string, TrackerProtocolReplayNonApplied>,
   record: RecordedTrackerProtocol,
-  result: { status: TrackerProtocolReplayStatus; note?: string; affectedCardIDs?: number[]; affectedSeatIDs?: number[] }
+  result: {
+    status: TrackerProtocolReplayStatus
+    note?: string
+    affectedCardIDs?: number[]
+    affectedSeatIDs?: number[]
+  }
 ): void {
   const note = result.note ?? ''
   const key = `${result.status}|${record.className}|${note}`

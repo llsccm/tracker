@@ -98,7 +98,7 @@ export default defineConfig([
           // object patterns of destructuring assignments
           ObjectPattern: { multiline: true, consistent: true },
           ImportDeclaration: { multiline: true },
-          ExportDeclaration: 'never'
+          ExportDeclaration: { multiline: true, consistent: true }
         }
       ],
       '@stylistic/array-element-newline': ['error', { consistent: true, multiline: true }]

@@ -1,6 +1,6 @@
-import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 import type { ReplayAssertionViolation } from './assertions'
 import type {
+  RecordedTrackerProtocol,
   TrackerProtocolReplayCausalClosure,
   TrackerProtocolReplayNonApplied,
   TrackerProtocolReplayReport,
@@ -117,7 +117,9 @@ function formatCardChange(change: ReplayCardChange): string[] {
   change.removedCandidates.forEach((candidate) => lines.push(`  -candidate ${candidate}`))
   change.addedCandidates.forEach((candidate) => lines.push(`  +candidate ${candidate}`))
   if (change.previous?.location !== change.next?.location) {
-    lines.push(`  location ${change.previous?.location ?? 'none'} -> ${change.next?.location ?? 'none'}`)
+    lines.push(
+      `  location ${change.previous?.location ?? 'none'} -> ${change.next?.location ?? 'none'}`
+    )
   }
   change.reasons.forEach((reason) => lines.push(`  reason=${reason}`))
   if (change.constraintGroupIDs.length > 0) {
@@ -130,10 +132,7 @@ function formatViolation(violation: ReplayAssertionViolation): string {
   return `- seq=${violation.seq} class=${violation.className} ${violation.label}：${violation.message}`
 }
 
-function formatCausalClosure(
-  closure: TrackerProtocolReplayCausalClosure,
-  limit: number
-): string[] {
+function formatCausalClosure(closure: TrackerProtocolReplayCausalClosure, limit: number): string[] {
   const lines = [
     `因果闭包（首个语义违反 seq=${closure.violation.seq}，关注卡牌 ${closure.cardIDs.join(', ') || '未指定'}）：`
   ]

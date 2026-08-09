@@ -23,9 +23,7 @@ describe('真实录制回放：连续整手转移 + 中途揭示', () => {
     const report = new TrackerProtocolReplayer({
       mode: 'watch',
       watchCardIDs: WATCHED_CARDS,
-      assertions: WATCHED_CARDS.map((cardID) =>
-        expectCardSeatsAt('final', cardID, EXPECTED_SEATS)
-      )
+      assertions: WATCHED_CARDS.map((cardID) => expectCardSeatsAt('final', cardID, EXPECTED_SEATS))
     }).replay(readFixture())
 
     if (!report.success) throw new Error(formatTrackerProtocolReplayReport(report))
@@ -43,9 +41,9 @@ describe('真实录制回放：连续整手转移 + 中途揭示', () => {
     const output = formatTrackerProtocolReplayReport(report, { includeFinalState: false })
     expect(output).toContain('card=10')
     expect(output.length).toBeLessThan(32 * 1024)
-    expect(report.diagnostics.cardChanges.every((change) => WATCHED_CARDS.includes(change.cardID))).toBe(
-      true
-    )
+    expect(
+      report.diagnostics.cardChanges.every((change) => WATCHED_CARDS.includes(change.cardID))
+    ).toBe(true)
   })
 
   it('断言违反时停在首个错误 seq 并给出因果闭包', () => {
