@@ -178,7 +178,7 @@ export function logic(msg) {
       case 'decodeGsClientUserSeatFlagNtf':
         // 新录像两个消息都有 旧录像只有这个消息
         handleRecordStartGame(msg)
-        if (Game.needShowName) laya.showName()
+        if (Game.needShowName && globalConfig.showNameSwitch) laya.showName()
         break
 
       case 'GsCUpdateRoleDataNtf':

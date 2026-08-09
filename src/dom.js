@@ -437,6 +437,7 @@ function buttonClick() {
       document.getElementById('seatUI').style.display = switchValue ? 'block' : 'none'
     },
     cardLabelSwitch() {},
+    showNameSwitch() {},
     rogueCitySwitch(switchValue) {
       switchValue && UI.cities ? drawCitiesUI(UI.cities) : drawCitiesUI('')
     },

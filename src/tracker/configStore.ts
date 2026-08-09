@@ -20,13 +20,14 @@ export const ACTIVE_CONFIG_ENTRIES: readonly ConfigEntry[] = [
   ['seatUISwitch', 'SEAT_UI_SWITCH', true],
   ['rogueCitySwitch', 'ROGUE_CITY_SWITCH', true],
   ['cardLabelSwitch', 'CARD_LABEL_SWITCH', false],
+  ['showNameSwitch', 'SHOW_NAME_SWITCH', false],
   ['debugLogSwitch', 'DEBUG_LOG_SWITCH', false],
-  ['peiXiuMapSwitch', 'PEIXIU_MAP_SWITCH', true],
+  ['peiXiuMapSwitch', 'PEIXIU_MAP_SWITCH', false],
   ['effectBlockSwitch', 'EFFECT_BLOCK_SWITCH', false],
   ['blockKillEffectSwitch', 'BLOCK_KILL_EFFECT_SWITCH', false],
   ['blockSkinStateSwitch', 'BLOCK_SKIN_STATE_SWITCH', false],
   ['skipAdWindowSwitch', 'SKIP_AD_WINDOW_SWITCH', true],
-  ['skipPackageWindowSwitch', 'SKIP_PACKAGE_WINDOW_SWITCH', true],
+  ['skipPackageWindowSwitch', 'SKIP_PACKAGE_WINDOW_SWITCH', false],
   ['blockMvpSettlementSwitch', 'BLOCK_MVP_SETTLEMENT_SWITCH', false]
 ]
 
