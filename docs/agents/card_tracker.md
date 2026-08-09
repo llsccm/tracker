@@ -1,8 +1,16 @@
 # 记牌器当前状态、设计背景与验证清单
 
-> 💡 当你需要推进 `src/tracker/`、排查记牌器协议同步异常、理解旧链表模型与新版 Seats 约束设计差异、或补充记牌器测试时，请阅读本文档。应用级初始化、Room/View 挂载时序详见 [`lifecycle.md`](lifecycle.md)。
+> 💡 当你需要推进 `src/tracker/`、排查记牌器协议同步异常、理解旧链表模型与新版 Seats 约束设计差异、或补充记牌器测试时，请阅读本文档。常用调用方式先查 [`tracker_api.md`](tracker_api.md)；具体技能/协议特例与历史验证按需读取下方链接；应用级初始化、Room/View 挂载时序详见 [`lifecycle.md`](lifecycle.md)。
 
 ---
+
+## 按需细节路由
+
+| 关注方向 | 按需文档 | 触发场景 |
+| --- | --- | --- |
+| 技能与协议特例 | [`card_tracker_skills.md`](card_tracker_skills.md) | 暗置标记、观虚 `987/988`、整手牌交换、诫厉 `3483`、天候 `3903` 等 |
+| 历史验证记录 | [`card_tracker_validation_history.md`](card_tracker_validation_history.md) | 追溯里程碑、旧测试数量、遍历基线或历史决策 |
+| 回放历史证据 | [`replay.md`](replay.md) | 任务明确涉及 JSONL 回放、`tests/replay/` 或匿名槽回放决策 |
 
 ## 当前定位
 
@@ -149,28 +157,17 @@
 
 ---
 
-## 暗置标记区候选流程
+## 技能与协议特例（按需）
 
-当协议出现 `FromZone=5`、`ToZone=4/8`、`CardIDs` 全暗且 `CardCount > 0` 时，记牌器会检查来源手牌是否存在明牌候选：
+常规记牌器开发不需要加载技能协议细节。遇到以下任一场景时，再阅读
+[`card_tracker_skills.md`](card_tracker_skills.md)：
 
-1. 若没有来源明牌，沿用普通暗牌占位移动逻辑。
-2. 若存在来源明牌，由 `RoomMovement.handleHiddenMarkMove()` 接管默认暗牌移动，并在 `Room.skillState.get('hiddenMarkCandidates')` 中记录候选账本。
-3. 账本记录来源座位、当前投影目标座位、`spellID`、候选明牌、已确认手牌/标记牌，以及本次暗置的明牌落入标记区数量范围。这里的 `spellID` 表示标记空间 ID：协议 `zone 4` 按旧 `Zone` 规则优先取 `ZoneParam || SpellID`，`zone 8` 优先取 `SpellID || ZoneParam`；木牛流马（木马）的标记空间 ID 固定为 `700`。
-4. 先将候选明牌投影为完整位置候选：保留原有 `A 手牌 / B 手牌` 等候选，再追加目标标记位置。普通标记追加 `目标座位 标记`；木马追加装备容器候选 `container:equipment:161:700`，再由索引按 161 当前装备座位显示到玩家标记区。这一步不会丢掉既有跨角色候选。
-5. 当范围 `knownMarkMin === knownMarkMax` 且候选全集只剩 `来源手牌 / 目标标记` 时，创建 `ConstraintGroup.expectedSlotsByLocation` 精确约束，并同步可镜像的 `expectedSlotsBySubZone`，支持 4 选 1、4 选 2、4 选 3 等 N 选 K。木马容器候选只参与 `expectedSlotsByLocation`，不生成 `expectedSlotsBySubZone` 镜像。
-6. 后续某张候选明牌明确从同一标记空间进入弃牌区时，确认它占用该标记区名额；明确从来源手牌移动时，确认它占用手牌名额。普通标记要求座位与标记 ID 同时匹配；木马标记 `700` 若 `markID` 一致但座位变化，会先把账本的当前投影座位重定向，再继续使用同一个装备容器候选收敛。161 木马被其他技能移动时，即使本次协议 `spellID` 不是 700，也会通过装备物理牌 ID 识别并迁移容器投影。
-7. 技能 `414` 的标记牌暗置回手牌时，返回协议可能使用 `3389` 作为 `SpellID`；同样由 `3389` 触发的标记也会以 `3389` 返回。因此从标记区按暗牌数量取源牌时，`414` 与 `3389` 作为兼容标记空间互扫，避免明牌仍残留在 `414` 标记区。
-8. 洗牌发现承担 cohort 未决身份的正 ID 暗标记实体时，会将同一实体原地匿名化为稳定负 `id/entityID`；标记位置、候选集合及 `hiddenMarkCandidates` 中的对象引用保持不变，不再暂停原实体或创建替身。
-9. 来源手牌被完整揭示时，`Room.moveCards()` 会在 `resolveKnownMoveCards()` 之前调用 `resolveHiddenMarkCandidatesFromFullHandReveal()`：未出现在完整手牌快照中的弱候选会先确认到标记空间，再让已知牌物化读取修正后的匿名手牌槽。这个前置时序仍是当前运行时契约。
-10. 正 ID 确认占用标记名额后，`reconcileMarkSpace(record, reason)` 统一回收溢出的匿名标记占位。无论目标是普通 player mark 还是木马装备容器，只要占位来自来源手牌，就必须挤回 `sourceSeat` 手牌，不能丢到 `outside`；只有全明装备容器快照清零后、失去手牌物理背书的孤儿占位由 `clearHiddenMarkPlaceholdersForObservedSnapshot()` 独立移出玩家区。
-11. `ConstraintGroup.expectedSlotsByLocation` 继续只承载精确数量约束。弱记录的范围求解与容器对称增强已经评估并暂缓：部分揭示的“未出现”不是负向证据，完整揭示又必须先于已知牌物化，观察快照还包含实体物化与孤儿清理，现阶段引入通用范围求解器不能替代这些局部流程。
+- 暗置标记区候选（包括普通标记与木牛流马装备容器）。
+- 观虚目标视角交换（`SpellID=987/988`）。
+- 整手牌交换、诫厉观看与交换区暂存（`SpellID=3483`）。
+- 天候私有观看与单牌展示（`SpellID=3903`）。
 
-示例：
-
-- 4 明 0 暗，暗置 1 张：普通标记形成 `A 手牌 = 3`、`A 标记 = 1` 的精确约束；木马形成 `A 手牌 = 3`、`container:equipment:161:700 = 1` 的精确约束。
-- 4 明 0 暗，暗置 3 张：形成 `A 手牌 = 1`、`A 标记 = 3` 的精确约束。
-- 2 明 2 暗，暗置 2 张：只记录这 2 张明牌可能在标记区；由于 `knownMarkMin=0`、`knownMarkMax=2`，不会创建强约束。
-- 若一张牌原本是 `A 手牌 / B 手牌`，暗置到 A 标记后会变成 `A 手牌 / B 手牌 / A 标记`；排除 B 后仍是 `A 手牌 / A 标记`，不会因为 owner 确定而误判具体区域。
+通用协议字段与位置语义仍以 [`docs/protocols/README.md`](../protocols/README.md) 及其专页为准。
 
 ---
 
@@ -204,80 +201,6 @@
 当前实现已经落在这个方向上，但并不是早期方案中的“全局遍历剔除”模型：暗牌额度为 0 时的候选剔除限定在相关 `ConstraintGroup` 内，避免无边界全局消元导致过度收敛。
 
 ---
-
-## 协议文档索引
-
-- 总入口：`docs/protocols/README.md`（按消息 className / SpellID / 通用模式定位专页）。
-
-## 观虚目标视角交换（SpellID=987/988）
-
-- 协议文档：`docs/protocols/GsCRoleOptTargetNtf-987.md`。
-- 交换序列为 `1->10` 五张牌堆顶、`5->10` 目标手牌、两次跨 `FromID/ToID` 的
-  `10->10`，再由 `10->1` / `10->5` 分别拆回；不是通用整手交换。
-- `src/tracker/skill/GuanXu.ts` 以 `FromID/ToID` 维护牌堆侧与手牌侧逻辑桶，避免全局
-  `exchange` 物理顺序把目标手牌误当成牌堆侧已知身份的物化端点。
-- 含明牌 ID 的分桶与桶间转移先用 `Room.probeMaterialize()` 只读预演整批身份对应关系，
-  张数和桶容量全部通过后才确认或物化；失败校验不能改写实体、`cardIndex` 或身份账本。
-- 牌堆侧已知身份尚未定位时，直接物化到该桶匿名实体；空 `CardIDs` 的整批回牌堆仍按桶
-  携带本地已知换出手牌，因此不会 `known-fallback/createExternal`，也不会把该牌遗留在交换区。
-- `ToPosition` 是 `PubGsCMoveCard` 的通用位置语义，详见 `docs/protocols/move-position.md`；
-  普通非负小整数按公共区底 -> 顶顺序表示零基精确插槽，`0` 与 `POSITION_BOTTOM` 一致。
-- 观虚只因全局 `exchange` 无法表达牌堆侧/手牌侧两个归属而保留逻辑桶；桶内同样按底 -> 顶
-  保存，并复用 `insertCardsAtProtocolPosition()`，不能在技能内另行定义位置坐标。
-- `POSITION_BOTTOM/POSITION_TOP` 与有效普通数值都是确定位置，不叠加弱候选；只有
-  `ToPosition` 缺失、越界或为 `POSITION_RANDOM` 时才降级为“牌顶前 N 张”公共范围候选。
-  发动者主视角的回堆 `CardIDs` 若完整覆盖整桶，同样保留该精确信息，避免覆盖
-  `handleRoleOptTargetNtf` 已建立的牌顶顺序。
-- 牌堆逻辑桶与公共 `Zone` 都按 bottom-first 保存；空或不完整 `CardIDs` 回堆时可直接作为
-  `sourceCards`，避免技能层再次反转而破坏协议顺序。
-- `987/988` 显式绕过 `HandExchange`；即使目标恰好只有一张手牌，也不能把这条技能路径误判为
-  双方整手互换。回归见 `tests/tracker/guanXuExchange.test.ts`。
-
-## 整手牌交换（通用协议模式）
-
-- 协议文档：`docs/protocols/hand-exchange.md`（以技能 121 为完整示例）。
-- 装饰器：`src/tracker/skill/HandExchange.ts`，经 `decorateGenericMove`（`*`）统一接入，不绑定单一 SpellID。
-- 识别门槛：`MoveType=11` + `5<->10` + 整手张数；允许己方整手正 `CardIDs`，避免误伤佐练/诫厉等非整手路径。
-- 手牌进 `exchange` 时按 `SpellID + FromID` 登记整批实体；同座位嵌套交换使用后进先出的批次栈，明确空手时也登记零张屏障批次；回手时 `FromID` 是原持有者批次键，目标座位看 `ToID`。
-- 多位置手牌候选使用唯一批次令牌逐分支置换，不归入先处理座位；候选模式通过 `handMoveCount` 同步协议整手数，通过 `cardCount` 只搬运确定实体，避免候选实锤和匿名实体重复占槽。
-- 候选批次回到己方且 `CardIDs` 完整覆盖整手时，正 ID 直接确认对应候选，未出现的候选排除该批次分支。
-- 暗实体占位仍随物理批次移动；回到己方并由正 ID 揭示时，真实身份若尚在其它公共区，使用 exchange 暗实体回填原槽位后再把真实身份移入手牌，避免占位残留或重复计数。
-- 明牌回填 `cardIDs`，暗实体回填 `sourceCards`；明暗混合批次不共用 `combinationID`。
-
-## 诫厉观看与交换区暂存（SpellID=3483）
-
-- 协议文档：`docs/protocols/GsCRoleOptTargetNtf-3483.md`。
-- 观看阶段 `Params` 布局与观虚同类：`[pileCount, handCount, ...pileTop, ...handPartial]`；手牌片段默认是部分手牌，仅当 `handCount` 恰好等于目标整手数时 `fullHand`。
-- 观看/同区展示的牌堆序列是 **top-first**（例：`[81, 99, 124, 4]`，`81` 为顶）；后续交换 `CardIDs` 可能整段逆序或混合重排（例进交换区 `[4, 124, 99, 81]`），不能跨消息沿用“第一项=牌顶”。
-- 配对 `PubGsCMoveCard` 为牌堆同区展示（`FromZone=ToZone=1`、`MoveType=21`、两端 `255`）；`CardIDs` 即牌堆顶 top-first 序列。
-- 目标通知主动路径：`handleRoleOptTargetNtf` 在 `Param == 1` 时写入 `expectedPileCount`，并同步牌堆顶与目标手牌片段。回归见 `tests/tracker/roleOptTargetNtf.test.ts`。
-- 后续交换序列已文档化：`1->10`（牌堆）+ `5->10`（部分手牌）后拆回 `10->1` / `10->5`；旧 `decorateJieLi` **暂不挂上**，默认走通用移动路径。
-- `PILE_SAME_ZONE_SHOW_SPELL_IDS` **不需要**仅为 `3483` 扩展；该白名单只修正权变/观虚的 RANDOM 端点。诫厉应先判断消息本身是否已明确为同区展示。
-- 不走整手交换账本：`HandExchange` 识别门槛会排除诫厉的非整手、回牌堆路径。
-
-## 天候私有观看与单牌展示（SpellID=3903）
-
-- 协议文档：`docs/protocols/GsCRoleOptTargetNtf-3903.md`。
-- `Type=28` 的 `Params` 为
-  `[pileCount, handCount, ...pileTopCardIDs, ...mainViewHandCardIDs]`；只按 `pileCount`
-  同步牌堆顶，主视角手牌片段不重复写入记牌器。
-- `Type=29` 的 `Params` 为 `[seatID, ...pileTopCardIDs]`；首项是展示者座位号，不是卡牌
-  ID，后续三项按 top-first 同步为发动者可见的牌堆顶。
-- 两种消息的有效牌面参数只下发给发动者，并要求 `Param=0`、`targetSeatID=255`；
-  其他角色可能收到空 `Params`。
-- 其他视角的交换消息 `CardIDs` 全空，序列为 `1->10`、`5->10`、两次 `10->10`、
-  `10->5`、`10->1`。`src/tracker/skill/TianHou.ts` 按批次区分原牌顶与原手牌匿名实体，
-  两条 `10->10` 只视为动画消息。
-- 原手牌确定明牌建立“发动者手牌 / 牌堆顶前 x 张”候选。明牌换出数量范围为
-  `knownOutMin=max(0,x-(N-K))`、`knownOutMax=min(x,K)`；仅上下界相等时建立精确完整位置约束。
-- 配对的 `PubGsCMoveCard` 同区展示（`MoveType=21`、牌堆两端 `255`）只亮牌顶三张中的一张，
-  **不能**确定是第几张。基础归一保持 `noop`，再由天候装饰器转换为公共区范围揭示：
-  命中原手牌候选时收紧到牌顶前 `x` 张，否则建立牌顶前三候选；`x=1` 时即确定牌顶。
-  范围揭示不绑定具体匿名牌堆槽，也不重排牌堆。不要把 `3903` 并入
-  `PILE_SAME_ZONE_SHOW_SPELL_IDS` 或 `PILE_RANDOM_AS_TOP_SPELL_IDS`。
-- 回归：`tests/tracker/roleOptTargetNtf.test.ts`、`tests/tracker/pubGsCMoveCard.test.ts`、
-  `tests/tracker/moveEventNormalizer.test.ts`、`tests/tracker/trackerController.test.ts`、
-  `tests/tracker/tianHouExchange.test.ts`。
 
 ## 已知未完成项
 
@@ -315,7 +238,7 @@
   历史正 ID 暗槽对照，不代表生产。真实洗牌关闭 cohort 时仍会为过期未决身份创建 suspended
   展示实体，但未物化身份按终态直接注册，不应进入位置索引或玩家快照的通用脏事件流；遍历
   基线应分别记录匿名生产路径与已物化暗槽的必要匿名化成本。
-- 匿名槽 G0/G1 真实回放已经完成并决定 NO-GO / 收缩；临时浏览器回放探针已退役。历史数据见本地归档 [`plans/anonymous-entity-and-slot.md`](../../plans/anonymous-entity-and-slot.md)。
+- 匿名槽 G0/G1 真实回放已经完成并决定 NO-GO / 收缩；临时浏览器回放探针已退役。历史证据按需见 [`replay.md`](replay.md)。
 - 初始牌堆初始化后，`pile.cards` 顺序应独立于 `room.cards`。
 - 摸暗牌、摸明牌时手牌额度及状态维护应保持准确。
 - 洗牌时协议 `cardCount` 与本地可枚举牌堆不一致属于高风险路径：需要确认 cohort generation 滚动、匿名实体数量、剩余牌堆相对顺序、牌顶/牌底公开明牌保留、玩家/mark 原对象与账本引用，以及数量不足时只告警而不补槽。
@@ -340,41 +263,8 @@
 
 ---
 
-## 最近验证记录
+## 验证历史（按需）
 
-- 2026-06-21：完成底层记牌器从 `src/refactor/` 至 `src/tracker/` 的最后更名与架构巩固，清理了 `shadow` 相关命名，整体实现成为唯一的记牌器运行基准。
-- 2026-06-26：`11d988a` 之后已引入 `trackerController` 可测试化拆分、位置候选迁移、公共候选与暗置标记候选回归测试；后续 tracker 变更应优先跑 `pnpm test:tracker` 与 `pnpm typecheck:tracker`。
-- 2026-06-30：`dd2696c` 强化洗牌堆与暗置标记同步：洗牌支持协议牌堆张数、id=0 暗占位补齐、正 ID 差集暂停追踪、暗标记占位账本迁移，并补充玩家来源明牌残留公共区的占位回补测试。
-- 本次 P1-1/P1-2 完成候选系统收敛：`locationCandidates` 成为唯一候选主模型，`subZoneCandidates`、`seats`、`publicCandidates` 均为只读兼容投影；补齐洗牌、暗置标记与 `resolveConstraints()` 边界回归测试。
-- 2026-07-02：`resolveConstraints()` 落地遍历优化 P0（A1 入口 player 快照 + E2 跳过未触碰座位），配套 `traversalStats.ts` 插桩与四场景遍历基线测试；基线场景遍历量下降 11%–32%。
-- 2026-07-02：落地 P1-D：`CardCounter` 改为增量同步与 getter 干净缓存，四个遍历基线场景相对优化前累计下降 36%–49%；`CardLocationIndex` 与 `AmbiguousKnownIndex` 仍保持全量重建。
-- 2026-07-03：落地 P1-E1：手牌槽统计按 seat 增量重算，四个遍历基线场景相对优化前累计下降 38%–57%；洗牌场景不涉及玩家手牌槽，收益主要来自前三类手牌变更/排他场景。
-- 2026-07-03：落地 Step 1-3：`CardLocationIndex` 增量维护（`applyDirtyCardEvents` / `applyCardChange` / `refreshPublicZones`）。常规摸牌、暗牌分配、排他触发、洗牌等高频场景全量重建降为增量更新。四个场景 visited 遍历数进一步下降。
-- 2026-07-04：落地 Step 6：`AmbiguousKnownIndex` 增量维护。消费 `dirtyCardEvents` 进行单牌增量更新，仅在约束组结构变化时全量 rebuild。
-- 2026-07-05：落地 Step 7 / A2：`resolveConstraints()` 的 player 快照增量维护，彻底消除入口与轮末 `filter((card) => card.location === 'player')` 的 O(N) 全量扫描，在高频移动中归零。遍历基线 visited 数分别下降至：常规摸牌 48（降76%）、暗牌分配 52（降68%）、排他触发 60（降72%）、洗牌 80（降60%）。
-- 2026-07-05：完成测试重构与合并，抽取 `locationCandidates` 与 `trackerController` 公共测试辅助，精简测试冗余，提升测试维护性。
-
-- 2026-07-15：文档对齐代码结构——去除文档行号锚点；开局路径以 `handleRecordStartGame` 为主、`GsCModifyUserseatNtf` 分发暂注释；`GameState` 纯状态与 `BrowserGameState` 钩子拆分；视图脏渲染与 `trackerVisibility` 已落地。
-- 2026-07-20：匿名牌堆阶段 1 完成；牌堆槽与身份解耦，G1 最终决定 NO-GO / 收缩，阶段 2–7 不执行，临时真实回放探针退役。决策归档见 [`plans/anonymous-entity-and-slot.md`](../../plans/anonymous-entity-and-slot.md)。
-- 2026-08-01：牌堆身份批次模型 Phase 4 完成，`PileIdentityLedger` 接管洗牌未决身份，删除
-  `remainingPileIdentityIDs`、CardCounter 洗牌分类、detached identity、洗牌专用 suspended
-  身份和玩家/mark 替身；暗区正 ID 实体改为原地匿名化并保留对象引用。Prettier、
-  `git diff --check`、`pnpm test:tracker`（51 个文件、469 项）、`pnpm typecheck:tracker`、
-  `pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm build:prod` 全部通过；洗牌遍历基线为 49。
-- 2026-08-01：牌堆身份批次模型 Phase 5 完成，公共 known 只物化匿名槽或确认端点同 ID，
-  删除正 ID 暗公共身份挤出与 displaced/suspended 名额转交；公共来源候选收紧到协议
-  `cardCount` 范围。新增正 ID 暗端点拒绝覆盖、同 ID 确认和 suspended 身份恢复回归；
-  `PileIdentityLedger.ts` 同步补充 cohort、降级、守恒与事务边界注释。Prettier、
-  `git diff --check`、`pnpm test:tracker`（51 个文件、471 项）、`pnpm typecheck:tracker`、
-  `pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm build:prod` 与 `serena memories check` 全部通过。
-- 2026-08-02：收口牌堆身份模型评审反馈：非牌堆公共区无 CardIDs 移动恢复消费实际端点，
-  纯模型统一身份归一化、空弃牌洗牌索引与固定 seed 事件覆盖，并明确阶段纯模型长期保留。
-  洗牌遍历基线记录匿名生产路径 197、历史已物化对照 308；Prettier、`git diff --check`、
-  `pnpm test:tracker`（49 个文件、426 项）、`pnpm typecheck:tracker`、`pnpm typecheck`、
-  `pnpm lint`、`pnpm build`、`pnpm build:prod` 全部通过。
-- 2026-08-02：洗牌新建的 detached suspended 身份改为按最终状态直接注册，避免没有旧投影
-  可清理的实体进入通用脏事件流；`Zone.replaceAll()` 不再重复改写已在本区关系中的卡牌状态，
-  `CardCounter` 同步推进显式注册实体的尾部游标。匿名生产洗牌基线由 197 降至 12，历史
-  已物化对照由 308 降至 160；`pnpm test:tracker`（49 个文件、427 项）、
-  `pnpm typecheck:tracker`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm build:prod`
-  全部通过。
+历史里程碑、当时的测试数量与遍历基线已移至
+[`card_tracker_validation_history.md`](card_tracker_validation_history.md)。只有在追溯旧重构范围、
+性能基线或某次实际校验结果时才读取；当前任务的验证命令始终以 [`testing.md`](testing.md) 为准。

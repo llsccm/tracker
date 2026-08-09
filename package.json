@@ -15,7 +15,10 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "typecheck:tracker": "tsc -p tsconfig.tracker.json",
-    "test:tracker": "vitest run tests/tracker tests/contracts/pile-identity"
+    "typecheck:replay": "tsc -p tests/replay/tsconfig.json",
+    "test:tracker": "vitest run tests/tracker tests/contracts/pile-identity",
+    "test:replay": "vitest run --config vitest.replay.tests.config.js",
+    "replay:tracker": "vitest run --config vitest.replay.config.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

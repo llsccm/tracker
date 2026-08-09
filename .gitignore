@@ -150,3 +150,6 @@ tmp/
 .codex
 
 /plans
+
+# Local tracker protocol recordings
+/replays

@@ -1,5 +1,6 @@
 import { unbindTrackerVisibilityShortcut } from './trackerVisibility'
 import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
+import { unbindPeiXiuHandSuitColorRefresh } from './PeiXiuHandMirror'
 
 export function bindInitialResize(globalConfig, resize) {
   window.WDVerSion = '1.0.0'
@@ -8,6 +9,7 @@ export function bindInitialResize(globalConfig, resize) {
 }
 
 export function removeInjectedDom(globalState) {
+  unbindPeiXiuHandSuitColorRefresh()
   unbindTrackerVisibilityShortcut()
   //document.getElementById('injectCSS')?.remove()
   document.getElementById('seatUI')?.remove()

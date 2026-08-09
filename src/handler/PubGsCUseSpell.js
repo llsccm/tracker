@@ -9,7 +9,7 @@ import { setSuitRecord } from '@/utils'
  * @param {object} msg - PubGsCUseSpell
  */
 export function handleUseSpell(msg) {
-  const { SeatID, SrcSeatID, SpellID, CardIDs = [] } = msg
+  const { SeatID, SpellID, CardIDs = [] } = msg
 
   if (Game.myID === SeatID && CardIDs.length === 1) {
     drawCard(CardIDs)
@@ -41,11 +41,16 @@ export function handleUseSpell(msg) {
       break
     }
 
-    case 3157: // 夏侯玄-清议
-    case 3511: // 李婉-联句
-      if ((SrcSeatID === Game.myID || import.meta.env.DEV) && CardIDs.some((id) => id > 0)) {
-        Game.setSpellState(SpellID, CardIDs)
-      }
+    // CardIDs: [110, 49] SeatID: 6 DestSeatIDs: [5]
+    case 3157: // 夏侯玄 清议
+    case 3511: // 李婉 联句
+      if (Game.myID === undefined) break
+      // 主视角
+      if (SeatID === Game.myID) break
+      // 联句的目标角色
+      if (msg.dest_Count === 1 && msg.DestSeatIDs?.[0] === Game.myID) break
+
+      if (CardIDs?.length === msg.card_count) Game.setSpellState(SpellID, CardIDs)
       break
 
     case 3193: // 贵相

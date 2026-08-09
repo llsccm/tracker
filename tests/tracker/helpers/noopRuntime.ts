@@ -1,4 +1,4 @@
-import { GameState } from '@/tracker/gameState'
+import { GameState } from '@/tracker/Game'
 
 export function createNoopGameState(): GameState {
   return new GameState()
@@ -14,7 +14,6 @@ export function createNoopRuntime() {
     setTurn() {},
     record() {},
     clear() {},
-    updateSeatLabel() {},
     syncRoomSeats() {}
   }
 }

@@ -186,6 +186,10 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
       card.addSeat(targetSeat, 'randomHandTransferCandidates')
     })
 
+    // 后续随机转移会重新分配来源/目标手牌槽位；旧批次对这两个位置的
+    // 期望数量只适用于上一事件，必须先失效，否则旧组的 `target=0`
+    // 会在收敛时删除本次新加入的目标候选。
+    this.invalidateHandTransferConstraintsForCards(sourceCandidateCards, fromSeat, targetSeat)
     this.expandConstraintGroupsForCards(sourceCandidateCards, targetSeat)
 
     // 暗牌候选会被提升为 hand 完整位置候选（locationCandidates + subZoneCandidates）。
@@ -443,6 +447,90 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
         group.candidateSeats.add(Number(seatID))
       }
     })
+  }
+
+  /**
+   * 使参与后续随机手牌转移的旧约束批次失效。
+   *
+   * 旧组仍可保留第三方位置（例如同一批牌还可能属于另一名玩家），但来源和
+   * 目标手牌的精确槽位已经被新的随机转移重新分配，继续保留会把新目标候选
+   * 错误地裁成旧批次的零名额。
+   */
+  invalidateHandTransferConstraintsForCards(
+    cards: Card[],
+    fromSeat: SeatID,
+    targetSeat: SeatID
+  ): void {
+    const cardSet = new Set(cards)
+    const affectedSeats = new Set([Number(fromSeat), Number(targetSeat)])
+    let changed = false
+
+    this.room.constraintGroups.forEach((group, groupID) => {
+      let hasMatchingCard = false
+      for (const card of group.cards) {
+        if (!cardSet.has(card)) continue
+        hasMatchingCard = true
+        break
+      }
+      if (!hasMatchingCard) return
+
+      const hasLocationConstraints =
+        group.expectedSlotsByLocation.size > 0 || group.expectedSlotsBySubZone.size > 0
+      let groupChanged = false
+
+      affectedSeats.forEach((seatID) => {
+        const handLocationKey = createLocationCandidateKey({
+          type: 'player',
+          seatID,
+          subZone: 'hand',
+          spellID: null
+        })
+        const handLocationKeyParts = handLocationKey.split(':')
+        const locationPrefix = `${handLocationKeyParts.slice(0, -1).join(':')}:`
+        const subZonePrefix = `${handLocationKeyParts.slice(1, -1).join(':')}:`
+        const locationKeys = Array.from(group.expectedSlotsByLocation.keys()).filter((key) =>
+          key.startsWith(locationPrefix)
+        )
+        const subZoneKeys = Array.from(group.expectedSlotsBySubZone.keys()).filter((key) =>
+          key.startsWith(subZonePrefix)
+        )
+        const hadHandLocationConstraint = locationKeys.length > 0 || subZoneKeys.length > 0
+
+        locationKeys.forEach((key) => {
+          if (group.expectedSlotsByLocation.delete(key)) groupChanged = true
+        })
+        subZoneKeys.forEach((key) => {
+          if (group.expectedSlotsBySubZone.delete(key)) groupChanged = true
+        })
+
+        // expectedSlotsBySeat 是旧兼容层；只有它没有完整位置层时，或确认对应
+        // hand 位置确实被清除时，才删除同席位的座位级槽位，避免误伤 mark 等子区。
+        if (
+          (hadHandLocationConstraint || !hasLocationConstraints) &&
+          group.expectedSlotsBySeat.delete(seatID)
+        ) {
+          groupChanged = true
+        }
+      })
+
+      if (!groupChanged) return
+
+      // 位置层是主模型，重新镜像兼容的 subZone 读面，避免旧零名额残留。
+      group.syncExpectedSlotCompatibility('location')
+      if (
+        group.expectedSlotsByLocation.size === 0 &&
+        group.expectedSlotsBySubZone.size === 0 &&
+        group.expectedSlotsBySeat.size === 0
+      ) {
+        group.candidateSeats.clear()
+        this.room.deleteConstraintGroup(groupID)
+      }
+      changed = true
+    })
+
+    if (changed) {
+      this.room.markConstraintGroupsDirty('invalidateHandTransferConstraintsForCards')
+    }
   }
 
   /**

@@ -3,6 +3,7 @@ import { isAnonymous, type Card } from './Card'
 import { POSITION_TOP } from './candidate/cardPositions'
 import { normalizeSpellID } from './candidate/markSpellID'
 import { summarizeMoveContext } from './helper/moveSummary'
+import { MOVE_TYPE } from './MoveEventNormalizer'
 import type { Room } from './Room'
 import { RoomMovementCandidateMethods } from './roomMovement/candidates'
 import type {
@@ -11,6 +12,7 @@ import type {
   RoomMoveContext,
   RoomMovementOptions
 } from './roomMovement/types'
+import { GUI_FU_ROLE_DATA_ID } from './runtime/protocolRules'
 import type { CardID, PublicZoneName, SeatID } from './types'
 
 /**
@@ -546,21 +548,34 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     }
 
     if (toZone === 'player') {
-      const movedUnknownCards = this.takeSourceCards(unknownCount, {
-        sourceIsOutside,
-        fromSeat,
-        fromSubZone,
-        subZone,
-        spellID,
-        fromSpellID,
-        fromZone,
-        fromPosition,
-        sourceCards,
-        sourceEvent,
-        moveType
-      })
+      const isPendingDiscardGain =
+        context.knownIDs.length === 0 &&
+        (fromZone === 'discard' || Number(fromZone) === 2) &&
+        Number(spellID) === GUI_FU_ROLE_DATA_ID &&
+        Number(moveType) === MOVE_TYPE.GAIN &&
+        subZone === 'hand' &&
+        targetSeats.length === 1
+
+      // 3709 的相邻角色数据才给出真实 CardID；第一条移动只建立匿名手牌槽，
+      // 弃牌堆实体和身份账本都留到结算时再移动。
+      const movedUnknownCards = isPendingDiscardGain
+        ? this.room.createExternalCards([], unknownCount)
+        : this.takeSourceCards(unknownCount, {
+            sourceIsOutside,
+            fromSeat,
+            fromSubZone,
+            subZone,
+            spellID,
+            fromSpellID,
+            fromZone,
+            fromPosition,
+            sourceCards,
+            sourceEvent,
+            moveType
+          })
 
       context.movedUnknownCards = movedUnknownCards
+
       movedUnknownCards.forEach((card) => {
         this.resolveSourcePlayerCandidate(card, context)
       })
@@ -569,6 +584,10 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       movedUnknownCards.forEach((card) => {
         card.bindCandidates(targetSeats, subZone, spellID, { known: false })
       })
+
+      if (isPendingDiscardGain) {
+        this.room.registerPendingDiscardGain(targetSeats[0], movedUnknownCards, sourceEvent)
+      }
 
       // seatID=255 会被 normalizeSeats 过滤为空；这代表无席位技能空间而非某个玩家。
       // 这里按 spellID 建账本，后续从弹窗 mark 回牌堆时直接取这个空间里的占位。

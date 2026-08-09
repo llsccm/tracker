@@ -48,6 +48,12 @@ jobs:
       - name: Tracker tests
         run: pnpm test:tracker
 
+      - name: Replay typecheck
+        run: pnpm typecheck:replay
+
+      - name: Replay tests
+        run: pnpm test:replay
+
       - name: Build
         run: pnpm build
 

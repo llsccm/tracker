@@ -21,6 +21,7 @@ import { handleRecordStartGame } from './handler/StartGame'
 import { laya } from './runtime/gameAdapter'
 import { Game, globalConfig, UI, user } from './tracker'
 import { tracker } from './tracker/runtime/browser'
+import { recordTrackerProtocol } from './tracker/runtime/protocolRecorder'
 import { wait } from './utils'
 import { addTooltip } from './utils/notification'
 import { handleBroadMsg } from './handler/chat'
@@ -49,6 +50,9 @@ export function logic(msg) {
 
     const className = msg.ClassName || msg.className || msg.toString()
     const { ProtoObj, SeatID } = msg
+
+    // 录制器有独立的记牌协议规则，需先于功能白名单执行，以保留路由遗漏现场。
+    recordTrackerProtocol(msg, { mySeatID: Game.myID, currentSeatID: Game.currentID })
 
     if (!isRetainedLogicMessage(className)) return
 
@@ -174,7 +178,7 @@ export function logic(msg) {
       case 'decodeGsClientUserSeatFlagNtf':
         // 新录像两个消息都有 旧录像只有这个消息
         handleRecordStartGame(msg)
-        if (Game.needShowName) laya.showName()
+        if (Game.needShowName && globalConfig.showNameSwitch) laya.showName()
         break
 
       case 'GsCUpdateRoleDataNtf':

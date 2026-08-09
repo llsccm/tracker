@@ -1,12 +1,11 @@
-import { CardConfig, SpellExtendConfig } from '@/config'
+import { SpellExtendConfig } from '@/config'
 import { Game, globalConfig } from '@/tracker'
-import {
-  getRenderedMainHandCardIDs,
-  subscribeRenderedMainHandCardIDs
-} from '@/tracker/view/PlayerHandView'
+import { GUI_FU_ROLE_DATA_ID } from '@/tracker/runtime/protocolRules'
 import { renderPeiXiuMapWindow, setPeiXiuMapWindowVisible } from '@/ui/PeiXiuMapWindow'
+import { getRenderedPeiXiuHandSuitColors } from '@/ui/PeiXiuHandMirror'
 import { parsePeiXiuRoleData, solvePeiXiuRoleData } from '@/utils/peixiuRouteFeature'
 import { handleQiaoZhi } from './skills/QiaoZhi'
+import { handleGuiFu } from './skills/GuiFu'
 import { laya } from '@/runtime/gameAdapter'
 
 // GsCUpdateRoleDataExNtf
@@ -81,6 +80,11 @@ export function handleUpdateRoleDataExNtf(msg) {
       handleQiaoZhi(msg, Game.myID)
       break
 
+    // 诡伏：非主视角先收到匿名移动，角色数据随后补充实际牌面。
+    case GUI_FU_ROLE_DATA_ID:
+      handleGuiFu(msg, Game.myID)
+      break
+
     // 郭照 椒遇 选择的颜色
     case 3571:
       // Datas:[x] 1红2黑
@@ -102,7 +106,7 @@ export function handleUpdateRoleDataExNtf(msg) {
         const presetRoutes = spellExtendConfig.PeiXiuPresetRoutes.get(roleData.mapId) || []
         const usesMainHandMirror =
           Game.myID != null && SeatID != null && Number(Game.myID) === Number(SeatID)
-        const handSuitColors = usesMainHandMirror ? getRenderedHandSuitColors() : null
+        const handSuitColors = usesMainHandMirror ? getRenderedPeiXiuHandSuitColors() : null
 
         const state = solvedState
           ? { ...solvedState, presetRoutes, handSuitColors, usesMainHandMirror }
@@ -128,37 +132,3 @@ export function handleUpdateRoleDataExNtf(msg) {
       break
   }
 }
-
-/**
- * @returns {number[]|null}
- */
-function getRenderedHandSuitColors() {
-  const cardIDs = getRenderedMainHandCardIDs()
-  if (cardIDs === null) return null
-
-  const cardConfig = CardConfig.GetInstance()
-  return cardIDs
-    .map((id) => Number(cardConfig.getCardColor(id)))
-    .filter((color) => color >= 1 && color <= 4)
-}
-
-function refreshPeiXiuHandSuitColors() {
-  const state = Game.getSpellState(4022)
-  if (!state?.usesMainHandMirror || !state.result) return
-
-  const handSuitColors = getRenderedHandSuitColors()
-  if (handSuitColors === null) return
-  if (
-    Array.isArray(state.handSuitColors) &&
-    state.handSuitColors.length === handSuitColors.length &&
-    state.handSuitColors.every((color, index) => color === handSuitColors[index])
-  ) {
-    return
-  }
-
-  const nextState = { ...state, handSuitColors }
-  Game.setSpellState(4022, nextState)
-  renderPeiXiuMapWindow(nextState, SpellExtendConfig.GetInstance().PeiXiuBonus)
-}
-
-subscribeRenderedMainHandCardIDs(refreshPeiXiuHandSuitColors)

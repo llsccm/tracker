@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowJs": false,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": false,
+    "baseUrl": "../..",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "types": ["vite/client", "vitest"]
+  },
+  "include": [
+    "../../src/tracker/**/*.ts",
+    "../../src/types/**/*.d.ts",
+    "tracker/**/*.ts"
+  ],
+  "exclude": ["../../node_modules"]
+}

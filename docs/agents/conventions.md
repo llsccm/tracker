@@ -136,7 +136,7 @@ const result = config
 
 详细策略、现有测试布局、补测约定与手工验收清单见 [`testing.md`](testing.md)。本节只保留提交前门槛摘要。
 
-- `package.json` 已配置 `format`（Prettier）、`lint`（ESLint）、`typecheck`、`typecheck:tracker` 与 `test:tracker`（Vitest 记牌器回归）脚本；当前尚未配置通用 `test` 脚本。
+- `package.json` 已配置 `format`（Prettier）、`lint`（ESLint）、`typecheck`、`typecheck:tracker` 与 `test:tracker`（Vitest 记牌器回归）脚本；当前尚未配置通用 `test` 脚本。默认 `typecheck` 与 Vitest 配置排除 `tests/replay/`，回放按需使用 `typecheck:replay`、`test:replay` 与 `replay:tracker`。
 - 修改文档无需运行构建测试。
 - 完成普通代码修改后运行：`pnpm lint` 与 `pnpm build`。
 - 修改 TypeScript 类型契约、`tsconfig*`、ESLint TypeScript 覆盖范围或 tracker 类型迁移相关代码后运行：`pnpm typecheck:tracker`；需要确认全仓类型入口时运行 `pnpm typecheck`。
