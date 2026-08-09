@@ -18,7 +18,7 @@
 | 代码约定、Style Guide、Prettier/ESLint/EditorConfig、Vite 别名、模块边界、Commits/PR 约定 | [`docs/agents/conventions.md`](docs/agents/conventions.md) | 修改或新增 JS/HTML/TS 代码、调整全局 Proxy 配置项、执行 Lint、撰写 commit/PR 标题、或准备 PR 提交；详细测试策略见 testing.md。 |
 | Serena 记忆库、同步状态与引用对齐检查 | [`docs/agents/serena.md`](docs/agents/serena.md) | 需要操作 `serena` 工具链、管理或修改 `mem:*` 格式的记忆文件。 |
 | 测试策略、回归命令、补测约定、手工验收清单 | [`docs/agents/testing.md`](docs/agents/testing.md) | 选择验证命令、补充 Vitest 回归、更新遍历基线、撰写 PR 验证说明，或做浏览器手工验收时。 |
-| 记牌器当前实现、历史设计、重构方案与领域验证清单 | [`docs/agents/card_tracker.md`](docs/agents/card_tracker.md) | 继续推进记牌器能力演进、排查协议同步异常、理解旧链表/Seats 方案或完善领域单测时。 |
+| 记牌器当前实现、领域边界与二级路由 | [`docs/agents/card_tracker.md`](docs/agents/card_tracker.md) | 定位核心模块、排查协议或收敛异常，或按需继续读取收敛、技能特例与历史验证文档时。 |
 | 记牌器开发 API 速查 | [`docs/agents/tracker_api.md`](docs/agents/tracker_api.md) | 需要快速查找角色手牌读取、手牌/牌堆揭示、移动、匿名占位或实体物化调用方式时。 |
 | 协议回放（按需） | [`docs/agents/replay.md`](docs/agents/replay.md) | 只有处理 JSONL 录制、`tests/replay/`、回放诊断或回放专用类型检查时才读取。 |
 | 协议样例与适配说明索引 | [`docs/protocols/README.md`](docs/protocols/README.md) | 按 className / SpellID / 通用模式定位 `docs/protocols/` 专页时。 |
