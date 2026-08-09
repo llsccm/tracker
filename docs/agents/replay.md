@@ -23,7 +23,7 @@
 | `tests/replay/tracker/helpers/protocolReplay/handlers.ts` | 支持的协议处理与回放状态变更 |
 | `tests/replay/tracker/helpers/protocolReplay/snapshot.ts` | Room/玩家/公共区/约束快照与一致性断言 |
 | `tests/replay/tracker/helpers/protocolReplay/types.ts` | 回放上下文、步骤、失败报告和快照类型 |
-| `tsconfig.replay.json` | 只覆盖 tracker 源码与回放 helper 的类型检查 |
+| `tests/replay/tsconfig.json` | 只覆盖 tracker 源码与回放 helper 的类型检查 |
 | `vitest.replay.tests.config.js` | 只包含 `tests/replay/tracker/**/*.test.ts` 的回放单测配置 |
 | `vitest.replay.config.js` | 只包含 `protocolReplay.runner.js` 的独立配置 |
 
@@ -47,6 +47,9 @@ pnpm replay:tracker
 - `DXC_TRACKER_PROTOCOL_FILE`：覆盖默认 `replays/tracker-protocols.jsonl` 路径。
 - `DXC_TRACKER_CURRENT_USER_ID`：录像无法从协议确定主视角时指定当前用户 ID。
 - `DXC_TRACKER_REPLAY_TRACE=1`：输出每条协议应用后的状态；长录制会产生大量日志。
+- `DXC_TRACKER_REPLAY_TO_SEQ`：传入回放器的 `toSeq`。
+- `DXC_TRACKER_REPLAY_WATCH_CARDS`：传入回放器的 `watchCardIDs`。
+- `DXC_TRACKER_REPLAY_WATCH_SEATS`：传入回放器的 `watchSeatIDs`。
 
 PowerShell、编码和文件路径写法按 [`commands.md`](commands.md) 与 Serena 本机记忆处理；本文不固化某个
 开发者的 Shell 细节。
