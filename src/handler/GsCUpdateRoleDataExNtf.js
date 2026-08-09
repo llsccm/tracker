@@ -1,5 +1,6 @@
 import { SpellExtendConfig } from '@/config'
 import { Game, globalConfig } from '@/tracker'
+import { GUI_FU_ROLE_DATA_ID } from '@/tracker/runtime/protocolRules'
 import { renderPeiXiuMapWindow, setPeiXiuMapWindowVisible } from '@/ui/PeiXiuMapWindow'
 import { getRenderedPeiXiuHandSuitColors } from '@/ui/PeiXiuHandMirror'
 import { parsePeiXiuRoleData, solvePeiXiuRoleData } from '@/utils/peixiuRouteFeature'
@@ -80,7 +81,7 @@ export function handleUpdateRoleDataExNtf(msg) {
       break
 
     // 诡伏：非主视角先收到匿名移动，角色数据随后补充实际牌面。
-    case 3709:
+    case GUI_FU_ROLE_DATA_ID:
       handleGuiFu(msg, Game.myID)
       break
 

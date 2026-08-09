@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { handleGuiFu, parseGuiFuCardIDs, ROLE_DATA_3709 } from '@/handler/skills/GuiFu'
 import { isAnonymous } from '@/tracker/Card'
+import type { Room } from '@/tracker/Room'
 import { trackerLogger } from '@/utils/logger'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
 
@@ -28,6 +29,12 @@ const {
 vi.mock('@/tracker/runtime/browser', () => ({
   tracker: trackerMock
 }))
+
+function getPlayerHandCards(room: Room, seatID: number) {
+  return room.cards.filter(
+    (card) => card.location === 'player' && card.subZone === 'hand' && card.seats.has(seatID)
+  )
+}
 
 describe('GsCUpdateRoleDataExNtf 3709', () => {
   beforeEach(() => {
@@ -173,10 +180,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
     expect(discard.cards.map((card) => card.id)).toEqual(beforeIDs)
     const actualID = beforeIDs[0]
 
-    const anonymousHand = room.cards.filter(
-      (card) =>
-        card.location === 'player' && card.subZone === 'hand' && card.seats.has(targetSeatID)
-    )
+    const anonymousHand = getPlayerHandCards(room, targetSeatID)
     expect(anonymousHand).toHaveLength(1)
     expect(anonymousHand[0].isKnown).toBe(false)
     expect(room.assertPileIdentityLedgerConsistency('3709-before-role-data')).toEqual([])
@@ -199,10 +203,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
     expect(discard.cards.map((card) => card.id)).toEqual(
       beforeIDs.filter((cardID) => cardID !== actualID)
     )
-    const hand = room.cards.filter(
-      (card) =>
-        card.location === 'player' && card.subZone === 'hand' && card.seats.has(targetSeatID)
-    )
+    const hand = getPlayerHandCards(room, targetSeatID)
     expect(hand).toHaveLength(1)
     expect(hand[0]).toMatchObject({ id: actualID, isKnown: true })
     expect(anonymousHand[0].location).toBe('outside')
@@ -266,10 +267,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
     )
 
     expect(pile.cards).toHaveLength(2)
-    const hand = room.cards.filter(
-      (card) =>
-        card.location === 'player' && card.subZone === 'hand' && card.seats.has(targetSeatID)
-    )
+    const hand = getPlayerHandCards(room, targetSeatID)
     expect(hand).toHaveLength(1)
     expect(hand[0]).toMatchObject({ id: 132, isKnown: true })
     expect(room.assertPileIdentityLedgerConsistency('3709-pile-after-role-data')).toEqual([])
@@ -310,11 +308,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
       [1]
     )
     expect(
-      room.cards
-        .filter(
-          (card) =>
-            card.location === 'player' && card.subZone === 'hand' && card.seats.has(targetSeatID)
-        )
+      getPlayerHandCards(room, targetSeatID)
         .map((card) => card.id)
         .sort((a, b) => a - b)
     ).toEqual([1, 132])
@@ -397,11 +391,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
     })
     expect(room.pendingDiscardGains).toHaveLength(0)
     expect(
-      room.cards
-        .filter(
-          (card) =>
-            card.location === 'player' && card.subZone === 'hand' && card.seats.has(targetSeatID)
-        )
+      getPlayerHandCards(room, targetSeatID)
         .map((card) => card.id)
         .sort((left, right) => left - right)
     ).toEqual([10, 20])
@@ -440,9 +430,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
     )
 
     expect(discard.cards).toHaveLength(1)
-    const hand = room.cards.filter(
-      (card) => card.location === 'player' && card.subZone === 'hand' && card.seats.has(seatID)
-    )
+    const hand = getPlayerHandCards(room, seatID)
     expect(hand).toHaveLength(1)
     expect(hand[0]).toMatchObject({ id: 132, isKnown: true })
   })
@@ -497,10 +485,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
       })
     ).toEqual({ result: 'settled', newCardIDs: [2, 132] })
 
-    const hand = room.cards.filter(
-      (card) =>
-        card.location === 'player' && card.subZone === 'hand' && card.seats.has(targetSeatID)
-    )
+    const hand = getPlayerHandCards(room, targetSeatID)
     expect(hand).toHaveLength(2)
     expect(hand.map((card) => card.id).sort((a, b) => a - b)).toEqual([2, 132])
     expect(hand.every((card) => card.isKnown)).toBe(true)
@@ -621,10 +606,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
     ).toMatchObject({ result: 'settled' })
 
     expect(discard.cards).toHaveLength(0)
-    const hand = room.cards.filter(
-      (card) =>
-        card.location === 'player' && card.subZone === 'hand' && card.seats.has(targetSeatID)
-    )
+    const hand = getPlayerHandCards(room, targetSeatID)
     expect(hand.map((card) => card.id).sort((a, b) => a - b)).toEqual(
       discardIDs.slice().sort((a, b) => a - b)
     )
@@ -676,26 +658,16 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
       result: 'settled'
     })
     const discardAfterFirstReveal = discard.cards.map((card) => card.id)
-    const handAfterFirstReveal = room.cards
-      .filter(
-        (card) =>
-          card.location === 'player' && card.subZone === 'hand' && card.seats.has(targetSeatID)
-      )
-      .map((card) => card.id)
+    const handAfterFirstReveal = getPlayerHandCards(room, targetSeatID).map((card) => card.id)
 
     expect(controller.settleTrackerPendingDiscardGain(targetSeatID, [actualID])).toEqual({
       result: 'duplicate',
       newCardIDs: []
     })
     expect(discard.cards.map((card) => card.id)).toEqual(discardAfterFirstReveal)
-    expect(
-      room.cards
-        .filter(
-          (card) =>
-            card.location === 'player' && card.subZone === 'hand' && card.seats.has(targetSeatID)
-        )
-        .map((card) => card.id)
-    ).toEqual(handAfterFirstReveal)
+    expect(getPlayerHandCards(room, targetSeatID).map((card) => card.id)).toEqual(
+      handAfterFirstReveal
+    )
   })
 
   it('角色数据快照缩短时只忽略旧牌删除并继续识别新增牌', () => {
@@ -749,7 +721,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
         newCardIDs: []
       })
       expect(discard.cards.map((card) => card.id)).toEqual(discardBeforeShortSnapshot)
-      expect(warn).not.toHaveBeenCalledWith('诡伏角色数据累计 ID 尾部不一致', expect.anything())
+      expect(warn).not.toHaveBeenCalled()
 
       controller.syncTrackerMove(
         protocolMove({
@@ -989,7 +961,7 @@ describe('GsCUpdateRoleDataExNtf 3709', () => {
       expect(discard.cards.map((card) => card.id)).toEqual(
         discardBefore.filter((cardID) => cardID !== discardIDs[1])
       )
-      expect(warn).not.toHaveBeenCalledWith('诡伏角色数据累计 ID 尾部不一致', expect.anything())
+      expect(warn).not.toHaveBeenCalled()
     } finally {
       warn.mockRestore()
     }

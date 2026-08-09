@@ -97,7 +97,10 @@ export class TrackerProtocolReplayer {
     )
     this.captureFullSnapshots =
       options.captureFullSnapshots === true || options.captureStepStates === true
-    this.toSeq = Number.isInteger(options.toSeq) ? Number(options.toSeq) : null
+    if (options.toSeq !== undefined && (!Number.isInteger(options.toSeq) || options.toSeq <= 0)) {
+      throw new TypeError('toSeq 必须是正整数')
+    }
+    this.toSeq = options.toSeq ?? null
 
     const assertions = options.assertions ?? []
     this.assertions = new ReplayAssertionRunner(assertions)

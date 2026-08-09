@@ -58,8 +58,9 @@ export function formatTrackerProtocolReplayReport(
     lines.push(...formatCausalClosure(diagnostics.causalClosure, maxCardChanges))
   }
 
-  if (report.steps.some((step) => step.state)) {
-    lines.push('逐条状态：', stringify(report.steps))
+  const stateSteps = report.steps.filter((step) => step.state).slice(-maxCardChanges)
+  if (stateSteps.length > 0) {
+    lines.push('逐条状态：', stringify(stateSteps))
   }
 
   if (report.failure) {

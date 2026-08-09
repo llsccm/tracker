@@ -339,13 +339,15 @@ describe('tracker protocol projection', () => {
   it('为录像开局保留处理器实际读取的 seatinfo', () => {
     const message = {
       className: 'decodeGsClientUserSeatFlagNtf',
+      accountName: '不需要保存',
       data: {
         version: 4080,
         timestamp: 7000,
         protoObj: {
           seatinfo: [{ seat_id: 1, user_temp_id: 100, nickname: '不需要保存', timestamp: 8000 }]
         }
-      }
+      },
+      nickname: '不需要保存'
     }
 
     expect(projectTrackerProtocol(message)).toEqual({
@@ -361,7 +363,11 @@ describe('tracker protocol projection', () => {
   })
 
   it('只为录像模式协议读取必要的 ProtoObj.matchName', () => {
-    const message = { className: 'decodeGameRecordInitInfo' }
+    const message = {
+      accountName: '不需要保存',
+      className: 'decodeGameRecordInitInfo',
+      nickname: '不需要保存'
+    }
     Object.defineProperty(message, 'ProtoObj', {
       get() {
         return { matchName: '斗地主', timestamp: 9000, ignored: true }

@@ -16,10 +16,25 @@ export interface ProtocolRecordingStatus {
   limitReached: boolean
 }
 
+interface RecordingSession {
+  id: string
+  startedAt: number
+}
+
+interface StoredTrackerProtocol extends RecordedTrackerProtocol {
+  sessionId: string
+  sessionStartedAt: number
+}
+
+interface StoredProtocolRecording {
+  session: RecordingSession
+  records: RecordedTrackerProtocol[]
+}
+
 type StatusListener = (status: ProtocolRecordingStatus) => void
 
 const DATABASE_NAME = 'dxc-tracker-protocol-recording'
-const DATABASE_VERSION = 1
+const DATABASE_VERSION = 2
 const RECORD_STORE_NAME = 'records'
 const DOWNLOAD_FILE_NAME = 'tracker-protocols.jsonl'
 export const MAX_PROTOCOL_RECORDS = 10_000
@@ -27,6 +42,8 @@ export const MAX_PROTOCOL_RECORDS = 10_000
 let active = false
 let sequence = 0
 let limitReached = false
+let currentSession: RecordingSession | null | undefined
+let lastSessionStartedAt = 0
 let records: RecordedTrackerProtocol[] = []
 let pendingRecords: RecordedTrackerProtocol[] = []
 let flushScheduled = false
@@ -42,6 +59,7 @@ export function startProtocolRecording(): ProtocolRecordingStatus {
   active = true
   sequence = 0
   limitReached = false
+  currentSession = createRecordingSession()
   records = []
   pendingRecords = []
   flushScheduled = false
@@ -63,6 +81,7 @@ export async function clearProtocolRecording(): Promise<ProtocolRecordingStatus>
   active = false
   sequence = 0
   limitReached = false
+  currentSession = null
   records = []
   pendingRecords = []
   flushScheduled = false
@@ -73,17 +92,26 @@ export async function clearProtocolRecording(): Promise<ProtocolRecordingStatus>
 }
 
 export async function initializeProtocolRecording(): Promise<ProtocolRecordingStatus> {
+  if (currentSession === null) return getProtocolRecordingStatus()
+
   const expectedGeneration = loadGeneration
   await storageQueue
-  const storedRecords = await readStoredRecordsSafely()
+  const storedRecording = await readStoredRecordingSafely(currentSession?.id)
 
   if (expectedGeneration !== loadGeneration || active || records.length > 0) {
     return getProtocolRecordingStatus()
   }
+  if (storedRecording === undefined) return getProtocolRecordingStatus()
+  if (storedRecording === null) {
+    if (currentSession === undefined) currentSession = null
+    return getProtocolRecordingStatus()
+  }
 
-  records = storedRecords.slice(0, MAX_PROTOCOL_RECORDS)
+  currentSession = storedRecording.session
+  lastSessionStartedAt = Math.max(lastSessionStartedAt, currentSession.startedAt)
+  records = storedRecording.records.slice(0, MAX_PROTOCOL_RECORDS)
   sequence = records[records.length - 1]?.seq ?? 0
-  limitReached = storedRecords.length >= MAX_PROTOCOL_RECORDS
+  limitReached = storedRecording.records.length >= MAX_PROTOCOL_RECORDS
   notifyStatusListeners()
   return getProtocolRecordingStatus()
 }
@@ -122,7 +150,15 @@ export async function exportProtocolRecording(): Promise<boolean> {
   flushPendingRecords()
   await storageQueue
 
-  const exportRecords = records.length > 0 ? records : await readStoredRecordsSafely()
+  let exportRecords = records
+  if (exportRecords.length === 0 && currentSession !== null) {
+    const storedRecording = await readStoredRecordingSafely(currentSession?.id)
+    if (storedRecording && currentSession === undefined) {
+      currentSession = storedRecording.session
+      lastSessionStartedAt = Math.max(lastSessionStartedAt, currentSession.startedAt)
+    }
+    exportRecords = storedRecording?.records ?? []
+  }
   if (exportRecords.length === 0) return false
 
   const content = serializeProtocolRecording(exportRecords)
@@ -161,7 +197,9 @@ function flushPendingRecords(): void {
 
   const batch = pendingRecords
   pendingRecords = []
-  enqueueStorage(() => putStoredRecords(batch))
+  const session = currentSession
+  if (!session) return
+  enqueueStorage(() => putStoredRecords(session, batch))
 }
 
 function notifyStatusListeners(): void {
@@ -182,13 +220,23 @@ function enqueueStorage(operation: () => Promise<void>): Promise<void> {
   return storageQueue
 }
 
-async function putStoredRecords(batch: RecordedTrackerProtocol[]): Promise<void> {
+async function putStoredRecords(
+  session: RecordingSession,
+  batch: RecordedTrackerProtocol[]
+): Promise<void> {
   const database = await openDatabase()
   if (!database || batch.length === 0) return
 
   const transaction = database.transaction(RECORD_STORE_NAME, 'readwrite')
   const store = transaction.objectStore(RECORD_STORE_NAME)
-  batch.forEach((record) => store.put(record))
+  batch.forEach((record) => {
+    const storedRecord: StoredTrackerProtocol = {
+      ...record,
+      sessionId: session.id,
+      sessionStartedAt: session.startedAt
+    }
+    store.put(storedRecord)
+  })
   await waitForTransaction(transaction)
 }
 
@@ -201,29 +249,96 @@ async function clearStoredRecords(): Promise<void> {
   await waitForTransaction(transaction)
 }
 
-async function readStoredRecords(): Promise<RecordedTrackerProtocol[]> {
+async function readStoredRecording(sessionId?: string): Promise<StoredProtocolRecording | null> {
   const database = await openDatabase()
-  if (!database) return []
+  if (!database) return null
 
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(RECORD_STORE_NAME, 'readonly')
     const request = transaction.objectStore(RECORD_STORE_NAME).getAll()
     request.onsuccess = () => {
-      const storedRecords = request.result as RecordedTrackerProtocol[]
-      resolve(
-        storedRecords.sort((left, right) => left.seq - right.seq).slice(0, MAX_PROTOCOL_RECORDS)
-      )
+      const storedRecords = (request.result as unknown[]).filter(isStoredTrackerProtocol)
+      const selectedSessionId = sessionId ?? findLatestSessionId(storedRecords)
+      if (!selectedSessionId) {
+        resolve(null)
+        return
+      }
+
+      const sessionRecords = storedRecords
+        .filter((record) => record.sessionId === selectedSessionId)
+        .sort((left, right) => left.seq - right.seq)
+      const firstRecord = sessionRecords[0]
+      if (!firstRecord) {
+        resolve(null)
+        return
+      }
+
+      resolve({
+        session: {
+          id: firstRecord.sessionId,
+          startedAt: firstRecord.sessionStartedAt
+        },
+        records: sessionRecords.slice(0, MAX_PROTOCOL_RECORDS).map(toRecordedTrackerProtocol)
+      })
     }
     request.onerror = () => reject(request.error)
   })
 }
 
-async function readStoredRecordsSafely(): Promise<RecordedTrackerProtocol[]> {
+async function readStoredRecordingSafely(
+  sessionId?: string
+): Promise<StoredProtocolRecording | null | undefined> {
   try {
-    return await readStoredRecords()
+    return await readStoredRecording(sessionId)
   } catch (error) {
     console.warn('[protocol-recorder] IndexedDB 读取失败', error)
-    return []
+    return undefined
+  }
+}
+
+function createRecordingSession(): RecordingSession {
+  const startedAt = Math.max(Date.now(), lastSessionStartedAt + 1)
+  lastSessionStartedAt = startedAt
+  const suffix =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2)
+  return { id: `${startedAt}-${suffix}`, startedAt }
+}
+
+function findLatestSessionId(records: StoredTrackerProtocol[]): string | null {
+  const latest = records.reduce<StoredTrackerProtocol | null>((current, record) => {
+    if (!current || record.sessionStartedAt > current.sessionStartedAt) return record
+    if (
+      record.sessionStartedAt === current.sessionStartedAt &&
+      record.sessionId > current.sessionId
+    ) {
+      return record
+    }
+    return current
+  }, null)
+  return latest?.sessionId ?? null
+}
+
+function isStoredTrackerProtocol(value: unknown): value is StoredTrackerProtocol {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Partial<StoredTrackerProtocol>
+  return (
+    typeof record.sessionId === 'string' &&
+    Number.isFinite(record.sessionStartedAt) &&
+    Number.isInteger(record.seq) &&
+    typeof record.className === 'string' &&
+    Boolean(record.payload) &&
+    typeof record.payload === 'object' &&
+    !Array.isArray(record.payload)
+  )
+}
+
+function toRecordedTrackerProtocol(record: StoredTrackerProtocol): RecordedTrackerProtocol {
+  return {
+    seq: record.seq,
+    className: record.className,
+    payload: record.payload
   }
 }
 
@@ -256,9 +371,10 @@ function openDatabase(): Promise<IDBDatabase | null> {
 
   request.onupgradeneeded = () => {
     const database = request.result
-    if (!database.objectStoreNames.contains(RECORD_STORE_NAME)) {
-      database.createObjectStore(RECORD_STORE_NAME, { keyPath: 'seq' })
+    if (database.objectStoreNames.contains(RECORD_STORE_NAME)) {
+      database.deleteObjectStore(RECORD_STORE_NAME)
     }
+    database.createObjectStore(RECORD_STORE_NAME, { keyPath: ['sessionId', 'seq'] })
   }
 
   request.onsuccess = () => {

@@ -1,5 +1,6 @@
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '../candidate/cardPositions'
 
+export const GUI_FU_ROLE_DATA_ID = 3709
 export const PILE_SAME_ZONE_SHOW_SPELL_IDS: ReadonlySet<number> = new Set([7011, 987, 988])
 export const PILE_RANDOM_AS_TOP_SPELL_IDS: ReadonlySet<number> = new Set([3208])
 export const YANXI_DRAW_SPELL_IDS: ReadonlySet<number> = new Set([7016, 7017])

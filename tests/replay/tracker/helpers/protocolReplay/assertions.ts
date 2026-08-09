@@ -109,7 +109,12 @@ export class ReplayAssertionRunner {
     const violations: ReplayAssertionViolation[] = []
     assertions.forEach((assertion) => {
       this.evaluated.add(assertion)
-      const message = assertion.check(context)
+      let message: string | null
+      try {
+        message = assertion.check(context)
+      } catch (error) {
+        message = formatAssertionError(error)
+      }
       if (message === null) return
       violations.push({
         seq: context.seq,
@@ -120,6 +125,17 @@ export class ReplayAssertionRunner {
       })
     })
     return violations
+  }
+}
+
+function formatAssertionError(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+
+  try {
+    return JSON.stringify(error) ?? String(error)
+  } catch {
+    return String(error)
   }
 }
 

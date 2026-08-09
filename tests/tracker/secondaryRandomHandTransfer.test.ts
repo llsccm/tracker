@@ -172,5 +172,6 @@ describe('二次随机手牌转移时的候选传播', () => {
       ).toEqual([10, 129])
     })
     expect(firstGroup?.expectedSlotsByLocation.size).toBe(0)
+    expect(Array.from(room.constraintGroups.values())).not.toContain(firstGroup)
   })
 })

@@ -465,7 +465,7 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
     const affectedSeats = new Set([Number(fromSeat), Number(targetSeat)])
     let changed = false
 
-    this.room.constraintGroups.forEach((group) => {
+    this.room.constraintGroups.forEach((group, groupID) => {
       let hasMatchingCard = false
       for (const card of group.cards) {
         if (!cardSet.has(card)) continue
@@ -479,8 +479,15 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
       let groupChanged = false
 
       affectedSeats.forEach((seatID) => {
-        const locationPrefix = `player:${seatID}:hand:`
-        const subZonePrefix = `${seatID}:hand:`
+        const handLocationKey = createLocationCandidateKey({
+          type: 'player',
+          seatID,
+          subZone: 'hand',
+          spellID: null
+        })
+        const handLocationKeyParts = handLocationKey.split(':')
+        const locationPrefix = `${handLocationKeyParts.slice(0, -1).join(':')}:`
+        const subZonePrefix = `${handLocationKeyParts.slice(1, -1).join(':')}:`
         const locationKeys = Array.from(group.expectedSlotsByLocation.keys()).filter((key) =>
           key.startsWith(locationPrefix)
         )
@@ -510,6 +517,14 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
 
       // 位置层是主模型，重新镜像兼容的 subZone 读面，避免旧零名额残留。
       group.syncExpectedSlotCompatibility('location')
+      if (
+        group.expectedSlotsByLocation.size === 0 &&
+        group.expectedSlotsBySubZone.size === 0 &&
+        group.expectedSlotsBySeat.size === 0
+      ) {
+        group.candidateSeats.clear()
+        this.room.deleteConstraintGroup(groupID)
+      }
       changed = true
     })
 

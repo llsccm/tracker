@@ -64,10 +64,10 @@ describe('真实录制回放：连续整手转移 + 中途揭示', () => {
     const finals = (['fast', 'watch', 'deep'] as const).map((mode) => {
       const report = new TrackerProtocolReplayer({ mode }).replay(readFixture())
       expect(report.success).toBe(true)
-      return JSON.stringify(report.finalState)
+      return report.finalState
     })
-    expect(finals[1]).toBe(finals[0])
-    expect(finals[2]).toBe(finals[0])
+    expect(finals[1]).toEqual(finals[0])
+    expect(finals[2]).toEqual(finals[0])
   })
 
   it('toSeq 截断后的状态与同范围完整回放一致，并标记为不完整', () => {
@@ -77,7 +77,7 @@ describe('真实录制回放：连续整手转移 + 中途揭示', () => {
       records.filter((record) => record.seq <= 60)
     )
 
-    expect(JSON.stringify(truncated.finalState)).toBe(JSON.stringify(sliced.finalState))
+    expect(truncated.finalState).toEqual(sliced.finalState)
     expect(truncated.diagnostics.tainted).toBe(true)
     expect(truncated.diagnostics.taintReasons.some((reason) => reason.includes('toSeq=60'))).toBe(
       true

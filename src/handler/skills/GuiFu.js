@@ -1,6 +1,6 @@
 import { tracker } from '@/tracker/runtime/browser'
 
-export const ROLE_DATA_3709 = 3709
+export { GUI_FU_ROLE_DATA_ID as ROLE_DATA_3709 } from '@/tracker/runtime/protocolRules'
 
 /**
  * 诡伏角色数据格式：首项为获得数量，后面紧跟对应数量的 CardID。

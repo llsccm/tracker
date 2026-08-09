@@ -1,3 +1,5 @@
+import { GUI_FU_ROLE_DATA_ID } from './protocolRules'
+
 export interface ProjectedTrackerProtocol {
   className: string
   payload: Record<string, unknown>
@@ -59,7 +61,7 @@ const ROLE_OPT_TARGET_SPELL_IDS = new Set([
   4025
 ])
 
-const TRACKER_ROLE_DATA_EX_IDS = new Set([3544, 3571, 3709])
+const TRACKER_ROLE_DATA_EX_IDS = new Set([3544, 3571, GUI_FU_ROLE_DATA_ID])
 const TRACKER_USE_SPELL_IDS = new Set([3090, 3138, 3157, 3161, 3185, 3193, 3511, 3750])
 
 const CONDITIONAL_RECORDING_RULES: Record<string, ProtocolPredicate> = {
@@ -112,6 +114,8 @@ const ROOT_FIELD_EXCEPTIONS = new Map([
 ])
 
 const ROOT_FIELD_ALLOWLISTS: Record<string, ReadonlySet<string>> = {
+  decodeGameRecordInitInfo: new Set(),
+  decodeGsClientUserSeatFlagNtf: new Set(),
   GsCFirstPhaseRole: new Set(['SeatID']),
   GsCGamephaseNtf: new Set(['Round', 'SeatID']),
   GsCGuoZhanSetCharacter: new Set(['GeneralData', 'SeatID']),

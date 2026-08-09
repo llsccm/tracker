@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
+import { Room } from '@/tracker/Room'
 import {
   expectCardIncludesSeatsAt,
   expectCardLocationCandidatesAt,
@@ -10,6 +11,7 @@ import {
   type RecordedTrackerProtocol,
   type TrackerProtocolReplayReport
 } from './helpers/protocolReplay'
+import { ReplayWatchTracker } from './helpers/protocolReplay/watch'
 
 describe('回放诊断：解析、指标、watch 与断言', () => {
   it('允许区间截取后的 JSONL 从非 1 的 seq 开始，但仍要求片段内连续', () => {
@@ -92,7 +94,7 @@ describe('回放诊断：解析、指标、watch 与断言', () => {
     expect(deep.diagnostics.tainted).toBe(false)
     expect(fast.diagnostics.tainted).toBe(true)
     expect(fast.diagnostics.taintReasons.join(' ')).toContain('影子索引检查')
-    expect(JSON.stringify(fast.finalState)).toBe(JSON.stringify(deep.finalState))
+    expect(fast.finalState).toEqual(deep.finalState)
   })
 
   it('开启 watch 只增加只读采集，不改变回放结果', () => {
@@ -102,7 +104,7 @@ describe('回放诊断：解析、指标、watch 与断言', () => {
       watchCardIDs: [1]
     }).replay(drawRecords())
 
-    expect(JSON.stringify(watched.finalState)).toBe(JSON.stringify(plain.finalState))
+    expect(watched.finalState).toEqual(plain.finalState)
     expect(plain.diagnostics.cardChanges).toEqual([])
     expect(watched.diagnostics.cardChanges.length).toBeGreaterThan(0)
     expect(watched.diagnostics.cardChanges.every((change) => change.cardID === 1)).toBe(true)
@@ -119,6 +121,23 @@ describe('回放诊断：解析、指标、watch 与断言', () => {
     expect(change?.next?.seats).toContain(1)
     expect(change?.reasons.length).toBeGreaterThan(0)
     expect(report.diagnostics.watchStats.watchedCards).toBeGreaterThan(0)
+    expect(report.diagnostics.metrics.counters.watchSeatScans).toBe(1)
+  })
+
+  it('provenance 无法淘汰时报告仍保留的超限数量', () => {
+    const room = new Room()
+    room.createConstraintGroup({ id: 'alive-1' })
+    room.createConstraintGroup({ id: 'alive-2' })
+    const watch = new ReplayWatchTracker({ cardIDs: [1], provenanceLimit: 1 })
+
+    watch.beginProtocol(room)
+    watch.endProtocol(1, 'TestProtocol', room)
+
+    expect(watch.getStats()).toMatchObject({
+      trackedConstraintGroups: 2,
+      droppedConstraintGroups: 0,
+      provenanceOverLimit: 1
+    })
   })
 
   it('换局重建 Room 后重置每局采集状态，不把上一局的候选串进新局', () => {
@@ -162,6 +181,51 @@ describe('回放诊断：解析、指标、watch 与断言', () => {
     expect(passing.success).toBe(true)
   })
 
+  it('领域断言抛错时记录违反并继续执行同一时机的后续断言', () => {
+    const evaluated: string[] = []
+    const report = new TrackerProtocolReplayer({
+      currentUserID: 101,
+      stopOn: 'never',
+      assertions: [
+        {
+          at: 5,
+          label: '抛错断言',
+          cardIDs: [1],
+          check: () => {
+            evaluated.push('throws')
+            throw new Error('断言内部错误')
+          }
+        },
+        {
+          at: 5,
+          label: '后续断言',
+          check: () => {
+            evaluated.push('continues')
+            return '后续违反'
+          }
+        }
+      ]
+    }).replay(drawRecords())
+
+    expect(evaluated).toEqual(['throws', 'continues'])
+    expect(report.failure).toBeUndefined()
+    expect(report.diagnostics.violations).toMatchObject([
+      {
+        seq: 5,
+        className: 'PubGsCMoveCard',
+        label: '抛错断言',
+        message: '断言内部错误',
+        cardIDs: [1]
+      },
+      {
+        seq: 5,
+        className: 'PubGsCMoveCard',
+        label: '后续断言',
+        message: '后续违反'
+      }
+    ])
+  })
+
   it('断言失败时停在首个违反的 seq 并输出因果闭包', () => {
     const report = new TrackerProtocolReplayer({
       currentUserID: 101,
@@ -187,15 +251,22 @@ describe('回放诊断：解析、指标、watch 与断言', () => {
   })
 
   it('stopOn=never 时收集全部违反而不提前停止', () => {
+    const records = drawRecords()
     const report = new TrackerProtocolReplayer({
       currentUserID: 101,
       stopOn: 'never',
       assertions: [expectCardSeatsAt(5, 1, [2]), expectCardSeatsAt('final', 1, [3])]
-    }).replay(drawRecords())
+    }).replay(records)
 
     expect(report.diagnostics.violations).toHaveLength(2)
     expect(report.diagnostics.stoppedAtSeq).toBe(5)
     expect(report.diagnostics.causalClosure).toBeNull()
+    expect(report.diagnostics.metrics.counters.protocols).toBe(records.length)
+  })
+
+  it('显式传入非正整数 toSeq 时立即拒绝配置', () => {
+    expect(() => new TrackerProtocolReplayer({ toSeq: 0 })).toThrow('toSeq 必须是正整数')
+    expect(() => new TrackerProtocolReplayer({ toSeq: -1 })).toThrow('toSeq 必须是正整数')
   })
 
   it('未完整应用的协议归并为带原因的结构化记录', () => {
@@ -221,7 +292,7 @@ describe('回放诊断：解析、指标、watch 与断言', () => {
     const truncated = new TrackerProtocolReplayer({ currentUserID: 101, toSeq: 4 }).replay(records)
     const sliced = new TrackerProtocolReplayer({ currentUserID: 101 }).replay(openingRecords())
 
-    expect(JSON.stringify(truncated.finalState)).toBe(JSON.stringify(sliced.finalState))
+    expect(truncated.finalState).toEqual(sliced.finalState)
     expect(truncated.diagnostics.stoppedAtSeq).toBe(4)
     expect(truncated.diagnostics.taintReasons.join(' ')).toContain('剩余 1 条协议未回放')
   })

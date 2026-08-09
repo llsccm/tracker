@@ -198,6 +198,31 @@ describe('tracker protocol replay', () => {
     expect(tracedReport.steps.every((step) => step.state !== undefined)).toBe(true)
   })
 
+  it('逐条状态只输出带快照的步骤并使用共享条数上限', () => {
+    const report = new TrackerProtocolReplayer({
+      currentUserID: 101,
+      captureFullSnapshots: true
+    }).replay(openingRecords())
+    const mixedReport = {
+      ...report,
+      steps: report.steps.map((step, index) =>
+        index === report.steps.length - 1 ? { ...step, state: undefined } : step
+      )
+    }
+
+    const output = formatTrackerProtocolReplayReport(mixedReport, {
+      includeFinalState: false,
+      maxCardChanges: 2
+    })
+    const stateSection = output.slice(output.indexOf('逐条状态：'))
+
+    expect(stateSection.match(/"seq":/g)).toHaveLength(2)
+    expect(stateSection).toContain('"seq": 2')
+    expect(stateSection).toContain('"seq": 3')
+    expect(stateSection).not.toContain('"seq": 1')
+    expect(stateSection).not.toContain('"seq": 4')
+  })
+
   it('成功报告只汇总身份候选数量而不展开完整卡牌列表', () => {
     const report = new TrackerProtocolReplayer({ currentUserID: 101 }).replay(openingRecords())
     expect(report.success).toBe(true)

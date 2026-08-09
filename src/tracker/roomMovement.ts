@@ -12,6 +12,7 @@ import type {
   RoomMoveContext,
   RoomMovementOptions
 } from './roomMovement/types'
+import { GUI_FU_ROLE_DATA_ID } from './runtime/protocolRules'
 import type { CardID, PublicZoneName, SeatID } from './types'
 
 /**
@@ -550,7 +551,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       const isPendingDiscardGain =
         context.knownIDs.length === 0 &&
         (fromZone === 'discard' || Number(fromZone) === 2) &&
-        Number(spellID) === 3709 &&
+        Number(spellID) === GUI_FU_ROLE_DATA_ID &&
         Number(moveType) === MOVE_TYPE.GAIN &&
         subZone === 'hand' &&
         targetSeats.length === 1

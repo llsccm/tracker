@@ -106,6 +106,7 @@ export class ReplayWatchTracker {
   private dirtyCursor = 0
   private droppedChanges = 0
   private droppedProvenance = 0
+  private provenanceOverLimit = 0
   private truncatedReasonProtocols = 0
 
   constructor(options: ReplayWatchOptions = {}) {
@@ -191,6 +192,7 @@ export class ReplayWatchTracker {
     this.previousStates.clear()
     this.provenance.clear()
     this.provenanceSignatures.clear()
+    this.provenanceOverLimit = 0
     return true
   }
 
@@ -219,6 +221,7 @@ export class ReplayWatchTracker {
       droppedChanges: this.droppedChanges,
       trackedConstraintGroups: this.provenance.size,
       droppedConstraintGroups: this.droppedProvenance,
+      provenanceOverLimit: this.provenanceOverLimit,
       truncatedReasonProtocols: this.truncatedReasonProtocols
     }
   }
@@ -234,12 +237,12 @@ export class ReplayWatchTracker {
 
   private resolveWatchedCards(room: Room): Card[] {
     if (this.watchSeatIDs.size > 0) {
-      room.cards.forEach((card) => {
+      this.getSeatWatchCandidates(room).forEach((card) => {
         if (card.id <= 0) return
         if (this.stickyCardIDs.has(card.id)) return
+        this.metrics.count('watchSeatScans')
         if (matchesWatchedSeats(card, this.watchSeatIDs)) this.stickyCardIDs.add(card.id)
       })
-      this.metrics.count('watchSeatScans', room.cards.length)
     }
 
     const cards: Card[] = []
@@ -248,6 +251,22 @@ export class ReplayWatchTracker {
       if (card) cards.push(card)
     })
     return cards.sort((left, right) => left.id - right.id)
+  }
+
+  private getSeatWatchCandidates(room: Room): Card[] {
+    const events = room.dirtyCardEvents
+    const hasLostEvents =
+      room.dirtyCardSeq > this.dirtyCursor &&
+      (events.length === 0 || events[0].seq > this.dirtyCursor + 1)
+    if (hasLostEvents) return room.cards
+
+    const cards = new Set<Card>()
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index]
+      if (event.seq <= this.dirtyCursor) break
+      cards.add(event.card)
+    }
+    return Array.from(cards)
   }
 
   /** 按 entityID 聚合本条协议内产生的 `type:reason` 摘要。 */
@@ -304,7 +323,10 @@ export class ReplayWatchTracker {
 
   private putProvenance(item: ReplayConstraintProvenance): void {
     this.provenance.set(item.id, item)
-    if (this.provenance.size <= this.provenanceLimit) return
+    if (this.provenance.size <= this.provenanceLimit) {
+      this.provenanceOverLimit = 0
+      return
+    }
 
     // 优先淘汰已失效且与 watched card 无关的 tombstone。
     for (const [id, candidate] of this.provenance) {
@@ -315,6 +337,7 @@ export class ReplayWatchTracker {
       this.provenanceSignatures.delete(id)
       this.droppedProvenance += 1
     }
+    this.provenanceOverLimit = Math.max(0, this.provenance.size - this.provenanceLimit)
   }
 }
 
