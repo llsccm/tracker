@@ -259,6 +259,7 @@ export class TrackerProtocolReplayer {
     violations.push(...this.assertions.collectUnevaluated(lastSeq, lastClassName))
 
     // fast/watch 降级了逐条索引检查，收尾时至少补一次全量核对。
+    let finalConsistencyFailed = false
     if (finalRoom?.isDeckReady && skippedIndexChecks > 0 && violations.length === 0) {
       try {
         this.metrics.time('consistency', () =>
@@ -268,6 +269,7 @@ export class TrackerProtocolReplayer {
           })
         )
       } catch (error) {
+        finalConsistencyFailed = true
         taintReasons.push(`收尾索引核对失败：${getErrorMessage(error)}`)
       }
     }
@@ -278,7 +280,7 @@ export class TrackerProtocolReplayer {
     if (finalState.room) lastActiveState = finalState
 
     return this.finalize({
-      success: violations.length === 0,
+      success: violations.length === 0 && !finalConsistencyFailed,
       counts,
       steps,
       nonApplied,

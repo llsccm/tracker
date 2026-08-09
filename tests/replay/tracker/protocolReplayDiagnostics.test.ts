@@ -7,7 +7,8 @@ import {
   formatTrackerProtocolReplayReport,
   parseTrackerProtocolJsonl,
   TrackerProtocolReplayer,
-  type RecordedTrackerProtocol
+  type RecordedTrackerProtocol,
+  type TrackerProtocolReplayReport
 } from './helpers/protocolReplay'
 
 describe('回放诊断：解析、指标、watch 与断言', () => {
@@ -38,6 +39,43 @@ describe('回放诊断：解析、指标、watch 与断言', () => {
     expect(timings.apply).toBeGreaterThanOrEqual(0)
     expect(timings.wallClock).toBeGreaterThanOrEqual(0)
     expect(formatTrackerProtocolReplayReport(report)).toContain('耗时(ms)：')
+  })
+
+  it('报告格式化遇到循环引用时返回失败说明，不中断诊断输出', () => {
+    const cyclic: Record<string, unknown> = {}
+    cyclic.self = cyclic
+    const report = {
+      success: false,
+      applied: 1,
+      ignored: 0,
+      partial: 0,
+      steps: [],
+      nonApplied: [],
+      finalState: {},
+      lastActiveState: null,
+      diagnostics: {
+        mode: 'watch',
+        metrics: { timings: {}, counters: {} },
+        watchStats: {},
+        cardChanges: [],
+        violations: [],
+        causalClosure: null,
+        stoppedAtSeq: 1,
+        tainted: false,
+        taintReasons: []
+      },
+      failure: {
+        seq: 1,
+        className: 'SomeProtocol',
+        payload: cyclic,
+        message: '模拟失败',
+        context: [],
+        stateBefore: null,
+        stateAfter: { cyclic }
+      }
+    } as unknown as TrackerProtocolReplayReport
+
+    expect(formatTrackerProtocolReplayReport(report)).toContain('无法序列化')
   })
 
   it('fast 模式跳过影子索引重建并把降级写进 tainted 原因', () => {

@@ -260,5 +260,9 @@ function stringifyInline(value: unknown): string {
 }
 
 function stringify(value: unknown): string {
-  return JSON.stringify(value, null, 2)
+  try {
+    return JSON.stringify(value, null, 2) ?? 'null'
+  } catch (error) {
+    return `（无法序列化：${error instanceof Error ? error.message : String(error)}）`
+  }
 }
