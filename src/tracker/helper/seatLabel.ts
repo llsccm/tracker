@@ -25,8 +25,10 @@ export function formatPlayerSeatLabel(
   const displayID = player.fixedViewId || 1
   const orderLabel = `${getDisplayIdLabel(displayID, options.orderLabels)}号位`
   const getGeneralName = options.getGeneralName ?? getConfiguredGeneralName
-  const generalNames = player.generals.map((generalID) => getGeneralName(generalID) || '')
-  const seatName = generalNames.some(Boolean) ? generalNames.join(' ') : orderLabel
+  const generalNames = player.generals
+    .map((generalID) => getGeneralName(generalID))
+    .filter((name): name is string => Boolean(name))
+  const seatName = generalNames.length > 0 ? generalNames.join(' ') : orderLabel
 
   return `${seatName}|${orderLabel}`
 }

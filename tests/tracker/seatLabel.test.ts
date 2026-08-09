@@ -16,6 +16,16 @@ describe('座位标签格式化', () => {
     expect(formatPlayerSeatLabel({ fixedViewId: undefined, generals: [0] })).toBe('一号位|一号位')
   })
 
+  it('部分武将未知时过滤空名称，避免多余空格', () => {
+    const player = { fixedViewId: 1, generals: [0, 101] }
+
+    expect(
+      formatPlayerSeatLabel(player, {
+        getGeneralName: (generalID) => ({ 101: '张飞' })[generalID]
+      })
+    ).toBe('张飞|一号位')
+  })
+
   it('未知顺位保留数字标签', () => {
     expect(getDisplayIdLabel(9)).toBe('9')
     expect(formatPlayerSeatLabel({ fixedViewId: 9, generals: [] })).toBe('9号位|9号位')
