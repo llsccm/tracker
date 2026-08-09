@@ -447,4 +447,3 @@ function sameStrings(left: string[], right: string[]): boolean {
 function sameNumbers(left: number[], right: number[]): boolean {
   return left.length === right.length && left.every((item, index) => item === right[index])
 }
-
