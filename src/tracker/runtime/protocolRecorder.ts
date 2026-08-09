@@ -299,11 +299,20 @@ async function readStoredRecordingSafely(
 function createRecordingSession(): RecordingSession {
   const startedAt = Math.max(Date.now(), lastSessionStartedAt + 1)
   lastSessionStartedAt = startedAt
-  const suffix =
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : Math.random().toString(36).slice(2)
+  const suffix = createSessionIdSuffix()
   return { id: `${startedAt}-${suffix}`, startedAt }
+}
+
+function createSessionIdSuffix(): string {
+  const cryptoApi = globalThis.crypto
+  if (typeof cryptoApi?.randomUUID === 'function') return cryptoApi.randomUUID()
+  if (typeof cryptoApi?.getRandomValues !== 'function') {
+    throw new Error('当前环境不支持安全随机数')
+  }
+
+  const randomBytes = new Uint8Array(16)
+  cryptoApi.getRandomValues(randomBytes)
+  return Array.from(randomBytes, (value) => value.toString(16).padStart(2, '0')).join('')
 }
 
 function findLatestSessionId(records: StoredTrackerProtocol[]): string | null {

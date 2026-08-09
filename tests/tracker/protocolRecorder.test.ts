@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   clearProtocolRecording,
@@ -409,6 +409,8 @@ describe('tracker protocol recorder', () => {
 
   afterEach(async () => {
     await clearProtocolRecording()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('默认关闭，手动开启后才按序号记录', async () => {
@@ -475,6 +477,21 @@ describe('tracker protocol recorder', () => {
         payload: { SeatID: 6, useType: 1, isSend: 0, spellID: 1 }
       }
     ])
+  })
+
+  it('randomUUID 不可用时使用 Web Crypto 生成会话标识', async () => {
+    const getRandomValues = vi.fn((values: Uint8Array) => {
+      values.fill(7)
+      return values
+    })
+    vi.stubGlobal('crypto', { getRandomValues })
+    const insecureRandom = vi.spyOn(Math, 'random')
+
+    startProtocolRecording()
+    await stopProtocolRecording()
+
+    expect(getRandomValues).toHaveBeenCalledOnce()
+    expect(insecureRandom).not.toHaveBeenCalled()
   })
 
   it('达到最大条数后自动停止并通过状态监听器提示', async () => {
