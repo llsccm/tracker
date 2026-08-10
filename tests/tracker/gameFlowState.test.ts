@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { drawCounter, getReadyTrackerRoom, setTrackerMySeatID } = vi.hoisted(() => ({
+const { drawCounter, getTrackedPlayerHandCardIDs, setTrackerMySeatID } = vi.hoisted(() => ({
   drawCounter: vi.fn(),
-  getReadyTrackerRoom: vi.fn(),
+  getTrackedPlayerHandCardIDs: vi.fn(),
   setTrackerMySeatID: vi.fn()
 }))
 
 vi.mock('../../src/tracker/runtime/browser', () => ({
   tracker: {
-    getReadyTrackerRoom,
+    getTrackedPlayerHandCardIDs,
     setTrackerMySeatID
   }
 }))
@@ -66,8 +66,8 @@ function createDrawContext(game, overrides = {}) {
 
 describe('handleGameFlowState 录像主视角', () => {
   beforeEach(() => {
-    getReadyTrackerRoom.mockReset()
-    getReadyTrackerRoom.mockReturnValue(null)
+    getTrackedPlayerHandCardIDs.mockReset()
+    getTrackedPlayerHandCardIDs.mockReturnValue([])
     setTrackerMySeatID.mockReset()
   })
 

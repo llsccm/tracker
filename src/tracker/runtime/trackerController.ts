@@ -191,6 +191,11 @@ export class TrackerController {
     return this.isTrackerReady() ? this.trackerRoom : null
   }
 
+  /** 读取当前已跟踪且已知的指定玩家手牌 ID。 */
+  getTrackedPlayerHandCardIDs(seatID: SeatID): CardID[] {
+    return this.getReadyTrackerRoom()?.getPlayerHandCardIDs(seatID) ?? []
+  }
+
   /**
    * 开局协议到达后创建单局 Room。
    * 旧 Room 必须先销毁，避免断线/重进导致上一局约束组继续影响新牌局。

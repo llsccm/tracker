@@ -83,7 +83,7 @@ export function normalizeTrackerMovePosition({
   isGuoZhan,
   specialEquipmentCards = false
 }: NormalizeTrackerMovePositionInput) {
-  let cardIDs = CardIDs.slice()
+  const cardIDs = CardIDs.slice()
   let fromPosition = FromPosition
   let toPosition = ToPosition
 
@@ -172,10 +172,10 @@ export function normalizeTrackerMovePosition({
     toPosition = POSITION_RANDOM
   }
 
-  // 手牌中不处理回魂
-  if (ToZone === 1 && ToID === 255 && ToPosition === POSITION_TOP) {
-    cardIDs = cardIDs.filter((cardID) => cardID !== 4400 && cardID !== 4401)
-  }
+  // 手牌中不处理回魂 目前先不处理
+  // if (ToZone === 1 && ToID === 255 && ToPosition === POSITION_TOP) {
+  //   cardIDs = cardIDs.filter((cardID) => cardID !== 4400 && cardID !== 4401)
+  // }
 
   // 手气卡返还的牌会重新混入牌堆，不能把协议/客户端代表位置当成牌顶事实。
   if (FromZone === 5 && ToZone === 1 && SpellID === 0 && MoveType === 19) {

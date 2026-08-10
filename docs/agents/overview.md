@@ -62,7 +62,8 @@
     - `CardConfig.js` / `SkillsConfig.js` / `CharacterConfig.js` / `RoguelikeConfig.js` / `SpellExtendConfig.js`
     - `vo/`：配置 VO（如山河图难度）
     - `index.js`：统一导出
-  - `src/draw.js`：界面绘制、记牌器输出、山河图展示、聊天输出与剪贴板辅助；严教、糜竺、称象、宜城等保留小抄函数。
+  - `src/draw.js`：界面绘制、记牌器输出、山河图展示、聊天输出与剪贴板辅助；统一 re-export `src/draw/` 中的保留小抄函数。
+  - `src/draw/`：按技能拆分的 `drawMiZhu.js`、`drawYanJiao.js`、`drawChengXiang.js`、`drawYiCheng.js` 及共用的 `drawHelpers.js`。
   - `src/runtime/gameAdapter.js`：安全读取 Laya/游戏对象的最小适配层。
   - `src/types/global.d.ts`：宿主与全局类型声明。
   - `src/utils/`：

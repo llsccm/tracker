@@ -1,6 +1,6 @@
 import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
 import { CardConfig } from '../config'
-import { drawYanJiao, drawYiCheng } from '../draw'
+import { drawChengXiang, drawYanJiao, drawYiCheng } from '../draw'
 import { Game } from '../tracker'
 import { tracker } from '../tracker/runtime/browser'
 import {
@@ -284,6 +284,21 @@ export function handleRoleOptTargetNtf(msg) {
     //     //
     //   }
     //   break
+
+    // 称象
+    case 441:
+    case 3492: {
+      if (SrcSeatID === undefined || targetSeatID !== 255) break
+      if (SrcSeatID !== Game.myID) break
+
+      const cardIDs = Game.getSpellState(SpellID)
+      if (!Array.isArray(cardIDs) || !cardIDs.length) break
+
+      drawChengXiang(getCardNumbers(cardIDs), SpellID == 3492)
+      Game.deleteSpellState(SpellID)
+
+      break
+    }
 
     default:
       break

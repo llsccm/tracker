@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { destroyPeiXiuMapWindow, revealTrackerCards } = vi.hoisted(() => ({
+const { destroyPeiXiuMapWindow, drawChengXiang, revealTrackerCards } = vi.hoisted(() => ({
   destroyPeiXiuMapWindow: vi.fn(),
+  drawChengXiang: vi.fn(),
   revealTrackerCards: vi.fn()
 }))
 
@@ -17,10 +18,12 @@ vi.mock('@/ui/PeiXiuMapWindow', () => ({
 }))
 
 vi.mock('../../src/draw', () => ({
+  drawChengXiang,
   drawYanJiao: vi.fn(),
   drawYiCheng: vi.fn()
 }))
 
+import { CardConfig } from '../../src/config'
 import { handleRoleOptTargetNtf } from '../../src/handler/GsCRoleOptTargetNtf'
 import { Game } from '../../src/tracker'
 import { tracker } from '../../src/tracker/runtime/browser'
@@ -28,10 +31,19 @@ import { tracker } from '../../src/tracker/runtime/browser'
 describe('GsCRoleOptTargetNtf', () => {
   beforeEach(() => {
     destroyPeiXiuMapWindow.mockClear()
+    drawChengXiang.mockClear()
     revealTrackerCards.mockClear()
     vi.mocked(tracker.getReadyTrackerRoom).mockReset()
+    Game.bindRoom(null)
+    Game.deleteSpellState(441)
+    Game.deleteSpellState(3492)
     Game.deleteSpellState(7009)
     Game.deleteSpellState(4022)
+  })
+
+  afterEach(() => {
+    Game.bindRoom(null)
+    vi.restoreAllMocks()
   })
 
   it('界强识将 Params 作为目标座位的全部手牌明牌', () => {
@@ -65,6 +77,37 @@ describe('GsCRoleOptTargetNtf', () => {
 
     expect(destroyPeiXiuMapWindow).toHaveBeenCalledOnce()
     expect(Game.getSpellState(4022)).toBeUndefined()
+  })
+
+  it.each([
+    { SpellID: 441, isNewChengXiang: false },
+    { SpellID: 3492, isNewChengXiang: true }
+  ])('称象 $SpellID 在目标通知中计算并展示结果', ({ SpellID, isNewChengXiang }) => {
+    Game.bindRoom({ mySeatID: 2, seatIDs: [2], size: 1 } as any)
+    Game.setSpellState(SpellID, [11, 12, 13, 14])
+    vi.spyOn(CardConfig.GetInstance(), 'getCardNumber').mockImplementation((id) => id - 10)
+
+    handleRoleOptTargetNtf({
+      SpellID,
+      SrcSeatID: 2,
+      targetSeatID: 255
+    })
+
+    expect(drawChengXiang).toHaveBeenCalledOnce()
+    expect(drawChengXiang).toHaveBeenCalledWith([1, 2, 3, 4], isNewChengXiang)
+    expect(Game.getSpellState(SpellID)).toBeUndefined()
+  })
+
+  it('称象目标通知缺少暂存牌时不展示', () => {
+    Game.bindRoom({ mySeatID: 2, seatIDs: [2], size: 1 } as any)
+
+    handleRoleOptTargetNtf({
+      SpellID: 441,
+      SrcSeatID: 2,
+      targetSeatID: 255
+    })
+
+    expect(drawChengXiang).not.toHaveBeenCalled()
   })
 
   it('观虚同时公开牌堆顶与目标手牌', () => {
