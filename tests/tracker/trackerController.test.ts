@@ -10,6 +10,20 @@ import {
 import { getCard as getCardFixture } from './helpers/room'
 
 describe('TrackerController', () => {
+  it('读取已跟踪的玩家手牌 ID，未准备时返回空数组', () => {
+    const controller = new TrackerController()
+
+    expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([])
+
+    const room = {
+      getPlayerHandCardIDs: vi.fn(() => [11, 12])
+    }
+    vi.spyOn(controller, 'getReadyTrackerRoom').mockReturnValue(room as any)
+
+    expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([11, 12])
+    expect(room.getPlayerHandCardIDs).toHaveBeenCalledWith(1)
+  })
+
   it('牌堆明牌同步将已有卡牌定位到牌顶且重复消息保持幂等', () => {
     const { controller } = createTrackerControllerHarness()
     const revealedIDs = [158, 2, 63, 125]

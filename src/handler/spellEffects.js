@@ -1,13 +1,9 @@
-import { CardConfig } from '../config'
-import { drawChengXiang } from '../draw'
 import handleJiaoYu from './skills/JiaoYu'
 import handleZuoLian from './skills/ZuoLian'
 
 function handleChengXiang(context) {
-  if (context.ToZone == 8 && context.MoveType == 6) {
-    const arr = context.CardIDs.map((id) => CardConfig.GetInstance().getCardNumber(id))
-    drawChengXiang(arr, context.SpellID == 3492)
-  }
+  if (context.ToZone != 8 || context.MoveType != 6) return
+  context.game.setSpellState(context.SpellID, [...(context.CardIDs || [])])
 }
 
 function handleQingYiLianJu(context) {

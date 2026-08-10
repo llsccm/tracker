@@ -30,11 +30,12 @@ import { setPeiXiuMapWindowVisible } from './ui/PeiXiuMapWindow'
 let iframe = null
 const version = import.meta.env.VITE_version ?? '0.9.0'
 
-export var Sdocument = document.getElementById('createSkinIframeSource')?.contentWindow?.document
+// export var Sdocument = document.getElementById('createSkinIframeSource')?.contentWindow?.document
 
 function getTrackedHandNumbers(seatID) {
   const config = CardConfig.GetInstance()
-  return (tracker.getReadyTrackerRoom()?.getPlayerHandCardIDs(seatID) ?? [])
+  return tracker
+    .getTrackedPlayerHandCardIDs(seatID)
     .map((id) => config.getCardNumber(id))
     .filter((number) => number > 0)
 }
@@ -534,8 +535,8 @@ function buttonClick() {
   // bindExternalLinks()
 
   document.getElementById('mizhu').onmousedown = function () {
-    const mzBTNs = document.querySelectorAll('.mizhu')
-    mzBTNs.forEach((e) => (e.style.display = 'none'))
+    // const mzBTNs = document.querySelectorAll('.mizhu')
+    // mzBTNs.forEach((e) => (e.style.display = 'none'))
     drawMiZhu(getTrackedHandNumbers(Game.myID))
     // 统率可能要算糜竺 暂不兼容
   }

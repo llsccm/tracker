@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/draw', () => ({ drawChengXiang: vi.fn() }))
+const { drawChengXiang } = vi.hoisted(() => ({ drawChengXiang: vi.fn() }))
+
+vi.mock('@/draw', () => ({ drawChengXiang }))
 
 import { applySpellEffect, spellEffectHandlers } from '@/handler/spellEffects'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
@@ -20,6 +22,9 @@ function createGameState(initialState = {}) {
     },
     getSpellState(spellID) {
       return states.get(spellID)
+    },
+    setSpellState(spellID, value) {
+      states.set(spellID, value)
     },
     deleteSpellState(spellID) {
       states.delete(spellID)
@@ -59,6 +64,25 @@ describe('技能副作用注册表', () => {
 
     expect(applySpellEffect(context)).toBe(false)
     expect(context.CardIDs).toEqual([1])
+  })
+
+  it.each([441, 3492])('称象 %s 暂存展示牌，等待目标通知结算', (SpellID) => {
+    const game = createGameState()
+    const CardIDs = [11, 12, 13, 14]
+
+    drawChengXiang.mockClear()
+    applySpellEffect(
+      createContext({
+        game,
+        CardIDs,
+        ToZone: 8,
+        MoveType: 6,
+        SpellID
+      })
+    )
+
+    expect(game.getSpellState(SpellID)).toEqual(CardIDs)
+    expect(drawChengXiang).not.toHaveBeenCalled()
   })
 
   it('佐练记录来源明牌并在后续暗牌移动中回填 CardIDs', () => {

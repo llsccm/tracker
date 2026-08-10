@@ -1,6 +1,6 @@
 import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
 import { CardConfig } from '../config'
-import { drawYanJiao, drawYiCheng } from '../draw'
+import { drawChengXiang, drawYanJiao, drawYiCheng } from '../draw'
 import { Game } from '../tracker'
 import { tracker } from '../tracker/runtime/browser'
 import {
@@ -11,10 +11,6 @@ import {
 import { laya } from '@/runtime/gameAdapter'
 import { wait } from '@/utils'
 // import handleYanXi from './handleYanXi'
-
-function getPlayerHandCardIDs(seatID) {
-  return tracker.getReadyTrackerRoom()?.getPlayerHandCardIDs(seatID) ?? []
-}
 
 function revealPlayerHandCards(seatID, cardIDs, options = {}) {
   tracker.revealTrackerCards({ type: 'player', seatID, ...options }, cardIDs)
@@ -89,7 +85,7 @@ export function handleRoleOptTargetNtf(msg) {
         // Params: (5) [96, 123, 128, 64, 129]
         if (Type == 28) {
           const paiduiNumbers = getCardNumbers(Params)
-          const shoupaiNumbers = getCardNumbers(getPlayerHandCardIDs(SeatID))
+          const shoupaiNumbers = getCardNumbers(tracker.getTrackedPlayerHandCardIDs(SeatID))
           drawYiCheng(paiduiNumbers, shoupaiNumbers)
         }
 
@@ -284,6 +280,21 @@ export function handleRoleOptTargetNtf(msg) {
     //     //
     //   }
     //   break
+
+    // 称象
+    case 441:
+    case 3492: {
+      if (SrcSeatID === undefined || targetSeatID !== 255) break
+      if (SrcSeatID !== Game.myID) break
+
+      const cardIDs = Game.getSpellState(SpellID)
+      if (!Array.isArray(cardIDs) || !cardIDs.length) break
+
+      drawChengXiang(getCardNumbers(cardIDs), SpellID == 3492)
+      Game.deleteSpellState(SpellID)
+
+      break
+    }
 
     default:
       break
