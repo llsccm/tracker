@@ -47,10 +47,9 @@ function hasNumberOverlap(left, right) {
  * @param {number[]} shoupaiNumbers
  */
 export function drawYiCheng(paiduiNumbers, shoupaiNumbers) {
+  if (!paiduiNumbers?.length || !shoupaiNumbers?.length) return
   const resDiv = getResultContainer()
   if (!resDiv) return
-
-  if (!paiduiNumbers?.length || !shoupaiNumbers?.length) return
 
   const paidui = normalizeCardNumbers(paiduiNumbers)
   const shoupai = normalizeCardNumbers(shoupaiNumbers)

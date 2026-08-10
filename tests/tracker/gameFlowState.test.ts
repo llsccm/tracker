@@ -6,7 +6,7 @@ const { drawCounter, getTrackedPlayerHandCardIDs, setTrackerMySeatID } = vi.hois
   setTrackerMySeatID: vi.fn()
 }))
 
-vi.mock('../../src/tracker/runtime/browser', () => ({
+vi.mock('@/tracker/runtime/browser', () => ({
   tracker: {
     getTrackedPlayerHandCardIDs,
     setTrackerMySeatID
@@ -19,7 +19,7 @@ vi.mock('@/runtime/gameAdapter', () => ({
   }
 }))
 
-vi.mock('../../src/config', () => ({
+vi.mock('@/config', () => ({
   CardConfig: {
     GetInstance: () => ({
       getCard: () => undefined
@@ -27,7 +27,7 @@ vi.mock('../../src/config', () => ({
   }
 }))
 
-import { handleGameFlowState } from '../../src/handler/gameFlowState'
+import { handleGameFlowState } from '@/handler/gameFlowState'
 
 function createRecordGame() {
   const room = {

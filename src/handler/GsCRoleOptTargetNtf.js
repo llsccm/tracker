@@ -12,10 +12,6 @@ import { laya } from '@/runtime/gameAdapter'
 import { wait } from '@/utils'
 // import handleYanXi from './handleYanXi'
 
-function getPlayerHandCardIDs(seatID) {
-  return tracker.getReadyTrackerRoom()?.getPlayerHandCardIDs(seatID) ?? []
-}
-
 function revealPlayerHandCards(seatID, cardIDs, options = {}) {
   tracker.revealTrackerCards({ type: 'player', seatID, ...options }, cardIDs)
 }
@@ -89,7 +85,7 @@ export function handleRoleOptTargetNtf(msg) {
         // Params: (5) [96, 123, 128, 64, 129]
         if (Type == 28) {
           const paiduiNumbers = getCardNumbers(Params)
-          const shoupaiNumbers = getCardNumbers(getPlayerHandCardIDs(SeatID))
+          const shoupaiNumbers = getCardNumbers(tracker.getTrackedPlayerHandCardIDs(SeatID))
           drawYiCheng(paiduiNumbers, shoupaiNumbers)
         }
 

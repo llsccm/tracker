@@ -3,7 +3,7 @@ import handleZuoLian from './skills/ZuoLian'
 
 function handleChengXiang(context) {
   if (context.ToZone != 8 || context.MoveType != 6) return
-  context.game.setSpellState(context.SpellID, context.CardIDs)
+  context.game.setSpellState(context.SpellID, [...(context.CardIDs || [])])
 }
 
 function handleQingYiLianJu(context) {

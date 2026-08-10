@@ -81,10 +81,10 @@ export function drawCard(shoupai) {
 
   const fragment = document.createDocumentFragment()
 
-  for (const s of shoupai) {
-    if (s == '0') continue
+  for (const id of shoupai) {
+    if (id == '0') continue
     const button = document.createElement('button')
-    const card = CardConfig.GetInstance().getCard(s)
+    const card = CardConfig.GetInstance().getCard(id)
     button.classList.add('shoupai')
     button.classList.toggle('red-card', card.color <= 2)
     button.innerHTML = getCardFaceHtml(card)

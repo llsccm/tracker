@@ -29,6 +29,7 @@ export function buttonRes(
   return button
 }
 
+/** 会先清空 #result */
 export function getResultContainer() {
   const resDiv = document.getElementById('result')
   if (resDiv) clearElement(resDiv)

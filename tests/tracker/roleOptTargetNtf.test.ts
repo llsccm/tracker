@@ -6,7 +6,7 @@ const { destroyPeiXiuMapWindow, drawChengXiang, revealTrackerCards } = vi.hoiste
   revealTrackerCards: vi.fn()
 }))
 
-vi.mock('../../src/tracker/runtime/browser', () => ({
+vi.mock('@/tracker/runtime/browser', () => ({
   tracker: {
     getReadyTrackerRoom: vi.fn(),
     revealTrackerCards
@@ -17,16 +17,16 @@ vi.mock('@/ui/PeiXiuMapWindow', () => ({
   destroyPeiXiuMapWindow
 }))
 
-vi.mock('../../src/draw', () => ({
+vi.mock('@/draw', () => ({
   drawChengXiang,
   drawYanJiao: vi.fn(),
   drawYiCheng: vi.fn()
 }))
 
-import { CardConfig } from '../../src/config'
-import { handleRoleOptTargetNtf } from '../../src/handler/GsCRoleOptTargetNtf'
-import { Game } from '../../src/tracker'
-import { tracker } from '../../src/tracker/runtime/browser'
+import { CardConfig } from '@/config'
+import { handleRoleOptTargetNtf } from '@/handler/GsCRoleOptTargetNtf'
+import { Game } from '@/tracker'
+import { tracker } from '@/tracker/runtime/browser'
 
 describe('GsCRoleOptTargetNtf', () => {
   beforeEach(() => {

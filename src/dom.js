@@ -30,7 +30,7 @@ import { setPeiXiuMapWindowVisible } from './ui/PeiXiuMapWindow'
 let iframe = null
 const version = import.meta.env.VITE_version ?? '0.9.0'
 
-export var Sdocument = document.getElementById('createSkinIframeSource')?.contentWindow?.document
+// export var Sdocument = document.getElementById('createSkinIframeSource')?.contentWindow?.document
 
 function getTrackedHandNumbers(seatID) {
   const config = CardConfig.GetInstance()
