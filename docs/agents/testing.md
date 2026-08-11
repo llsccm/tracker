@@ -186,8 +186,10 @@ observer、双写状态或统计 schema。新增牌堆事件语义时应同步�
 ### 牌堆身份迁移回归
 
 Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入口和对应测试 helper。生产
-只保留 `PileIdentityLedger` 单一身份权威；真实样本与 observer 指标仅作为历史决策证据，见
-本地归档 [`plans/pile-identity-cohort-plan.md`](../../plans/pile-identity-cohort-plan.md)。
+只保留 `PileIdentityLedger` 单一身份权威；当前匿名牌堆、cohort、物化与 suspended 运行时契约见
+[`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md)。真实样本与 observer 指标仅作为
+历史决策证据，见本地归档
+[`plans/pile-identity-cohort-plan.md`](../../plans/pile-identity-cohort-plan.md)。
 
 当前必须保持的自动化契约：
 
