@@ -544,6 +544,7 @@
       font-size: 12px;
       line-height: 1.2;
       white-space: nowrap;
+      cursor: help;
     }
 
     .panel-header {
@@ -1765,7 +1766,55 @@
           <div class="detail-head rogue-attr-head">结局倾向</div>
           <div class="nav-divider"></div>
           <div class="detail-body rogue-attr-body" id="rogueAttrInfo">
-            每局的选择都会最终指向不同结局
+            <span
+              class="rogue-attr-badge"
+              data-rogue-attr="rep"
+              title="声望值影响最终结局"
+            >
+              声望:<span class="rogue-attr-value">--</span>
+            </span>
+            <span
+              class="rogue-attr-badge"
+              data-rogue-attr="tro"
+              title="战斗奇遇选择战斗会提升战功值; 普通+5 精英+10"
+            >
+              战功:<span class="rogue-attr-value">--</span>
+            </span>
+            <span
+              class="rogue-attr-badge"
+              data-rogue-attr="wis"
+              title="交互奇遇选择道具会提升智谋值"
+            >
+              智谋:<span class="rogue-attr-value">--</span>
+            </span>
+            <span
+              class="rogue-attr-badge"
+              data-rogue-attr="mar"
+              title="交互奇遇选择拿铜币会提升商才值"
+            >
+              商才:<span class="rogue-attr-value">--</span>
+            </span>
+            <span
+              class="rogue-attr-badge"
+              data-rogue-attr="loy"
+              title="当前忠诚倾向值，可能影响最终结局"
+            >
+              忠诚:<span class="rogue-attr-value">--</span>
+            </span>
+            <span
+              class="rogue-attr-badge"
+              data-rogue-attr="ass"
+              title="当前权谋倾向值，可能影响最终结局"
+            >
+              权谋:<span class="rogue-attr-value">--</span>
+            </span>
+            <span
+              class="rogue-attr-badge"
+              data-rogue-attr="cha"
+              title="当前魅力倾向值，可能影响最终结局"
+            >
+              魅力:<span class="rogue-attr-value">--</span>
+            </span>
           </div>
         </div>
         <div id="storeDetail">
