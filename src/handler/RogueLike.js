@@ -83,29 +83,19 @@ export async function handleRogueLike(ProtoObj) {
   }
 }
 
-// 山河图
-const ROGUE_ATTR_LABELS = [
-  { key: 'rep', label: '声望' },
-  { key: 'tro', label: '战功' },
-  { key: 'wis', label: '智谋' },
-  { key: 'mar', label: '商才' },
-  { key: 'loy', label: '忠诚' },
-  { key: 'ass', label: '权谋' },
-  { key: 'cha', label: '魅力' }
-]
-
 function renderRogueAttrInfo(attrInfo) {
+  if (!attrInfo) return
+
   const container = document.getElementById('rogueAttrInfo')
   if (!container) return
-  if (!attrInfo) {
-    container.textContent = '结局倾向未同步'
-    return
+
+  for (const badge of container.querySelectorAll('[data-rogue-attr]')) {
+    const valueContainer = badge.querySelector('.rogue-attr-value')
+    if (!valueContainer) continue
+
+    const value = Number(attrInfo[badge.dataset.rogueAttr])
+    valueContainer.textContent = Number.isFinite(value) ? value : 0
   }
-  const badges = ROGUE_ATTR_LABELS.map(({ key, label }) => {
-    const value = Number.isFinite(attrInfo[key]) ? attrInfo[key] : (attrInfo[key] ?? 0)
-    return `<span class="rogue-attr-badge">${label}:${value}</span>`
-  }).join('')
-  container.innerHTML = badges
 }
 
 // req函数：使用闭包实现请求控制
