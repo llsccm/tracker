@@ -99,12 +99,15 @@ PowerShell、编码和文件路径写法按 [`commands.md`](commands.md) 与 Ser
 - [`plans/anonymous-entity-and-slot.md`](../../plans/anonymous-entity-and-slot.md)
 - [`plans/pile-identity-cohort-plan.md`](../../plans/pile-identity-cohort-plan.md)
 
-这些归档是决策证据，不是当前运行时入口。当前牌堆身份权威是生产 `PileIdentityLedger`，对应长期契约见
-`tests/contracts/pile-identity/`，不需要因为历史回放结论重新启用 observer 或浏览器探针。
+这些归档是决策证据，不是当前运行时入口。当前匿名牌堆、身份分区与 cohort 运行时契约见
+[`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md)；牌堆身份权威是生产
+`PileIdentityLedger`，对应长期契约见 `tests/contracts/pile-identity/`，不需要因为历史回放结论重新启用
+observer 或浏览器探针。
 
 ## 相关入口
 
 - 常规测试选择与验证分层：[`testing.md`](testing.md)
+- 匿名牌堆与身份账本：[`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md)
 - 记牌器方法速查：[`tracker_api.md`](tracker_api.md)
 - 运行时生命周期：[`lifecycle.md`](lifecycle.md)
 - 回放测试就地说明：[`tests/replay/README.md`](../../tests/replay/README.md)

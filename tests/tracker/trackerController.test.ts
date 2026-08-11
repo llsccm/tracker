@@ -900,6 +900,61 @@ describe('TrackerController', () => {
     expect(room.getPlayer(1).candidateHandCards).toEqual([])
   })
 
+  it('游戏外匿名牌先进入12区后按实体牌揭示到装备区', () => {
+    const { controller } = createTrackerControllerHarness()
+
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 5, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1])
+    controller.syncTrackerMove(
+      protocolMove({
+        CardCount: 1,
+        CardIDs: [],
+        FromID: 255,
+        FromPosition: POSITION_TOP,
+        FromZone: 0,
+        FromZoneParam: 0,
+        MoveType: 19,
+        SpellID: 11003,
+        ToID: 255,
+        ToPosition: POSITION_TOP,
+        ToZone: 12,
+        ToZoneParam: 0
+      })
+    )
+
+    const room = controller.getTrackerRoom()
+    const [placeholder] = room.zones.get('exile')!.cards
+    expect(placeholder).toBeDefined()
+    expect(isAnonymous(placeholder)).toBe(true)
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardCount: 1,
+        CardIDs: [12126],
+        FromID: 255,
+        FromPosition: POSITION_RANDOM,
+        FromZone: 12,
+        FromZoneParam: 0,
+        MoveType: 15,
+        SpellID: 11003,
+        ToID: 5,
+        ToPosition: POSITION_RANDOM,
+        ToZone: 6,
+        ToZoneParam: 0
+      })
+    )
+
+    const revealedCard = room.cardIndex.get(12126)
+    expect(revealedCard).toBe(placeholder)
+    expect(revealedCard.location).toBe('player')
+    expect(revealedCard.subZone).toBe('equip')
+    expect(revealedCard.seats.has(5)).toBe(true)
+    expect(revealedCard.isKnown).toBe(true)
+    expect(room.zones.get('exile')!.cards).toEqual([])
+    expect(room.cards).toHaveLength(2)
+  })
+
   it('从12区获得未登记的实体牌时补建真实手牌且不残留匿名实体', () => {
     const { controller } = createTrackerControllerHarness()
     const gainedCardIDs = [20410, 20420, 20411]

@@ -19,6 +19,7 @@
 | Serena 记忆库、同步状态与引用对齐检查 | [`docs/agents/serena.md`](docs/agents/serena.md) | 需要操作 `serena` 工具链、管理或修改 `mem:*` 格式的记忆文件。 |
 | 测试策略、回归命令、补测约定、手工验收清单 | [`docs/agents/testing.md`](docs/agents/testing.md) | 选择验证命令、补充 Vitest 回归、更新遍历基线、撰写 PR 验证说明，或做浏览器手工验收时。 |
 | 记牌器当前实现、领域边界与二级路由 | [`docs/agents/card_tracker.md`](docs/agents/card_tracker.md) | 定位核心模块、排查协议或收敛异常，或按需继续读取收敛、技能特例与历史验证文档时。 |
+| 匿名牌堆、身份账本、cohort/generation、物化与 suspended 模型 | [`docs/agents/card_tracker_anonymous_pile.md`](docs/agents/card_tracker_anonymous_pile.md) | 排查匿名牌堆槽、牌堆身份守恒、洗牌世代、两阶段暗牌揭示或 `PileIdentityLedger` 异常时。 |
 | 记牌器开发 API 速查 | [`docs/agents/tracker_api.md`](docs/agents/tracker_api.md) | 需要快速查找角色手牌读取、手牌/牌堆揭示、移动、匿名占位或实体物化调用方式时。 |
 | 协议回放（按需） | [`docs/agents/replay.md`](docs/agents/replay.md) | 只有处理 JSONL 录制、`tests/replay/`、回放诊断或回放专用类型检查时才读取。 |
 | 协议样例与适配说明索引 | [`docs/protocols/README.md`](docs/protocols/README.md) | 按 className / SpellID / 通用模式定位 `docs/protocols/` 专页时。 |

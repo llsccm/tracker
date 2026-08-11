@@ -156,13 +156,14 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     } = context
     let missingIDs: CardID[]
     let createdCards: Card[] = []
-    // 12 区会暂存未进入初始牌池的技能生成牌；它和普通 known 缺口都要建实体，
-    // 但前者是协议事实，后者是解析失败后的兜底，诊断语义不同。
+    // 12 区会暂存未进入初始牌池的技能生成牌；若前置消息已创建匿名槽，应先在来源端点
+    // 物化身份。只有端点没有可用槽时才补建实体，并与普通 known 缺口区分诊断语义。
     const isExternalSource = sourceIsOutside || context.fromZone === 'exile'
-    let knownCardCreationReason: KnownCardCreationReason | null = null
+    let knownCardCreationReason: KnownCardCreationReason | null = isExternalSource
+      ? 'external-source'
+      : null
 
-    if (isExternalSource) {
-      knownCardCreationReason = 'external-source'
+    if (sourceIsOutside) {
       const existingCards = this.room.findCardsByIDs(knownIDs)
       const existingIDs = new Set(existingCards.map((card) => card.id))
       missingIDs = knownIDs.filter((id) => !existingIDs.has(id))
@@ -212,7 +213,11 @@ export class RoomMovement extends RoomMovementCandidateMethods {
             targetEntityID: target?.entityID ?? null,
             remainingAnonymousTargets: availableTargets.length
           }
-          const materialized = this.room.materialize(cardID, target ?? null)
+          // 12 区中已经带正 ID 的暗实体仍由末尾统一确认并记录诊断；匿名槽则在这里物化。
+          const materialized =
+            isExternalSource && existingInSource
+              ? existing
+              : this.room.materialize(cardID, target ?? null)
           // 匿名端点按协议顺序一经分配就不回塞。正常情况下 materialize 必然成功；若身份
           // 分区异常导致失败，保留该名额可避免后续 CardID 错占前一张牌的物理端点。
           const resolved = materialized ?? existing
@@ -257,7 +262,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
             inDeckIdentities: this.room.deckIdentities.has(cardID)
           }))
         })
-        knownCardCreationReason = 'known-fallback'
+        knownCardCreationReason = isExternalSource ? 'external-source' : 'known-fallback'
         createdCards = this.room.createExternalCards(missingIDs, missingIDs.length)
         const cardMap = new Map(context.knownCards.map((card) => [card.id, card]))
         createdCards.forEach((card) => cardMap.set(card.id, card))

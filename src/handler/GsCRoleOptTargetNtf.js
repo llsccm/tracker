@@ -98,12 +98,13 @@ export function handleRoleOptTargetNtf(msg) {
 
     // 蒲元 锻造
     case 11003:
-      if (Param == 0 && Params?.length > 0 && SrcSeatID != Game.myID) {
-        document.getElementById('result').innerHTML =
-          '<span class="textRes"> 【锻造】<br>' +
-          Params.map((id) => CardConfig.GetInstance().getCard(id).ncn).join('<br>') +
-          '</span>'
-      }
+      // 此消息包含锻造可选结果 作用不大
+      // if (Param == 0 && Params?.length > 0 && SrcSeatID != Game.myID) {
+      //   document.getElementById('result').innerHTML =
+      //     '<span class="textRes"> 【锻造】<br>' +
+      //     Params.map((id) => CardConfig.GetInstance().getCard(id).ncn).join('<br>') +
+      //     '</span>'
+      // }
 
       break
 

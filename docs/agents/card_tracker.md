@@ -8,6 +8,7 @@
 
 | 关注方向 | 按需文档 | 触发场景 |
 | --- | --- | --- |
+| 匿名牌堆与身份账本 | [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md) | 匿名物理槽、`PileIdentityLedger`、cohort/generation、`unlocated`/`suspended` 分区、物化、洗牌身份守恒 |
 | 约束收敛与不动点 | [`card_tracker_convergence.md`](card_tracker_convergence.md) | 修改 `resolveConstraints()`、`ConstraintGroup`、完整位置名额、观测手牌数排他，或排查过度收敛、欠收敛、空转与遍历量回归 |
 | 技能与协议特例 | [`card_tracker_skills.md`](card_tracker_skills.md) | 暗置标记、观虚 `987/988`、整手牌交换、诫厉 `3483`、天候 `3903` 等 |
 | 历史验证记录 | [`card_tracker_validation_history.md`](card_tracker_validation_history.md) | 追溯里程碑、旧测试数量、遍历基线或历史决策 |
