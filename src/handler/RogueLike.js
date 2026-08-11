@@ -84,8 +84,6 @@ export async function handleRogueLike(ProtoObj) {
 }
 
 function renderRogueAttrInfo(attrInfo) {
-  if (!attrInfo) return
-
   const container = document.getElementById('rogueAttrInfo')
   if (!container) return
 
@@ -93,7 +91,7 @@ function renderRogueAttrInfo(attrInfo) {
     const valueContainer = badge.querySelector('.rogue-attr-value')
     if (!valueContainer) continue
 
-    const value = Number(attrInfo[badge.dataset.rogueAttr])
+    const value = Number(attrInfo?.[badge.dataset.rogueAttr])
     valueContainer.textContent = Number.isFinite(value) ? value : 0
   }
 }
