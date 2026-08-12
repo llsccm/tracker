@@ -5,7 +5,8 @@ import { unbindPeiXiuHandSuitColorRefresh } from './PeiXiuHandMirror'
 export function bindInitialResize(globalConfig, resize) {
   window.WDVerSion = '1.0.0'
   window.padding = globalConfig.padding || 0
-  window.addEventListener('resize', resize) // 网页端开启
+  // Electron 中脚本晚于 Laya 注入，捕获阶段可确保先更新可用宽度。
+  window.addEventListener('resize', resize, true)
 }
 
 export function removeInjectedDom(globalState) {
@@ -22,7 +23,7 @@ export function removeInjectedDom(globalState) {
 }
 
 export function cleanupLifecycle({ resize, scheduleSetGameSize, SGSresize, globalState }) {
-  window.removeEventListener('resize', resize)
+  window.removeEventListener('resize', resize, true)
   window.removeEventListener('resize', scheduleSetGameSize)
   window.removeEventListener('SGSresize', SGSresize)
   window.SGSMODULE.splice(0, Infinity) // 清空模块
