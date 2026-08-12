@@ -11,6 +11,7 @@ import {
 } from '@/tracker/runtime/protocolRules'
 import type { RawMoveCardEvent } from '@/tracker/types'
 import { parseGuiFuCardIDs } from '@/handler/skills/GuiFu'
+import { initializeDuoQiState, recordDuoQiActivation } from '@/tracker/skill/DuoQi'
 import type { ApplyTrackerProtocolResult, TrackerProtocolReplayContext } from './types'
 
 interface ReplayMoveContext {
@@ -335,6 +336,8 @@ function applyUseSpellState(
   const srcSeatID = readNumber(payload.SrcSeatID)
   let didApply = false
 
+  if (recordDuoQiActivation(gameState, payload)) didApply = true
+
   switch (spellID) {
     case 3090:
       if (seatID === gameState.currentID && readNumber(payload.EffectIndex) === 1) {
@@ -393,13 +396,7 @@ function applyRoleSpellOpt(
     !context.gameState.round &&
     !context.gameState.phase
   ) {
-    const previous = context.gameState.getSpellState(3731)
-    const previousIDs = Array.isArray(previous) ? previous : []
-    context.gameState.setSpellState(
-      3731,
-      Array.from(new Set(previousIDs.concat(datas))).filter((cardID) => cardID > 0)
-    )
-    didApply = true
+    didApply = Boolean(initializeDuoQiState(context.gameState, datas))
   }
 
   switch (spellID) {

@@ -128,6 +128,10 @@ export interface MoveOptions {
   position?: PublicPosition
   fromPosition?: PublicPosition
   resetKnownToUnknown?: boolean
+  /** 在来源选择前把这些已知身份降级为匿名物理代表。 */
+  anonymizeCards?: Card[]
+  /** 协议未公开 CardIDs，但技能已可靠确定的身份账本移动。 */
+  pileIdentityCardIDs?: CardID[]
   sourceCards?: Card[]
   publicCandidateReveal?: PublicCandidateReveal
   postMovePublicCandidates?: PostMovePublicCandidate[]

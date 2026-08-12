@@ -92,6 +92,14 @@ describe('tracker protocol recording rules', () => {
       })
     ).toBe(false)
     expect(shouldRecordTrackerProtocol({ className: 'PubGsCUseSpell', SpellID: 4022 })).toBe(false)
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'PubGsCUseSpell',
+        SpellID: 3731,
+        EffectIndex: 2,
+        DestSeatIDs: [3]
+      })
+    ).toBe(true)
 
     expect(
       shouldRecordTrackerProtocol({
@@ -320,6 +328,26 @@ describe('tracker protocol projection', () => {
         CardIDs: [1],
         EffectIndex: 1,
         DestSeatIDs: []
+      }
+    })
+
+    expect(
+      projectTrackerProtocol({
+        className: 'PubGsCUseSpell',
+        SpellID: 3731,
+        SeatID: 4,
+        SkillOwerSeatID: 4,
+        EffectIndex: 2,
+        DestSeatIDs: [3]
+      })
+    ).toEqual({
+      className: 'PubGsCUseSpell',
+      payload: {
+        SpellID: 3731,
+        SeatID: 4,
+        SkillOwerSeatID: 4,
+        EffectIndex: 2,
+        DestSeatIDs: [3]
       }
     })
 

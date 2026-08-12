@@ -8,6 +8,7 @@ import { CardLocationIndex } from './CardLocationIndex'
 import {
   PileIdentityLedger,
   type PileIdentityConsistencyIssue,
+  type AmbiguousDiscardRecycleGroup,
   type PileIdentityLedgerMove,
   type PileIdentityRevealLocation,
   type PileIdentityShuffleTransition
@@ -82,6 +83,7 @@ interface ShufflePileOptions {
   cardCount?: number | null
   /** Controller 归一化后的同一条洗牌事件，由 Room 在物理重建前提交给身份账本。 */
   identityMove?: Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'>
+  ambiguousDiscardRecycleGroups?: readonly AmbiguousDiscardRecycleGroup[]
 }
 
 export interface DirtyCardEvent {
@@ -289,6 +291,10 @@ export class Room {
     } catch (error) {
       trackerLogger.warn('牌堆身份账本移动更新失败', { error, move })
     }
+  }
+
+  registerAmbiguousOutsideIdentityGroup(cardIDs: readonly CardID[]): void {
+    this.pileIdentityLedger.registerAmbiguousOutsideGroup(cardIDs)
   }
 
   /**
@@ -1637,6 +1643,7 @@ export class Room {
       cardCount: hasProtocolPileCount ? normalizedCardCount : projectedPileCount,
       pileCountBefore: remainingPileCards.length
     }
+    identityMove.ambiguousDiscardRecycleGroups = options.ambiguousDiscardRecycleGroups
     // 洗牌会同时关闭旧 cohort 与建立洗回批次；必须先让账本原子提交这次过渡，Room 才能
     // 把提交结果投影成 suspended/匿名实体，避免物理状态领先于身份权威。
     const shuffleTransition = this.applyPileIdentityShuffleBeforePhysicalMove(
@@ -2394,6 +2401,12 @@ export class Room {
     opt: MoveOptions = {}
   ): void {
     const context = this.movement.createMoveContext(cardIDs, toZone, opt)
+
+    context.anonymizeCards.forEach((card) => {
+      this.anonymizeLocatedIdentity(card, 'moveCards:ambiguousSource', {
+        preservePlacement: true
+      })
+    })
 
     // trackerLogger.info(
     //   'moveCards 开始',

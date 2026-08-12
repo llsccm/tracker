@@ -52,6 +52,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       fromPosition = position,
       expectedSlotsBySeat,
       resetKnownToUnknown = false,
+      anonymizeCards = [],
       sourceCards,
       postMovePublicCandidates,
       sourceEvent
@@ -106,6 +107,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       fromPosition,
       expectedSlotsBySeat,
       resetKnownToUnknown,
+      anonymizeCards: Array.from(new Set(anonymizeCards)).filter(Boolean),
       sourceCards,
       postMovePublicCandidates,
       sourceEvent,

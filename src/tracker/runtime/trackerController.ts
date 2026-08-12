@@ -28,6 +28,12 @@ import type {
   TrackerView
 } from '../types'
 import { registerDefaultMoveEventHandlers } from './moveEventHandlers'
+import {
+  collectDuoQiAmbiguousDiscardRecycleGroups,
+  commitDuoQiMove,
+  finalizeDuoQiDiscardRecycle,
+  observeDuoQiKnownCardIDs
+} from '../skill/DuoQi'
 
 interface RevealTarget {
   type?: 'player' | 'public' | string
@@ -380,7 +386,13 @@ export class TrackerController {
           pileCountBefore,
           knownPileDrawCards
         )
-        readyRoom.shufflePile({ cardCount: event.cardCount, identityMove: pileIdentityMove })
+        const ambiguousDiscardRecycleGroups = collectDuoQiAmbiguousDiscardRecycleGroups(readyRoom)
+        readyRoom.shufflePile({
+          cardCount: event.cardCount,
+          identityMove: pileIdentityMove,
+          ambiguousDiscardRecycleGroups
+        })
+        if (ambiguousDiscardRecycleGroups.length > 0) finalizeDuoQiDiscardRecycle(readyRoom)
         this.controllerView.scheduleRender()
         return
       } else {
@@ -389,6 +401,7 @@ export class TrackerController {
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
         readyRoom.moveCards(event.cardIDs, event.toZone, event.options)
+        commitDuoQiMove(readyRoom, event)
       }
 
       const pileIdentityMove = this.createPileIdentityMove(
@@ -399,6 +412,7 @@ export class TrackerController {
         knownPileDrawCards
       )
       readyRoom.applyPileIdentityMove(pileIdentityMove)
+      observeDuoQiKnownCardIDs(readyRoom, event.cardIDs)
       this.controllerView.scheduleRender()
     } catch (e) {
       this.controllerLogger.warn('移动同步异常，已跳过本次 tracker 更新', {
@@ -418,7 +432,9 @@ export class TrackerController {
     knownPileDrawCards: readonly Card[]
   ): Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'> {
     const fromZone = event.FromZone == null ? null : Number(event.FromZone)
-    const cardIDs = this.normalizeIDs(event.CardIDs)
+    const cardIDs = this.normalizeIDs(
+      normalizedEvent.options.pileIdentityCardIDs ?? event.CardIDs
+    )
     const pileCountAfter = room.zones.get('pile')?.cards.length ?? 0
     const knownPileIdentityIDsConsumed = knownPileDrawCards
       .filter((card) => card.location !== 'pile' && card.id > 0)
@@ -687,6 +703,7 @@ export class TrackerController {
       // target 只描述展示目标，不能证明已有实体真的离开原公共区；例如弃牌区重复明示
       // 仍会保持在 discard。让 Room 根据同步完成后的 Card.location 写入账本分区。
       readyRoom.applyPileIdentityReveal(ids)
+      observeDuoQiKnownCardIDs(readyRoom, ids)
       this.controllerView.scheduleRender()
     } catch (e) {
       this.onError('[Refactor] 明牌同步失败:', e, { target, cardIDs: ids })

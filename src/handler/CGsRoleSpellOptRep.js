@@ -1,6 +1,7 @@
 import { Game } from '@/tracker'
 import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
 import { tracker } from '@/tracker/runtime/browser'
+import { initializeDuoQiState } from '@/tracker/skill/DuoQi'
 
 const PROTOCOL_PILE_ZONE = 1
 const PROTOCOL_HAND_ZONE = 5
@@ -22,17 +23,10 @@ function handleResultType({ Datas, Type }) {
       // 但是这里是系统播报 没办法判断谁是地主
       break
 
-    // TODO 初始牌 SpellID == 0
-    case 72:
-      if (Game.isGameStart && Datas?.length && !Game.round && !Game.phase) {
-        const spellCards = Game.getSpellState(3731)
-        const prev = Array.isArray(spellCards) ? spellCards : []
-        const uniqueIds = new Set(prev.concat(Datas))
-
-        Game.setSpellState(
-          3731,
-          Array.from(uniqueIds).filter((id) => id > 0)
-        ) // 魔吕布 夺炁
+    // TODO 初始牌 OPT_INITIAL_CARDS 夺炁初始化
+    case 72: // 此时 turn = 1 round = 0 phase = 0
+      if (Datas?.length && Game.isGameStart && !Game.round && !Game.phase) {
+        initializeDuoQiState(Game, Datas)
       }
       break
 

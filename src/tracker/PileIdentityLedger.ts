@@ -61,8 +61,15 @@ export interface PileIdentityLedgerMove {
   discardCountBefore?: number
   /** 洗牌前弃牌区可确认的身份；用于直接 Room 调用补齐尚未双写的测试事实。 */
   knownDiscardIdentityIDsBefore?: readonly CardID[]
+  /** 弃牌堆中只知道集合与洗回数量的局部模糊组。 */
+  ambiguousDiscardRecycleGroups?: readonly AmbiguousDiscardRecycleGroup[]
   pileCountAfter: number
   discardCountAfter: number
+}
+
+export interface AmbiguousDiscardRecycleGroup {
+  candidateIdentityIDs: readonly CardID[]
+  recycledCount: number
 }
 
 /** 账本完成洗牌事件后交给 Room 的世代过渡事实。 */
@@ -71,6 +78,7 @@ export interface PileIdentityShuffleTransition {
   discardCountBefore: number
   expiringIdentityIDs: CardID[]
   recycledIdentityIDs: CardID[]
+  ambiguousDiscardRecycleGroups: AmbiguousDiscardRecycleGroup[]
 }
 
 export interface PileIdentityLedgerMoveResult {
@@ -218,6 +226,26 @@ export class PileIdentityLedger {
           ]
 
     this.warnForIssues(this.collectConsistencyIssues(identities.length, 'initialize'))
+  }
+
+  registerAmbiguousOutsideGroup(cardIDs: readonly CardID[]): void {
+    const identities = normalizeIDs(cardIDs)
+    if (identities.length === 0) return
+
+    this.commit('register:ambiguousOutsideGroup', () => {
+      identities.forEach((cardID) => {
+        this.identityUniverse.add(cardID)
+        this.locatedIdentityIDs.delete(cardID)
+        this.knownPileIdentityIDs.delete(cardID)
+        this.knownDiscardIdentityIDs.delete(cardID)
+        this.removeIdentityFromCohorts(cardID, false)
+      })
+      this.cohorts.push({
+        generation: this.generation,
+        candidateIdentityIDs: new Set(identities),
+        remainingPileCount: 0
+      })
+    })
   }
 
   applyMove(move: PileIdentityLedgerMove): PileIdentityLedgerMoveResult {
@@ -449,13 +477,30 @@ export class PileIdentityLedger {
       ...(move.knownDiscardIdentityIDsBefore ?? [])
     ])
     const closesGeneration = !isInitialPileShuffle(discardCountBefore, this.identityUniverse.size)
+    const ambiguousDiscardRecycleGroups = (move.ambiguousDiscardRecycleGroups ?? [])
+      .map((group) => ({
+        candidateIdentityIDs: normalizeIDs(group.candidateIdentityIDs),
+        recycledCount: Math.min(
+          normalizeCount(group.recycledCount),
+          normalizeIDs(group.candidateIdentityIDs).length
+        )
+      }))
+      .filter(
+        (group) => group.candidateIdentityIDs.length > 0 && group.recycledCount > 0
+      )
+    const ambiguousIdentityIDs = new Set(
+      ambiguousDiscardRecycleGroups.flatMap((group) => group.candidateIdentityIDs)
+    )
 
     return {
       closesGeneration,
       discardCountBefore,
       // 先冻结旧 cohort，再由同一事务滚动账本；Room 只能消费提交成功后的这份结果。
-      expiringIdentityIDs: closesGeneration ? this.getUnresolvedIdentityIDs() : [],
-      recycledIdentityIDs
+      expiringIdentityIDs: closesGeneration
+        ? this.getUnresolvedIdentityIDs().filter((cardID) => !ambiguousIdentityIDs.has(cardID))
+        : [],
+      recycledIdentityIDs,
+      ambiguousDiscardRecycleGroups
     }
   }
 
@@ -465,8 +510,16 @@ export class PileIdentityLedger {
   ): void {
     const discardCountBefore = transition.discardCountBefore
     const recycledIdentityIDs = transition.recycledIdentityIDs
+    const ambiguousDiscardRecycleGroups = transition.ambiguousDiscardRecycleGroups
+    const ambiguousRecycledCount = ambiguousDiscardRecycleGroups.reduce(
+      (total, group) => total + normalizeCount(group.recycledCount),
+      0
+    )
     // 协议只给弃牌总数；减去已知弃牌身份后，剩余部分是无法建立新精确 cohort 的匿名弃牌。
-    const anonymousDiscardCount = Math.max(0, discardCountBefore - recycledIdentityIDs.length)
+    const anonymousDiscardCount = Math.max(
+      0,
+      discardCountBefore - recycledIdentityIDs.length - ambiguousRecycledCount
+    )
 
     if (!transition.closesGeneration) {
       if (discardCountBefore > 0) {
@@ -474,6 +527,16 @@ export class PileIdentityLedger {
         // 身份先退回未决集合，匿名弃牌则由 reconcile 恢复完整牌堆基数；两者最终仍属于
         // 当前 generation，而不会建立新的牌底批次。
         recycledIdentityIDs.forEach((cardID) => this.prepareIdentityForPile(cardID))
+        ambiguousDiscardRecycleGroups.forEach((group) => {
+          const identities = normalizeIDs(group.candidateIdentityIDs)
+          identities.forEach((cardID) => this.prepareIdentityForPile(cardID))
+          if (identities.length === 0) return
+          this.cohorts.push({
+            generation: this.generation,
+            candidateIdentityIDs: new Set(identities),
+            remainingPileCount: Math.min(normalizeCount(group.recycledCount), identities.length)
+          })
+        })
         this.knownDiscardIdentityIDs.clear()
       }
       this.reconcilePileCountInternal(pileCountAfter)
@@ -481,6 +544,16 @@ export class PileIdentityLedger {
     }
 
     this.rotateFromDiscardInternal(recycledIdentityIDs)
+    ambiguousDiscardRecycleGroups.forEach((group) => {
+      const identities = normalizeIDs(group.candidateIdentityIDs)
+      identities.forEach((cardID) => this.prepareIdentityForPile(cardID))
+      if (identities.length === 0) return
+      this.cohorts.unshift({
+        generation: this.generation,
+        candidateIdentityIDs: new Set(identities),
+        remainingPileCount: Math.min(normalizeCount(group.recycledCount), identities.length)
+      })
+    })
     this.knownDiscardIdentityIDs.clear()
 
     if (anonymousDiscardCount > 0) {
