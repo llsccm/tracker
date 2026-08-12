@@ -57,6 +57,11 @@ function resize() {
   document.documentElement.style.setProperty('--sgs-center-x', `${window.innerWidth / 2}px`)
 }
 
+function refreshSidebarViewport() {
+  resize()
+  window.dispatchEvent(new Event('resize'))
+}
+
 function SGSresize() {
   window.dispatchEvent(new Event('resize'))
 }
@@ -401,7 +406,7 @@ export async function addFrame() {
 
   addDragHint()
   buttonClick()
-  initDragElement(globalConfig, globalState)
+  initDragElement(globalConfig, globalState, refreshSidebarViewport)
   // drawChatFace()
 }
 
@@ -483,7 +488,7 @@ function buttonClick() {
 
         if (globalConfig.padding) {
           globalConfig.padding = 0
-          window.dispatchEvent(new Event('resize'))
+          refreshSidebarViewport()
           container.style.transform = 'translate(0px, 0px)'
         }
       } else {
@@ -518,7 +523,7 @@ function buttonClick() {
     // document.getElementById('createIframe').style.right = '0px';
     // document.getElementById('createIframe').style.left = '';
   }
-  window.dispatchEvent(new Event('resize'))
+  refreshSidebarViewport()
 
   switchConfigKeys.forEach((configKey) =>
     setSwitchChecked(configKey, Boolean(globalConfig[configKey]))
