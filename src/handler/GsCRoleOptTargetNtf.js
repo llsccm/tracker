@@ -286,13 +286,13 @@ export function handleRoleOptTargetNtf(msg) {
     case 441:
     case 3492: {
       if (SrcSeatID === undefined || targetSeatID !== 255) break
-      if (SrcSeatID !== Game.myID) break
 
       const cardIDs = Game.getSpellState(SpellID)
+      Game.deleteSpellState(SpellID)
+      if (SrcSeatID !== Game.myID) break
       if (!Array.isArray(cardIDs) || !cardIDs.length) break
 
       drawChengXiang(getCardNumbers(cardIDs), SpellID == 3492)
-      Game.deleteSpellState(SpellID)
 
       break
     }

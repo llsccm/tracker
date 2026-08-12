@@ -22,7 +22,7 @@ function getYanJiaoRemain(counts, ...subsets) {
   return remain
 }
 
-function createYanJiaoButton(left, right, _remain, _allot) {
+function createYanJiaoButton(left, right) {
   const button = document.createElement('button')
   const spanA = document.createElement('span')
   const spanB = document.createElement('span')
@@ -114,8 +114,8 @@ export function drawYanJiao(array) {
 
   for (const remainCount of Array.from(pairs.keys()).sort((a, b) => a - b)) {
     const pairsByRemain = pairs.get(remainCount).sort((a, b) => a[0][0] - b[0][0])
-    for (const [left, right, remain] of pairsByRemain) {
-      fragment.appendChild(createYanJiaoButton(left, right, remain, false))
+    for (const [left, right] of pairsByRemain) {
+      fragment.appendChild(createYanJiaoButton(left, right))
       rendered += 1
       if (rendered >= 5) break
     }

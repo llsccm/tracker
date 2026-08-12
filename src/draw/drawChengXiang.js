@@ -34,9 +34,9 @@ export function drawChengXiang(array, K) {
   function backtrack(temp, start, sum) {
     if (sum > 13) return
     if (temp.length > 0) {
-      const result = temp.slice()
-      result.K = K && sum === 13 ? temp.length : 0
-      results.push(result)
+      const numbers = temp.slice()
+      const exact = K && sum === 13 ? temp.length : 0
+      results.push({ numbers, exact })
     }
 
     for (let i = start; i < arr.length; i++) {
@@ -55,12 +55,15 @@ export function drawChengXiang(array, K) {
 
   const fragment = document.createDocumentFragment()
   const visibleResults = results
-    .filter((subset, _, self) => !self.some((superSet) => isStrictMultisetSubset(subset, superSet)))
-    .sort((a, b) => (b.K || 0) - (a.K || 0) || b.length - a.length)
+    .filter(
+      (subset, _, self) =>
+        !self.some((superSet) => isStrictMultisetSubset(subset.numbers, superSet.numbers))
+    )
+    .sort((a, b) => (b.exact || 0) - (a.exact || 0) || b.numbers.length - a.numbers.length)
 
   for (const result of visibleResults) {
-    const button = buttonRes(formatCardNumbers(result, false))
-    if (K && result.K) button.classList.add('textRes')
+    const button = buttonRes(formatCardNumbers(result.numbers, false))
+    if (K && result.exact) button.classList.add('textRes')
     fragment.appendChild(button)
   }
 

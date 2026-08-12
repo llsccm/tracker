@@ -7,6 +7,8 @@ import {
 } from './drawHelpers'
 import { n2N } from '../utils'
 
+const MAX_RENDERED_RESULTS = 15
+
 /**
  * 生成固定长度的点数组合及其点数和。
  * 【易城】需要比较手牌组合和牌堆组合，因此这里保留 selected 与 sum。
@@ -57,19 +59,22 @@ export function drawYiCheng(paiduiNumbers, shoupaiNumbers) {
   const fragment = document.createDocumentFragment()
   let rendered = 0
 
-  for (let n = 2; n <= max; n++) {
+  for (let n = 2; n <= max && rendered < MAX_RENDERED_RESULTS; n++) {
     const paiduiGroups = getYiChengGroups(paidui, n)
     const handGroups = getYiChengGroups(shoupai, n)
 
-    handGroups.forEach((handGroup) => {
-      paiduiGroups.forEach((paiduiGroup) => {
-        if (handGroup.sum <= paiduiGroup.sum) return
-        if (hasNumberOverlap(handGroup.selected, paiduiGroup.selected)) return
+    for (const handGroup of handGroups) {
+      if (rendered >= MAX_RENDERED_RESULTS) break
+
+      for (const paiduiGroup of paiduiGroups) {
+        if (rendered >= MAX_RENDERED_RESULTS) break
+        if (handGroup.sum <= paiduiGroup.sum) continue
+        if (hasNumberOverlap(handGroup.selected, paiduiGroup.selected)) continue
         if (
           max >= 3 &&
           !handGroup.selected.some((number, index) => number < paiduiGroup.selected[index])
         ) {
-          return
+          continue
         }
 
         fragment.appendChild(
@@ -80,20 +85,21 @@ export function drawYiCheng(paiduiNumbers, shoupaiNumbers) {
           )
         )
         rendered += 1
-      })
-    })
+      }
+    }
   }
 
   const shoupaiSet = Array.from(new Set(shoupai))
   const paiduiSet = Array.from(new Set(paidui))
-  shoupaiSet.forEach((sp) => {
+  for (const sp of shoupaiSet) {
+    if (rendered >= MAX_RENDERED_RESULTS) break
     const pd = paiduiSet.filter((n) => n < sp)
-    if (!pd.length) return
+    if (!pd.length) continue
     fragment.appendChild(
       buttonRes(n2N(sp) + '→' + pd.map((n) => n2N(n)).join('/'), '点击复制', false)
     )
     rendered += 1
-  })
+  }
 
   if (!rendered) {
     showTextResult(resDiv, '【易城】无法交换！')

@@ -5,13 +5,7 @@ export function clearElement(element) {
   while (element?.firstChild) element.removeChild(element.firstChild)
 }
 
-export function buttonRes(
-  text,
-  title = '点击复制',
-  encode = true,
-  disable = false,
-  _callback = null
-) {
+export function buttonRes(text, title = '点击复制', encode = true, disable = false) {
   const button = document.createElement('button')
   button.className = 'calRes'
   button.title = title
@@ -24,8 +18,6 @@ export function buttonRes(
       button.textContent = text
     }, 500)
   }
-  // callback是由游戏点击设置或者查看人物的时候生成的 调用的callback不一定存在
-  // copyCallBack ? copyCallBack(true) : false
   return button
 }
 

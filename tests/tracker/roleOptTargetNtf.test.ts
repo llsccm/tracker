@@ -98,6 +98,20 @@ describe('GsCRoleOptTargetNtf', () => {
     expect(Game.getSpellState(SpellID)).toBeUndefined()
   })
 
+  it.each([441, 3492])('其他玩家的称象 %s 目标通知清除暂存牌但不展示', (SpellID) => {
+    Game.bindRoom({ mySeatID: 2, seatIDs: [2], size: 1 } as any)
+    Game.setSpellState(SpellID, [11, 12, 13, 14])
+
+    handleRoleOptTargetNtf({
+      SpellID,
+      SrcSeatID: 3,
+      targetSeatID: 255
+    })
+
+    expect(drawChengXiang).not.toHaveBeenCalled()
+    expect(Game.getSpellState(SpellID)).toBeUndefined()
+  })
+
   it('称象目标通知缺少暂存牌时不展示', () => {
     Game.bindRoom({ mySeatID: 2, seatIDs: [2], size: 1 } as any)
 
