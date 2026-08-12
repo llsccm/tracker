@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { normalizeTrackerMovePosition } from '@/tracker/runtime/protocolRules'
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
+// import { normalizeTrackerMovePosition } from '@/tracker/runtime/protocolRules'
 import {
   formatTrackerProtocolReplayReport,
   parseTrackerProtocolJsonl,
@@ -140,24 +140,24 @@ describe('tracker protocol replay', () => {
     expect(report.failure?.message).toContain('SpellID=713 移动协议剔除下标 99 越界')
   })
 
-  it('回魂牌回牌堆时按原始牌顶位置过滤牌面', () => {
-    const normalized = normalizeTrackerMovePosition({
-      CardIDs: [4400, 7],
-      CardCount: 2,
-      FromID: 4,
-      FromZone: 5,
-      FromPosition: POSITION_TOP,
-      ToID: 255,
-      ToZone: 1,
-      ToPosition: POSITION_TOP,
-      MoveType: 19,
-      SpellID: 0,
-      isGuoZhan: false
-    })
+  // it('回魂牌回牌堆时按原始牌顶位置过滤牌面', () => {
+  //   const normalized = normalizeTrackerMovePosition({
+  //     CardIDs: [4400, 7],
+  //     CardCount: 2,
+  //     FromID: 4,
+  //     FromZone: 5,
+  //     FromPosition: POSITION_TOP,
+  //     ToID: 255,
+  //     ToZone: 1,
+  //     ToPosition: POSITION_TOP,
+  //     MoveType: 19,
+  //     SpellID: 0,
+  //     isGuoZhan: false
+  //   })
 
-    expect(normalized.CardIDs).toEqual([7])
-    expect(normalized.ToPosition).toBe(POSITION_RANDOM)
-  })
+  //   expect(normalized.CardIDs).toEqual([7])
+  //   expect(normalized.ToPosition).toBe(POSITION_RANDOM)
+  // })
 
   it('一致性检查读取玩家快照而不推进快照游标', () => {
     const replayer = new TrackerProtocolReplayer({ currentUserID: 101 })

@@ -6,10 +6,6 @@ import { laya } from '@/runtime/gameAdapter'
 const excludeNames = new Set(['乐', '兵', '闪电'])
 const shaNames = new Set(['杀', '火杀', '雷杀', '冰杀'])
 
-function getTrackedPlayerHandCardIDs(seatID) {
-  return tracker.getReadyTrackerRoom()?.getPlayerHandCardIDs(seatID) ?? []
-}
-
 function updateResult(html) {
   if (typeof document === 'undefined') return
   const result = document.getElementById('result')
@@ -29,7 +25,7 @@ function updateQuanDaoDisplay(context) {
     return
   }
 
-  let cards = getTrackedPlayerHandCardIDs(game.myID).slice()
+  let cards = tracker.getTrackedPlayerHandCardIDs(game.myID).slice()
 
   if (context.ToZone == 5) {
     cards.push(...context.CardIDs)

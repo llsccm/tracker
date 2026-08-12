@@ -5,7 +5,7 @@ export function addDragHint() {
   document.body.appendChild(sidebarHint)
 }
 
-export function initDragElement(globalConfig, globalState) {
+export function initDragElement(globalConfig, globalState, refreshSidebarViewport) {
   // 1.在明牌框框内点击拖动三国杀页面元素会拖动不了
   // 2.拖动三国杀元素途径明牌框框，会拖动不了
   // 鼠标按下的时候 禁止明牌框框鼠标悬浮查看更多卡牌功能 且重新分发鼠标事件
@@ -120,7 +120,7 @@ export function initDragElement(globalConfig, globalState) {
     if (globalConfig.padding) {
       globalConfig.padding = 0
       container.style.height = '500px' // 应用到容器
-      window.dispatchEvent(new Event('resize'))
+      refreshSidebarViewport()
     }
 
     if (!pendingFrame) {
@@ -162,7 +162,7 @@ export function initDragElement(globalConfig, globalState) {
           toggle.click()
         }
         globalConfig.padding = 232
-        window.dispatchEvent(new Event('resize'))
+        refreshSidebarViewport()
         translateX = 0
         translateY = 0
         container.style.transform = `translate(${translateX}px, ${translateY}px)` // 重置整个容器位置

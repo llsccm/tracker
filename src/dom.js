@@ -30,11 +30,12 @@ import { setPeiXiuMapWindowVisible } from './ui/PeiXiuMapWindow'
 let iframe = null
 const version = import.meta.env.VITE_version ?? '0.9.0'
 
-export var Sdocument = document.getElementById('createSkinIframeSource')?.contentWindow?.document
+// export var Sdocument = document.getElementById('createSkinIframeSource')?.contentWindow?.document
 
 function getTrackedHandNumbers(seatID) {
   const config = CardConfig.GetInstance()
-  return (tracker.getReadyTrackerRoom()?.getPlayerHandCardIDs(seatID) ?? [])
+  return tracker
+    .getTrackedPlayerHandCardIDs(seatID)
     .map((id) => config.getCardNumber(id))
     .filter((number) => number > 0)
 }
@@ -54,6 +55,11 @@ export function Exit() {
 function resize() {
   window.innerWidth = document.documentElement.clientWidth - window.padding
   document.documentElement.style.setProperty('--sgs-center-x', `${window.innerWidth / 2}px`)
+}
+
+function refreshSidebarViewport() {
+  resize()
+  window.dispatchEvent(new Event('resize'))
 }
 
 function SGSresize() {
@@ -400,7 +406,7 @@ export async function addFrame() {
 
   addDragHint()
   buttonClick()
-  initDragElement(globalConfig, globalState)
+  initDragElement(globalConfig, globalState, refreshSidebarViewport)
   // drawChatFace()
 }
 
@@ -482,7 +488,7 @@ function buttonClick() {
 
         if (globalConfig.padding) {
           globalConfig.padding = 0
-          window.dispatchEvent(new Event('resize'))
+          refreshSidebarViewport()
           container.style.transform = 'translate(0px, 0px)'
         }
       } else {
@@ -517,7 +523,7 @@ function buttonClick() {
     // document.getElementById('createIframe').style.right = '0px';
     // document.getElementById('createIframe').style.left = '';
   }
-  window.dispatchEvent(new Event('resize'))
+  refreshSidebarViewport()
 
   switchConfigKeys.forEach((configKey) =>
     setSwitchChecked(configKey, Boolean(globalConfig[configKey]))
@@ -534,8 +540,8 @@ function buttonClick() {
   // bindExternalLinks()
 
   document.getElementById('mizhu').onmousedown = function () {
-    const mzBTNs = document.querySelectorAll('.mizhu')
-    mzBTNs.forEach((e) => (e.style.display = 'none'))
+    // const mzBTNs = document.querySelectorAll('.mizhu')
+    // mzBTNs.forEach((e) => (e.style.display = 'none'))
     drawMiZhu(getTrackedHandNumbers(Game.myID))
     // 统率可能要算糜竺 暂不兼容
   }
