@@ -233,13 +233,7 @@ export class PileIdentityLedger {
     if (identities.length === 0) return
 
     this.commit('register:ambiguousOutsideGroup', () => {
-      identities.forEach((cardID) => {
-        this.identityUniverse.add(cardID)
-        this.locatedIdentityIDs.delete(cardID)
-        this.knownPileIdentityIDs.delete(cardID)
-        this.knownDiscardIdentityIDs.delete(cardID)
-        this.removeIdentityFromCohorts(cardID, false)
-      })
+      identities.forEach((cardID) => this.prepareIdentityForPile(cardID))
       this.cohorts.push({
         generation: this.generation,
         candidateIdentityIDs: new Set(identities),

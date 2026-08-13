@@ -401,7 +401,14 @@ export class TrackerController {
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
         readyRoom.moveCards(event.cardIDs, event.toZone, event.options)
-        commitDuoQiMove(readyRoom, event)
+        try {
+          commitDuoQiMove(readyRoom, event)
+        } catch (error) {
+          this.controllerLogger.warn('夺炁模糊组注册失败，已跳过该组并继续写入身份账本', {
+            error,
+            cardIDs: event.cardIDs
+          })
+        }
       }
 
       const pileIdentityMove = this.createPileIdentityMove(

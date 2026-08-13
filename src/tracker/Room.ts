@@ -1635,15 +1635,17 @@ export class Room {
     const knownDiscardIdentityIDsBefore = recycledCards
       .map((card) => card.id)
       .filter((cardID) => cardID > 0)
-    const identityMove = options.identityMove ?? {
-      eventType: 'shuffleDiscardIntoPile',
-      fromZone: 2,
-      toZone: 9,
-      cardIDs: [],
-      cardCount: hasProtocolPileCount ? normalizedCardCount : projectedPileCount,
-      pileCountBefore: remainingPileCards.length
+    const identityMove = {
+      ...(options.identityMove ?? {
+        eventType: 'shuffleDiscardIntoPile',
+        fromZone: 2,
+        toZone: 9,
+        cardIDs: [],
+        cardCount: hasProtocolPileCount ? normalizedCardCount : projectedPileCount,
+        pileCountBefore: remainingPileCards.length
+      }),
+      ambiguousDiscardRecycleGroups: options.ambiguousDiscardRecycleGroups
     }
-    identityMove.ambiguousDiscardRecycleGroups = options.ambiguousDiscardRecycleGroups
     // 洗牌会同时关闭旧 cohort 与建立洗回批次；必须先让账本原子提交这次过渡，Room 才能
     // 把提交结果投影成 suspended/匿名实体，避免物理状态领先于身份权威。
     const shuffleTransition = this.applyPileIdentityShuffleBeforePhysicalMove(
