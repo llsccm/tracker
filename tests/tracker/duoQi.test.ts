@@ -5,6 +5,7 @@ import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
 import type { Room } from '@/tracker/Room'
 import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import {
+  commitDuoQiMove,
   getDuoQiState,
   initializeDuoQiState,
   recordDuoQiActivation,
@@ -800,6 +801,57 @@ describe('夺炁初始牌身份', () => {
 
     expect(decorated?.options.duoQiDiscardGroupID).toBeUndefined()
     expect(getDuoQiState(gameState)?.pendingDiscardGroups).toEqual([])
+  })
+
+  it('仅有规范化 options 时仍识别展示来源并结束 3730 手牌组', () => {
+    const { gameState, room } = setup(undefined, 300)
+    bindHand(room, [1, 2, 3, 4], 1, false)
+    bindHand(room, [5, 6, 7, 8], 2, false)
+    const state = initializeDuoQiState(gameState, [1, 2, 3, 4, 5, 6, 7, 8])!
+
+    state.pendingRandomHandGroups.push({
+      ownerSeatID: 1,
+      targetSeatID: 2,
+      candidateEntities: new Set(),
+      candidateCardIDs: new Set(),
+      gainedCount: 1,
+      sequence: 11
+    })
+
+    const knownMove = room.decorateMoveEvent({
+      cardIDs: [5],
+      cardCount: 1,
+      toZone: 'discard',
+      options: {
+        fromSeatID: 1,
+        fromSubZone: 'hand'
+      }
+    })
+    expect(knownMove.options).toMatchObject({
+      duoQiRandomHandCandidateIDs: [5],
+      duoQiRandomHandGroupSequence: 11
+    })
+
+    recordDuoQiRoleDataTarget(gameState, {
+      DataID: 8,
+      Datas: [3730, 1],
+      SeatID: 2
+    })
+    const gainAllMove = room.decorateMoveEvent({
+      cardIDs: [],
+      cardCount: 1,
+      toZone: 'player',
+      options: {
+        spellID: 3730,
+        fromSeatID: 2,
+        fromSubZone: 'hand',
+        seatID: 1,
+        subZone: 'hand'
+      }
+    })
+    commitDuoQiMove(room, gainAllMove)
+
+    expect(state.pendingRandomHandGroups).toEqual([])
   })
 
   it('存在未决弃牌模糊组时不叠加第二组', () => {

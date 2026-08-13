@@ -619,9 +619,12 @@ export function decorateDuoQiKnownMove(event: MoveEventDraft, room: Room): MoveE
   const state = getDuoQiState(getGame(room))
   if (!state || state.pendingRandomHandGroups.length === 0) return event
 
-  const raw = getRaw(event)
-  const fromSeatID = Number(raw.FromID)
-  if (Number(raw.FromZone) !== 5 || !event.cardIDs?.some?.((cardID: CardID) => cardID > 0)) {
+  const fromSeatID = Number(event.options?.fromSeatID)
+  if (
+    event.options?.fromSubZone !== 'hand' ||
+    !Number.isFinite(fromSeatID) ||
+    !event.cardIDs?.some?.((cardID: CardID) => cardID > 0)
+  ) {
     return event
   }
 
@@ -783,9 +786,14 @@ function finishRandomHandGroupsAfterGainAll(
 ): void {
   if (!state || state.pendingRandomHandGroups.length === 0) return
 
-  const raw = getRaw(event)
-  const spellID = Number(raw.SpellID ?? event.options?.spellID)
-  if (spellID !== DUO_QI_GAIN_ALL_SPELL_ID || Number(raw.FromZone) !== 5) return
+  const spellID = Number(getRaw(event).SpellID ?? event.options?.spellID)
+  if (
+    spellID !== DUO_QI_GAIN_ALL_SPELL_ID ||
+    event.options?.fromSubZone !== 'hand' ||
+    !Number.isFinite(Number(event.options?.fromSeatID))
+  ) {
+    return
+  }
 
   const activation = state.activations.get(DUO_QI_GAIN_ALL_SPELL_ID)
   if (!activation || !activationMatchesMove(activation, event)) return

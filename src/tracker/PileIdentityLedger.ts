@@ -558,7 +558,11 @@ export class PileIdentityLedger {
 
       const targetCohort = recycledCohort
       identities.forEach((cardID) => targetCohort.candidateIdentityIDs.add(cardID))
-      targetCohort.remainingPileCount += recycledCount
+      const mergedRemainingPileCount = targetCohort.remainingPileCount + recycledCount
+      targetCohort.remainingPileCount = Math.min(
+        mergedRemainingPileCount,
+        targetCohort.candidateIdentityIDs.size
+      )
     })
     this.knownDiscardIdentityIDs.clear()
 
