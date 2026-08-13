@@ -1,6 +1,7 @@
 # 三国杀小抄项目生命周期机制
 
 本文档说明应用整体运行周期、Room/View 挂载与销毁、局内状态流转，以及关键入口位置。
+Room 内部状态所有权、行为模块与写入管线见 [`room.md`](room.md)。
 **维护约定**：只引用文件路径与符号名，不绑定源码行号（避免 markdown 链接 hash 行号或 `路径:行号` 文案），避免代码移动后失效。
 
 ---
@@ -209,8 +210,8 @@ sequenceDiagram
 - `round > 0`：`Game.enter` 推进阶段计数；handler 根据 `SeatRoundState`
   更新顶部阶段指示
 
-状态机主体在 [`gameState.ts`](../../src/tracker/gameState.ts)；初始化、记录等通用浏览器钩子仍在
-[`Game.ts`](../../src/tracker/Game.ts)，玩家阶段消息的 DOM/Laya 副作用集中在
+状态机主体与浏览器运行时实例统一在 [`Game.ts`](../../src/tracker/Game.ts)
+（`GameState` 类 + `Game` 实例），玩家阶段消息的 DOM/Laya 副作用集中在
 [`GsCGamephaseNtf.js`](../../src/handler/GsCGamephaseNtf.js)。
 
 ### 3. 卡牌移动
@@ -245,6 +246,6 @@ graph LR
 | 物理牌堆     | `initDeck`                                                 | [`Room.ts`](../../src/tracker/Room.ts)                                                                                                                                       | 牌实例与 counter                      |
 | 视图挂载     | `mount` / `scheduleRender`                                 | [`view/index.ts`](../../src/tracker/view/index.ts)                                                                                                                           | 两段式挂载与脏渲染                    |
 | 可见性       | `applyTrackerVisibility`                                   | [`trackerVisibility.ts`](../../src/ui/trackerVisibility.ts)                                                                                                                  | 快捷键显隐                            |
-| 回合轮次     | `setTurn` / `handleGameTurn` / `enter` / `handleGamePhase` | [`gameState.ts`](../../src/tracker/gameState.ts) / [`MsgGameTurnNtf.js`](../../src/handler/MsgGameTurnNtf.js) / [`GsCGamephaseNtf.js`](../../src/handler/GsCGamephaseNtf.js) | 局内状态推进与回合/阶段 DOM/Laya 编排 |
+| 回合轮次     | `setTurn` / `handleGameTurn` / `enter` / `handleGamePhase` | [`Game.ts`](../../src/tracker/Game.ts) / [`MsgGameTurnNtf.js`](../../src/handler/MsgGameTurnNtf.js) / [`GsCGamephaseNtf.js`](../../src/handler/GsCGamephaseNtf.js) | 局内状态推进与回合/阶段 DOM/Laya 编排 |
 | 脚本卸载     | `cleanupLifecycle`                                         | [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js)                                                                                                                           | 移除监听与 DOM                        |
 | Room 销毁    | `destroyTrackerRoom`                                       | `trackerController`                                                                                                                                                          | unmount + destroy                     |

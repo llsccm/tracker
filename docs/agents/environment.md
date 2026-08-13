@@ -17,7 +17,7 @@
 - 全量 TypeScript 类型检查：`pnpm typecheck`。
 - 记牌器 TypeScript 类型检查：`pnpm typecheck:tracker`。
 - 记牌器回归测试：`pnpm test:tracker`。
-- 仓库文档不强制指定开发者操作系统或默认 Shell；优先使用 `pnpm` 脚本和可用 MCP 工具，外部命令按本机 Serena 记忆选择等价写法。
+- 仓库文档不强制指定开发者操作系统或默认 Shell；执行方式按“自带工具 → MCP → Shell”的优先级选择，确需运行项目脚本时优先使用 `pnpm`，外部命令按本机 Serena 记忆选择等价写法。
 - 终端、Shell、沙箱/权限限制与检索工具回退属于本机环境差异；不要把当前开发者的本机环境假定写回仓库文档。
 - 不要依赖或提交构建产物 `dist/` 与本地 `.env` 配置文件；`pnpm-lock.yaml` 当前为仓库跟踪文件，除依赖或版本任务外不要无关删除、重生成或格式化。
 - 界面 HTML 已改为从外部 URL 加载（通过 `src/utils/htmlResource.js`），不再依赖构建时 HTML 转 JS 生成链。

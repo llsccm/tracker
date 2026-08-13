@@ -10,7 +10,7 @@
 - 当前记忆状态需与项目实际进展同步：
   - `mem:core`：应反映保守重构与细粒度重构已完成至 F-lite，保留范围为记牌器、山河图信息展示、斗地主记牌（`src/handler/doudizhu.js`）、聊天基础过滤与本地设置；当前主动记牌器与运行时状态核心为 `src/tracker/`，且 `Room` 已包含 `CardLocationIndex` 区域投影；界面 HTML 为 `html/iframe.html`。
   - `mem:tech_stack`：应反映 JavaScript/TypeScript ESM、ESLint flat config（`eslint.config.js`）、`@` 路径别名、`src/config/` 配置系统、`src/tracker/` 当前状态与记牌器核心、`pnpm-lock.yaml` 当前为仓库跟踪文件、`typecheck` / `typecheck:tracker` / `test:tracker` 脚本，以及界面 HTML（`html/iframe.html`）通过运行时加载且无转译逻辑，本地 `.env` 不再跟踪。
-  - `mem:conventions`：应反映默认中文、LF、pnpm、MCP 优先、已跟踪 `pnpm-lock.yaml` 不要无关改动，本地 `.env` 不再跟踪；同时保持 `globalConfig` 位于 `src/tracker/state.ts`，活跃配置项以 `src/tracker/state.ts` 的 `ACTIVE_CONFIG_ENTRIES` 为准，`src/tracker/index.ts` 仅聚合共享状态入口、界面 HTML 为 `html/iframe.html` 且由外部加载、配置通过 `ConfigManager` 单例分发。
+  - `mem:conventions`：应反映默认中文、LF、pnpm、工具优先级（自带工具 → MCP → Shell）、已跟踪 `pnpm-lock.yaml` 不要无关改动，本地 `.env` 不再跟踪；同时保持 `globalConfig` 位于 `src/tracker/state.ts`，活跃配置项以 `src/tracker/state.ts` 的 `ACTIVE_CONFIG_ENTRIES` 为准，`src/tracker/index.ts` 仅聚合共享状态入口、界面 HTML 为 `html/iframe.html` 且由外部加载、配置通过 `ConfigManager` 单例分发。
   - `mem:local_environment`：只负责要求执行命令前识别当前 Shell，并将 PowerShell 路由到 `mem:commands/powershell`、将 Bash 路由到 `mem:commands/bash`、将 Command Prompt（`cmd.exe`）路由到 `mem:commands/cmd`；不得按操作系统、默认配置或历史会话推断当前终端。
   - `mem:commands/powershell`：应保存 PowerShell 专用的执行、编码和原生命令回退规范，以及 `apply_patch`、Serena MCP 编辑工具、其他方式依次降级的编辑优先级。
   - `mem:commands/bash`：应保存 Bash 专用的执行与原生命令回退规范。

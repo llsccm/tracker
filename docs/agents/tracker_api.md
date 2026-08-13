@@ -1,7 +1,8 @@
 # 记牌器开发 API 速查
 
 > 当你需要新增协议/技能、调整记牌器状态，或在测试中快速完成“读取手牌、揭示牌面、移动/补建实体”时按需阅读。
-> 本文只列稳定的公开入口和少量必要低层原语；领域设计背景见 [`card_tracker.md`](card_tracker.md)，
+> 本文只列稳定的公开入口和少量必要低层原语；Room 状态所有权与行为模块边界见
+> [`room.md`](room.md)，领域设计背景见 [`card_tracker.md`](card_tracker.md)，
 > Card/Player/Zone 模型字段与不变量见 [`card_player_model.md`](card_player_model.md)，
 > 匿名牌堆、cohort、物化与 suspended 的完整模型见
 > [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md)，生命周期见 [`lifecycle.md`](lifecycle.md)。

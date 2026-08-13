@@ -19,6 +19,7 @@
 | Serena 记忆库、同步状态与引用对齐检查 | [`docs/agents/serena.md`](docs/agents/serena.md) | 需要操作 `serena` 工具链、管理或修改 `mem:*` 格式的记忆文件。 |
 | 测试策略、回归命令、补测约定、手工验收清单 | [`docs/agents/testing.md`](docs/agents/testing.md) | 选择验证命令、补充 Vitest 回归、更新遍历基线、撰写 PR 验证说明，或做浏览器手工验收时。 |
 | 记牌器当前实现、领域边界与二级路由 | [`docs/agents/card_tracker.md`](docs/agents/card_tracker.md) | 定位核心模块、排查协议或收敛异常，或按需继续读取收敛、技能特例与历史验证文档时。 |
+| Room 单局容器、状态所有权、行为模块与主入口 | [`docs/agents/room.md`](docs/agents/room.md) | 修改或排查 `Room.ts`、判断逻辑应放在 Room 还是行为模块、理清单局初始化/移动/收敛/销毁流程时。 |
 | Card / Player / Zone 模型、候选投影与视图同步 | [`docs/agents/card_player_model.md`](docs/agents/card_player_model.md) | 修改或排查 `Card.ts`、`BaseCard.ts`、`Player.ts`、`Zone.ts`，处理牌实体字段、玩家区投影、公共区顺序或子区/容器/标记语义时。 |
 | 匿名牌堆、身份账本、cohort/generation、物化与 suspended 模型 | [`docs/agents/card_tracker_anonymous_pile.md`](docs/agents/card_tracker_anonymous_pile.md) | 排查匿名牌堆槽、牌堆身份守恒、洗牌世代、两阶段暗牌揭示或 `PileIdentityLedger` 异常时。 |
 | 记牌器开发 API 速查 | [`docs/agents/tracker_api.md`](docs/agents/tracker_api.md) | 需要快速查找角色手牌读取、手牌/牌堆揭示、移动、匿名占位或实体物化调用方式时。 |
@@ -40,7 +41,7 @@
 - **包管理器**：必须严格使用 `pnpm` 进行依赖的安装和管理。
 - **代码修改约束**：修改局部代码时保持 2 空格缩进，除非有明确命令，否则不做无关的全局格式化。
 - **本机环境记忆**：涉及终端、Shell、沙箱限制或检索工具回退时，先读取 Serena 记忆；不要把当前开发者的本机环境假定写入仓库文档。
-- **MCP 优先**：如果可用的工具能够满足需求，优先调用 MCP 工具而不是运行终端命令。
+- **工具优先级**：按“自带工具 → MCP → Shell”的顺序选择执行方式；自带工具优先，MCP 次之，Shell 最后。
 - **代码检索顺序**：文本/文件发现优先使用 `rg`，符号级读取与引用追踪优先使用 Serena；只有两者不适合或不可用时才退回 PowerShell。
 - **回放按需披露**：回放文档与 `tests/replay/` 只在任务明确涉及回放时读取；除非用户明确要求，否则不运行 `pnpm test:replay`、`pnpm typecheck:replay`、`pnpm replay:tracker` 或相关测试。
 - **文档不绑行号**：`docs/agents/` 与项目说明只引用文件路径与符号名，禁止绑定源码行号（markdown 链接 hash 中的 L 行号或 `路径:行号` 文案），避免代码移动后失效。

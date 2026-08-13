@@ -14,7 +14,7 @@
 | 快速完成读取/移动/揭示 | [`tracker_api.md`](tracker_api.md) | 稳定的公开 API 与低层原语 |
 | 修改候选、约束或收敛 | [`card_tracker_convergence.md`](card_tracker_convergence.md) | `locationCandidates`、`ConstraintGroup`、手牌数排他 |
 | 处理匿名槽、物化、suspended | [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md) | 负 ID 匿名实体与身份账本 |
-| 定位 Room 与生命周期 | [`card_tracker.md`](card_tracker.md) / [`lifecycle.md`](lifecycle.md) | 单局容器与挂载时序 |
+| 定位 Room 与生命周期 | [`room.md`](room.md) / [`lifecycle.md`](lifecycle.md) | 单局容器、行为模块与挂载时序 |
 
 ## 核心分层
 
@@ -147,6 +147,7 @@ flowchart LR
 ## 验证与进一步阅读
 
 - [`tracker_api.md`](tracker_api.md)：读取手牌、揭示、移动、匿名补位 API。
+- [`room.md`](room.md)：Room 状态所有权、生命周期、写入管线与行为模块边界。
 - [`card_tracker_convergence.md`](card_tracker_convergence.md)：收敛终止、数量约束与索引。
 - [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md)：匿名槽、物化、suspended。
 - [`lifecycle.md`](lifecycle.md)：Room/View 挂载与对局运行周期。

@@ -7,7 +7,7 @@
 ## 终端与 Shell 规范
 
 - **不指定本机环境**：仓库文档不强制声明开发者操作系统、默认 Shell 或终端实现；这些信息属于本机环境记忆。
-- **MCP 优先**：如果可用 MCP 工具能满足需求，优先使用 MCP 工具；确需终端时，再按本机 Shell 语法执行。
+- **工具优先级**：按“自带工具 → MCP → Shell”的顺序选择执行方式；自带工具优先，MCP 次之，确需终端时再按本机 Shell 语法执行。
 - **识别 Shell**：先识别当前终端类型；识别为 PowerShell 时直接执行 PowerShell 命令，不要额外嵌套 `pwsh -NoLogo -NoProfile -Command`。当前终端不是 PowerShell 时，如需执行 PowerShell 命令，再使用 `pwsh -NoLogo -NoProfile -Command`。
 - **错误处理**：PowerShell 命令开头包含 `$ErrorActionPreference = 'Stop';`。
 - **文件编码**：读写文件时显式指定 `-Encoding UTF8`。
