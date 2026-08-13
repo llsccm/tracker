@@ -164,4 +164,5 @@ pnpm test:tracker
 - `docs/agents/testing.md`：测试策略、补测约定与手工验收清单。
 - `docs/agents/overview.md`：项目结构与保留范围。
 - `docs/agents/card_tracker.md`：记牌器当前实现、设计背景和风险清单。
+- `docs/agents/card_player_model.md`：Card/Player/Zone 模型、候选投影与视图同步。
 - `docs/agents/lifecycle.md`：应用生命周期、页面注入和 Room/View 挂载时序。
