@@ -1,5 +1,26 @@
 # `GsCUpdateRoleDataExNtf`：角色扩展数据更新
 
+## `DataID = 8`：OPT_DATA_ADD_SPELL_EFFECT
+
+该消息是后续 `SpellID=3730` 自动获取所使用目标与技能拥有者的唯一记录来源。
+`PubGsCUseSpell(3730)` 不参与目标记录。
+
+```text
+DataID: 8
+Datas: [3730, 4]
+IsSpell: false
+SeatID: 2
+```
+
+字段语义：
+
+- `SeatID`：本次夺炁目标座位。
+- `Datas[0]`：需要更新目标的技能 ID；当前只处理 `3730`。
+- `Datas[1]`：夺炁技能拥有者座位。
+
+运行时由 `recordDuoQiRoleDataTarget()` 覆盖 `DuoQiState.activations[3730]`，使后续无
+`CardIDs` 的弃牌堆与目标手牌移动按新的目标选择初始牌实体。
+
 ## `DataID = 4022`：裴秀地图状态更新
 
 消息记录地图 ID、当前位置和已经绘制的

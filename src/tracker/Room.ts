@@ -8,6 +8,7 @@ import { CardLocationIndex } from './CardLocationIndex'
 import {
   PileIdentityLedger,
   type PileIdentityConsistencyIssue,
+  type AmbiguousDiscardRecycleGroup,
   type PileIdentityLedgerMove,
   type PileIdentityRevealLocation,
   type PileIdentityShuffleTransition
@@ -82,6 +83,7 @@ interface ShufflePileOptions {
   cardCount?: number | null
   /** Controller 归一化后的同一条洗牌事件，由 Room 在物理重建前提交给身份账本。 */
   identityMove?: Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'>
+  ambiguousDiscardRecycleGroups?: readonly AmbiguousDiscardRecycleGroup[]
 }
 
 export interface DirtyCardEvent {
@@ -289,6 +291,10 @@ export class Room {
     } catch (error) {
       trackerLogger.warn('牌堆身份账本移动更新失败', { error, move })
     }
+  }
+
+  registerAmbiguousOutsideIdentityGroup(cardIDs: readonly CardID[]): boolean {
+    return this.pileIdentityLedger.registerAmbiguousOutsideGroup(cardIDs)
   }
 
   /**
@@ -1629,13 +1635,16 @@ export class Room {
     const knownDiscardIdentityIDsBefore = recycledCards
       .map((card) => card.id)
       .filter((cardID) => cardID > 0)
-    const identityMove = options.identityMove ?? {
-      eventType: 'shuffleDiscardIntoPile',
-      fromZone: 2,
-      toZone: 9,
-      cardIDs: [],
-      cardCount: hasProtocolPileCount ? normalizedCardCount : projectedPileCount,
-      pileCountBefore: remainingPileCards.length
+    const identityMove = {
+      ...(options.identityMove ?? {
+        eventType: 'shuffleDiscardIntoPile',
+        fromZone: 2,
+        toZone: 9,
+        cardIDs: [],
+        cardCount: hasProtocolPileCount ? normalizedCardCount : projectedPileCount,
+        pileCountBefore: remainingPileCards.length
+      }),
+      ambiguousDiscardRecycleGroups: options.ambiguousDiscardRecycleGroups
     }
     // 洗牌会同时关闭旧 cohort 与建立洗回批次；必须先让账本原子提交这次过渡，Room 才能
     // 把提交结果投影成 suspended/匿名实体，避免物理状态领先于身份权威。
@@ -2392,8 +2401,43 @@ export class Room {
     cardIDs: CardID[] | CardID,
     toZone: PublicZoneName | 'player',
     opt: MoveOptions = {}
-  ): void {
+  ): boolean {
     const context = this.movement.createMoveContext(cardIDs, toZone, opt)
+
+    if (context.requireAnonymizeSuccess) {
+      // 先对整组做无副作用预检，避免前几张已释放、后续成员失败时留下半匿名化状态。
+      const invalidAnonymizeCards = context.anonymizeCards.filter(
+        (card) => !hasRealIdentity(card) || card.id <= 0 || this.cardIndex.get(card.id) !== card
+      )
+      if (invalidAnonymizeCards.length > 0) {
+        invalidAnonymizeCards.forEach((card) => {
+          trackerLogger.warn('模糊来源实体匿名化失败，身份仍被视为已定位', {
+            reason: 'moveCards:ambiguousSource:preflight',
+            cardID: card.id,
+            entityID: card.entityID,
+            location: card.location,
+            isKnown: card.isKnown
+          })
+        })
+        return false
+      }
+    }
+
+    for (const card of context.anonymizeCards) {
+      const releasedIdentityID = this.anonymizeLocatedIdentity(card, 'moveCards:ambiguousSource', {
+        preservePlacement: true
+      })
+      if (releasedIdentityID !== null) continue
+
+      trackerLogger.warn('模糊来源实体匿名化失败，身份仍被视为已定位', {
+        reason: 'moveCards:ambiguousSource',
+        cardID: card.id,
+        entityID: card.entityID,
+        location: card.location,
+        isKnown: card.isKnown
+      })
+      if (context.requireAnonymizeSuccess) return false
+    }
 
     // trackerLogger.info(
     //   'moveCards 开始',
@@ -2428,6 +2472,7 @@ export class Room {
       dirtyCardCount: this.dirtyCards.size,
       constraintGroupCount: this.constraintGroups.size
     })
+    return true
   }
 
   /**

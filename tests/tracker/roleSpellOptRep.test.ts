@@ -15,6 +15,8 @@ vi.mock('../../src/tracker/runtime/browser', () => ({
 
 import { handleRoleSpellOptRep } from '@/handler/CGsRoleSpellOptRep'
 import { Game } from '@/tracker'
+import { Room } from '@/tracker/Room'
+import type { DuoQiState } from '@/tracker/skill/DuoQi'
 
 describe('CGsRoleSpellOptRep', () => {
   beforeEach(() => {
@@ -48,9 +50,11 @@ describe('CGsRoleSpellOptRep', () => {
     expect(setTrackerFirstHand).not.toHaveBeenCalled()
   })
 
-  it('Type 72 在开局阶段累计去重后的正 CardID', () => {
+  it('Type 72 在开局时机创建结构化夺炁状态', () => {
     Game.isGameStart = true
-    Game.setSpellState(3731, [2, 63])
+    const room = new Room({ gameState: Game })
+    room.registerPlayers([{ SeatID: 2, ClientID: 200 }], 200)
+    room.initDeck([63, 125])
 
     handleRoleSpellOptRep({
       Datas: [63, 125, 0],
@@ -59,7 +63,10 @@ describe('CGsRoleSpellOptRep', () => {
       Type: 72
     })
 
-    expect(Game.getSpellState(3731)).toEqual([2, 63, 125])
+    const state = Game.getSpellState<DuoQiState>(3731)
+    expect(state?.active).toBe(true)
+    expect(Array.from(state?.allCardIDs ?? [])).toEqual([63, 125])
+    room.destroy()
   })
 
   it('捷悟将 Datas 同步为对应座位的手牌明牌', () => {

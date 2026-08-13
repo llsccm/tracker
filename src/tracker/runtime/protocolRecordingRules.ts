@@ -61,8 +61,18 @@ const ROLE_OPT_TARGET_SPELL_IDS = new Set([
   4025
 ])
 
-const TRACKER_ROLE_DATA_EX_IDS = new Set([3544, 3571, GUI_FU_ROLE_DATA_ID])
-const TRACKER_USE_SPELL_IDS = new Set([3090, 3138, 3157, 3161, 3185, 3193, 3511, 3750])
+const TRACKER_ROLE_DATA_EX_IDS = new Set([8, 3544, 3571, GUI_FU_ROLE_DATA_ID])
+const TRACKER_USE_SPELL_IDS = new Set([
+  3090,
+  3138,
+  3157,
+  3161,
+  3185,
+  3193,
+  3511,
+  3731,
+  3750
+])
 
 const CONDITIONAL_RECORDING_RULES: Record<string, ProtocolPredicate> = {
   MsgNtfUseCardType: shouldRecordCounterUseCard,
@@ -148,6 +158,7 @@ const ROOT_FIELD_ALLOWLISTS: Record<string, ReadonlySet<string>> = {
     'DestSeatIDs',
     'EffectIndex',
     'SeatID',
+    'SkillOwerSeatID',
     'SpellID',
     'SrcSeatID'
   ]),
@@ -226,6 +237,12 @@ function shouldRecordUseSpell(
       return (
         readNumberField(message, 'EffectIndex') === 2 &&
         readArrayField(message, 'DestSeatIDs').length === 0
+      )
+
+    case 3731:
+      return (
+        readNumberField(message, 'EffectIndex') === 2 &&
+        readArrayField(message, 'DestSeatIDs').length > 0
       )
 
     default:

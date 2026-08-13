@@ -8,6 +8,7 @@
 
 | 当前任务 | 建议阅读范围 | 后续文档 |
 | --- | --- | --- |
+| 修改 Card/Player/Zone 字段或写入口 | [`card_player_model.md`](card_player_model.md) | 模型不变量与候选主模型 |
 | 快速理解收敛主流程 | 「目标与边界」和「不动点主循环」 | 无 |
 | 新增协议或技能候选 | 「不动点主循环」和「扩展检查清单」 | [`card_tracker_skills.md`](card_tracker_skills.md) |
 | 排查不终止或状态不刷新 | 「终止性与 `changed` 契约」和「常见故障定位」 | [`testing.md`](testing.md) |

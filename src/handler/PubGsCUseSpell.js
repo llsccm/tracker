@@ -2,6 +2,7 @@ import { CardConfig } from '@/config'
 import { drawCard } from '@/draw'
 import { laya } from '@/runtime/gameAdapter'
 import { Game } from '@/tracker'
+import { recordDuoQiActivation } from '@/tracker/skill/DuoQi'
 // import { laya } from '@/runtime/gameAdapter'
 import { setSuitRecord } from '@/utils'
 
@@ -14,6 +15,8 @@ export function handleUseSpell(msg) {
   if (Game.myID === SeatID && CardIDs.length === 1) {
     drawCard(CardIDs)
   }
+
+  recordDuoQiActivation(Game, msg)
 
   switch (SpellID) {
     // 博图计数器

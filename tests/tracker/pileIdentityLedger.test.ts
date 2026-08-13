@@ -530,6 +530,43 @@ describe('PileIdentityLedger', () => {
     })
   })
 
+  it('同次洗回的重叠候选只按合并后的身份宽度保留基数', () => {
+    const ledger = new PileIdentityLedger()
+    ledger.initialize([1, 2, 3, 4, 5])
+    applyMove(ledger, {
+      eventType: 'drawUnknown',
+      fromZone: 1,
+      toZone: 5,
+      cardIDs: [],
+      cardCount: 5,
+      fromPosition: POSITION_TOP,
+      pileCountAfter: 0
+    })
+
+    const result = ledger.applyMove({
+      eventType: 'shuffleDiscardIntoPile',
+      fromZone: 2,
+      toZone: 9,
+      cardIDs: [],
+      cardCount: 4,
+      discardCountBefore: 4,
+      discardCountAfter: 0,
+      pileCountAfter: 4,
+      ambiguousDiscardRecycleGroups: [
+        { candidateIdentityIDs: [1, 2, 3], recycledCount: 3 },
+        { candidateIdentityIDs: [2, 3, 4], recycledCount: 3 }
+      ]
+    })
+
+    expect(result.committed).toBe(true)
+    expect(ledger.getSnapshot().cohort.groups.find((group) => group.generation === 1)).toEqual({
+      generation: 1,
+      kind: 'all-in-pile',
+      cardIDs: [1, 2, 3, 4],
+      remainingPileCount: 4
+    })
+  })
+
   it('B9/B10 分别从牌底和牌顶批次消费暗槽', () => {
     const bottomLedger = createTwoCohortLedger()
     applyMove(bottomLedger, {

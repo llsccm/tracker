@@ -1,6 +1,6 @@
 # 记牌器当前状态、设计背景与验证清单
 
-> 💡 当你需要推进 `src/tracker/`、排查记牌器协议同步异常、理解旧链表模型与新版 Seats 约束设计差异、或补充记牌器测试时，请阅读本文档。常用调用方式先查 [`tracker_api.md`](tracker_api.md)；约束收敛、技能/协议特例与历史验证按需读取下方链接；应用级初始化、Room/View 挂载时序详见 [`lifecycle.md`](lifecycle.md)。
+> 💡 当你需要推进 `src/tracker/`、排查记牌器协议同步异常、理解旧链表模型与新版 Seats 约束设计差异、或补充记牌器测试时，请阅读本文档。常用调用方式先查 [`tracker_api.md`](tracker_api.md)；Card/Player/Zone 模型细节见 [`card_player_model.md`](card_player_model.md)；约束收敛、技能/协议特例与历史验证按需读取下方链接；应用级初始化、Room/View 挂载时序详见 [`lifecycle.md`](lifecycle.md)。
 
 ---
 
@@ -8,6 +8,7 @@
 
 | 关注方向 | 按需文档 | 触发场景 |
 | --- | --- | --- |
+| Card / Player / Zone 模型 | [`card_player_model.md`](card_player_model.md) | 排查牌实体字段、玩家区投影、公共区顺序，或新增子区/装备容器/标记区 |
 | 匿名牌堆与身份账本 | [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md) | 匿名物理槽、`PileIdentityLedger`、cohort/generation、`unlocated`/`suspended` 分区、物化、洗牌身份守恒 |
 | 约束收敛与不动点 | [`card_tracker_convergence.md`](card_tracker_convergence.md) | 修改 `resolveConstraints()`、`ConstraintGroup`、完整位置名额、观测手牌数排他，或排查过度收敛、欠收敛、空转与遍历量回归 |
 | 技能与协议特例 | [`card_tracker_skills.md`](card_tracker_skills.md) | 暗置标记、观虚 `987/988`、整手牌交换、诫厉 `3483`、天候 `3903` 等 |
@@ -82,35 +83,18 @@
 - `protocolZones.ts` 负责把协议区域编号映射为新版公共区与玩家子区；`MoveEventNormalizer` 只做分类与字段映射，不直接修改 `Room` 状态。`FromID` / `ToID` 的含义依赖具体 `FromZone` / `ToZone`，不能一律当作座位 ID：例如 `FromZone=8` 弹窗标记回牌堆时，`FromID` 可能是技能/标记空间 ID；`FromZone=1` 牌堆来源时，`FromID=255` 可能只是牌堆/无座位占位。
 - `Room.moveCards()`、`Room.resolveConstraints()`、`Room.shufflePile()`、`Room.getPublicZone()` 是高频核心入口，应优先留在 `Room` 中；新增内部辅助方法时优先放入对应行为模块，再由 `Room` 暴露必要的薄入口。
 
-### `Card`
+### `Card` / `Player` / `Zone`
 
-- 继承 `BaseCard`，通过 `CardConfig` 单例取得牌名、花色、点数、类型等展示元数据。
-- 保存物理位置与推断状态：`location`、`subZone`、`isKnown`、`spellID`、`turn`、`round`、`phase`、`owner`、`locationCandidates`、`suspended`、`combinationID`；`seats`、`subZoneCandidates`、`publicCandidates` 是从 `locationCandidates` 或确定位置派生的兼容读面。
-- 匿名暗牌使用稳定负 `id/entityID`，不再使用 `id=0`；每个匿名实体拥有递减负数的唯一内部句柄。`Room.resolveConstraints()` 稳定后会按玩家观测手牌数、确定明牌和候选明牌主动对账匿名手牌实体；缺失时补建，过量时仅把匿名实体释放到 `outside`。存在未被精确槽位约束覆盖的候选手牌时不会提前实体化；若后续具体明牌移动协议证明该牌来自此手牌，则按该事实创建瞬时匿名实体完成身份交换并回补明牌原位置。
-- `bindCandidates()` 只绑定候选席位，默认不确认明牌；`bindTo()` 是默认确认明牌的便捷入口。
-- `locationCandidates` 是完整位置候选唯一主模型，可同时表达玩家区候选、公共区候选与装备容器候选；`subZoneCandidates`、`publicCandidates` 与 `seats` 均为只读兼容投影，外部写入必须通过 `setLocationCandidates()` 或保留的兼容方法转发。
-- `subZoneCandidates` 表达玩家区完整位置候选（三元组 `seatID/subZone/spellID`），用于同一张明牌可能处于多个玩家或多个玩家子区域的情况，例如 `A 手牌 / B 手牌 / A 标记`。
-- `publicCandidates` 只表达牌堆顶/底等不确定公共候选位置；确定公共区位置仍由 `Card.location` 与公共 `Zone` 顺序共同表达。
-- 装备容器候选使用 `type: 'container'`、`containerType: 'equipment'`、`cardID` 与 `spellID` 描述，例如木马区候选固定为 `container:equipment:161:700`；它不直接同步到 `seats` 或 `owner`，只在投影层按装备当前位置显示到玩家标记区。
-- `setSeats()` 是旧写入口的兼容层：有完整位置候选时只过滤 `locationCandidates` 的玩家位置，无候选但出现多座位时会生成同一子区的玩家位置候选；只有完整位置候选也只剩一个时，才会落定具体 `subZone`。
-- `moveToPublicZone()` 会清理 `subZone`、`seats`、`owner`、`combinationID`、`spellID`；移入 `exile` 时会重置 `isKnown`。
-- `syncOwnerFromSeats()` 会在候选席位、owner 或 resolved seat 变化时调用 `Room.notifyCardChanged()` 记录视图脏变更。席位或候选变更事件（`card-seats-changed`、`card-location-resolved`、`card-location-candidates-changed`）均携带 `previousSeats`（变更前席位集合）：候选收缩时被移除的座位只在该字段可见，收敛跳过与脏渲染判定都应依赖它。
-- `getLocationDescription()` 优先处理暂停追踪状态，再走 `AmbiguousKnownIndex.describe()`，最后退化为牌堆、弃牌堆、销毁、交换/处理区或玩家子区域描述。
+模型字段、候选主模型、投影关系和修改护栏统一见
+[`card_player_model.md`](card_player_model.md)。此处只保留记牌器流程最常引用的结论：
 
-### `Player`
-
-- 由 `Room` 持有，记录 `seatID`、`fixedViewId`、观测到的手牌总数标记、`observedHandCount` 与 `unknownCardCount`。
-- `knownHandCards` 与 `candidateHandCards` 不直接由外部写入，主要由 `Room.syncViewGroups()` 根据全局卡牌池差量同步。
-- `refreshUnknownCardCount()` 使用 `observedHandCount - 确定手牌明牌数 - 模糊明牌期望槽位数` 计算暗牌额度。
-- `getCandidateHandSlotCount()` 优先读取相关 `ConstraintGroup.expectedSlotsBySeat`，没有显式期望时按候选明牌数量退化计算。
-- `getCandidateHandSlotCount()` 同时读取主模型 `ConstraintGroup.expectedSlotsByLocation` 与兼容模型 `expectedSlotsBySubZone` 中的 `hand` 名额，避免 `A 手牌 / A 标记` 候选被算成确定手牌或漏算手牌槽位。
-- `markCards` 以 `spellID -> Card[]` 形式保存标记区卡牌，供多个技能标记区并存的后续视图渲染使用。
-
-### `Zone`
-
-- 只承载公共逻辑区域的有序 `Card[]`，例如 `pile`、`discard`、`process`、`exile`。
-- `add()` 支持按位置插入；`remove()` / `removeCard()` 负责从公共区移除实体牌。
-- 公共区不表达玩家手牌、装备、判定或标记区所有权；这些由 `Card.location === 'player'` 与 `Player` 选择器表达。
+- `Card.locationCandidates` 是完整位置候选唯一主模型；`seats`、`subZoneCandidates` 与
+  `publicCandidates` 都是兼容投影，`seats.size === 1` 只表示 owner 确定，不等于子区域确定。
+- 匿名暗牌使用稳定负 `id/entityID`；`isKnown` 与真实身份是两件事，正 ID 不自动代表已公开。
+- `Player.knownHandCards`、`candidateHandCards`、`equipCards`、`judgeCards` 与 `markCards`
+  由 `Room.syncViewGroups()` 同步，不直接由外部写入。
+- `Zone` 只承载公共逻辑区的有序 `Card[]`；玩家手牌、装备、判定或标记区所有权由
+  `Card.location === 'player'` 与 `Player` 选择器表达。
 
 ### `ConstraintGroup`
 

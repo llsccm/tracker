@@ -11,6 +11,11 @@ import {
 } from '@/tracker/runtime/protocolRules'
 import type { RawMoveCardEvent } from '@/tracker/types'
 import { parseGuiFuCardIDs } from '@/handler/skills/GuiFu'
+import {
+  initializeDuoQiState,
+  recordDuoQiActivation,
+  recordDuoQiRoleDataTarget
+} from '@/tracker/skill/DuoQi'
 import type { ApplyTrackerProtocolResult, TrackerProtocolReplayContext } from './types'
 
 interface ReplayMoveContext {
@@ -335,6 +340,8 @@ function applyUseSpellState(
   const srcSeatID = readNumber(payload.SrcSeatID)
   let didApply = false
 
+  if (recordDuoQiActivation(gameState, payload)) didApply = true
+
   switch (spellID) {
     case 3090:
       if (seatID === gameState.currentID && readNumber(payload.EffectIndex) === 1) {
@@ -393,13 +400,7 @@ function applyRoleSpellOpt(
     !context.gameState.round &&
     !context.gameState.phase
   ) {
-    const previous = context.gameState.getSpellState(3731)
-    const previousIDs = Array.isArray(previous) ? previous : []
-    context.gameState.setSpellState(
-      3731,
-      Array.from(new Set(previousIDs.concat(datas))).filter((cardID) => cardID > 0)
-    )
-    didApply = true
+    didApply = Boolean(initializeDuoQiState(context.gameState, datas))
   }
 
   switch (spellID) {
@@ -621,6 +622,12 @@ function applyRoleDataEx(
 ): ApplyTrackerProtocolResult {
   const dataID = requireInteger(record, 'DataID')
   const datas = optionalNumberArray(record.payload.Datas, 'Datas')
+
+  if (dataID === 8) {
+    return recordDuoQiRoleDataTarget(context.gameState, record.payload)
+      ? applied()
+      : ignored('夺炁目标通知未携带可用状态')
+  }
 
   if (dataID === 3571) {
     if (datas.length === 0) return ignored('椒遇颜色通知未携带颜色')

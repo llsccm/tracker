@@ -14,6 +14,11 @@ import {
   getSourceZoneCards
 } from '../skill/moveEventUtils'
 import decorateWenGua from '../skill/WenGua'
+import {
+  decorateDuoQiEntitySafety,
+  decorateDuoQiKnownMove,
+  decorateDuoQiMove
+} from '../skill/DuoQi'
 
 export type MoveEventHandler = (event: MoveEventDraft, room: Room) => MoveEventDraft
 
@@ -104,6 +109,8 @@ function createFilteredPublicMoveHandler(
 
 export function registerDefaultMoveEventHandlers(room: Room): void {
   room.registerMoveEventHandler('*', decorateGenericMove)
+  room.registerMoveEventHandler('*', decorateDuoQiEntitySafety)
+  room.registerMoveEventHandler('*', decorateDuoQiKnownMove)
   // 黄承彦【观虚】：按 FromID/ToID 保留牌堆侧与手牌侧交换桶。
   room.registerMoveEventHandler(987, decorateGuanXu)
   room.registerMoveEventHandler(988, decorateGuanXu)
@@ -111,6 +118,9 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
   room.registerMoveEventHandler(3903, decorateTianHou)
   //【思泣】：协议不公开返回牌 ID，按弃牌堆顺序筛选红牌实体作为明确来源。
   room.registerMoveEventHandler(3543, decorateSiQi)
+  // 魔吕布【夺炁】：初始牌身份标记与 3730/3731 获取修正。
+  room.registerMoveEventHandler(3730, decorateDuoQiMove)
+  room.registerMoveEventHandler(3731, decorateDuoQiMove)
   // 马承【骋烈】
   // room.registerMoveEventHandler(3208, decorateChengLie)
   // 族钟繇【诫厉】

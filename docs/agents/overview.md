@@ -46,7 +46,7 @@
     - `index.ts`：仅导出 `globalConfig`、`globalState`、`rogueMap`、`UI`、`user`、`Game`。
     - `state.ts` / `configStore.ts` / `user.ts` / `userModel.ts` / `gameState.ts` / `Game.ts` / `types.ts` / `traversalStats.ts`：配置代理、全局 UI、用户态、对局状态（纯逻辑 + 浏览器钩子）、遍历插桩。
     - `Room.ts`：单局状态源。
-    - `Card.ts` / `BaseCard.ts` / `Player.ts` / `Zone.ts`：牌/玩家/公共区模型。
+    - `Card.ts` / `BaseCard.ts` / `Player.ts` / `Zone.ts`：牌/玩家/公共区模型；字段与不变量见 [`card_player_model.md`](card_player_model.md)。
     - `ConstraintGroup.ts` / `AmbiguousKnownIndex.ts` / `CardLocationIndex.ts` / `CardCounter.ts`：约束与增量索引。
     - `MoveEventNormalizer.ts` / `protocolZones.ts`：移动归一化与协议区映射。
     - `roomConstraints.ts` / `roomPublicZones.ts` / `roomMovement.ts` + `roomMovement/*`：Room 行为拆分。
