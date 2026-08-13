@@ -311,7 +311,7 @@ describe('夺炁初始牌身份', () => {
       })
     )
     const [group] = state.pendingRandomHandGroups
-    expect(group.candidateEntities).toHaveLength(4)
+    expect(group.candidateEntities.size).toBe(4)
     expect(group.gainedCount).toBe(1)
     expect(
       Array.from(group.candidateEntities).every(
@@ -475,7 +475,7 @@ describe('夺炁初始牌身份', () => {
 
     expect(room.cards).toHaveLength(initialEntityCount)
     const targetInitialCardIDs = state.initialCardIDsBySeat.get(2) ?? new Set()
-    expect(targetInitialCardIDs).toHaveLength(4)
+    expect(targetInitialCardIDs.size).toBe(4)
     expect(targetInitialCardIDs.has(5)).toBe(true)
     expect(targetInitialCardIDs.has(6)).toBe(true)
     expect(state.unresolvedCardIDs).toEqual(new Set())

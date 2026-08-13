@@ -287,21 +287,13 @@ function decorateGainAll(event: MoveEventDraft, room: Room, state: DuoQiState): 
 
   const sourceZone = Number(raw.FromZone)
   resolveRandomHandCandidatesForGainAll(event, room, state, activation, sourceZone)
-  const targetCardIDs = getInitialCardIDsForSeat(state, activation.targetSeatID)
-  const targetCards = new Set<Card>(getInitialEntitiesForSeat(state, activation.targetSeatID))
-  targetCardIDs
-    .map((cardID) => room.cardIndex.get(cardID))
-    .filter((card): card is Card => Boolean(card))
-    .forEach((card) => targetCards.add(card))
-  const sourceCards = Array.from(targetCards)
-    .filter((card) => !isCardInOwnerHand(card, activation.ownerSeatID))
-    .filter((card) =>
-      sourceZone === 2
-        ? card.location === 'discard'
-        : card.location === 'player' &&
-          card.subZone === 'hand' &&
-          card.seats.has(activation.targetSeatID)
-    )
+  const sourceCards = collectGainAllSourceCards(
+    room,
+    state,
+    activation.targetSeatID,
+    activation.ownerSeatID,
+    sourceZone
+  )
 
   const cardCount = Math.max(0, Number(event.cardCount ?? raw.CardCount) || 0)
   if (sourceCards.length !== cardCount) return event
