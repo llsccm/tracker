@@ -44,6 +44,7 @@ export interface RoomMovementOptions {
   expectedSlotsBySeat?: ExpectedSlotsBySeatInput
   resetKnownToUnknown?: boolean
   anonymizeCards?: Card[]
+  requireAnonymizeSuccess?: boolean
   sourceCards?: Card[]
   /** 技能需要保留全暗手牌的 N 选 K 身份事实时，强制建立随机转移候选。 */
   forceRandomHandTransferCandidates?: boolean
@@ -70,6 +71,7 @@ export interface RoomMoveContext {
   expectedSlotsBySeat?: ExpectedSlotsBySeatInput
   resetKnownToUnknown: boolean
   anonymizeCards: Card[]
+  requireAnonymizeSuccess: boolean
   sourceCards?: Card[]
   forceRandomHandTransferCandidates: boolean
   postMovePublicCandidates?: PostMovePublicCandidate[]

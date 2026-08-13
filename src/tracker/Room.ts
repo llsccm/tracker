@@ -293,8 +293,8 @@ export class Room {
     }
   }
 
-  registerAmbiguousOutsideIdentityGroup(cardIDs: readonly CardID[]): void {
-    this.pileIdentityLedger.registerAmbiguousOutsideGroup(cardIDs)
+  registerAmbiguousOutsideIdentityGroup(cardIDs: readonly CardID[]): boolean {
+    return this.pileIdentityLedger.registerAmbiguousOutsideGroup(cardIDs)
   }
 
   /**
@@ -2401,14 +2401,43 @@ export class Room {
     cardIDs: CardID[] | CardID,
     toZone: PublicZoneName | 'player',
     opt: MoveOptions = {}
-  ): void {
+  ): boolean {
     const context = this.movement.createMoveContext(cardIDs, toZone, opt)
 
-    context.anonymizeCards.forEach((card) => {
-      this.anonymizeLocatedIdentity(card, 'moveCards:ambiguousSource', {
+    if (context.requireAnonymizeSuccess) {
+      // 先对整组做无副作用预检，避免前几张已释放、后续成员失败时留下半匿名化状态。
+      const invalidAnonymizeCards = context.anonymizeCards.filter(
+        (card) => !hasRealIdentity(card) || card.id <= 0 || this.cardIndex.get(card.id) !== card
+      )
+      if (invalidAnonymizeCards.length > 0) {
+        invalidAnonymizeCards.forEach((card) => {
+          trackerLogger.warn('模糊来源实体匿名化失败，身份仍被视为已定位', {
+            reason: 'moveCards:ambiguousSource:preflight',
+            cardID: card.id,
+            entityID: card.entityID,
+            location: card.location,
+            isKnown: card.isKnown
+          })
+        })
+        return false
+      }
+    }
+
+    for (const card of context.anonymizeCards) {
+      const releasedIdentityID = this.anonymizeLocatedIdentity(card, 'moveCards:ambiguousSource', {
         preservePlacement: true
       })
-    })
+      if (releasedIdentityID !== null) continue
+
+      trackerLogger.warn('模糊来源实体匿名化失败，身份仍被视为已定位', {
+        reason: 'moveCards:ambiguousSource',
+        cardID: card.id,
+        entityID: card.entityID,
+        location: card.location,
+        isKnown: card.isKnown
+      })
+      if (context.requireAnonymizeSuccess) return false
+    }
 
     // trackerLogger.info(
     //   'moveCards 开始',
@@ -2443,6 +2472,7 @@ export class Room {
       dirtyCardCount: this.dirtyCards.size,
       constraintGroupCount: this.constraintGroups.size
     })
+    return true
   }
 
   /**

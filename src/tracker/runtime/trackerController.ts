@@ -29,6 +29,7 @@ import type {
 } from '../types'
 import { registerDefaultMoveEventHandlers } from './moveEventHandlers'
 import {
+  cancelDuoQiMove,
   collectDuoQiAmbiguousDiscardRecycleGroups,
   commitDuoQiMove,
   finalizeDuoQiDiscardRecycle,
@@ -392,7 +393,8 @@ export class TrackerController {
           identityMove: pileIdentityMove,
           ambiguousDiscardRecycleGroups
         })
-        if (ambiguousDiscardRecycleGroups.length > 0) finalizeDuoQiDiscardRecycle(readyRoom)
+        // 洗牌已重建弃牌区实体，任何未决组都不能继续引用旧 memberCards。
+        finalizeDuoQiDiscardRecycle(readyRoom)
         this.controllerView.scheduleRender()
         return
       } else {
@@ -400,7 +402,14 @@ export class TrackerController {
           '移动事件分支: moveCards',
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
-        readyRoom.moveCards(event.cardIDs, event.toZone, event.options)
+        const moveCompleted = readyRoom.moveCards(event.cardIDs, event.toZone, event.options)
+        if (!moveCompleted) {
+          cancelDuoQiMove(readyRoom, event)
+          this.controllerLogger.warn('夺炁模糊来源匿名化失败，已取消本次 tracker 移动', {
+            cardIDs: event.cardIDs
+          })
+          return
+        }
         try {
           commitDuoQiMove(readyRoom, event)
         } catch (error) {
@@ -439,9 +448,7 @@ export class TrackerController {
     knownPileDrawCards: readonly Card[]
   ): Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'> {
     const fromZone = event.FromZone == null ? null : Number(event.FromZone)
-    const cardIDs = this.normalizeIDs(
-      normalizedEvent.options.pileIdentityCardIDs ?? event.CardIDs
-    )
+    const cardIDs = this.normalizeIDs(normalizedEvent.options.pileIdentityCardIDs ?? event.CardIDs)
     const pileCountAfter = room.zones.get('pile')?.cards.length ?? 0
     const knownPileIdentityIDsConsumed = knownPileDrawCards
       .filter((card) => card.location !== 'pile' && card.id > 0)

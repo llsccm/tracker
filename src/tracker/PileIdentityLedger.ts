@@ -228,11 +228,11 @@ export class PileIdentityLedger {
     this.warnForIssues(this.collectConsistencyIssues(identities.length, 'initialize'))
   }
 
-  registerAmbiguousOutsideGroup(cardIDs: readonly CardID[]): void {
+  registerAmbiguousOutsideGroup(cardIDs: readonly CardID[]): boolean {
     const identities = normalizeIDs(cardIDs)
-    if (identities.length === 0) return
+    if (identities.length === 0) return false
 
-    this.commit('register:ambiguousOutsideGroup', () => {
+    return this.commit('register:ambiguousOutsideGroup', () => {
       identities.forEach((cardID) => this.prepareIdentityForPile(cardID))
       this.cohorts.push({
         generation: this.generation,
@@ -479,9 +479,7 @@ export class PileIdentityLedger {
           normalizeIDs(group.candidateIdentityIDs).length
         )
       }))
-      .filter(
-        (group) => group.candidateIdentityIDs.length > 0 && group.recycledCount > 0
-      )
+      .filter((group) => group.candidateIdentityIDs.length > 0 && group.recycledCount > 0)
     const ambiguousIdentityIDs = new Set(
       ambiguousDiscardRecycleGroups.flatMap((group) => group.candidateIdentityIDs)
     )
@@ -538,15 +536,29 @@ export class PileIdentityLedger {
     }
 
     this.rotateFromDiscardInternal(recycledIdentityIDs)
+    // Room 会随机打乱本次全部回收牌，已知弃牌和夺炁模糊组没有可证明的牌底相对顺序；
+    // 因此合并为同一 generation 的无序总基数，底摸只能消费这个聚合 cohort。
+    let recycledCohort =
+      this.cohorts[0]?.generation === this.generation ? this.cohorts[0] : undefined
     ambiguousDiscardRecycleGroups.forEach((group) => {
       const identities = normalizeIDs(group.candidateIdentityIDs)
       identities.forEach((cardID) => this.prepareIdentityForPile(cardID))
       if (identities.length === 0) return
-      this.cohorts.unshift({
-        generation: this.generation,
-        candidateIdentityIDs: new Set(identities),
-        remainingPileCount: Math.min(normalizeCount(group.recycledCount), identities.length)
-      })
+
+      const recycledCount = Math.min(normalizeCount(group.recycledCount), identities.length)
+      if (!recycledCohort) {
+        recycledCohort = {
+          generation: this.generation,
+          candidateIdentityIDs: new Set(identities),
+          remainingPileCount: recycledCount
+        }
+        this.cohorts.unshift(recycledCohort)
+        return
+      }
+
+      const targetCohort = recycledCohort
+      identities.forEach((cardID) => targetCohort.candidateIdentityIDs.add(cardID))
+      targetCohort.remainingPileCount += recycledCount
     })
     this.knownDiscardIdentityIDs.clear()
 
