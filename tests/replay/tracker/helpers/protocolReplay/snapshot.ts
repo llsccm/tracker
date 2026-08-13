@@ -1,4 +1,5 @@
 import { AmbiguousKnownIndex } from '@/tracker/AmbiguousKnownIndex'
+import { Card } from '@/tracker/Card'
 import { CardLocationIndex } from '@/tracker/CardLocationIndex'
 import type { ConstraintGroup } from '@/tracker/ConstraintGroup'
 import type { GameState } from '@/tracker/Game'
@@ -264,10 +265,11 @@ function sortNumbers(values: Iterable<number>): number[] {
 }
 
 function normalizeJsonValue(value: unknown): unknown {
+  if (value instanceof Card) return { cardID: value.id, entityID: value.entityID }
   if (value instanceof Set) return Array.from(value, normalizeJsonValue)
   if (value instanceof Map) {
     return Object.fromEntries(
-      Array.from(value.entries(), ([key, item]) => [String(key), normalizeJsonValue(item)])
+      Array.from(value.entries(), ([key, item]) => [normalizeMapKey(key), normalizeJsonValue(item)])
     )
   }
   if (Array.isArray(value)) return value.map(normalizeJsonValue)
@@ -276,6 +278,11 @@ function normalizeJsonValue(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [key, normalizeJsonValue(item)])
   )
+}
+
+function normalizeMapKey(key: unknown): string {
+  if (key instanceof Card) return `card:${key.entityID}`
+  return String(key)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

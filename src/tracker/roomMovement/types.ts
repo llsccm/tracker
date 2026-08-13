@@ -45,6 +45,8 @@ export interface RoomMovementOptions {
   resetKnownToUnknown?: boolean
   anonymizeCards?: Card[]
   sourceCards?: Card[]
+  /** 技能需要保留全暗手牌的 N 选 K 身份事实时，强制建立随机转移候选。 */
+  forceRandomHandTransferCandidates?: boolean
   postMovePublicCandidates?: PostMovePublicCandidate[]
   sourceEvent?: MoveSourceEvent
   [key: string]: unknown
@@ -69,6 +71,7 @@ export interface RoomMoveContext {
   resetKnownToUnknown: boolean
   anonymizeCards: Card[]
   sourceCards?: Card[]
+  forceRandomHandTransferCandidates: boolean
   postMovePublicCandidates?: PostMovePublicCandidate[]
   sourceEvent?: MoveSourceEvent
   targetSeats: SeatID[]
@@ -156,6 +159,8 @@ export interface RandomHandTransferOptions {
   sourceHandTotalObserved?: boolean
   /** 候选传播前保存的来源未知手牌额度。 */
   sourceUnknownCount?: number
+  /** 全暗来源通常没有展示价值；技能身份账本可显式要求仍建立 N 选 K。 */
+  force?: boolean
   sourceEvent?: MoveSourceEvent
 }
 

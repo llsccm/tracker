@@ -86,6 +86,14 @@ describe('tracker protocol recording rules', () => {
     expect(
       shouldRecordTrackerProtocol({
         className: 'PubGsCUseSpell',
+        SpellID: 3730,
+        EffectIndex: 1,
+        DestSeatIDs: [3]
+      })
+    ).toBe(false)
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'PubGsCUseSpell',
         SpellID: 3750,
         EffectIndex: 2,
         DestSeatIDs: [6]
@@ -170,6 +178,9 @@ describe('tracker protocol recording rules', () => {
     )
 
     expect(shouldRecordTrackerProtocol({ className: 'GsCUpdateRoleDataExNtf', DataID: 3544 })).toBe(
+      true
+    )
+    expect(shouldRecordTrackerProtocol({ className: 'GsCUpdateRoleDataExNtf', DataID: 8 })).toBe(
       true
     )
     expect(shouldRecordTrackerProtocol({ className: 'GsCUpdateRoleDataExNtf', DataID: 3709 })).toBe(

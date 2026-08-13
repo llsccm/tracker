@@ -14,7 +14,11 @@ import {
   getSourceZoneCards
 } from '../skill/moveEventUtils'
 import decorateWenGua from '../skill/WenGua'
-import { decorateDuoQiEntitySafety, decorateDuoQiMove } from '../skill/DuoQi'
+import {
+  decorateDuoQiEntitySafety,
+  decorateDuoQiKnownMove,
+  decorateDuoQiMove
+} from '../skill/DuoQi'
 
 export type MoveEventHandler = (event: MoveEventDraft, room: Room) => MoveEventDraft
 
@@ -106,6 +110,7 @@ function createFilteredPublicMoveHandler(
 export function registerDefaultMoveEventHandlers(room: Room): void {
   room.registerMoveEventHandler('*', decorateGenericMove)
   room.registerMoveEventHandler('*', decorateDuoQiEntitySafety)
+  room.registerMoveEventHandler('*', decorateDuoQiKnownMove)
   // 黄承彦【观虚】：按 FromID/ToID 保留牌堆侧与手牌侧交换桶。
   room.registerMoveEventHandler(987, decorateGuanXu)
   room.registerMoveEventHandler(988, decorateGuanXu)

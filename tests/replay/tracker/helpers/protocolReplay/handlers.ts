@@ -11,7 +11,11 @@ import {
 } from '@/tracker/runtime/protocolRules'
 import type { RawMoveCardEvent } from '@/tracker/types'
 import { parseGuiFuCardIDs } from '@/handler/skills/GuiFu'
-import { initializeDuoQiState, recordDuoQiActivation } from '@/tracker/skill/DuoQi'
+import {
+  initializeDuoQiState,
+  recordDuoQiActivation,
+  recordDuoQiRoleDataTarget
+} from '@/tracker/skill/DuoQi'
 import type { ApplyTrackerProtocolResult, TrackerProtocolReplayContext } from './types'
 
 interface ReplayMoveContext {
@@ -618,6 +622,12 @@ function applyRoleDataEx(
 ): ApplyTrackerProtocolResult {
   const dataID = requireInteger(record, 'DataID')
   const datas = optionalNumberArray(record.payload.Datas, 'Datas')
+
+  if (dataID === 8) {
+    return recordDuoQiRoleDataTarget(context.gameState, record.payload)
+      ? applied()
+      : ignored('夺炁目标通知未携带可用状态')
+  }
 
   if (dataID === 3571) {
     if (datas.length === 0) return ignored('椒遇颜色通知未携带颜色')

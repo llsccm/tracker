@@ -4,7 +4,9 @@ import type { CardID, SeatID } from '../types'
 import { getRaw, patchEvent, type MoveEventDraft } from './moveEventUtils'
 
 export const DUO_QI_STATE_SPELL_ID = 3731
+/** 狂魔 */
 export const DUO_QI_GAIN_ALL_SPELL_ID = 3730
+/** 夺炁 */
 export const DUO_QI_RANDOM_GAIN_SPELL_ID = 3731
 
 export type DuoQiSpellID = typeof DUO_QI_GAIN_ALL_SPELL_ID | typeof DUO_QI_RANDOM_GAIN_SPELL_ID
@@ -29,6 +31,15 @@ export interface DuoQiDiscardGroup {
   ledgerRegistered: boolean
 }
 
+export interface DuoQiRandomHandGroup {
+  ownerSeatID: SeatID
+  targetSeatID: SeatID
+  candidateEntities: Set<Card>
+  candidateCardIDs: Set<CardID>
+  gainedCount: number
+  sequence: number
+}
+
 export interface DuoQiAmbiguousDiscardRecycleGroup {
   candidateIdentityIDs: CardID[]
   recycledCount: number
@@ -45,6 +56,7 @@ export interface DuoQiState {
   unresolvedCardIDs: Set<CardID>
   activations: Map<DuoQiSpellID, DuoQiActivation>
   pendingDiscardGroups: DuoQiDiscardGroup[]
+  pendingRandomHandGroups: DuoQiRandomHandGroup[]
   sequence: number
 }
 
@@ -64,12 +76,14 @@ interface DuoQiUseSpellMessage {
   DestSeatIDs?: SeatID[]
 }
 
-function normalizeCardIDs(cardIDs: readonly CardID[]): CardID[] {
-  return Array.from(new Set(cardIDs.map(Number).filter((cardID) => cardID > 0)))
+interface DuoQiRoleDataTargetMessage {
+  DataID?: number | string
+  Datas?: unknown[]
+  SeatID?: SeatID
 }
 
-function isDuoQiSpellID(spellID: number): spellID is DuoQiSpellID {
-  return spellID === DUO_QI_GAIN_ALL_SPELL_ID || spellID === DUO_QI_RANDOM_GAIN_SPELL_ID
+function normalizeCardIDs(cardIDs: readonly CardID[]): CardID[] {
+  return Array.from(new Set(cardIDs.map(Number).filter((cardID) => cardID > 0)))
 }
 
 function getGame(room: Room): DuoQiGameStateLike {
@@ -147,6 +161,7 @@ export function initializeDuoQiState(
     unresolvedCardIDs: new Set(normalizedCardIDs),
     activations: new Map(),
     pendingDiscardGroups: [],
+    pendingRandomHandGroups: [],
     sequence: 0
   }
 
@@ -173,15 +188,14 @@ export function recordDuoQiActivation(
   msg: DuoQiUseSpellMessage
 ): DuoQiActivation | undefined {
   const spellID = Number(msg.SpellID)
-  if (!isDuoQiSpellID(spellID)) return undefined
+  // 3731 的目标来自 PubGsCUseSpell；3730 必须等待 GsCUpdateRoleDataExNtf(DataID=8)。
+  if (spellID !== DUO_QI_RANDOM_GAIN_SPELL_ID) return undefined
 
   const state = getDuoQiState(game)
   if (!state) return undefined
 
-  const expectedEffectIndex =
-    spellID === DUO_QI_RANDOM_GAIN_SPELL_ID ? 2 : spellID === DUO_QI_GAIN_ALL_SPELL_ID ? 1 : 0
   const effectIndex = Number(msg.EffectIndex)
-  if (effectIndex !== expectedEffectIndex) return undefined
+  if (effectIndex !== 2) return undefined
 
   const ownerSeatID = Number(msg.SkillOwerSeatID ?? msg.SeatID ?? msg.SrcSeatID)
   const targetSeatID = Number(msg.DestSeatIDs?.[0])
@@ -201,6 +215,38 @@ export function recordDuoQiActivation(
     skipInference: ownerSeatID === game.myID
   }
   state.activations.set(spellID, activation)
+  return activation
+}
+
+export function recordDuoQiRoleDataTarget(
+  game: DuoQiGameStateLike,
+  msg: DuoQiRoleDataTargetMessage
+): DuoQiActivation | undefined {
+  if (Number(msg.DataID) !== 8 || !Array.isArray(msg.Datas)) return undefined
+  const spellID = Number(msg.Datas[0])
+  if (spellID !== DUO_QI_GAIN_ALL_SPELL_ID) return undefined
+
+  const state = getDuoQiState(game)
+  if (!state) return undefined
+
+  const targetSeatID = Number(msg.SeatID)
+  const ownerSeatID = Number(msg.Datas[1])
+  if (
+    !Number.isFinite(targetSeatID) ||
+    !Number.isFinite(ownerSeatID) ||
+    targetSeatID === ownerSeatID
+  ) {
+    return undefined
+  }
+
+  const activation: DuoQiActivation = {
+    ownerSeatID,
+    targetSeatID,
+    effectIndex: 1,
+    sequence: ++state.sequence,
+    skipInference: ownerSeatID === game.myID
+  }
+  state.activations.set(DUO_QI_GAIN_ALL_SPELL_ID, activation)
   return activation
 }
 
@@ -240,6 +286,7 @@ function decorateGainAll(event: MoveEventDraft, room: Room, state: DuoQiState): 
   if (event.cardIDs?.some?.((cardID: CardID) => cardID > 0)) return event
 
   const sourceZone = Number(raw.FromZone)
+  resolveRandomHandCandidatesForGainAll(event, room, state, activation, sourceZone)
   const targetCardIDs = getInitialCardIDsForSeat(state, activation.targetSeatID)
   const targetCards = new Set<Card>(getInitialEntitiesForSeat(state, activation.targetSeatID))
   targetCardIDs
@@ -265,6 +312,140 @@ function decorateGainAll(event: MoveEventDraft, room: Room, state: DuoQiState): 
       pileIdentityCardIDs: sourceCards.filter((card) => card.id > 0).map((card) => card.id)
     }
   })
+}
+
+function resolveRandomHandCandidatesForGainAll(
+  event: MoveEventDraft,
+  room: Room,
+  state: DuoQiState,
+  activation: DuoQiActivation,
+  sourceZone: number
+): void {
+  const cardCount = Math.max(0, Number(event.cardCount ?? getRaw(event).CardCount) || 0)
+  if (cardCount <= 0) return
+
+  const definiteSourceCards = collectGainAllSourceCards(
+    room,
+    state,
+    activation.targetSeatID,
+    activation.ownerSeatID,
+    sourceZone
+  )
+  const groups = state.pendingRandomHandGroups.filter(
+    (group) =>
+      group.ownerSeatID === activation.ownerSeatID &&
+      group.targetSeatID === activation.targetSeatID &&
+      group.gainedCount > 0
+  )
+  if (groups.length !== 1) return
+
+  const [group] = groups
+  const candidateCards = Array.from(group.candidateCardIDs)
+    .map((cardID) => room.cardIndex.get(cardID))
+    .filter((card): card is Card => Boolean(card))
+    .filter((card) => isCardInGainAllSource(card, activation.targetSeatID, sourceZone))
+  const alreadyTargetCards = candidateCards.filter(
+    (card) => state.initialSeatByEntity.get(card) === activation.targetSeatID
+  )
+  const unresolvedCandidateCards = candidateCards
+    .filter((card) => !alreadyTargetCards.includes(card))
+    .filter((card) => !definiteSourceCards.includes(card))
+  const missingCount = cardCount - definiteSourceCards.length
+  if (missingCount < 0 || unresolvedCandidateCards.length !== missingCount) return
+
+  const confirmedCards = [...alreadyTargetCards, ...unresolvedCandidateCards]
+  if (confirmedCards.length === 0 || confirmedCards.length > group.gainedCount) return
+
+  const reassignments = planInitialEntitySeatReassignments(
+    state,
+    group,
+    unresolvedCandidateCards,
+    activation.targetSeatID
+  )
+  if (!reassignments) return
+
+  applyInitialEntitySeatReassignments(state, reassignments, activation.targetSeatID)
+  confirmedCards.forEach((card) => {
+    bindInitialCardID(state, card.id, activation.targetSeatID)
+    group.candidateCardIDs.delete(card.id)
+  })
+  group.gainedCount -= confirmedCards.length
+  if (group.gainedCount <= 0) {
+    state.pendingRandomHandGroups = state.pendingRandomHandGroups.filter(
+      (candidate) => candidate !== group
+    )
+  }
+}
+
+interface InitialEntitySeatReassignment {
+  card: Card
+  replacement: Card
+  previousSeatID: SeatID | undefined
+}
+
+function planInitialEntitySeatReassignments(
+  state: DuoQiState,
+  group: DuoQiRandomHandGroup,
+  cards: readonly Card[],
+  targetSeatID: SeatID
+): InitialEntitySeatReassignment[] | null {
+  const replacements = Array.from(group.candidateEntities).filter(
+    (candidate) =>
+      candidate.id <= 0 &&
+      !cards.includes(candidate) &&
+      state.initialSeatByEntity.get(candidate) === targetSeatID
+  )
+  const reassignments: InitialEntitySeatReassignment[] = []
+
+  for (const card of cards) {
+    const previousSeatID = state.initialSeatByEntity.get(card)
+    if (previousSeatID === targetSeatID) continue
+
+    const replacement = replacements.shift()
+    if (!replacement) return null
+    reassignments.push({ card, replacement, previousSeatID })
+  }
+
+  return reassignments
+}
+
+function applyInitialEntitySeatReassignments(
+  state: DuoQiState,
+  reassignments: readonly InitialEntitySeatReassignment[],
+  targetSeatID: SeatID
+): void {
+  reassignments.forEach(({ card, replacement, previousSeatID }) => {
+    if (previousSeatID === undefined) state.initialSeatByEntity.delete(replacement)
+    else state.initialSeatByEntity.set(replacement, previousSeatID)
+    state.initialSeatByEntity.set(card, targetSeatID)
+  })
+}
+
+function collectGainAllSourceCards(
+  room: Room,
+  state: DuoQiState,
+  targetSeatID: SeatID,
+  ownerSeatID: SeatID,
+  sourceZone: number
+): Card[] {
+  const targetCards = new Set<Card>(getInitialEntitiesForSeat(state, targetSeatID))
+  getInitialCardIDsForSeat(state, targetSeatID)
+    .map((cardID) => room.cardIndex.get(cardID))
+    .filter((card): card is Card => Boolean(card))
+    .forEach((card) => targetCards.add(card))
+
+  return Array.from(targetCards)
+    .filter((card) => !isCardInOwnerHand(card, ownerSeatID))
+    .filter((card) => isCardInGainAllSource(card, targetSeatID, sourceZone))
+}
+
+function isCardInGainAllSource(card: Card, targetSeatID: SeatID, sourceZone: number): boolean {
+  if (sourceZone === 2) return card.location === 'discard'
+  return (
+    card.location === 'player' &&
+    card.subZone === 'hand' &&
+    card.seats.has(targetSeatID)
+  )
 }
 
 function createDiscardGroup(
@@ -350,8 +531,90 @@ export function decorateDuoQiMove(event: MoveEventDraft, room: Room): MoveEventD
 
   const spellID = Number(getRaw(event).SpellID ?? event.options?.spellID)
   if (spellID === DUO_QI_GAIN_ALL_SPELL_ID) return decorateGainAll(event, room, state)
-  if (spellID === DUO_QI_RANDOM_GAIN_SPELL_ID) return decorateRandomDiscardGain(event, room, state)
+  if (spellID === DUO_QI_RANDOM_GAIN_SPELL_ID) {
+    return decorateRandomHandGain(decorateRandomDiscardGain(event, room, state), room, state)
+  }
   return event
+}
+
+function decorateRandomHandGain(
+  event: MoveEventDraft,
+  room: Room,
+  state: DuoQiState
+): MoveEventDraft {
+  const raw = getRaw(event)
+  const activation = state.activations.get(DUO_QI_RANDOM_GAIN_SPELL_ID)
+  if (!activation || activation.skipInference || !activationMatchesMove(activation, raw)) {
+    return event
+  }
+  if (
+    Number(raw.FromZone) !== 5 ||
+    event.cardIDs?.some?.((cardID: CardID) => cardID > 0) ||
+    event.options?.sourceCards?.length
+  ) {
+    return event
+  }
+
+  const count = Math.max(0, Number(event.cardCount ?? raw.CardCount) || 0)
+  const candidateEntities = new Set(
+    getInitialEntitiesForSeat(state, activation.targetSeatID).filter(
+      (card) =>
+        card.location === 'player' &&
+        card.subZone === 'hand' &&
+        card.seats.has(activation.targetSeatID)
+    )
+  )
+  if (count <= 0 || candidateEntities.size < count) return event
+
+  const group: DuoQiRandomHandGroup = {
+    ownerSeatID: activation.ownerSeatID,
+    targetSeatID: activation.targetSeatID,
+    candidateEntities,
+    candidateCardIDs: new Set(),
+    gainedCount: count,
+    sequence: activation.sequence
+  }
+  state.pendingRandomHandGroups.push(group)
+  return patchEvent(event, {
+    options: {
+      forceRandomHandTransferCandidates: true,
+      duoQiRandomHandGroupSequence: group.sequence
+    }
+  })
+}
+
+export function decorateDuoQiKnownMove(event: MoveEventDraft, room: Room): MoveEventDraft {
+  const state = getDuoQiState(getGame(room))
+  if (!state || state.pendingRandomHandGroups.length === 0) return event
+
+  const raw = getRaw(event)
+  const fromSeatID = Number(raw.FromID)
+  if (
+    Number(raw.FromZone) !== 5 ||
+    !event.cardIDs?.some?.((cardID: CardID) => cardID > 0)
+  ) {
+    return event
+  }
+
+  const group = state.pendingRandomHandGroups
+    .slice()
+    .reverse()
+    .find((candidate) => candidate.ownerSeatID === fromSeatID && candidate.gainedCount > 0)
+  if (!group) return event
+
+  const knownIDs = event.cardIDs.filter((cardID: CardID) => cardID > 0)
+  const candidateIDs = knownIDs.filter(
+    (cardID: CardID) =>
+      state.allCardIDs.has(cardID) && !state.initialSeatByCardID.has(cardID)
+  )
+  if (candidateIDs.length === 0) return event
+
+  return patchEvent(event, {
+    options: {
+      duoQiRandomHandCandidateIDs: candidateIDs,
+      duoQiRandomHandGroupSequence: group.sequence
+    }
+  })
 }
 
 export function decorateDuoQiEntitySafety(event: MoveEventDraft, room: Room): MoveEventDraft {
@@ -365,6 +628,9 @@ export function decorateDuoQiEntitySafety(event: MoveEventDraft, room: Room): Mo
     Number(raw.FromZone) === 5 && !event.cardIDs?.some?.((cardID: CardID) => cardID > 0)
 
   if (!isUnknownHandSelection || spellID === DUO_QI_GAIN_ALL_SPELL_ID) return event
+
+  // 3731 由技能私有局部候选组保留初始归属；此处不能清掉整组实体标签。
+  if (spellID === DUO_QI_RANDOM_GAIN_SPELL_ID) return event
 
   const selectionCount = Math.max(0, Number(event.cardCount ?? raw.CardCount) || 0)
   const sourcePlayer = room.getPlayer(fromSeatID)
@@ -388,6 +654,10 @@ function findInitialSeatByCard(state: DuoQiState, room: Room, cardID: CardID): S
 
   const card = room.cardIndex.get(cardID)
   if (!card) return undefined
+
+  if (state.pendingRandomHandGroups.some((group) => group.candidateCardIDs.has(cardID))) {
+    return undefined
+  }
 
   const entitySeatID = state.initialSeatByEntity.get(card)
   if (entitySeatID !== undefined) return entitySeatID
@@ -450,6 +720,8 @@ export function collectDuoQiAmbiguousDiscardRecycleGroups(
 
 export function commitDuoQiMove(room: Room, event: MoveEventDraft): void {
   const state = getDuoQiState(getGame(room))
+  commitRandomHandCandidates(state, event)
+  finishRandomHandGroupsAfterGainAll(state, event)
   const groupID = String(event.options?.duoQiDiscardGroupID ?? '')
   if (!state || !groupID) return
 
@@ -465,6 +737,41 @@ export function commitDuoQiMove(room: Room, event: MoveEventDraft): void {
     )
     throw error
   }
+}
+
+function finishRandomHandGroupsAfterGainAll(
+  state: DuoQiState | undefined,
+  event: MoveEventDraft
+): void {
+  if (!state || state.pendingRandomHandGroups.length === 0) return
+
+  const raw = getRaw(event)
+  const spellID = Number(raw.SpellID ?? event.options?.spellID)
+  if (spellID !== DUO_QI_GAIN_ALL_SPELL_ID || Number(raw.FromZone) !== 5) return
+
+  const activation = state.activations.get(DUO_QI_GAIN_ALL_SPELL_ID)
+  if (!activation || !activationMatchesMove(activation, raw)) return
+
+  // 3730 的玩家手牌分片表示目标手中剩余初始牌已全部收齐；此前同目标的 3731
+  // 随机获得事实已被覆盖，继续保留只会把后续发动者明牌误记到过期目标。
+  state.pendingRandomHandGroups = state.pendingRandomHandGroups.filter(
+    (group) =>
+      group.ownerSeatID !== activation.ownerSeatID || group.targetSeatID !== activation.targetSeatID
+  )
+}
+
+function commitRandomHandCandidates(state: DuoQiState | undefined, event: MoveEventDraft): void {
+  if (!state || state.pendingRandomHandGroups.length === 0) return
+
+  const sequence = Number(event.options?.duoQiRandomHandGroupSequence)
+  const group = state.pendingRandomHandGroups.find((candidate) => candidate.sequence === sequence)
+  if (!group) return
+
+  normalizeCardIDs(event.options?.duoQiRandomHandCandidateIDs ?? []).forEach((cardID) => {
+    if (state.allCardIDs.has(cardID) && !state.initialSeatByCardID.has(cardID)) {
+      group.candidateCardIDs.add(cardID)
+    }
+  })
 }
 
 export function finalizeDuoQiDiscardRecycle(room: Room): void {

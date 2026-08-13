@@ -61,7 +61,7 @@ const ROLE_OPT_TARGET_SPELL_IDS = new Set([
   4025
 ])
 
-const TRACKER_ROLE_DATA_EX_IDS = new Set([3544, 3571, GUI_FU_ROLE_DATA_ID])
+const TRACKER_ROLE_DATA_EX_IDS = new Set([8, 3544, 3571, GUI_FU_ROLE_DATA_ID])
 const TRACKER_USE_SPELL_IDS = new Set([
   3090,
   3138,
@@ -70,7 +70,6 @@ const TRACKER_USE_SPELL_IDS = new Set([
   3185,
   3193,
   3511,
-  3730,
   3731,
   3750
 ])
@@ -238,12 +237,6 @@ function shouldRecordUseSpell(
       return (
         readNumberField(message, 'EffectIndex') === 2 &&
         readArrayField(message, 'DestSeatIDs').length === 0
-      )
-
-    case 3730:
-      return (
-        readNumberField(message, 'EffectIndex') === 1 &&
-        readArrayField(message, 'DestSeatIDs').length > 0
       )
 
     case 3731:
