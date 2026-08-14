@@ -4,6 +4,7 @@ import decorateGuanXu, { isGuanXuSpellID } from '../skill/GuanXu'
 import decorateHandExchange from '../skill/HandExchange'
 import decorateSiQi from '../skill/SiQi'
 import decorateTianHou from '../skill/TianHou'
+import decorateZuoLian from '../skill/ZuoLian'
 import {
   getRaw,
   getCount,
@@ -132,13 +133,8 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
     11104,
     createFilteredPublicMoveHandler(11104, 'qisi_candidate', (card) => card.type === 3)
   )
-  // 蔡瑁【佐练】：优先筛选属性杀候选。
-  // room.registerMoveEventHandler(
-  //   3488,
-  //   createFilteredPublicMoveHandler(3488, 'zuolian_candidate', (card) =>
-  //     ['雷杀', '火杀', '冰杀'].includes(card.name)
-  //   )
-  // )
+  // 蔡瑁【佐练】：仅在弃牌堆随机取牌时，优先最后入堆的火杀，其次雷杀。
+  room.registerMoveEventHandler(3488, decorateZuoLian)
   // 樊稠【兴乱】：优先筛选点数为 6 的候选。
   room.registerMoveEventHandler(
     862,
