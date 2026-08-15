@@ -35,6 +35,7 @@ describe('GsCRoleOptTargetNtf', () => {
     revealTrackerCards.mockClear()
     vi.mocked(tracker.getReadyTrackerRoom).mockReset()
     Game.bindRoom(null)
+    Game.deleteSpellState(361)
     Game.deleteSpellState(441)
     Game.deleteSpellState(3492)
     Game.deleteSpellState(7009)
@@ -64,6 +65,26 @@ describe('GsCRoleOptTargetNtf', () => {
       { type: 'player', seatID: 2, fullHand: true },
       [137, 42, 46, 94, 118, 47, 96, 59]
     )
+  })
+
+  it('下书目标通知直接记录目标座位和展示牌', () => {
+    handleRoleOptTargetNtf({
+      Param: 0,
+      Params: [108, 131, 49, 54, 78],
+      SeatID: 1,
+      SpellID: 361,
+      SrcSeatID: 1,
+      targetSeatID: 4,
+      Timeout: 30,
+      Type: 29,
+      className: 'GsCRoleOptTargetNtf'
+    })
+
+    expect(revealTrackerCards).not.toHaveBeenCalled()
+    expect(Game.getSpellState(361)).toEqual({
+      shownCardIDs: [108, 131, 49, 54, 78],
+      targetSeatID: 4
+    })
   })
 
   it('裴秀开始选择技能时销毁地图并清除地图状态', () => {

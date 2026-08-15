@@ -2,6 +2,7 @@ import { Game } from '@/tracker'
 import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
 import { tracker } from '@/tracker/runtime/browser'
 import { initializeDuoQiState } from '@/tracker/skill/DuoQi'
+import { handleXiaShuChoice } from './skills/XiaShu'
 
 const PROTOCOL_PILE_ZONE = 1
 const PROTOCOL_HAND_ZONE = 5
@@ -79,6 +80,11 @@ export function handleRoleSpellOptRep(msg = {}) {
     case 3571:
       // 这里只有一张牌的消息 有一点点意义
       // if (Type === 10) Game.getSpellState(SpellID)?.add?.(Datas[0])
+      break
+
+    // 下书：Datas[0] 为 1 取展示牌，为 2 取暗牌。
+    case 361:
+      handleXiaShuChoice(msg, Game)
       break
 
     // 裴秀地图结果暂由地图消息链消费。

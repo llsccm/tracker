@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
 
-const { revealTrackerCardsInZone, setTrackerFirstHand } = vi.hoisted(() => ({
+const { revealTrackerCards, revealTrackerCardsInZone, setTrackerFirstHand } = vi.hoisted(() => ({
+  revealTrackerCards: vi.fn(),
   revealTrackerCardsInZone: vi.fn(),
   setTrackerFirstHand: vi.fn()
 }))
 
 vi.mock('../../src/tracker/runtime/browser', () => ({
   tracker: {
+    revealTrackerCards,
     revealTrackerCardsInZone,
     setTrackerFirstHand
   }
@@ -20,8 +22,10 @@ import type { DuoQiState } from '@/tracker/skill/DuoQi'
 
 describe('CGsRoleSpellOptRep', () => {
   beforeEach(() => {
+    revealTrackerCards.mockClear()
     revealTrackerCardsInZone.mockClear()
     setTrackerFirstHand.mockClear()
+    Game.deleteSpellState(361)
     Game.deleteSpellState(3731)
     Game.isGameStart = false
     Game.round = 0
@@ -108,6 +112,28 @@ describe('CGsRoleSpellOptRep', () => {
     })
 
     expect(revealTrackerCardsInZone).not.toHaveBeenCalled()
+  })
+
+  it('下书选择回复先于移动，只记录选项等待实际转移', () => {
+    Game.setSpellState(361, {
+      shownCardIDs: [108, 131, 49, 54, 78],
+      targetSeatID: 4
+    })
+
+    handleRoleSpellOptRep({
+      Datas: [2, 1],
+      SeatID: 1,
+      SpellID: 361,
+      Type: 22,
+      data_count: 2
+    })
+
+    expect(Game.getSpellState(361)).toMatchObject({
+      actorSeatID: 1,
+      choice: 2,
+      targetSeatID: 4
+    })
+    expect(revealTrackerCards).not.toHaveBeenCalled()
   })
 
   it('嚣翻按协议底部方向同步逆序后的 Datas', () => {

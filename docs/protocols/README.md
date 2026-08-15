@@ -19,6 +19,7 @@
 
 | 文档                                                         |       SpellID | 场景                                             | 关键识别                                                                           |
 | ------------------------------------------------------------ | ------------: | ------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| [`GsCRoleOptTargetNtf-361.md`](GsCRoleOptTargetNtf-361.md)   |         `361` | 下书：展示目标部分手牌后选择取明牌或暗牌        | `targetSeatID` 直接给出目标；暗牌分支在通用转移后确认展示牌留在原座位              |
 | [`GsCRoleOptTargetNtf-987.md`](GsCRoleOptTargetNtf-987.md)   | `987` / `988` | 观虚：观看并交换牌堆顶 + 目标手牌                | 按 `FromID/ToID` 维护 exchange 逻辑桶；桶内复用通用 `ToPosition` 位置语义           |
 | [`GsCRoleOptTargetNtf-3483.md`](GsCRoleOptTargetNtf-3483.md) |        `3483` | 诫厉：观看牌堆顶 + 目标部分手牌，后续交换拆回    | 观看同观虚布局；交换 `1->10` + 部分 `5->10` 再 `10->1` / `10->5`；数组顺序可能逆序 |
 | [`GsCRoleOptTargetNtf-3876.md`](GsCRoleOptTargetNtf-3876.md) |        `3876` | 界强识：目标全部手牌明牌                         | `Params` 全是手牌 ID，`fullHand`                                                   |

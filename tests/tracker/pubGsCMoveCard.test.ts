@@ -171,4 +171,60 @@ describe('PubGsCMoveCard', () => {
       ToPosition: POSITION_RANDOM
     })
   })
+
+  it('移动后副作用在 tracker 同步完成后执行', () => {
+    const order: string[] = []
+    applySpellEffect.mockImplementationOnce(
+      (context: { afterMove(callback: () => void): void }) => {
+        context.afterMove(() => order.push('afterMove'))
+      }
+    )
+    syncTrackerMove.mockImplementationOnce(() => order.push('syncTrackerMove'))
+
+    handleMoveCard({
+      CardCount: 1,
+      CardIDs: [0],
+      FromID: 7,
+      FromPosition: POSITION_TOP,
+      FromZone: 5,
+      FromZoneParam: 0,
+      MoveType: 5,
+      SpellID: 361,
+      ToID: 3,
+      ToPosition: POSITION_TOP,
+      ToZone: 5,
+      ToZoneParam: 0
+    })
+
+    expect(order).toEqual(['syncTrackerMove', 'afterMove'])
+  })
+
+  it('为技能处理器提供规范化的下书移动位置', () => {
+    let effectContext: Record<string, unknown> | undefined
+    applySpellEffect.mockImplementationOnce((context: Record<string, unknown>) => {
+      effectContext = context
+    })
+
+    handleMoveCard({
+      CardCount: 1,
+      CardIDs: [0],
+      FromID: 7,
+      FromPosition: POSITION_TOP,
+      FromZone: 5,
+      FromZoneParam: 0,
+      MoveType: 5,
+      SpellID: 361,
+      ToID: 3,
+      ToPosition: POSITION_TOP,
+      ToZone: 5,
+      ToZoneParam: 0
+    })
+
+    expect(effectContext).toMatchObject({
+      fromSeatID: 7,
+      toSeatID: 3,
+      fromSubZone: 'hand',
+      toSubZone: 'hand'
+    })
+  })
 })

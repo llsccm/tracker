@@ -1,6 +1,7 @@
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import type { GameState } from '@/tracker/Game'
 import type { Room } from '@/tracker/Room'
+import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 import {
   FULL_HAND_ROLE_OPT_SPELL_IDS,
@@ -11,6 +12,10 @@ import {
 } from '@/tracker/runtime/protocolRules'
 import type { RawMoveCardEvent } from '@/tracker/types'
 import { parseGuiFuCardIDs } from '@/handler/skills/GuiFu'
+import handleXiaShuMove, {
+  handleXiaShuChoice,
+  handleXiaShuTargetNotice
+} from '@/handler/skills/XiaShu'
 import {
   initializeDuoQiState,
   recordDuoQiActivation,
@@ -31,6 +36,11 @@ interface ReplayMoveContext {
   MoveType: number
   SpellID: number
   SrcSeatID?: number
+  fromSeatID?: number
+  toSeatID?: number
+  fromSubZone?: string
+  toSubZone?: string
+  fromSpellID?: number | null
 }
 
 export function applyTrackerReplayProtocol(
@@ -454,6 +464,10 @@ function applyRoleSpellOpt(
       }
       break
 
+    case 361:
+      didApply = handleXiaShuChoice(record.payload, context.gameState)
+      break
+
     default:
       break
   }
@@ -489,6 +503,11 @@ function applyRoleOptTarget(
   }
 
   switch (spellID) {
+    case 361:
+      return handleXiaShuTargetNotice(record.payload, context.gameState)
+        ? applied()
+        : ignored('下书目标通知未携带有效目标或展示牌')
+
     case 943:
       if (param !== 0 || params.length !== 1) return ignored('图南未携带单张牌堆顶')
       revealPileCards(context, record, params)
@@ -713,6 +732,7 @@ function applyMoveCard(
   requireReadyRoom(context, record, '同步移动协议')
   const move = readMove(record)
   const notes: string[] = []
+  const afterMoveCallbacks: (() => void)[] = []
   const prepared = prepareTrackerMoveCardIDs({
     CardIDs: move.CardIDs,
     CardCount: move.CardCount,
@@ -734,6 +754,12 @@ function applyMoveCard(
     CardIDs: prepared.CardIDs,
     isGuoZhan: context.gameState.isGuoZhan
   })
+  const normalizedEvent = normalizeMoveEvent({
+    ...move,
+    CardIDs: normalized.CardIDs,
+    FromPosition: normalized.FromPosition,
+    ToPosition: normalized.ToPosition
+  })
   const moveContext: ReplayMoveContext = {
     game: context.gameState,
     CardIDs: normalized.CardIDs,
@@ -746,7 +772,19 @@ function applyMoveCard(
     ToPosition: normalized.ToPosition,
     MoveType: move.MoveType,
     SpellID: move.SpellID,
-    SrcSeatID: readNumber(record.payload.SrcSeatID)
+    SrcSeatID: readNumber(record.payload.SrcSeatID),
+    fromSeatID:
+      normalizedEvent.options.fromSeatID == null
+        ? undefined
+        : Number(normalizedEvent.options.fromSeatID),
+    toSeatID:
+      normalizedEvent.options.seatID == null ? undefined : Number(normalizedEvent.options.seatID),
+    fromSubZone: normalizedEvent.options.fromSubZone ?? undefined,
+    toSubZone: normalizedEvent.options.subZone ?? undefined,
+    fromSpellID:
+      normalizedEvent.options.fromSpellID == null
+        ? null
+        : Number(normalizedEvent.options.fromSpellID)
   }
 
   const specialZoneHandled = applySpecialZoneState(moveContext)
@@ -754,6 +792,17 @@ function applyMoveCard(
     applyGameFlowState(context, record, moveContext)
     const spellNote = applyMoveSpellState(moveContext)
     if (spellNote) notes.push(spellNote)
+
+    if (moveContext.SpellID === 361) {
+      // 与生产 PubGsCMoveCard 一致：移动前注册下书副作用，tracker 同步完成后再结算。
+      handleXiaShuMove({
+        ...moveContext,
+        tracker: context.controller,
+        afterMove(callback: () => void) {
+          afterMoveCallbacks.push(callback)
+        }
+      })
+    }
   }
 
   if (matchesCardConfigDependentEquipmentMove(moveContext)) {
@@ -765,6 +814,8 @@ function applyMoveCard(
     FromPosition: moveContext.FromPosition,
     ToPosition: moveContext.ToPosition
   })
+  // 下书需要先看到通用随机转移建立的数量约束，不能在 syncTrackerMove 之前执行。
+  afterMoveCallbacks.splice(0).forEach((callback) => callback())
 
   return notes.length > 0 ? partial(notes.join('；')) : applied()
 }

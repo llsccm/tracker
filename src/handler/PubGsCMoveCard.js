@@ -1,7 +1,7 @@
 import { CardConfig } from '../config'
-// import { laya } from '../runtime/gameAdapter'
 import { Game } from '../tracker'
 import { tracker } from '../tracker/runtime/browser'
+import { normalizeMoveEvent } from '../tracker/MoveEventNormalizer'
 import { POSITION_TOP } from '../tracker/candidate/cardPositions'
 import {
   normalizeTrackerMovePosition,
@@ -25,6 +25,7 @@ function syncMoveToTracker(msg, { CardIDs, FromPosition, ToPosition }) {
 export function handleMoveCard(msg) {
   let { CardIDs, FromPosition, ToPosition } = msg
   const { CardCount, FromID, FromZone, ToID, ToZone, MoveType, SpellID, SrcSeatID } = msg
+  const afterMoveCallbacks = []
 
   // 1. 预处理与过滤
   const preparedMove = prepareTrackerMoveCardIDs({
@@ -75,9 +76,17 @@ export function handleMoveCard(msg) {
   FromPosition = normalizedMove.FromPosition
   ToPosition = normalizedMove.ToPosition
 
+  const normalizedEvent = normalizeMoveEvent({
+    ...msg,
+    CardIDs,
+    FromPosition,
+    ToPosition
+  })
+
   const context = {
     msg,
     game: Game,
+    tracker,
     CardIDs,
     CardCount,
     FromID,
@@ -89,12 +98,22 @@ export function handleMoveCard(msg) {
     MoveType,
     SpellID,
     SrcSeatID,
+    fromSeatID: normalizedEvent.options.fromSeatID,
+    toSeatID: normalizedEvent.options.seatID,
+    fromSubZone: normalizedEvent.options.fromSubZone,
+    toSubZone: normalizedEvent.options.subZone,
+    fromSpellID: normalizedEvent.options.fromSpellID,
+    afterMove(callback) {
+      if (typeof callback === 'function') afterMoveCallbacks.push(callback)
+    },
     finishMove() {
       syncMoveToTracker(msg, {
         CardIDs: context.CardIDs,
         FromPosition: context.FromPosition,
         ToPosition: context.ToPosition
       })
+
+      afterMoveCallbacks.splice(0).forEach((callback) => callback())
     }
   }
 

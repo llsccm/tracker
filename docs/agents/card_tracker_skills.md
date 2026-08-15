@@ -8,11 +8,28 @@
 
 | 场景 | 协议或识别条件 | 主要实现 / 回归入口 |
 | --- | --- | --- |
+| 下书明暗选择 | `SpellID=361` | `src/handler/skills/XiaShu.js`、`tests/tracker/xiaShu.test.ts` |
 | 暗置标记区候选 | `FromZone=5`、`ToZone=4/8`、全暗 `CardIDs` | `RoomMovement.handleHiddenMarkMove()`、`hiddenMarkCandidates` |
 | 观虚目标视角交换 | `SpellID=987/988` | `src/tracker/skill/GuanXu.ts`、`tests/tracker/guanXuExchange.test.ts` |
 | 整手牌交换 | `MoveType=11` + `5<->10` + 整手张数 | `src/tracker/skill/HandExchange.ts` |
 | 诫厉观看与暂存 | `SpellID=3483` | `handleRoleOptTargetNtf`、`tests/tracker/roleOptTargetNtf.test.ts` |
 | 天候私有观看与展示 | `SpellID=3903` | `src/tracker/skill/TianHou.ts`、`tests/tracker/tianHouExchange.test.ts` |
+
+## 下书明暗选择（SpellID=361）
+
+- `GsCRoleOptTargetNtf` 同时给出 `Params` 展示牌和 `targetSeatID`；技能层直接记录二者，不通过
+  `SeatID` / `SrcSeatID`、配对移动或卡牌当前 owner/候选反推目标。该通知只保存技能状态；配对的
+  手牌同区 `PubGsCMoveCard` 继续由通用移动框架同步明牌。
+- `CGsRoleSpellOptRep Type=22` 的 `Datas[0]=1` 表示取展示牌，后续已知牌移动沿用通用框架；
+  `Datas[0]=2` 表示取暗牌。
+- 暗牌分支先让通用随机转移建立“目标剩余 / 发动者获得”的数量约束并同步手牌数，再以
+  `handMoveCount=0` 把展示牌确认回原目标手牌。展示牌填满目标剩余槽位后，其它牌的目标手牌分支
+  会由通用约束删除：确定暗牌落定到发动者，候选槽获得发动者分支并保留其它原有分支。
+- 下书不快照或重建既有 `ConstraintGroup`。通用转移负责失效旧的来源/目标手牌名额并创建本次转移
+  约束，随后由展示牌确认触发统一收敛。
+- 实测 `CGsRoleSpellOptRep` 选择回复固定早于后续取牌 `PubGsCMoveCard`。选择处理器只记录
+  `choice/actorSeatID`；移动完成回调是唯一结算点，负责确认展示牌并清理技能状态。
+- 协议样例：`docs/protocols/GsCRoleOptTargetNtf-361.md`。
 
 ## 暗置标记区候选流程
 
