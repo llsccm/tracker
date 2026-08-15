@@ -62,17 +62,7 @@ const ROLE_OPT_TARGET_SPELL_IDS = new Set([
 ])
 
 const TRACKER_ROLE_DATA_EX_IDS = new Set([8, 3544, 3571, GUI_FU_ROLE_DATA_ID])
-const TRACKER_USE_SPELL_IDS = new Set([
-  3090,
-  3138,
-  3157,
-  3161,
-  3185,
-  3193,
-  3511,
-  3731,
-  3750
-])
+const TRACKER_USE_SPELL_IDS = new Set([3090, 3138, 3157, 3161, 3185, 3193, 3511, 3731, 3750])
 
 const CONDITIONAL_RECORDING_RULES: Record<string, ProtocolPredicate> = {
   MsgNtfUseCardType: shouldRecordCounterUseCard,
@@ -259,7 +249,10 @@ function shouldRecordMoveCard(message: ProtocolObject): boolean {
   )
 }
 
-function shouldRecordRoleSpellOpt(message: ProtocolObject): boolean {
+function shouldRecordRoleSpellOpt(
+  message: ProtocolObject,
+  context: TrackerProtocolRecordingContext = {}
+): boolean {
   const datas = readArrayField(message, 'Datas')
   if (datas.length === 0) return false
 
@@ -277,6 +270,11 @@ function shouldRecordRoleSpellOpt(message: ProtocolObject): boolean {
       return type === 50
     case 7009:
       return type === 30
+    case 3483:
+      return (
+        type === 53 &&
+        (context.mySeatID === undefined || Number(datas[1]) === Number(context.mySeatID))
+      )
     default:
       return false
   }

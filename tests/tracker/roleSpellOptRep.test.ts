@@ -1,7 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
 
-const { revealTrackerCards, revealTrackerCardsInZone, setTrackerFirstHand } = vi.hoisted(() => ({
+const {
+  getReadyTrackerRoom,
+  parseJieLiSelectionData,
+  recordJieLiSelection,
+  revealTrackerCards,
+  revealTrackerCardsInZone,
+  setTrackerFirstHand
+} = vi.hoisted(() => ({
+  getReadyTrackerRoom: vi.fn(),
+  parseJieLiSelectionData: vi.fn(),
+  recordJieLiSelection: vi.fn(),
   revealTrackerCards: vi.fn(),
   revealTrackerCardsInZone: vi.fn(),
   setTrackerFirstHand: vi.fn()
@@ -9,10 +19,16 @@ const { revealTrackerCards, revealTrackerCardsInZone, setTrackerFirstHand } = vi
 
 vi.mock('../../src/tracker/runtime/browser', () => ({
   tracker: {
+    getReadyTrackerRoom,
     revealTrackerCards,
     revealTrackerCardsInZone,
     setTrackerFirstHand
   }
+}))
+
+vi.mock('../../src/tracker/skill/JieLi', () => ({
+  parseJieLiSelectionData,
+  recordJieLiSelection
 }))
 
 import { handleRoleSpellOptRep } from '@/handler/CGsRoleSpellOptRep'
@@ -22,6 +38,9 @@ import type { DuoQiState } from '@/tracker/skill/DuoQi'
 
 describe('CGsRoleSpellOptRep', () => {
   beforeEach(() => {
+    getReadyTrackerRoom.mockReset()
+    parseJieLiSelectionData.mockReset()
+    recordJieLiSelection.mockReset()
     revealTrackerCards.mockClear()
     revealTrackerCardsInZone.mockClear()
     setTrackerFirstHand.mockClear()
@@ -30,6 +49,50 @@ describe('CGsRoleSpellOptRep', () => {
     Game.isGameStart = false
     Game.round = 0
     Game.phase = 0
+  })
+
+  it('诫厉 Type 53 只在当前视角为目标座位时记录交换选择', () => {
+    const datas = [7, 6, 1, 48, 1, 110]
+    const selection = {
+      actorSeat: 7,
+      targetSeat: 6,
+      handCardIDs: [48],
+      pileCardIDs: [110]
+    }
+    const room = { mySeatID: 6 }
+    getReadyTrackerRoom.mockReturnValue(room)
+    parseJieLiSelectionData.mockReturnValue(selection)
+
+    handleRoleSpellOptRep({
+      Datas: datas,
+      SeatID: 7,
+      SpellID: 3483,
+      Type: 53
+    })
+
+    expect(parseJieLiSelectionData).toHaveBeenCalledWith(datas)
+    expect(recordJieLiSelection).toHaveBeenCalledWith(room, selection)
+  })
+
+  it.each([7, 5])('诫厉 Type 53 在座位 %s 视角不处理目标座位 6 的选择', (mySeatID) => {
+    const selection = {
+      actorSeat: 7,
+      targetSeat: 6,
+      handCardIDs: [48],
+      pileCardIDs: [110]
+    }
+    getReadyTrackerRoom.mockReturnValue({ mySeatID })
+    parseJieLiSelectionData.mockReturnValue(selection)
+
+    handleRoleSpellOptRep({
+      Datas: [7, 6, 1, 48, 1, 110],
+      SeatID: 7,
+      SpellID: 3483,
+      Type: 53
+    })
+
+    expect(parseJieLiSelectionData).not.toHaveBeenCalled()
+    expect(recordJieLiSelection).not.toHaveBeenCalled()
   })
 
   it('Type 44 叫分回包不设置先手', () => {
