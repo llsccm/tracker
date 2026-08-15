@@ -536,7 +536,7 @@ export class PileIdentityLedger {
     }
 
     this.rotateFromDiscardInternal(recycledIdentityIDs)
-    // Room 会随机打乱本次全部回收牌，已知弃牌和夺炁模糊组没有可证明的牌底相对顺序；
+    // Room 会随机打乱本次全部回收牌，已知弃牌和模糊回收组没有可证明的牌底相对顺序；
     // 因此合并为同一 generation 的无序总基数，底摸只能消费这个聚合 cohort。
     let recycledCohort =
       this.cohorts[0]?.generation === this.generation ? this.cohorts[0] : undefined
