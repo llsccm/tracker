@@ -69,6 +69,86 @@ describe('tracker protocol replay', () => {
     ).toEqual([1])
   })
 
+  it.each([
+    ['发动者', 101, 1],
+    ['目标角色', 202, 2]
+  ] as const)('主视角为%s时完整重放下书暗牌选择', (_view, currentUserID, mySeatID) => {
+    const shownCardIDs = [1, 2, 3, 4, 5]
+    const records: RecordedTrackerProtocol[] = openingRecords(
+      Array.from({ length: 12 }, (_, index) => index + 1)
+    ).concat([
+      {
+        seq: 5,
+        className: 'PubGsCMoveCard',
+        payload: movePayload({ CardIDs: Array(10).fill(0), CardCount: 10, ToID: 2 })
+      },
+      {
+        seq: 6,
+        className: 'GsCRoleOptTargetNtf',
+        payload: {
+          Param: 0,
+          Params: shownCardIDs,
+          SeatID: 1,
+          SpellID: 361,
+          SrcSeatID: 1,
+          targetSeatID: 2,
+          Type: 29
+        }
+      },
+      {
+        seq: 7,
+        className: 'PubGsCMoveCard',
+        payload: movePayload({
+          CardIDs: shownCardIDs,
+          CardCount: shownCardIDs.length,
+          FromID: 2,
+          FromZone: 5,
+          ToID: 2,
+          ToZone: 5,
+          MoveType: 21,
+          SpellID: 361
+        })
+      },
+      {
+        seq: 8,
+        className: 'CGsRoleSpellOptRep',
+        payload: { Datas: [2, 1], SeatID: 1, SpellID: 361, Type: 22 }
+      },
+      {
+        seq: 9,
+        className: 'PubGsCMoveCard',
+        payload: movePayload({
+          CardIDs: Array(5).fill(0),
+          CardCount: 5,
+          FromID: 2,
+          FromZone: 5,
+          ToID: 1,
+          ToZone: 5,
+          MoveType: 5,
+          SpellID: 361
+        })
+      }
+    ])
+    const replayer = new TrackerProtocolReplayer({ currentUserID })
+    const report = replayer.replay(records)
+    const room = replayer.controller.getReadyTrackerRoom()
+
+    expect(report.success).toBe(true)
+    expect(report).toMatchObject({ applied: 9, ignored: 0, partial: 0 })
+    expect(room?.mySeatID).toBe(mySeatID)
+    expect(
+      room
+        ?.getPlayer(2)
+        .knownHandCards.map((card) => card.id)
+        .sort((a, b) => a - b)
+    ).toEqual(shownCardIDs)
+    expect(room?.getPlayer(2).observedHandCount).toBe(5)
+    expect(room?.getPlayer(2).unknownCardCount).toBe(0)
+    expect(room?.getPlayer(1).observedHandCount).toBe(5)
+    expect(room?.getPlayer(1).unknownCardCount).toBe(5)
+    expect(replayer.gameState.getSpellState(361)).toBeUndefined()
+  })
+
   it('重放看牌协议并保留牌堆顶顺序供逻辑推断检查', () => {
     const records = openingRecords().concat({
       seq: 5,

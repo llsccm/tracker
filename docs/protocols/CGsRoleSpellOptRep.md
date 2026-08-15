@@ -9,9 +9,14 @@
 
 | `SpellID` | `Type` | 技能 | `Datas` 语义            |
 | --------: | -----: | ---- | ----------------------- |
+|     `361` |   `22` | 下书 | 首项 `1` 取展示牌，`2` 取暗牌 |
 |    `7009` |   `30` | 鹰视 | 本次看到的牌堆顶卡牌 ID |
 |    `3336` |   `50` | 嚣翻 | 本次看到的牌堆底卡牌 ID |
 |    `4021` |      - | 裴秀 | 地图 ID 和起始格        |
+
+下书的展示牌和目标座位由 `GsCRoleOptTargetNtf` 的 `Params` / `targetSeatID` 记录；该选择回复实测早于
+后续取牌 `PubGsCMoveCard`，完整消息链见
+[`GsCRoleOptTargetNtf-361.md`](GsCRoleOptTargetNtf-361.md)。
 
 ## 鹰视：观看牌堆顶
 

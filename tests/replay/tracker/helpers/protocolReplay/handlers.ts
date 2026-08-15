@@ -11,6 +11,10 @@ import {
 } from '@/tracker/runtime/protocolRules'
 import type { RawMoveCardEvent } from '@/tracker/types'
 import { parseGuiFuCardIDs } from '@/handler/skills/GuiFu'
+import handleXiaShuMove, {
+  handleXiaShuChoice,
+  handleXiaShuTargetNotice
+} from '@/handler/skills/XiaShu'
 import {
   initializeDuoQiState,
   recordDuoQiActivation,
@@ -454,6 +458,10 @@ function applyRoleSpellOpt(
       }
       break
 
+    case 361:
+      didApply = handleXiaShuChoice(record.payload, context.gameState)
+      break
+
     default:
       break
   }
@@ -489,6 +497,11 @@ function applyRoleOptTarget(
   }
 
   switch (spellID) {
+    case 361:
+      return handleXiaShuTargetNotice(record.payload, context.gameState)
+        ? applied()
+        : ignored('下书目标通知未携带有效目标或展示牌')
+
     case 943:
       if (param !== 0 || params.length !== 1) return ignored('图南未携带单张牌堆顶')
       revealPileCards(context, record, params)
@@ -713,6 +726,7 @@ function applyMoveCard(
   requireReadyRoom(context, record, '同步移动协议')
   const move = readMove(record)
   const notes: string[] = []
+  const afterMoveCallbacks: (() => void)[] = []
   const prepared = prepareTrackerMoveCardIDs({
     CardIDs: move.CardIDs,
     CardCount: move.CardCount,
@@ -754,6 +768,17 @@ function applyMoveCard(
     applyGameFlowState(context, record, moveContext)
     const spellNote = applyMoveSpellState(moveContext)
     if (spellNote) notes.push(spellNote)
+
+    if (moveContext.SpellID === 361) {
+      // 与生产 PubGsCMoveCard 一致：移动前注册下书副作用，tracker 同步完成后再结算。
+      handleXiaShuMove({
+        ...moveContext,
+        tracker: context.controller,
+        afterMove(callback: () => void) {
+          afterMoveCallbacks.push(callback)
+        }
+      })
+    }
   }
 
   if (matchesCardConfigDependentEquipmentMove(moveContext)) {
@@ -765,6 +790,8 @@ function applyMoveCard(
     FromPosition: moveContext.FromPosition,
     ToPosition: moveContext.ToPosition
   })
+  // 下书需要先看到通用随机转移建立的数量约束，不能在 syncTrackerMove 之前执行。
+  afterMoveCallbacks.splice(0).forEach((callback) => callback())
 
   return notes.length > 0 ? partial(notes.join('；')) : applied()
 }

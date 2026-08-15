@@ -4,10 +4,12 @@ export const GUI_FU_ROLE_DATA_ID = 3709
 export const PILE_SAME_ZONE_SHOW_SPELL_IDS: ReadonlySet<number> = new Set([7011, 987, 988])
 export const PILE_RANDOM_AS_TOP_SPELL_IDS: ReadonlySet<number> = new Set([3208])
 export const YANXI_DRAW_SPELL_IDS: ReadonlySet<number> = new Set([7016, 7017])
+/** 展示全部手牌 */
 export const FULL_HAND_ROLE_OPT_SPELL_IDS: ReadonlySet<number> = new Set([
   4, 5, 357, 372, 501, 811, 921, 3119, 3437, 3876, 4025
 ])
-export const PARTIAL_HAND_ROLE_OPT_SPELL_IDS: ReadonlySet<number> = new Set([361, 774, 851, 3310])
+/** 展示部分手牌 */
+export const PARTIAL_HAND_ROLE_OPT_SPELL_IDS: ReadonlySet<number> = new Set([774, 851, 3310])
 
 interface PrepareTrackerMoveCardIDsInput {
   CardIDs: number[]

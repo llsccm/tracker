@@ -52,7 +52,7 @@ describe('技能副作用注册表', () => {
     const registeredSpellIDs = Array.from(spellEffectHandlers.keys()).map(Number)
 
     expect(registeredSpellIDs.sort((a, b) => a - b)).toEqual([
-      441, 3157, 3488, 3492, 3511, 3571, 3750
+      361, 441, 3157, 3488, 3492, 3511, 3571, 3750
     ])
   })
 

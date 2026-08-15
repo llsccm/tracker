@@ -25,6 +25,7 @@ function syncMoveToTracker(msg, { CardIDs, FromPosition, ToPosition }) {
 export function handleMoveCard(msg) {
   let { CardIDs, FromPosition, ToPosition } = msg
   const { CardCount, FromID, FromZone, ToID, ToZone, MoveType, SpellID, SrcSeatID } = msg
+  const afterMoveCallbacks = []
 
   // 1. 预处理与过滤
   const preparedMove = prepareTrackerMoveCardIDs({
@@ -78,6 +79,7 @@ export function handleMoveCard(msg) {
   const context = {
     msg,
     game: Game,
+    tracker,
     CardIDs,
     CardCount,
     FromID,
@@ -89,12 +91,17 @@ export function handleMoveCard(msg) {
     MoveType,
     SpellID,
     SrcSeatID,
+    afterMove(callback) {
+      if (typeof callback === 'function') afterMoveCallbacks.push(callback)
+    },
     finishMove() {
       syncMoveToTracker(msg, {
         CardIDs: context.CardIDs,
         FromPosition: context.FromPosition,
         ToPosition: context.ToPosition
       })
+
+      afterMoveCallbacks.splice(0).forEach((callback) => callback())
     }
   }
 

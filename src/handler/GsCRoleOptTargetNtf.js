@@ -10,6 +10,7 @@ import {
 } from '../tracker/runtime/protocolRules'
 import { laya } from '@/runtime/gameAdapter'
 import { wait } from '@/utils'
+import { handleXiaShuTargetNotice } from './skills/XiaShu'
 // import handleYanXi from './handleYanXi'
 
 function revealPlayerHandCards(seatID, cardIDs, options = {}) {
@@ -71,6 +72,11 @@ export function handleRoleOptTargetNtf(msg) {
   }
 
   switch (SpellID) {
+    // 下书
+    case 361:
+      handleXiaShuTargetNotice(msg, Game)
+      break
+
     // 张菖蒲 严教
     case 945:
       if (Param == 0 && Params?.length > 0) {
