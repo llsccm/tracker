@@ -360,4 +360,67 @@ describe('族钟繇诫厉视角权限与交换', () => {
     expect(handCard.subZone).toBe('hand')
     expect(Array.from(handCard.seats)).toEqual([targetSeat])
   })
+
+  it('其它视角缺少上下文时将完整交换链安全降级为 noop', () => {
+    const { controller, room, pile, exchange } = setupView(
+      [91, 4, 124, 99, 81, 901, 902, 903],
+      [91],
+      observerSeat
+    )
+    const handCard = room.cardIndex.get(91)!
+    const pileBefore = pile.cards.slice()
+    const handBefore = getTargetHandIDs(room)
+    const handCountBefore = room.getPlayer(targetSeat)!.observedHandCount
+
+    createJieLiMoves([4, 124, 99, 81], [91], [124]).forEach((move) =>
+      controller.syncTrackerMove(move)
+    )
+
+    expect(pile.cards).toEqual(pileBefore)
+    expect(getTargetHandIDs(room)).toEqual(handBefore)
+    expect(room.getPlayer(targetSeat)!.observedHandCount).toBe(handCountBefore)
+    expect(exchange.cards).toHaveLength(0)
+    expect(handCard.getLocationCandidates()).toEqual([])
+    expect(room.skillState.has(JIE_LI_SPELL_ID)).toBe(false)
+  })
+
+  it('其它视角的半链状态由下一次上下文覆盖且不会污染新批次', () => {
+    const { controller, room } = setupView(
+      [91, 10, 11, 12, 4, 124, 99, 81, 1001, 1002, 1003],
+      [91],
+      observerSeat
+    )
+    const handCard = room.cardIndex.get(91)!
+    expect(recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })).toBe(true)
+
+    const firstMoves = createJieLiMoves([4, 124, 99, 81], [91], [124])
+    firstMoves.slice(0, 3).forEach((move) => controller.syncTrackerMove(move))
+
+    expect(room.skillState.get(JIE_LI_SPELL_ID)).toEqual(
+      expect.objectContaining({
+        context: { actorSeat, targetSeat, pileCount: 4 },
+        observerBatch: expect.objectContaining({
+          actorSeat,
+          targetSeat,
+          pileCount: 4,
+          exchangeCount: 1,
+          phase: 'hand-staged'
+        })
+      })
+    )
+
+    expect(recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 3 })).toBe(true)
+    expect(room.skillState.get(JIE_LI_SPELL_ID)).toEqual({
+      context: { actorSeat, targetSeat, pileCount: 3 }
+    })
+
+    createJieLiMoves([12, 11, 10], [91], [10]).forEach((move) => controller.syncTrackerMove(move))
+
+    expect(locationKeys(handCard)).toEqual(
+      [playerHand(targetSeat), publicLocation('pile', 'top', 3)]
+        .map((candidate) => createLocationCandidateKey(candidate))
+        .sort()
+    )
+    expect(room.skillState.has(JIE_LI_SPELL_ID)).toBe(false)
+  })
 })
