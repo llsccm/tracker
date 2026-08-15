@@ -1,12 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { trackerLogger } from '@/utils/logger'
 import { isAnonymous } from '@/tracker/Card'
-import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
+import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import type { Room } from '@/tracker/Room'
 import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import {
   commitDuoQiMove,
-  getDuoQiState,
   initializeDuoQiState,
   recordDuoQiActivation,
   recordDuoQiRoleDataTarget
@@ -78,7 +77,6 @@ describe('夺炁初始牌身份', () => {
 
     expect(replacement).not.toBe(state)
     expect(replacement.sequence).toBe(0)
-    expect(replacement.pendingDiscardGroups).toEqual([])
     expect(replacement.initialHandCountsBySeat).toEqual(
       new Map([
         [1, 4],
@@ -155,19 +153,31 @@ describe('夺炁初始牌身份', () => {
     expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([])
   })
 
-  it('3731 从弃牌堆四选一后洗牌保留局部 4 选 3 cohort', () => {
-    const { controller, gameState, room } = setup([1, 2, 3, 4, 5, 6, 7, 8, 9], 300)
-    bindHand(room, [1, 2, 3, 4], 1)
-    bindHand(room, [5, 6, 7, 8], 2)
-    initializeDuoQiState(gameState, [1, 2, 3, 4, 5, 6, 7, 8])
+  it('3731 其它视角从弃牌堆暗取时确认后进入的目标夺炁牌', () => {
+    const { controller, gameState, room } = setup(undefined, 300)
+    dealAnonymousHand(room, 1, 4)
+    dealAnonymousHand(room, 2, 4)
+    const state = initializeDuoQiState(gameState, [1, 2, 3, 4, 5, 6, 7, 8])!
 
-    room.moveCards([5, 6, 7, 8], 'discard', {
-      fromSeatID: 2,
-      fromSubZone: 'hand',
-      fromZone: null,
-      cardCount: 4
+    const discardMoves = [
+      { cardID: 5, seatID: 2 },
+      { cardID: 6, seatID: 2 },
+      { cardID: 1, seatID: 1 }
+    ]
+    discardMoves.forEach(({ cardID, seatID }) => {
+      controller.syncTrackerMove(
+        protocolMove({
+          CardIDs: [cardID],
+          CardCount: 1,
+          FromZone: 5,
+          FromID: seatID,
+          ToZone: 2,
+          ToID: 255,
+          MoveType: 4
+        })
+      )
     })
-    room.applyPileIdentityReveal([5, 6, 7, 8], 'discard')
+    expect(state.initialCardIDsBySeat.get(2)).toEqual(new Set([5, 6]))
     recordDuoQiActivation(gameState, {
       SpellID: 3731,
       EffectIndex: 2,
@@ -182,116 +192,24 @@ describe('夺炁初始牌身份', () => {
         CardCount: 1,
         FromZone: 2,
         FromID: 255,
+        FromZoneParam: 0,
+        FromPosition: POSITION_RANDOM,
         ToZone: 5,
         ToID: 1,
+        ToZoneParam: 0,
+        ToPosition: POSITION_TOP,
         MoveType: 18,
         SpellID: 3731
       })
     )
 
-    const state = getDuoQiState(gameState)!
-    expect(state.pendingDiscardGroups).toHaveLength(1)
-    expect(room.zones.get('discard')!.cards).toHaveLength(3)
-    expect(room.zones.get('discard')!.cards.every(isAnonymous)).toBe(true)
-
-    const pileCount = room.zones.get('pile')!.cards.length + room.zones.get('discard')!.cards.length
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [],
-        CardCount: pileCount,
-        FromZone: 2,
-        ToZone: 9,
-        MoveType: 255
-      })
-    )
-
-    expect(getDuoQiState(gameState)!.pendingDiscardGroups).toEqual([])
-    expect(room.pileIdentityLedger.getSnapshot().cohort.groups).toContainEqual({
-      generation: 1,
-      kind: 'partial',
-      cardIDs: [5, 6, 7, 8],
-      remainingPileCount: 3
+    expect(room.cardIndex.get(6)).toMatchObject({
+      isKnown: true,
+      location: 'player',
+      owner: 1
     })
-    expect(room.pileIdentityLedger.getSnapshot().accountedPileCount).toBe(pileCount)
-  })
-
-  it('3731 模糊组与已知弃牌同次洗回时合并为无序新世代', () => {
-    const { controller, gameState, room } = setup([1, 2, 3, 4, 5, 6, 7, 8, 9], 300)
-    bindHand(room, [1, 2, 3, 4], 1)
-    bindHand(room, [5, 6, 7, 8], 2)
-    initializeDuoQiState(gameState, [1, 2, 3, 4, 5, 6, 7, 8])
-
-    room.moveCards([5, 6, 7, 8], 'discard', {
-      fromSeatID: 2,
-      fromSubZone: 'hand',
-      fromZone: null,
-      cardCount: 4
-    })
-    room.moveCards([9], 'discard', {
-      fromZone: 'pile',
-      cardCount: 1
-    })
-    room.applyPileIdentityReveal([5, 6, 7, 8, 9], 'discard')
-    recordDuoQiActivation(gameState, {
-      SpellID: 3731,
-      EffectIndex: 2,
-      SeatID: 2,
-      SkillOwerSeatID: 1,
-      DestSeatIDs: [2]
-    })
-
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [],
-        CardCount: 1,
-        FromZone: 2,
-        FromID: 255,
-        ToZone: 5,
-        ToID: 1,
-        MoveType: 18,
-        SpellID: 3731
-      })
-    )
-    const pileCount = room.zones.get('pile')!.cards.length + room.zones.get('discard')!.cards.length
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [],
-        CardCount: pileCount,
-        FromZone: 2,
-        ToZone: 9,
-        MoveType: 255
-      })
-    )
-
-    const recycledGroup = room.pileIdentityLedger
-      .getSnapshot()
-      .cohort.groups.find((group) => group.generation === 1)
-    expect(recycledGroup).toEqual({
-      generation: 1,
-      kind: 'partial',
-      cardIDs: [5, 6, 7, 8, 9],
-      remainingPileCount: 4
-    })
-
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [],
-        CardCount: 1,
-        FromZone: 1,
-        FromPosition: POSITION_BOTTOM,
-        ToZone: 5,
-        ToID: 3,
-        MoveType: 1
-      })
-    )
-
-    const afterBottomDraw = room.pileIdentityLedger
-      .getSnapshot()
-      .cohort.groups.find((group) => group.generation === 1)
-    expect(afterBottomDraw).toMatchObject({
-      cardIDs: [5, 6, 7, 8, 9],
-      remainingPileCount: 3
-    })
+    expect(room.cardIndex.get(5)?.location).toBe('discard')
+    expect(room.cardIndex.get(1)?.location).toBe('discard')
   })
 
   it('整手未知交换保留初始化实体标记，后续展示仍归交换前座位', () => {
@@ -630,57 +548,7 @@ describe('夺炁初始牌身份', () => {
     expect(group.gainedCount).toBe(2)
   })
 
-  it('3731 模糊来源匿名化失败时取消移动并清理待处理组', () => {
-    const { controller, gameState, room } = setup(undefined, 300)
-    bindHand(room, [1, 2, 3, 4], 1)
-    bindHand(room, [5, 6, 7, 8], 2)
-    initializeDuoQiState(gameState, [1, 2, 3, 4, 5, 6, 7, 8])
-    room.moveCards([5, 6, 7, 8], 'discard', {
-      fromSeatID: 2,
-      fromSubZone: 'hand',
-      fromZone: null,
-      cardCount: 4
-    })
-    room.applyPileIdentityReveal([5, 6, 7, 8], 'discard')
-    recordDuoQiActivation(gameState, {
-      SpellID: 3731,
-      EffectIndex: 2,
-      SeatID: 2,
-      SkillOwerSeatID: 1,
-      DestSeatIDs: [2]
-    })
-    const invalidCard = room.cardIndex.get(5)!
-    const decorateMoveEvent = room.decorateMoveEvent.bind(room)
-    const decorateSpy = vi.spyOn(room, 'decorateMoveEvent').mockImplementation((event) => {
-      const decorated = decorateMoveEvent(event)
-      room.cardIndex.delete(5)
-      return decorated
-    })
-
-    try {
-      controller.syncTrackerMove(
-        protocolMove({
-          CardIDs: [],
-          CardCount: 1,
-          FromZone: 2,
-          FromID: 255,
-          ToZone: 5,
-          ToID: 1,
-          MoveType: 18,
-          SpellID: 3731
-        })
-      )
-    } finally {
-      decorateSpy.mockRestore()
-      room.cardIndex.set(5, invalidCard)
-    }
-
-    expect(room.zones.get('discard')?.cards).toHaveLength(4)
-    expect(room.zones.get('discard')?.cards.every((card) => card.id > 0)).toBe(true)
-    expect(getDuoQiState(gameState)?.pendingDiscardGroups).toEqual([])
-  })
-
-  it('3731 弃牌推断失败时不残留待处理模糊组', () => {
+  it('3731 目标夺炁牌数量不足时不伪造确定来源', () => {
     const { gameState, room } = setup(undefined, 300)
     bindHand(room, [1, 2, 3, 4], 1)
     bindHand(room, [5, 6, 7, 8], 2)
@@ -717,11 +585,10 @@ describe('夺炁初始牌身份', () => {
     )
 
     expect(decorated).toBeTruthy()
-    expect(decorated?.options.duoQiDiscardGroupID).toBeUndefined()
-    expect(getDuoQiState(gameState)?.pendingDiscardGroups).toEqual([])
+    expect(decorated?.options.sourceCards).toBeUndefined()
   })
 
-  it('3731 获取全部弃牌候选时按确定集合移动且不建立模糊组', () => {
+  it('3731 只取得后入的一张，不沿用 3730 的全取规则', () => {
     const { controller, gameState, room } = setup(undefined, 300)
     bindHand(room, [1, 2, 3, 4], 1)
     bindHand(room, [5, 6, 7, 8], 2)
@@ -745,7 +612,7 @@ describe('夺炁初始牌身份', () => {
     controller.syncTrackerMove(
       protocolMove({
         CardIDs: [],
-        CardCount: 2,
+        CardCount: 1,
         FromZone: 2,
         FromID: 255,
         ToZone: 5,
@@ -755,13 +622,9 @@ describe('夺炁初始牌身份', () => {
       })
     )
 
-    expect(room.zones.get('discard')?.cards).toEqual([])
-    expect([5, 6].map((cardID) => room.cardIndex.get(cardID)?.location)).toEqual([
-      'player',
-      'player'
-    ])
-    expect(getDuoQiState(gameState)?.pendingDiscardGroups).toEqual([])
-    expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([])
+    expect(room.cardIndex.get(6)).toMatchObject({ location: 'player', owner: 1 })
+    expect(room.cardIndex.get(5)?.location).toBe('discard')
+    expect([7, 8].map((cardID) => room.cardIndex.get(cardID)?.owner)).toEqual([2, 2])
   })
 
   it('同 SpellID 的非手牌目标移动不触发夺炁推断', () => {
@@ -799,8 +662,7 @@ describe('夺炁初始牌身份', () => {
       )
     )
 
-    expect(decorated?.options.duoQiDiscardGroupID).toBeUndefined()
-    expect(getDuoQiState(gameState)?.pendingDiscardGroups).toEqual([])
+    expect(decorated?.options.sourceCards).toBeUndefined()
   })
 
   it('仅有规范化 options 时仍识别展示来源并结束 3730 手牌组', () => {
@@ -854,7 +716,7 @@ describe('夺炁初始牌身份', () => {
     expect(state.pendingRandomHandGroups).toEqual([])
   })
 
-  it('存在未决弃牌模糊组时不叠加第二组', () => {
+  it('3731 连续暗取时依次取得后进入弃牌区的目标夺炁牌', () => {
     const { controller, gameState, room } = setup(undefined, 300)
     bindHand(room, [1, 2, 3, 4], 1)
     bindHand(room, [5, 6, 7, 8], 2)
@@ -887,25 +749,23 @@ describe('夺炁初始牌身份', () => {
         SpellID: 3731
       })
     )
-    const firstGroup = getDuoQiState(gameState)?.pendingDiscardGroups[0]
-    expect(firstGroup).toBeTruthy()
-
-    const decorated = room.decorateMoveEvent(
-      normalizeMoveEvent(
-        protocolMove({
-          CardIDs: [],
-          CardCount: 1,
-          FromZone: 2,
-          FromID: 255,
-          ToZone: 5,
-          ToID: 1,
-          MoveType: 18,
-          SpellID: 3731
-        })
-      )
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 1,
+        FromZone: 2,
+        FromID: 255,
+        ToZone: 5,
+        ToID: 1,
+        MoveType: 18,
+        SpellID: 3731
+      })
     )
 
-    expect(decorated?.options.duoQiDiscardGroupID).toBeUndefined()
-    expect(getDuoQiState(gameState)?.pendingDiscardGroups).toEqual([firstGroup])
+    expect([8, 7].map((cardID) => room.cardIndex.get(cardID))).toEqual([
+      expect.objectContaining({ isKnown: true, location: 'player', owner: 1 }),
+      expect.objectContaining({ isKnown: true, location: 'player', owner: 1 })
+    ])
+    expect(room.zones.get('discard')?.cards.map((card) => card.id)).toEqual([5, 6])
   })
 })

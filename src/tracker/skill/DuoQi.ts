@@ -19,24 +19,6 @@ export interface DuoQiActivation {
   skipInference: boolean
 }
 
-/**
- * 3731 从弃牌堆暗取时的技能私有候选组。
- *
- * 组只表达“这些初始牌中有 gainedCount 张已被取走”，不任选某个 CardID；只有后续明牌
- * 事件才能继续排除候选。memberCards/movedCards 是洗牌前的实体引用，弃牌堆重建后必须清空。
- */
-export interface DuoQiDiscardGroup {
-  id: string
-  ownerSeatID: SeatID
-  targetSeatID: SeatID
-  candidateIdentityIDs: Set<CardID>
-  gainedCount: number
-  remainingDiscardCount: number
-  memberCards: Set<Card>
-  movedCards: Set<Card>
-  ledgerRegistered: boolean
-}
-
 /** 3731 从暗手牌获得时保留 N 选 K 事实，等待后续展示或 3730 全取消息收敛。 */
 export interface DuoQiRandomHandGroup {
   ownerSeatID: SeatID
@@ -45,11 +27,6 @@ export interface DuoQiRandomHandGroup {
   candidateCardIDs: Set<CardID>
   gainedCount: number
   sequence: number
-}
-
-export interface DuoQiAmbiguousDiscardRecycleGroup {
-  candidateIdentityIDs: CardID[]
-  recycledCount: number
 }
 
 export interface DuoQiState {
@@ -65,7 +42,6 @@ export interface DuoQiState {
   initialSeatByEntity: Map<Card, SeatID>
   unresolvedCardIDs: Set<CardID>
   activations: Map<DuoQiSpellID, DuoQiActivation>
-  pendingDiscardGroups: DuoQiDiscardGroup[]
   pendingRandomHandGroups: DuoQiRandomHandGroup[]
   sequence: number
 }
@@ -110,11 +86,6 @@ function getInitialHandCards(room: Room, seatID: SeatID): Card[] {
     (card) =>
       card.location === 'player' && card.subZone === 'hand' && card.seats.has(Number(seatID))
   )
-}
-
-function cancelDuoQiDiscardGroup(state: DuoQiState, groupID: string): void {
-  if (!groupID) return
-  state.pendingDiscardGroups = state.pendingDiscardGroups.filter((group) => group.id !== groupID)
 }
 
 function getKnownInitialCardsForSeat(state: DuoQiState, seatID: SeatID): Set<CardID> {
@@ -176,7 +147,6 @@ export function initializeDuoQiState(
     initialSeatByEntity: new Map(),
     unresolvedCardIDs: new Set(normalizedCardIDs),
     activations: new Map(),
-    pendingDiscardGroups: [],
     pendingRandomHandGroups: [],
     sequence: 0
   }
@@ -477,43 +447,24 @@ function isCardInGainAllSource(card: Card, targetSeatID: SeatID, sourceZone: num
   return card.location === 'player' && card.subZone === 'hand' && card.seats.has(targetSeatID)
 }
 
-function createDiscardGroup(
+function collectRecentDiscardSourceCards(
   event: MoveEventDraft,
   room: Room,
   state: DuoQiState,
   activation: DuoQiActivation
-): DuoQiDiscardGroup | null {
-  if (state.pendingDiscardGroups.length > 0) return null
-  const initialHandCount = state.initialHandCountsBySeat.get(activation.targetSeatID) ?? 0
+): Card[] {
   const targetInitialCardIDs = getInitialCardIDsForSeat(state, activation.targetSeatID)
-  if (targetInitialCardIDs.length !== initialHandCount) return null
-
-  const candidateIdentityIDs = targetInitialCardIDs.filter(
-    (cardID) => room.cardIndex.get(cardID)?.location === 'discard'
+  const targetInitialCardIDsInDiscard = new Set(
+    targetInitialCardIDs.filter((cardID) => room.cardIndex.get(cardID)?.location === 'discard')
   )
-  const memberCards = candidateIdentityIDs
-    .map((cardID) => room.cardIndex.get(cardID))
-    .filter((card): card is Card => Boolean(card))
+  const sourceCandidates = (room.zones.get('discard')?.cards ?? []).filter((card) =>
+    targetInitialCardIDsInDiscard.has(card.id)
+  )
   const gainedCount = Math.max(0, Number(event.cardCount) || 0)
-  if (
-    candidateIdentityIDs.length < gainedCount ||
-    memberCards.length !== candidateIdentityIDs.length
-  ) {
-    return null
-  }
+  if (gainedCount <= 0 || sourceCandidates.length < gainedCount) return []
 
-  const group: DuoQiDiscardGroup = {
-    id: `duoqi_discard_${activation.sequence}_${state.sequence + state.pendingDiscardGroups.length + 1}`,
-    ownerSeatID: activation.ownerSeatID,
-    targetSeatID: activation.targetSeatID,
-    candidateIdentityIDs: new Set(candidateIdentityIDs),
-    gainedCount,
-    remainingDiscardCount: candidateIdentityIDs.length - gainedCount,
-    memberCards: new Set(memberCards),
-    movedCards: new Set(),
-    ledgerRegistered: false
-  }
-  return group
+  // 弃牌区按 bottom-first 保存；3731 默认取得目标角色较后进入弃牌区的夺炁牌。
+  return sourceCandidates.slice(-gainedCount).reverse()
 }
 
 function decorateRandomDiscardGain(
@@ -531,31 +482,16 @@ function decorateRandomDiscardGain(
     return event
   }
 
-  // 弃牌堆不支持“暗取某张已知牌”：将整组实体匿名化，并把它作为 N 选 K 候选
-  // 注册到账本；随后任何展示只收敛集合，直到洗牌把剩余基数交给新 generation。
-  const group = createDiscardGroup(event, room, state, activation)
-  if (!group || group.gainedCount <= 0) return event
+  // 与 3731 的暗手牌随机获取不同，弃牌区有可复现的先后顺序；即使其它视角收到空
+  // CardIDs，也能按“目标夺炁牌后入优先”还原实际身份。
+  const gainedCount = Math.max(0, Number(event.cardCount) || 0)
+  const sourceCards = collectRecentDiscardSourceCards(event, room, state, activation)
+  if (gainedCount <= 0 || sourceCards.length !== gainedCount) return event
 
-  if (group.gainedCount === group.memberCards.size) {
-    const sourceCards = Array.from(group.memberCards)
-    return patchEvent(event, {
-      options: {
-        sourceCards,
-        pileIdentityCardIDs: sourceCards.filter((card) => card.id > 0).map((card) => card.id)
-      }
-    })
-  }
-
-  const sourceCards = Array.from(group.memberCards).slice(0, group.gainedCount)
-  sourceCards.forEach((card) => group.movedCards.add(card))
-  state.pendingDiscardGroups.push(group)
   return patchEvent(event, {
     options: {
       sourceCards,
-      combinationID: group.id,
-      anonymizeCards: Array.from(group.memberCards),
-      requireAnonymizeSuccess: true,
-      duoQiDiscardGroupID: group.id
+      pileIdentityCardIDs: sourceCards.filter((card) => card.id > 0).map((card) => card.id)
     }
   })
 }
@@ -692,29 +628,7 @@ function findInitialSeatByCard(state: DuoQiState, room: Room, cardID: CardID): S
 
   const entitySeatID = state.initialSeatByEntity.get(card)
   if (entitySeatID !== undefined) return entitySeatID
-
-  for (const group of state.pendingDiscardGroups) {
-    if (!group.candidateIdentityIDs.has(cardID)) continue
-    if (group.movedCards.has(card) || group.memberCards.has(card)) return group.targetSeatID
-  }
-
   return undefined
-}
-
-function settleDiscardGroups(state: DuoQiState, room: Room, cardID: CardID): void {
-  state.pendingDiscardGroups = state.pendingDiscardGroups.filter((group) => {
-    if (!group.candidateIdentityIDs.has(cardID)) return group.candidateIdentityIDs.size > 0
-
-    const card = room.cardIndex.get(cardID)
-    group.candidateIdentityIDs.delete(cardID)
-    if (card?.location === 'discard') {
-      group.remainingDiscardCount = Math.max(0, group.remainingDiscardCount - 1)
-    } else if (group.gainedCount > 0) {
-      group.gainedCount -= 1
-    }
-
-    return group.candidateIdentityIDs.size > 0
-  })
 }
 
 export function observeDuoQiKnownCardIDs(room: Room, cardIDs: readonly CardID[]): void {
@@ -725,59 +639,14 @@ export function observeDuoQiKnownCardIDs(room: Room, cardIDs: readonly CardID[])
     if (!state.allCardIDs.has(cardID)) return
     const initialSeatID = findInitialSeatByCard(state, room, cardID)
     if (initialSeatID !== undefined) bindInitialCardID(state, cardID, initialSeatID)
-    settleDiscardGroups(state, room, cardID)
   })
   convergeInitialSeats(state)
 }
 
-// 洗牌前只交接已成功注册且仍留在弃牌堆的候选基数；实体引用不会跨洗牌存活。
-export function collectDuoQiAmbiguousDiscardRecycleGroups(
-  room: Room
-): DuoQiAmbiguousDiscardRecycleGroup[] {
-  const state = getDuoQiState(getGame(room))
-  if (!state || state.pendingDiscardGroups.length === 0) return []
-
-  return state.pendingDiscardGroups
-    .filter(
-      (group) =>
-        group.ledgerRegistered &&
-        group.remainingDiscardCount > 0 &&
-        group.candidateIdentityIDs.size > 0
-    )
-    .map((group) => ({
-      candidateIdentityIDs: Array.from(group.candidateIdentityIDs),
-      recycledCount: Math.min(group.remainingDiscardCount, group.candidateIdentityIDs.size)
-    }))
-}
-
 export function commitDuoQiMove(room: Room, event: MoveEventDraft): void {
   const state = getDuoQiState(getGame(room))
-  const groupID = String(event.options?.duoQiDiscardGroupID ?? '')
-  const group = state?.pendingDiscardGroups.find((candidate) => candidate.id === groupID)
   commitRandomHandCandidates(state, event)
   finishRandomHandGroupsAfterGainAll(state, event)
-  if (!state || !group || group.ledgerRegistered) return
-
-  // 物理移动成功后才登记集合事实；账本事务回滚时同步撤销技能组，不能把未注册组交给洗牌。
-  try {
-    const committed = room.registerAmbiguousOutsideIdentityGroup(
-      Array.from(group.candidateIdentityIDs)
-    )
-    if (committed) {
-      group.ledgerRegistered = true
-      return
-    }
-    cancelDuoQiDiscardGroup(state, groupID)
-  } catch (error) {
-    cancelDuoQiDiscardGroup(state, groupID)
-    throw error
-  }
-}
-
-export function cancelDuoQiMove(room: Room, event: MoveEventDraft): void {
-  const state = getDuoQiState(getGame(room))
-  if (!state) return
-  cancelDuoQiDiscardGroup(state, String(event.options?.duoQiDiscardGroupID ?? ''))
 }
 
 function finishRandomHandGroupsAfterGainAll(
@@ -818,10 +687,4 @@ function commitRandomHandCandidates(state: DuoQiState | undefined, event: MoveEv
       group.candidateCardIDs.add(cardID)
     }
   })
-}
-
-export function finalizeDuoQiDiscardRecycle(room: Room): void {
-  const state = getDuoQiState(getGame(room))
-  if (!state || state.pendingDiscardGroups.length === 0) return
-  state.pendingDiscardGroups = []
 }

@@ -28,13 +28,7 @@ import type {
   TrackerView
 } from '../types'
 import { registerDefaultMoveEventHandlers } from './moveEventHandlers'
-import {
-  cancelDuoQiMove,
-  collectDuoQiAmbiguousDiscardRecycleGroups,
-  commitDuoQiMove,
-  finalizeDuoQiDiscardRecycle,
-  observeDuoQiKnownCardIDs
-} from '../skill/DuoQi'
+import { commitDuoQiMove, observeDuoQiKnownCardIDs } from '../skill/DuoQi'
 
 interface RevealTarget {
   type?: 'player' | 'public' | string
@@ -387,14 +381,10 @@ export class TrackerController {
           pileCountBefore,
           knownPileDrawCards
         )
-        const ambiguousDiscardRecycleGroups = collectDuoQiAmbiguousDiscardRecycleGroups(readyRoom)
         readyRoom.shufflePile({
           cardCount: event.cardCount,
-          identityMove: pileIdentityMove,
-          ambiguousDiscardRecycleGroups
+          identityMove: pileIdentityMove
         })
-        // 洗牌已重建弃牌区实体，任何未决组都不能继续引用旧 memberCards。
-        finalizeDuoQiDiscardRecycle(readyRoom)
         this.controllerView.scheduleRender()
         return
       } else {
@@ -404,20 +394,12 @@ export class TrackerController {
         )
         const moveCompleted = readyRoom.moveCards(event.cardIDs, event.toZone, event.options)
         if (!moveCompleted) {
-          cancelDuoQiMove(readyRoom, event)
-          this.controllerLogger.warn('夺炁模糊来源匿名化失败，已取消本次 tracker 移动', {
+          this.controllerLogger.warn('移动来源解析失败，已取消本次 tracker 移动', {
             cardIDs: event.cardIDs
           })
           return
         }
-        try {
-          commitDuoQiMove(readyRoom, event)
-        } catch (error) {
-          this.controllerLogger.warn('夺炁模糊组注册失败，已跳过该组并继续写入身份账本', {
-            error,
-            cardIDs: event.cardIDs
-          })
-        }
+        commitDuoQiMove(readyRoom, event)
       }
 
       const pileIdentityMove = this.createPileIdentityMove(
