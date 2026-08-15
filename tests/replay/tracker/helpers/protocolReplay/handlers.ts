@@ -1,6 +1,7 @@
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import type { GameState } from '@/tracker/Game'
 import type { Room } from '@/tracker/Room'
+import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 import {
   FULL_HAND_ROLE_OPT_SPELL_IDS,
@@ -35,6 +36,11 @@ interface ReplayMoveContext {
   MoveType: number
   SpellID: number
   SrcSeatID?: number
+  fromSeatID?: number
+  toSeatID?: number
+  fromSubZone?: string
+  toSubZone?: string
+  fromSpellID?: number | null
 }
 
 export function applyTrackerReplayProtocol(
@@ -748,6 +754,12 @@ function applyMoveCard(
     CardIDs: prepared.CardIDs,
     isGuoZhan: context.gameState.isGuoZhan
   })
+  const normalizedEvent = normalizeMoveEvent({
+    ...move,
+    CardIDs: normalized.CardIDs,
+    FromPosition: normalized.FromPosition,
+    ToPosition: normalized.ToPosition
+  })
   const moveContext: ReplayMoveContext = {
     game: context.gameState,
     CardIDs: normalized.CardIDs,
@@ -760,7 +772,19 @@ function applyMoveCard(
     ToPosition: normalized.ToPosition,
     MoveType: move.MoveType,
     SpellID: move.SpellID,
-    SrcSeatID: readNumber(record.payload.SrcSeatID)
+    SrcSeatID: readNumber(record.payload.SrcSeatID),
+    fromSeatID:
+      normalizedEvent.options.fromSeatID == null
+        ? undefined
+        : Number(normalizedEvent.options.fromSeatID),
+    toSeatID:
+      normalizedEvent.options.seatID == null ? undefined : Number(normalizedEvent.options.seatID),
+    fromSubZone: normalizedEvent.options.fromSubZone ?? undefined,
+    toSubZone: normalizedEvent.options.subZone ?? undefined,
+    fromSpellID:
+      normalizedEvent.options.fromSpellID == null
+        ? null
+        : Number(normalizedEvent.options.fromSpellID)
   }
 
   const specialZoneHandled = applySpecialZoneState(moveContext)

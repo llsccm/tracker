@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { applySpellEffect } from '@/handler/spellEffects'
-import { handleXiaShuChoice, handleXiaShuTargetNotice } from '@/handler/skills/XiaShu'
+import handleXiaShuMove, {
+  handleXiaShuChoice,
+  handleXiaShuTargetNotice
+} from '@/handler/skills/XiaShu'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from './helpers/room'
 
@@ -140,6 +143,10 @@ describe('下书', () => {
           afterMoveCallbacks.push(callback)
         },
         SpellID: 361,
+        fromSeatID: 7,
+        toSeatID: 3,
+        fromSubZone: 'hand',
+        toSubZone: 'hand',
         CardIDs: [0, 0, 0, 0, 0],
         CardCount: 5,
         FromID: 7,
@@ -197,5 +204,30 @@ describe('下书', () => {
     } finally {
       room.destroy()
     }
+  })
+
+  it.each([
+    ['同区展示', { FromZone: 5, ToZone: 5, FromID: 7, ToID: 7 }],
+    ['标记区来源', { FromZone: 4, ToZone: 5, FromID: 7, ToID: 3 }]
+  ])('移动位置为%s时不注册下书回调', (_label, move) => {
+    const game = createGameState()
+    game.setSpellState(361, { shownCardIDs: [96], targetSeatID: 7, choice: 2, actorSeatID: 3 })
+    const callbacks: (() => void)[] = []
+
+    handleXiaShuMove({
+      game,
+      ...move,
+      fromSeatID: move.FromID,
+      toSeatID: move.ToID,
+      fromSubZone: move.FromZone === 5 ? 'hand' : 'mark',
+      toSubZone: 'hand',
+      SpellID: 361,
+      CardCount: 1,
+      afterMove(callback: () => void) {
+        callbacks.push(callback)
+      }
+    })
+
+    expect(callbacks).toHaveLength(0)
   })
 })

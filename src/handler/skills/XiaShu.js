@@ -2,6 +2,11 @@ const XIA_SHU_SPELL_ID = 361
 const XIA_SHU_TAKE_SHOWN = 1
 const XIA_SHU_TAKE_HIDDEN = 2
 
+function isValidSeatID(value) {
+  const seatID = Number(value)
+  return Number.isInteger(seatID) && seatID >= 0 && seatID !== 255
+}
+
 function getXiaShuState(game) {
   const state = game.getSpellState(XIA_SHU_SPELL_ID)
   if (!state || Array.isArray(state) || typeof state !== 'object') return undefined
@@ -77,17 +82,19 @@ export function handleXiaShuChoice(msg, game) {
 
 export default function handleXiaShuMove(context) {
   const isHandTransfer =
-    context.FromZone == 5 &&
-    context.ToZone == 5 &&
-    context.FromID != context.ToID &&
+    Number(context.SpellID) === XIA_SHU_SPELL_ID &&
+    Number(context.FromZone) === 5 &&
+    Number(context.ToZone) === 5 &&
+    context.fromSubZone === 'hand' &&
+    context.toSubZone === 'hand' &&
     Number(context.CardCount) > 0
   if (!isHandTransfer) return
 
   const state = getXiaShuState(context.game)
-  const targetSeatID = Number(context.FromID)
-  const transferSeatID = Number(context.ToID)
+  const targetSeatID = Number(context.fromSeatID)
+  const transferSeatID = Number(context.toSeatID)
   if (!state || state.targetSeatID !== targetSeatID) return
-  if (!Number.isInteger(transferSeatID) || transferSeatID === 255) return
+  if (!isValidSeatID(targetSeatID) || !isValidSeatID(transferSeatID)) return
   if (Number.isInteger(state.actorSeatID) && state.actorSeatID !== transferSeatID) return
   if (typeof context.afterMove !== 'function') return
 

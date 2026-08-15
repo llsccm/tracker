@@ -1,7 +1,7 @@
 import { CardConfig } from '../config'
-// import { laya } from '../runtime/gameAdapter'
 import { Game } from '../tracker'
 import { tracker } from '../tracker/runtime/browser'
+import { normalizeMoveEvent } from '../tracker/MoveEventNormalizer'
 import { POSITION_TOP } from '../tracker/candidate/cardPositions'
 import {
   normalizeTrackerMovePosition,
@@ -76,6 +76,13 @@ export function handleMoveCard(msg) {
   FromPosition = normalizedMove.FromPosition
   ToPosition = normalizedMove.ToPosition
 
+  const normalizedEvent = normalizeMoveEvent({
+    ...msg,
+    CardIDs,
+    FromPosition,
+    ToPosition
+  })
+
   const context = {
     msg,
     game: Game,
@@ -91,6 +98,11 @@ export function handleMoveCard(msg) {
     MoveType,
     SpellID,
     SrcSeatID,
+    fromSeatID: normalizedEvent.options.fromSeatID,
+    toSeatID: normalizedEvent.options.seatID,
+    fromSubZone: normalizedEvent.options.fromSubZone,
+    toSubZone: normalizedEvent.options.subZone,
+    fromSpellID: normalizedEvent.options.fromSpellID,
     afterMove(callback) {
       if (typeof callback === 'function') afterMoveCallbacks.push(callback)
     },
