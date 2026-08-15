@@ -265,52 +265,31 @@ describe('GsCRoleOptTargetNtf', () => {
     expect(revealTrackerCards).toHaveBeenNthCalledWith(2, { type: 'player', seatID: 4 }, [91, 158])
   })
 
-  it('诫厉目标视角只收到牌堆张数并记录上下文', () => {
+  it.each([
+    { label: '目标视角', mySeatID: 6, actorSeat: 7, targetSeat: 6 },
+    { label: '其它视角', mySeatID: 2, actorSeat: 3, targetSeat: 4 }
+  ])('诫厉 $label 只收到牌堆张数并记录上下文', ({ mySeatID, actorSeat, targetSeat }) => {
     const skillState: Record<string, any> = {}
     const getSkillState = vi.fn(() => skillState)
     vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({
-      mySeatID: 6,
+      mySeatID,
       getSkillState
     } as any)
 
     handleRoleOptTargetNtf({
       Param: 1,
       Params: [4],
-      SeatID: 7,
+      SeatID: actorSeat,
       SpellID: 3483,
-      SrcSeatID: 7,
+      SrcSeatID: actorSeat,
       Timeout: 30,
       Type: 28,
-      targetSeatID: 6,
+      targetSeatID: targetSeat,
       className: 'GsCRoleOptTargetNtf'
     })
 
     expect(revealTrackerCards).not.toHaveBeenCalled()
-    expect(skillState.context).toEqual({ actorSeat: 7, targetSeat: 6, pileCount: 4 })
-  })
-
-  it('诫厉其它视角同样只收到牌堆张数', () => {
-    const skillState: Record<string, any> = {}
-    const getSkillState = vi.fn(() => skillState)
-    vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({
-      mySeatID: 2,
-      getSkillState
-    } as any)
-
-    handleRoleOptTargetNtf({
-      Param: 1,
-      Params: [4],
-      SeatID: 3,
-      SpellID: 3483,
-      SrcSeatID: 3,
-      Timeout: 30,
-      Type: 28,
-      targetSeatID: 4,
-      className: 'GsCRoleOptTargetNtf'
-    })
-
-    expect(skillState.context).toEqual({ actorSeat: 3, targetSeat: 4, pileCount: 4 })
-    expect(revealTrackerCards).not.toHaveBeenCalled()
+    expect(skillState.context).toEqual({ actorSeat, targetSeat, pileCount: 4 })
   })
 
   it('诫厉开发模式也不从纯计数通知伪造牌面', () => {
