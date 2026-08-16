@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { POSITION_RANDOM, POSITION_TOP } from '../../src/tracker/candidate/cardPositions'
-import { normalizeMoveEvent } from '../../src/tracker/MoveEventNormalizer'
-import type { Room } from '../../src/tracker/Room'
-import { registerDefaultMoveEventHandlers } from '../../src/tracker/runtime/moveEventHandlers'
+import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
+import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import type { Room } from '@/tracker/Room'
+import { registerDefaultMoveEventHandlers } from '@/tracker/runtime/moveEventHandlers'
 import { createTestRoom, getCard } from './helpers/room'
 
 function createRoomWithDiscard(cardNames: string[]) {

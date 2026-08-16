@@ -85,8 +85,10 @@ flowchart LR
 
 ### 普通协议移动
 
-真实协议应先进入 `TrackerController.syncTrackerMove()`，由 Controller 补字段、归一化、应用技能装饰并
-选择 `moveCards()` 或 `shufflePile()`。不要在 handler 中直接修改 `Card`、`Zone` 或玩家投影。
+原始协议消息先由 `src/handler/PubGsCMoveCard.js` 完成协议预处理、位置规范化、`CardIDs` 修正和
+技能副作用，再交给 `src/tracker/runtime/bridge.ts` 装配的 `tracker` 同步归一化移动。不要在
+handler 中直接修改 `Card`、`Zone` 或玩家投影；`TrackerController` / bridge 只负责归一化事实的
+运行时同步、Room 生命周期和入口连接。
 
 `Room.moveCards()` 保留高频主流程，阶段细节委托给 `RoomMovement`：
 
@@ -145,7 +147,8 @@ flowchart LR
 
 | 变更类型 | 首选位置 | 原因 |
 | --- | --- | --- |
-| 原始协议字段修正、Zone 映射、运行时可用性判断 | `TrackerController`、`MoveEventNormalizer`、`protocolZones.ts` | Room 消费归一化事实，不猜原始协议字段 |
+| 协议预处理、位置规范化、`CardIDs` 修正、技能副作用 | `src/handler/PubGsCMoveCard.js` | 统一处理原始协议字段并桥接归一化移动 |
+| 归一化移动同步、Room 创建/销毁与运行时同步 | `src/tracker/runtime/bridge.ts`、`trackerController.ts` | 连接 handler、Room 与生命周期 |
 | `moveCards()` 某个低频阶段或来源取牌规则 | `roomMovement.ts` / `roomMovement/*` | 保持 Room 中的高频主流程短而稳定 |
 | 约束组、暂停追踪、视图组同步 | `roomConstraints.ts` | 集中维护推断和稳定投影规则 |
 | 公共区查询、牌序读面、一致性诊断 | `roomPublicZones.ts` | 避免在 Room 重复实现 Zone 遍历 |

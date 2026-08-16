@@ -54,8 +54,11 @@
 
 ### 候选主模型
 
-- 外部写入候选必须走 `setLocationCandidates()`、`bindCandidates()`、`setSeats()`、
-  `setSubZoneCandidates()` 等收口入口，不能直接修改 `locationCandidates`。
+- 外部写入候选推荐只使用 `setLocationCandidates()`、`setSeats()` 和
+  `resolveLocationCandidate()`；`bindCandidates()` 与 `setSubZoneCandidates()` 仅供
+  内部委托使用，不应列为通用外部写入口。
+- `locationCandidates`、`seats`、`subZoneCandidates`、`publicCandidates` 均不允许
+  在外部直接修改。
 - `seats.size === 1` 只表示 owner 确定；`A 手牌 / A 标记` 仍可能在子区域层未收敛。
 - 候选缩小时必须携带 `previousSeats`，否则收敛器无法恢复被剔除的座位。
 - 装备容器候选使用 `type: 'container'` 与 `containerType: 'equipment'`，不直接同步到

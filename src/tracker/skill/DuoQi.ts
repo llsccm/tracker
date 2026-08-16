@@ -3,11 +3,12 @@ import type { Room } from '../Room'
 import type { CardID, SeatID } from '../types'
 import { getRaw, patchEvent, type MoveEventDraft } from './moveEventUtils'
 
-export const DUO_QI_STATE_SPELL_ID = 3731
 /** 狂魔 */
 export const DUO_QI_GAIN_ALL_SPELL_ID = 3730
 /** 夺炁 */
 export const DUO_QI_RANDOM_GAIN_SPELL_ID = 3731
+
+export const DUO_QI_STATE_SPELL_ID = DUO_QI_RANDOM_GAIN_SPELL_ID
 
 export type DuoQiSpellID = typeof DUO_QI_GAIN_ALL_SPELL_ID | typeof DUO_QI_RANDOM_GAIN_SPELL_ID
 
