@@ -86,12 +86,28 @@ describe('tracker protocol recording rules', () => {
     expect(
       shouldRecordTrackerProtocol({
         className: 'PubGsCUseSpell',
+        SpellID: 3730,
+        EffectIndex: 1,
+        DestSeatIDs: [3]
+      })
+    ).toBe(false)
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'PubGsCUseSpell',
         SpellID: 3750,
         EffectIndex: 2,
         DestSeatIDs: [6]
       })
     ).toBe(false)
     expect(shouldRecordTrackerProtocol({ className: 'PubGsCUseSpell', SpellID: 4022 })).toBe(false)
+    expect(
+      shouldRecordTrackerProtocol({
+        className: 'PubGsCUseSpell',
+        SpellID: 3731,
+        EffectIndex: 2,
+        DestSeatIDs: [3]
+      })
+    ).toBe(true)
 
     expect(
       shouldRecordTrackerProtocol({
@@ -138,6 +154,28 @@ describe('tracker protocol recording rules', () => {
       })
     ).toBe(false)
     expect(
+      shouldRecordTrackerProtocol(
+        {
+          className: 'CGsRoleSpellOptRep',
+          SpellID: 3483,
+          Type: 53,
+          Datas: [7, 6, 1, 48, 1, 110]
+        },
+        { mySeatID: 6 }
+      )
+    ).toBe(true)
+    expect(
+      shouldRecordTrackerProtocol(
+        {
+          className: 'CGsRoleSpellOptRep',
+          SpellID: 3483,
+          Type: 53,
+          Datas: [7, 6, 1, 48, 1, 110]
+        },
+        { mySeatID: 7 }
+      )
+    ).toBe(false)
+    expect(
       shouldRecordTrackerProtocol({
         className: 'GsCRoleOptTargetNtf',
         SpellID: 4,
@@ -162,6 +200,9 @@ describe('tracker protocol recording rules', () => {
     )
 
     expect(shouldRecordTrackerProtocol({ className: 'GsCUpdateRoleDataExNtf', DataID: 3544 })).toBe(
+      true
+    )
+    expect(shouldRecordTrackerProtocol({ className: 'GsCUpdateRoleDataExNtf', DataID: 8 })).toBe(
       true
     )
     expect(shouldRecordTrackerProtocol({ className: 'GsCUpdateRoleDataExNtf', DataID: 3709 })).toBe(
@@ -320,6 +361,26 @@ describe('tracker protocol projection', () => {
         CardIDs: [1],
         EffectIndex: 1,
         DestSeatIDs: []
+      }
+    })
+
+    expect(
+      projectTrackerProtocol({
+        className: 'PubGsCUseSpell',
+        SpellID: 3731,
+        SeatID: 4,
+        SkillOwerSeatID: 4,
+        EffectIndex: 2,
+        DestSeatIDs: [3]
+      })
+    ).toEqual({
+      className: 'PubGsCUseSpell',
+      payload: {
+        SpellID: 3731,
+        SeatID: 4,
+        SkillOwerSeatID: 4,
+        EffectIndex: 2,
+        DestSeatIDs: [3]
       }
     })
 

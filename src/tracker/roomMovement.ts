@@ -52,7 +52,10 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       fromPosition = position,
       expectedSlotsBySeat,
       resetKnownToUnknown = false,
+      anonymizeCards = [],
+      requireAnonymizeSuccess = false,
       sourceCards,
+      forceRandomHandTransferCandidates = false,
       postMovePublicCandidates,
       sourceEvent
     } = opt
@@ -106,7 +109,10 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       fromPosition,
       expectedSlotsBySeat,
       resetKnownToUnknown,
+      anonymizeCards: Array.from(new Set(anonymizeCards)).filter(Boolean),
+      requireAnonymizeSuccess,
       sourceCards,
+      forceRandomHandTransferCandidates,
       postMovePublicCandidates,
       sourceEvent,
       targetSeats,
@@ -445,13 +451,15 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       subZone,
       targetHandSeat,
       toZone,
-      unknownCount
+      unknownCount,
+      forceRandomHandTransferCandidates
     } = context
 
     // 暗置标记区候选会接管默认暗牌移动，避免明牌身份被未知占位吞掉。
     if (this.handleHiddenMarkMove(context)) return
 
     if (
+      forceRandomHandTransferCandidates ||
       this.shouldPropagateRandomHandTransferCandidates({
         sourceSeat: sourceHandSeat,
         targetSeat: targetHandSeat,
@@ -476,7 +484,8 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         sourceUnknownCount: context.sourceHandTotalObserved
           ? context.sourceHandUnknownCount
           : undefined,
-        sourceEvent
+        sourceEvent,
+        force: forceRandomHandTransferCandidates
       })
 
       // 完整候选覆盖已经表达了这次 K 张转移；此时不能再确定性挑选暗实体搬到目标。

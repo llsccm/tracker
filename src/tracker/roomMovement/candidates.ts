@@ -75,7 +75,8 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
     sourceTotalBefore,
     sourceHandTotalObserved = false,
     sourceUnknownCount,
-    sourceEvent
+    sourceEvent,
+    force = false
   }: RandomHandTransferOptions): Card[] {
     if (!(count > 0) || fromSeat === null || targetSeat === null || fromSeat === targetSeat) {
       return []
@@ -90,6 +91,7 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
       sourceUnknownCount ??
       (sourcePlayer?.hasObservedHandCount ? sourcePlayer.unknownCardCount : undefined)
     if (
+      !force &&
       (sourceHandTotalObserved || sourcePlayer?.hasObservedHandCount) &&
       typeof observedSourceTotal === 'number' &&
       typeof observedUnknownCount === 'number' &&
@@ -101,6 +103,7 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
     const existingSourceCards = this.getPlayerHandCardsBySeat(fromSeat)
     // 未观测路径：借这次必要扫描顺带确认是否存在可展示明牌。
     if (
+      !force &&
       !(sourceHandTotalObserved || sourcePlayer?.hasObservedHandCount) &&
       !existingSourceCards.some((card) => card.isKnown === true)
     ) {

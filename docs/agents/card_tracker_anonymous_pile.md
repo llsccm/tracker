@@ -294,6 +294,7 @@ pnpm build
 ## 进一步阅读
 
 - [`card_tracker.md`](card_tracker.md)：记牌器整体模块边界与风险清单。
+- [`card_player_model.md`](card_player_model.md)：Card/Player/Zone 实体字段与候选主模型。
 - [`tracker_api.md`](tracker_api.md)：移动、揭示、物化与匿名补位 API 速查。
 - [`testing.md`](testing.md)：测试分层、牌堆身份契约和验证命令。
 - [`replay.md`](replay.md)：匿名槽真实回放与历史裁决证据。

@@ -4,11 +4,13 @@
 
 族钟繇发动诫厉（`SpellID = 3483`）时，会收到一组配对消息：
 
-1. `GsCRoleOptTargetNtf` 同时提供本次看到的牌堆顶卡牌 ID，以及目标座位的**部分**手牌明牌 ID。
+1. 发动者的 `GsCRoleOptTargetNtf` 提供牌堆顶卡牌 ID 和目标的**部分**手牌 ID；目标与其它座位只收到 `Params=[pileCount]`。
 2. `PubGsCMoveCard` 描述牌堆顶卡牌在牌堆内的同区展示，不代表真实移动或随机洗入牌堆。
 
 后续还有牌堆/手牌经交换区再分别回牌堆与回手牌的 `MoveType=11` 序列。
-该序列协议语义见下文；`decorateJieLi` **暂不挂上主动路径**，因为旧装饰假设与已观测实战序列不一致。
+该序列按视角分流：发动者使用已有完整信息走默认移动；生产目标只定位自己换出手牌的回堆槽；
+第三方视角不消费牌 ID 或移动物理实体，只在完整交换链结算后保留目标手牌/牌顶范围弱候选。
+开发模式只放开目标视角的完整身份调试。
 
 ## 目标通知
 
@@ -46,21 +48,30 @@ Params: [4, 2, 81, 99, 124, 4, 91, 158]
 - 牌堆顶 `Params` / 同区展示 `CardIDs` 均为 **top-first**：第一项 `81` 是最顶牌，向内依次为 `99`、`124`、`4`
 - **手牌片段是目标座位的部分手牌，不一定覆盖其全部手牌**；仅当本地整手数恰好等于 `handCount` 时才升级为 `fullHand`
 
+上述完整 `Params` 只会下发给发动者。目标座位 `6` 以及其它座位实测收到：
+
+```text
+Param: 1
+Params: [4]
+SeatID: 7
+SpellID: 3483
+SrcSeatID: 7
+Type: 28
+targetSeatID: 6
+```
+
 当 `Param == 1` 时，当前主动适配：
 
-1. 若 `Params[0] > 0`，把 `expectedPileCount = pileCount` 写入 `Room.getSkillState(3483)`，供后续牌堆进交换区时的局部分组使用。
-2. 若 `Params.length > 2` 且 `pileCount > 0`，将 `Params.slice(2, 2 + pileCount)` 同步为牌堆顶明牌。
+1. 不论当前视角是否携带牌 ID，都用 `SrcSeatID / targetSeatID / Params[0]` 记录 `actorSeat / targetSeat / pileCount` 上下文。
+2. 若 `Params.length > 2` 且 `pileCount > 0`，按协议实际携带的 ID 同步牌堆顶；协议已保证这只出现在发动者视角。
 3. 若 `handCount > 0` 且 `targetSeatID` 不是公共占位座位 `255`，将
    `Params.slice(2 + pileCount, 2 + pileCount + handCount)` 同步为目标座位手牌明牌：
    - 默认按**部分手牌**处理（不带 `fullHand`）。
    - 若本地已观测手牌数等于 `handCount`，或无观测时本地手牌实体数等于 `handCount`，则按整手
      `fullHand: true` 同步，并写回该座位的观测手牌数。
 
-说明：
-
-- 同时携带牌堆顶与手牌片段时，目标通知会同步两者。
-- 协议字面仍是“目标手牌片段”；只有在本地事实表明张数恰好覆盖整手时，才升级为 `fullHand`。
-- 仅有牌堆张数（例如 `Params = [4]`）时只写 `expectedPileCount`，不调用明牌同步。
+说明：运行时不需要根据 `mySeatID` 再判断是否展示。`Params` 本身已是权限边界；
+只有 `[pileCount]` 时不伪造任何牌面。
 
 ## 同区展示
 
@@ -231,10 +242,66 @@ ToZoneParam: 0
    - 对每条 `PubGsCMoveCard` 单独解释其 `CardIDs` 顺序
    - 不要把观看阶段数组直接 reverse 后当成回牌堆/回手牌结果
 
-## 与旧 `decorateJieLi` 的差异（暂不挂上）
+## 目标本人视角：Type 53 在隐藏回堆前给出交换选择
 
-历史装饰器 `src/tracker/skill/JieLi.ts` 仍保留，但**不要**在
-`registerDefaultMoveEventHandlers()` 中挂上。它与本实战序列至少有这些冲突：
+目标本人视角还观测到以下一张牌交换序列：
+
+```text
+牌堆进入交换区：CardIDs=[118,156,39,110]
+目标手牌进入交换区：CardIDs=[48]
+CGsRoleSpellOptRep：Type=53, Datas=[7,6,1,48,1,110]
+交换区回牌堆：CardCount=4, CardIDs=[]
+交换区回目标手牌：CardIDs=[110]
+```
+
+Type 53 的 `Datas` 布局为：
+
+```text
+[actorSeat, targetSeat, handCount, ...handToPileCardIDs, pileCount, ...pileToHandCardIDs]
+```
+
+本例表示：发动者座位 `7`、目标座位 `6`、目标手牌 `48` 换入牌堆、牌堆牌 `110` 换入目标手牌。
+因此隐藏的 `10 -> 1` 到达前已经可以确定：`48` 应回到 `110` 的原牌堆槽位。实际牌序 top-first 为：
+
+```text
+[48,39,156,118]
+```
+
+但生产目标视角只能保留：
+
+```text
+[48, ?, ?, ?]
+```
+
+`39/156/118` 在本视角中仍由匿名物理槽承载，不进入 `cardIndex` 或牌堆已知身份集。
+
+同一布局在目标座位 `4` 视角还观测到两张交换：
+
+```text
+牌堆进入交换区：CardIDs=[4,124,99,81]
+目标手牌进入交换区：CardIDs=[91,158]
+CGsRoleSpellOptRep：Type=53, Datas=[3,4,2,91,158,2,124,4]
+交换区回牌堆：CardCount=4, CardIDs=[]
+交换区回目标手牌：CardIDs=[124,4]
+```
+
+Type 53 的两组卡牌 ID 按下标逐项配对，而不是两个无序集合：
+
+- `handToPile[0]=91` 替换 `pileToHand[0]=124` 的原牌堆槽位
+- `handToPile[1]=158` 替换 `pileToHand[1]=4` 的原牌堆槽位
+
+原牌堆 top-first 为 `[81,99,124,4]`，实际回堆后为 `[81,99,91,158]`，目标手牌获得
+`[124,4]`。生产目标视角只保留 `[?, ?, 91, 158]`；运行时按配对关系建立短期
+`protocol pile ID -> anonymous slot` 映射，不将 `81/99/124/4` 预先物化为牌堆明牌。
+
+这组消息全部属于目标角色视角，不能依赖发动者或其它角色视角补齐回堆 `CardIDs`。
+`CGsRoleSpellOptRep.SeatID=7` 仍是发动者，不是需要消费该消息的视角；运行时仅当
+`Room.mySeatID === targetSeat`（本例为座位 `6`）时解析并写入诫厉批次。发动者座位 `7` 和其它座位
+不处理这条 `3483 / Type 53` 选择结果。
+
+## 当前 `decorateJieLi` 策略
+
+旧装饰器曾与实战序列有这些冲突：
 
 | 旧装饰假设                                                 | 已观测实战                                          |
 | ---------------------------------------------------------- | --------------------------------------------------- |
@@ -243,24 +310,29 @@ ToZoneParam: 0
 | 只特化 `10 -> 1` 回牌堆                                    | 实战还有 `10 -> 5` 回目标手牌                       |
 | 把暂存理解成“手牌批次原样回放”                             | 发动者在交换区完成重选/重排后拆回两个目标区         |
 
-因此当前策略：
+当前主动策略：
 
-1. **观看阶段**目标通知继续由 `handleRoleOptTargetNtf` 同步牌堆顶与部分手牌，并写 `expectedPileCount`。
-2. **交换阶段**暂走默认 `PubGsCMoveCard` / `Room.moveCards` 路径，不启用 `decorateJieLi`。
-3. 整手交换通用账本（`HandExchange`）继续排除诫厉：识别门槛要求 `5<->10` 且整手张数；诫厉是部分手牌，且还有 `1<->10`。
-4. 待默认路径验证清楚后，再单独设计诫厉交换装饰，而不是直接复活旧 `decorateJieLi`。
+1. `handleRoleOptTargetNtf` 从完整或纯计数 `Params` 统一记录 `actorSeat / targetSeat / pileCount`；只有协议实际携带 ID 时才同步牌面。
+2. 发动者不建立 JieLi 推断批次，直接走默认已知移动。
+3. `handleRoleSpellOptRep` 只在当前 `mySeatID` 等于 Type 53 的 `targetSeat` 时解析选择结果；发动者和其它座位直接忽略。
+4. 生产目标视角将 `1 -> 10` 泄露的牌堆 ID 改成匿名 `sourceCards`，Type 53 只把目标手牌替换到匹配槽位。`pileIdentityCardIDs` 只写目标原手牌与技能前已合法公开的身份。
+5. 后续 `10 -> 5` 只校验其明牌与 Type 53 的 `pileToHandCardIDs` 一致，再执行正常入手移动并清理批次。
+6. 开发模式的目标视角允许物化完整牌堆槽，用于调试隐藏回堆结果。
+7. 第三方视角把四条交换移动归一为物理 `noop`；只有完整观察到 `1 -> 10`、`5 -> 10`、`10 -> 1`、`10 -> 5` 后，才为交换开始时仍可能位于目标手牌的明牌追加“牌堆顶前 pileCount 张”候选。原有位置分支全部保留，不消费消息中的 `CardIDs`，也不建立精确数量约束；仅有观看消息或链路中断时不修改候选。
+8. 整手交换通用账本（`HandExchange`）显式排除 `3483`，避免目标恰好只有一张手牌时误判为整手互换。
 
 ## 代码位置
 
 - 目标通知与部分手牌明牌：`src/handler/GsCRoleOptTargetNtf.js`（`SpellID = 3483`）
 - 牌堆同区展示端点归一化：`src/handler/PubGsCMoveCard.js` 的 `normalizeMovePosition` / `PILE_SAME_ZONE_SHOW_SPELL_IDS`
 - 同区展示识别：`src/tracker/MoveEventNormalizer.ts` 的 `isSameZoneShowEvent`
-- 历史交换装饰（未挂载）：`src/tracker/skill/JieLi.ts`
+- Type 53 目标视角分发：`src/handler/CGsRoleSpellOptRep.js`
+- 目标视角交换装饰：`src/tracker/skill/JieLi.ts`
 - 移动装饰注册：`src/tracker/runtime/moveEventHandlers.ts` 的 `registerDefaultMoveEventHandlers`
 - 相关排除说明：`docs/protocols/hand-exchange.md`（诫厉不走整手交换账本）
 
 ## 已知适配缺口
 
-1. 交换阶段默认路径是否稳定处理 `1->10`、部分手牌 `5->10`、混合 `10->1` / `10->5` 仍需实测与回归。
-2. 旧 `decorateJieLi` 与实战序列不匹配，**暂不挂上**；需要按本文件重写或替换。
+1. 生产目标视角的匿名牌堆槽、Type 53 位置配对、隐藏回堆与最终入手已有回归；发动者默认精确移动、第三方目标手牌/牌顶范围弱候选也已覆盖。
+2. 字段不完整的结算分支会回退默认移动；交换序列中断或重复时仍可继续补充超时清理、诊断与恢复策略。
 3. 边缘约束仍待用新版 `ConstraintGroup` 精细化；见 `docs/agents/card_tracker.md` 未完成项。

@@ -1,6 +1,7 @@
 import { SpellExtendConfig } from '@/config'
 import { Game, globalConfig } from '@/tracker'
 import { GUI_FU_ROLE_DATA_ID } from '@/tracker/runtime/protocolRules'
+import { recordDuoQiRoleDataTarget } from '@/tracker/skill/DuoQi'
 import { renderPeiXiuMapWindow, setPeiXiuMapWindowVisible } from '@/ui/PeiXiuMapWindow'
 import { getRenderedPeiXiuHandSuitColors } from '@/ui/PeiXiuHandMirror'
 import { parsePeiXiuRoleData, solvePeiXiuRoleData } from '@/utils/peixiuRouteFeature'
@@ -12,6 +13,12 @@ import { laya } from '@/runtime/gameAdapter'
 export function handleUpdateRoleDataExNtf(msg) {
   const { Datas, SeatID, DataID } = msg
   switch (DataID) {
+    // OPT_DATA_ADD_SPELL_EFFECT
+    case 8:
+      // 夺炁：SeatID 是目标，Datas=[SpellID, 技能拥有者座位]。
+      recordDuoQiRoleDataTarget(Game, msg)
+      break
+
     //出杀次数
     case 1:
       if (Game.currentID == SeatID && Array.isArray(Datas)) {

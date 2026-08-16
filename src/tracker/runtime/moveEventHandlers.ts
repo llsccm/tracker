@@ -2,8 +2,10 @@ import { POSITION_RANDOM } from '../candidate/cardPositions'
 import type { Room } from '../Room'
 import decorateGuanXu, { isGuanXuSpellID } from '../skill/GuanXu'
 import decorateHandExchange from '../skill/HandExchange'
+import decorateJieLi from '../skill/JieLi'
 import decorateSiQi from '../skill/SiQi'
 import decorateTianHou from '../skill/TianHou'
+import decorateZuoLian from '../skill/ZuoLian'
 import {
   getRaw,
   getCount,
@@ -14,6 +16,11 @@ import {
   getSourceZoneCards
 } from '../skill/moveEventUtils'
 import decorateWenGua from '../skill/WenGua'
+import {
+  decorateDuoQiEntitySafety,
+  decorateDuoQiKnownMove,
+  decorateDuoQiMove
+} from '../skill/DuoQi'
 
 export type MoveEventHandler = (event: MoveEventDraft, room: Room) => MoveEventDraft
 
@@ -55,8 +62,8 @@ export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEven
 
   // observePendingChengLieFinalDiscard(event, room)
 
-  // 天候的部分手牌交换需要同时区分牌堆批次与手牌批次，不能落入整手交换账本。
-  if (spellID === 3903 || isGuanXuSpellID(spellID)) return event
+  // 观虚、诫厉、天候都有技能专属交换批次，不能落入整手交换账本。
+  if (spellID === 3483 || spellID === 3903 || isGuanXuSpellID(spellID)) return event
 
   // 整手牌经交换区互易：按协议模式处理，不绑定单一 SpellID。
   return decorateHandExchange(event, room)
@@ -104,31 +111,42 @@ function createFilteredPublicMoveHandler(
 
 export function registerDefaultMoveEventHandlers(room: Room): void {
   room.registerMoveEventHandler('*', decorateGenericMove)
+  // 夺炁 初始牌身份标记
+  room.registerMoveEventHandler('*', decorateDuoQiEntitySafety)
+  room.registerMoveEventHandler('*', decorateDuoQiKnownMove)
+
   // 黄承彦【观虚】：按 FromID/ToID 保留牌堆侧与手牌侧交换桶。
   room.registerMoveEventHandler(987, decorateGuanXu)
   room.registerMoveEventHandler(988, decorateGuanXu)
+
   // 周群【天候】：其他视角的匿名换牌批次及最终单牌范围揭示。
   room.registerMoveEventHandler(3903, decorateTianHou)
+
   //【思泣】：协议不公开返回牌 ID，按弃牌堆顺序筛选红牌实体作为明确来源。
   room.registerMoveEventHandler(3543, decorateSiQi)
+
+  // 魔吕布【夺炁】： 3730/3731 获取修正。
+  room.registerMoveEventHandler(3730, decorateDuoQiMove)
+  room.registerMoveEventHandler(3731, decorateDuoQiMove)
+
   // 马承【骋烈】
   // room.registerMoveEventHandler(3208, decorateChengLie)
-  // 族钟繇【诫厉】
-  // room.registerMoveEventHandler(3483, decorateJieLi)
+
+  // 族钟繇【诫厉】：目标视角定位换出槽位，第三方视角保留手牌/牌顶范围弱候选。
+  room.registerMoveEventHandler(3483, decorateJieLi)
+
   // 徐氏【问卦】
   room.registerMoveEventHandler(780, decorateWenGua)
+
   // 蒲元【奇思】：优先筛选装备牌候选。
-  room.registerMoveEventHandler(
-    11104,
-    createFilteredPublicMoveHandler(11104, 'qisi_candidate', (card) => card.type === 3)
-  )
-  // 蔡瑁【佐练】：优先筛选属性杀候选。
   // room.registerMoveEventHandler(
-  //   3488,
-  //   createFilteredPublicMoveHandler(3488, 'zuolian_candidate', (card) =>
-  //     ['雷杀', '火杀', '冰杀'].includes(card.name)
-  //   )
+  //   11104,
+  //   createFilteredPublicMoveHandler(11104, 'qisi_candidate', (card) => card.type === 3)
   // )
+
+  // 蔡瑁【佐练】：仅在弃牌堆随机取牌时，优先最后入堆的火杀，其次雷杀。
+  room.registerMoveEventHandler(3488, decorateZuoLian)
+
   // 樊稠【兴乱】：优先筛选点数为 6 的候选。
   room.registerMoveEventHandler(
     862,

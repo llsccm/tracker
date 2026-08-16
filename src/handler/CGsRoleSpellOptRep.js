@@ -1,6 +1,9 @@
 import { Game } from '@/tracker'
 import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
 import { tracker } from '@/tracker/runtime/browser'
+import { initializeDuoQiState } from '@/tracker/skill/DuoQi'
+import { parseJieLiSelectionData, recordJieLiSelection } from '@/tracker/skill/JieLi'
+import { handleXiaShuChoice } from './skills/XiaShu'
 
 const PROTOCOL_PILE_ZONE = 1
 const PROTOCOL_HAND_ZONE = 5
@@ -22,17 +25,10 @@ function handleResultType({ Datas, Type }) {
       // 但是这里是系统播报 没办法判断谁是地主
       break
 
-    // TODO 初始牌 SpellID == 0
-    case 72:
-      if (Game.isGameStart && Datas?.length && !Game.round && !Game.phase) {
-        const spellCards = Game.getSpellState(3731)
-        const prev = Array.isArray(spellCards) ? spellCards : []
-        const uniqueIds = new Set(prev.concat(Datas))
-
-        Game.setSpellState(
-          3731,
-          Array.from(uniqueIds).filter((id) => id > 0)
-        ) // 魔吕布 夺炁
+    // TODO 初始牌 OPT_INITIAL_CARDS 夺炁初始化
+    case 72: // 此时 turn = 1 round = 0 phase = 0
+      if (Datas?.length && Game.isGameStart && !Game.round && !Game.phase) {
+        initializeDuoQiState(Game, Datas)
       }
       break
 
@@ -42,6 +38,7 @@ function handleResultType({ Datas, Type }) {
 }
 
 // 同一回复会同时携带通用 Type 结果和技能结果，两层语义需要分别分发。
+// CGsRoleSpellOptRep
 export function handleRoleSpellOptRep(msg = {}) {
   const { Datas, SeatID, SpellID, Type } = msg
   handleResultType(msg)
@@ -87,9 +84,22 @@ export function handleRoleSpellOptRep(msg = {}) {
       // if (Type === 10) Game.getSpellState(SpellID)?.add?.(Datas[0])
       break
 
-    // 裴秀地图结果暂由地图消息链消费。
-    case 4021:
-    case 4022:
+    // 下书：Datas[0] 为 1 取展示牌，为 2 取暗牌。
+    case 361:
+      handleXiaShuChoice(msg, Game)
+      break
+
+    // 诫厉
+    case 3483:
+      if (Type === 53) {
+        const room = tracker.getReadyTrackerRoom()
+        if (!room || room.mySeatID !== Number(Datas?.[1])) break
+        const selection = parseJieLiSelectionData(Datas)
+        if (selection) recordJieLiSelection(room, selection)
+      }
+      break
+
+    // 裴秀地图结果暂由地图消息链消费。4021 4022
     default:
       break
   }

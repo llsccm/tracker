@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
+import { getDuoQiState } from '@/tracker/skill/DuoQi'
 // import { normalizeTrackerMovePosition } from '@/tracker/runtime/protocolRules'
 import {
   formatTrackerProtocolReplayReport,
@@ -68,6 +69,86 @@ describe('tracker protocol replay', () => {
     ).toEqual([1])
   })
 
+  it.each([
+    ['发动者', 101, 1],
+    ['目标角色', 202, 2]
+  ] as const)('主视角为%s时完整重放下书暗牌选择', (_view, currentUserID, mySeatID) => {
+    const shownCardIDs = [1, 2, 3, 4, 5]
+    const records: RecordedTrackerProtocol[] = openingRecords(
+      Array.from({ length: 12 }, (_, index) => index + 1)
+    ).concat([
+      {
+        seq: 5,
+        className: 'PubGsCMoveCard',
+        payload: movePayload({ CardIDs: Array(10).fill(0), CardCount: 10, ToID: 2 })
+      },
+      {
+        seq: 6,
+        className: 'GsCRoleOptTargetNtf',
+        payload: {
+          Param: 0,
+          Params: shownCardIDs,
+          SeatID: 1,
+          SpellID: 361,
+          SrcSeatID: 1,
+          targetSeatID: 2,
+          Type: 29
+        }
+      },
+      {
+        seq: 7,
+        className: 'PubGsCMoveCard',
+        payload: movePayload({
+          CardIDs: shownCardIDs,
+          CardCount: shownCardIDs.length,
+          FromID: 2,
+          FromZone: 5,
+          ToID: 2,
+          ToZone: 5,
+          MoveType: 21,
+          SpellID: 361
+        })
+      },
+      {
+        seq: 8,
+        className: 'CGsRoleSpellOptRep',
+        payload: { Datas: [2, 1], SeatID: 1, SpellID: 361, Type: 22 }
+      },
+      {
+        seq: 9,
+        className: 'PubGsCMoveCard',
+        payload: movePayload({
+          CardIDs: Array(5).fill(0),
+          CardCount: 5,
+          FromID: 2,
+          FromZone: 5,
+          ToID: 1,
+          ToZone: 5,
+          MoveType: 5,
+          SpellID: 361
+        })
+      }
+    ])
+    const replayer = new TrackerProtocolReplayer({ currentUserID })
+    const report = replayer.replay(records)
+    const room = replayer.controller.getReadyTrackerRoom()
+
+    expect(report.success).toBe(true)
+    expect(report).toMatchObject({ applied: 9, ignored: 0, partial: 0 })
+    expect(room?.mySeatID).toBe(mySeatID)
+    expect(
+      room
+        ?.getPlayer(2)
+        .knownHandCards.map((card) => card.id)
+        .sort((a, b) => a - b)
+    ).toEqual(shownCardIDs)
+    expect(room?.getPlayer(2).observedHandCount).toBe(5)
+    expect(room?.getPlayer(2).unknownCardCount).toBe(0)
+    expect(room?.getPlayer(1).observedHandCount).toBe(5)
+    expect(room?.getPlayer(1).unknownCardCount).toBe(5)
+    expect(replayer.gameState.getSpellState(361)).toBeUndefined()
+  })
+
   it('重放看牌协议并保留牌堆顶顺序供逻辑推断检查', () => {
     const records = openingRecords().concat({
       seq: 5,
@@ -80,6 +161,41 @@ describe('tracker protocol replay', () => {
     expect(report.finalState.room?.zones.pile.cardIDsBottomToTop.slice(-2).reverse()).toEqual([
       2, 3
     ])
+  })
+
+  it('3730 只由 DataID=8 记录目标，PubGsCUseSpell 不提前写入', () => {
+    const records = openingRecords().concat(
+      {
+        seq: 5,
+        className: 'CGsRoleSpellOptRep',
+        payload: { SpellID: 0, Type: 72, SeatID: 1, Datas: [1, 2, 3, 4] }
+      },
+      {
+        seq: 6,
+        className: 'PubGsCUseSpell',
+        payload: {
+          SpellID: 3730,
+          EffectIndex: 1,
+          SeatID: 1,
+          SkillOwerSeatID: 1,
+          DestSeatIDs: [3],
+          CardIDs: []
+        }
+      },
+      {
+        seq: 7,
+        className: 'GsCUpdateRoleDataExNtf',
+        payload: { DataID: 8, Datas: [3730, 1], SeatID: 2 }
+      }
+    )
+    const replayer = new TrackerProtocolReplayer({ currentUserID: 101 })
+    const report = replayer.replay(records)
+
+    expect(report.success).toBe(true)
+    expect(getDuoQiState(replayer.gameState)?.activations.get(3730)).toMatchObject({
+      ownerSeatID: 1,
+      targetSeatID: 2
+    })
   })
 
   it('录制开始过晚时停在首条无法重建的协议并报告前置状态', () => {

@@ -1,4 +1,5 @@
 import handleJiaoYu from './skills/JiaoYu'
+import handleXiaShu from './skills/XiaShu'
 import handleZuoLian from './skills/ZuoLian'
 
 function handleChengXiang(context) {
@@ -36,6 +37,7 @@ function handleQianFu(context) {
 }
 
 export const spellEffectHandlers = new Map([
+  [361, handleXiaShu],
   [441, handleChengXiang],
   [3492, handleChengXiang],
   // [3033, handleJiZhan],

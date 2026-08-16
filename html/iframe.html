@@ -76,6 +76,17 @@
       align-items: center;
       gap: 4px;
       padding: 8px;
+      position: relative;
+    }
+
+    .nav-row::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--text-gold), transparent);
     }
 
     .nav-item {
@@ -97,12 +108,6 @@
       height: 13px;
       stroke-width: 2;
       flex: 0 0 auto;
-    }
-
-    .nav-divider {
-      height: 1px;
-      width: 100%;
-      background: linear-gradient(90deg, transparent, var(--text-gold), transparent);
     }
 
     .text-sgs-red {
@@ -241,12 +246,11 @@
       position: relative;
       padding: 5px;
       height: auto;
-      width: 94%;
       display: flex;
       flex-wrap: wrap;
       gap: 4px;
       align-items: center;
-      box-shadow: 1px 1px 3px;
+      box-shadow: 0px 1px 3px;
       z-index: 1;
       margin: 1px;
       overflow: hidden;
@@ -498,7 +502,6 @@
     .detail-head {
       width: 10%;
       height: 25px;
-      float: left;
       text-align: center;
       color: var(--text-gold);
       margin-left: 3px;
@@ -507,24 +510,20 @@
     .detail-body {
       min-height: 40px;
       padding: 5px;
-      width: 94%;
       display: block;
-      box-shadow: 1px 1px 3px;
+      box-shadow: 0px 0px 3px;
       margin: 1px;
       border-radius: 5px;
       overflow: hidden;
     }
 
     .rogue-attr-head {
-      float: none;
       width: auto;
       text-align: center;
       white-space: nowrap;
     }
 
     .rogue-attr-body {
-      float: none;
-      width: 100%;
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
@@ -1564,14 +1563,12 @@
         <span class="sha" id="sha">剩余: 1</span>
       </div>
     </div>
-    <div class="nav-divider"></div>
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="tab-cards" type="button">记牌器</button>
       <button class="tab-btn" data-tab="tab-stats" type="button">计数器</button>
       <button class="tab-btn" data-tab="tab-map" type="button">山河图</button>
       <button class="tab-btn" data-tab="tab-settings" type="button">设置</button>
     </div>
-    <div class="nav-divider"></div>
   </div>
   <div class="content" id="content">
 
@@ -1717,7 +1714,6 @@
             <br />
             <br />
             <br />
-            <div id="guhuo" style="display: none">蛊惑牌</div>
             <div class="function yanjiao" id="yanjiao">严教小抄</div>
             <button class="function mizhuBTN" id="mizhu">糜竺小抄</button>
             <!-- <button class="function mizhu mySeatID" id="mySeatID1">座位：1</button> -->
@@ -1764,7 +1760,6 @@
         </div>
         <div class="detail">
           <div class="detail-head rogue-attr-head">结局倾向</div>
-          <div class="nav-divider"></div>
           <div class="detail-body rogue-attr-body" id="rogueAttrInfo">
             <span
               class="rogue-attr-badge"

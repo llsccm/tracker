@@ -8,11 +8,28 @@
 
 | 场景 | 协议或识别条件 | 主要实现 / 回归入口 |
 | --- | --- | --- |
+| 下书明暗选择 | `SpellID=361` | `src/handler/skills/XiaShu.js`、`tests/tracker/xiaShu.test.ts` |
 | 暗置标记区候选 | `FromZone=5`、`ToZone=4/8`、全暗 `CardIDs` | `RoomMovement.handleHiddenMarkMove()`、`hiddenMarkCandidates` |
 | 观虚目标视角交换 | `SpellID=987/988` | `src/tracker/skill/GuanXu.ts`、`tests/tracker/guanXuExchange.test.ts` |
 | 整手牌交换 | `MoveType=11` + `5<->10` + 整手张数 | `src/tracker/skill/HandExchange.ts` |
 | 诫厉观看与暂存 | `SpellID=3483` | `handleRoleOptTargetNtf`、`tests/tracker/roleOptTargetNtf.test.ts` |
 | 天候私有观看与展示 | `SpellID=3903` | `src/tracker/skill/TianHou.ts`、`tests/tracker/tianHouExchange.test.ts` |
+
+## 下书明暗选择（SpellID=361）
+
+- `GsCRoleOptTargetNtf` 同时给出 `Params` 展示牌和 `targetSeatID`；技能层直接记录二者，不通过
+  `SeatID` / `SrcSeatID`、配对移动或卡牌当前 owner/候选反推目标。该通知只保存技能状态；配对的
+  手牌同区 `PubGsCMoveCard` 继续由通用移动框架同步明牌。
+- `CGsRoleSpellOptRep Type=22` 的 `Datas[0]=1` 表示取展示牌，后续已知牌移动沿用通用框架；
+  `Datas[0]=2` 表示取暗牌。
+- 暗牌分支先让通用随机转移建立“目标剩余 / 发动者获得”的数量约束并同步手牌数，再以
+  `handMoveCount=0` 把展示牌确认回原目标手牌。展示牌填满目标剩余槽位后，其它牌的目标手牌分支
+  会由通用约束删除：确定暗牌落定到发动者，候选槽获得发动者分支并保留其它原有分支。
+- 下书不快照或重建既有 `ConstraintGroup`。通用转移负责失效旧的来源/目标手牌名额并创建本次转移
+  约束，随后由展示牌确认触发统一收敛。
+- 实测 `CGsRoleSpellOptRep` 选择回复固定早于后续取牌 `PubGsCMoveCard`。选择处理器只记录
+  `choice/actorSeatID`；移动完成回调是唯一结算点，负责确认展示牌并清理技能状态。
+- 协议样例：`docs/protocols/GsCRoleOptTargetNtf-361.md`。
 
 ## 暗置标记区候选流程
 
@@ -78,8 +95,12 @@
 - 观看阶段 `Params` 布局与观虚同类：`[pileCount, handCount, ...pileTop, ...handPartial]`；手牌片段默认是部分手牌，仅当 `handCount` 恰好等于目标整手数时 `fullHand`。
 - 观看/同区展示的牌堆序列是 **top-first**（例：`[81, 99, 124, 4]`，`81` 为顶）；后续交换 `CardIDs` 可能整段逆序或混合重排（例进交换区 `[4, 124, 99, 81]`），不能跨消息沿用“第一项=牌顶”。
 - 配对 `PubGsCMoveCard` 为牌堆同区展示（`FromZone=ToZone=1`、`MoveType=21`、两端 `255`）；`CardIDs` 即牌堆顶 top-first 序列。
-- 目标通知主动路径：`handleRoleOptTargetNtf` 在 `Param == 1` 时写入 `expectedPileCount`，并同步牌堆顶与目标手牌片段。回归见 `tests/tracker/roleOptTargetNtf.test.ts`。
-- 后续交换序列已文档化：`1->10`（牌堆）+ `5->10`（部分手牌）后拆回 `10->1` / `10->5`；旧 `decorateJieLi` **暂不挂上**，默认走通用移动路径。
+- 协议已隔离视角：发动者收到完整 `[pileCount, handCount, ...IDs]`，目标与其它座位只收到 `Params=[pileCount]`。`handleRoleOptTargetNtf` 不再自行判断展示权限，只有消息实际携带 ID 时才同步牌面。
+- `handleRoleOptTargetNtf` 在两种 `Params` 形态下都记录 `actorSeat / targetSeat / pileCount` 上下文。生产目标运行槽位推断；`import.meta.env.DEV` 只放开目标视角的完整身份调试。
+- 后续交换序列为 `1->10`（牌堆）+ `5->10`（部分手牌）后拆回 `10->1` / `10->5`。
+- 目标手牌进入交换区后，`CGsRoleSpellOptRep Type=53` 的 `Datas` 为 `[actorSeat,targetSeat,handCount,...handToPile,pileCount,...pileToHand]`。仅当 `Room.mySeatID === targetSeat` 时记录；发动者和其它座位不消费该消息。
+- 生产目标视角把牌堆进交换区的泄露 ID 改为匿名物理槽；Type 53 只建立短期 `protocol ID -> slot` 映射，将目标原手牌放回对应槽位。例如 `48` 位于原 `110` 槽位，其它三个槽仍匿名，不展示 `[39,156,118]`。
+- 发动者仅走默认已知牌移动，不建立 JieLi 推断批次。第三方视角将 3483 的物理观看/交换事件归一为 `noop`，但在确认 `1->10`、`5->10`、`10->1`、`10->5` 完整结算后，为当时仍可能位于目标手牌的明牌追加“牌堆顶前 pileCount 张”公共弱候选；原有其它位置分支全部保留，不建立精确 N 选 K 约束。`3483` 显式绕过 `HandExchange`。
 - `PILE_SAME_ZONE_SHOW_SPELL_IDS` **不需要**仅为 `3483` 扩展；该白名单只修正权变/观虚的 RANDOM 端点。诫厉应先判断消息本身是否已明确为同区展示。
 - 不走整手交换账本：`HandExchange` 识别门槛会排除诫厉的非整手、回牌堆路径。
 
