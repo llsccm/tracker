@@ -82,7 +82,7 @@ export function getDuoQiState(game: DuoQiGameStateLike): DuoQiState | undefined 
   return state?.active === true ? state : undefined
 }
 
-function getInitialHandCards(room: Room, seatID: SeatID): Card[] {
+function getHandCards(room: Room, seatID: SeatID): Card[] {
   return room.cards.filter(
     (card) =>
       card.location === 'player' && card.subZone === 'hand' && card.seats.has(Number(seatID))
@@ -154,7 +154,7 @@ export function initializeDuoQiState(
 
   // 先记录初始化瞬间的实体分组。可见牌同时绑定 CardID；不可见牌等后续展示再由实体反查。
   room.seatIDs.forEach((seatID) => {
-    const handCards = getInitialHandCards(room, seatID)
+    const handCards = getHandCards(room, seatID)
     state.initialHandCountsBySeat.set(seatID, handCards.length)
     state.initialCardIDsBySeat.set(seatID, new Set())
 
@@ -602,7 +602,7 @@ export function decorateDuoQiEntitySafety(event: MoveEventDraft, room: Room): Mo
 
   const selectionCount = Math.max(0, Number(event.cardCount ?? raw.CardCount) || 0)
   const sourcePlayer = room.getPlayer(fromSeatID)
-  const physicalHandCards = getInitialHandCards(room, fromSeatID)
+  const physicalHandCards = getHandCards(room, fromSeatID)
   const sourceHandCount = sourcePlayer?.hasObservedHandCount
     ? sourcePlayer.observedHandCount
     : physicalHandCards.length

@@ -17,7 +17,7 @@ export function handleXiaShuTargetNotice(msg, game) {
   const { Param, Params, targetSeatID, Type } = msg
   if (Number(Param) !== 0 || Number(Type) !== 29 || !Array.isArray(Params)) return false
 
-  const shownCardIDs = Array.from(new Set(Params.filter((id) => Number(id) > 0).map(Number)))
+  const shownCardIDs = Params.map(Number).filter((id) => id > 0)
   const targetSeat = Number(targetSeatID)
   if (!shownCardIDs.length || !Number.isInteger(targetSeat) || targetSeat === 255) return false
 

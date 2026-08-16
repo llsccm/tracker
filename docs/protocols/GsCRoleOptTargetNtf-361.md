@@ -22,9 +22,12 @@ Type: 29
 className: "GsCRoleOptTargetNtf"
 ```
 
-`SeatID` 与 `SrcSeatID` 都是发动者座位；被展示手牌的角色由 `targetSeatID` 明确给出。运行时直接记录
-`{ targetSeatID, shownCardIDs: Params }`，不再从配对移动或当前卡牌候选反推目标。该通知不直接同步
-卡牌，避免与随后必到的手牌同区展示重复处理。
+`SeatID` 与 `SrcSeatID` 都是发动者座位；被展示手牌的角色由 `targetSeatID` 明确给出。
+`handleXiaShuTargetNotice()` 只接受 `Param=0`、`Type=29` 且 `Params` 为数组的通知；它会将牌 ID
+转为数字并过滤非正值，不对重复 ID 做静默去重，重复值应视为上游游戏异常。规范化后的列表为空，
+或 `targetSeatID` 转换后不是整数、等于 `255` 时会拒绝该通知；否则记录规范化后的
+`{ targetSeatID, shownCardIDs }`，不再从配对移动或当前卡牌候选反推目标。该通知不直接同步卡牌，
+避免与随后必到的手牌同区展示重复处理。
 
 ## 配对的手牌同区展示
 
