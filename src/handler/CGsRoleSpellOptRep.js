@@ -2,6 +2,7 @@ import { Game } from '@/tracker'
 import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
 import { tracker } from '@/tracker/runtime/browser'
 import { initializeDuoQiState } from '@/tracker/skill/DuoQi'
+import { parseJieLiSelectionData, recordJieLiSelection } from '@/tracker/skill/JieLi'
 import { handleXiaShuChoice } from './skills/XiaShu'
 
 const PROTOCOL_PILE_ZONE = 1
@@ -37,6 +38,7 @@ function handleResultType({ Datas, Type }) {
 }
 
 // 同一回复会同时携带通用 Type 结果和技能结果，两层语义需要分别分发。
+// CGsRoleSpellOptRep
 export function handleRoleSpellOptRep(msg = {}) {
   const { Datas, SeatID, SpellID, Type } = msg
   handleResultType(msg)
@@ -87,9 +89,17 @@ export function handleRoleSpellOptRep(msg = {}) {
       handleXiaShuChoice(msg, Game)
       break
 
-    // 裴秀地图结果暂由地图消息链消费。
-    case 4021:
-    case 4022:
+    // 诫厉
+    case 3483:
+      if (Type === 53) {
+        const room = tracker.getReadyTrackerRoom()
+        if (!room || room.mySeatID !== Number(Datas?.[1])) break
+        const selection = parseJieLiSelectionData(Datas)
+        if (selection) recordJieLiSelection(room, selection)
+      }
+      break
+
+    // 裴秀地图结果暂由地图消息链消费。4021 4022
     default:
       break
   }

@@ -154,6 +154,28 @@ describe('tracker protocol recording rules', () => {
       })
     ).toBe(false)
     expect(
+      shouldRecordTrackerProtocol(
+        {
+          className: 'CGsRoleSpellOptRep',
+          SpellID: 3483,
+          Type: 53,
+          Datas: [7, 6, 1, 48, 1, 110]
+        },
+        { mySeatID: 6 }
+      )
+    ).toBe(true)
+    expect(
+      shouldRecordTrackerProtocol(
+        {
+          className: 'CGsRoleSpellOptRep',
+          SpellID: 3483,
+          Type: 53,
+          Datas: [7, 6, 1, 48, 1, 110]
+        },
+        { mySeatID: 7 }
+      )
+    ).toBe(false)
+    expect(
       shouldRecordTrackerProtocol({
         className: 'GsCRoleOptTargetNtf',
         SpellID: 4,

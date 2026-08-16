@@ -95,8 +95,12 @@
 - 观看阶段 `Params` 布局与观虚同类：`[pileCount, handCount, ...pileTop, ...handPartial]`；手牌片段默认是部分手牌，仅当 `handCount` 恰好等于目标整手数时 `fullHand`。
 - 观看/同区展示的牌堆序列是 **top-first**（例：`[81, 99, 124, 4]`，`81` 为顶）；后续交换 `CardIDs` 可能整段逆序或混合重排（例进交换区 `[4, 124, 99, 81]`），不能跨消息沿用“第一项=牌顶”。
 - 配对 `PubGsCMoveCard` 为牌堆同区展示（`FromZone=ToZone=1`、`MoveType=21`、两端 `255`）；`CardIDs` 即牌堆顶 top-first 序列。
-- 目标通知主动路径：`handleRoleOptTargetNtf` 在 `Param == 1` 时写入 `expectedPileCount`，并同步牌堆顶与目标手牌片段。回归见 `tests/tracker/roleOptTargetNtf.test.ts`。
-- 后续交换序列已文档化：`1->10`（牌堆）+ `5->10`（部分手牌）后拆回 `10->1` / `10->5`；旧 `decorateJieLi` **暂不挂上**，默认走通用移动路径。
+- 协议已隔离视角：发动者收到完整 `[pileCount, handCount, ...IDs]`，目标与其它座位只收到 `Params=[pileCount]`。`handleRoleOptTargetNtf` 不再自行判断展示权限，只有消息实际携带 ID 时才同步牌面。
+- `handleRoleOptTargetNtf` 在两种 `Params` 形态下都记录 `actorSeat / targetSeat / pileCount` 上下文。生产目标运行槽位推断；`import.meta.env.DEV` 只放开目标视角的完整身份调试。
+- 后续交换序列为 `1->10`（牌堆）+ `5->10`（部分手牌）后拆回 `10->1` / `10->5`。
+- 目标手牌进入交换区后，`CGsRoleSpellOptRep Type=53` 的 `Datas` 为 `[actorSeat,targetSeat,handCount,...handToPile,pileCount,...pileToHand]`。仅当 `Room.mySeatID === targetSeat` 时记录；发动者和其它座位不消费该消息。
+- 生产目标视角把牌堆进交换区的泄露 ID 改为匿名物理槽；Type 53 只建立短期 `protocol ID -> slot` 映射，将目标原手牌放回对应槽位。例如 `48` 位于原 `110` 槽位，其它三个槽仍匿名，不展示 `[39,156,118]`。
+- 发动者仅走默认已知牌移动，不建立 JieLi 推断批次。第三方视角将 3483 的物理观看/交换事件归一为 `noop`，但在确认 `1->10`、`5->10`、`10->1`、`10->5` 完整结算后，为当时仍可能位于目标手牌的明牌追加“牌堆顶前 pileCount 张”公共弱候选；原有其它位置分支全部保留，不建立精确 N 选 K 约束。`3483` 显式绕过 `HandExchange`。
 - `PILE_SAME_ZONE_SHOW_SPELL_IDS` **不需要**仅为 `3483` 扩展；该白名单只修正权变/观虚的 RANDOM 端点。诫厉应先判断消息本身是否已明确为同区展示。
 - 不走整手交换账本：`HandExchange` 识别门槛会排除诫厉的非整手、回牌堆路径。
 

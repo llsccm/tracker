@@ -8,6 +8,7 @@ import {
   PARTIAL_HAND_ROLE_OPT_SPELL_IDS,
   shouldRevealAsFullHand
 } from '../tracker/runtime/protocolRules'
+import { recordJieLiContext } from '../tracker/skill/JieLi'
 import { laya } from '@/runtime/gameAdapter'
 import { wait } from '@/utils'
 import { handleXiaShuTargetNotice } from './skills/XiaShu'
@@ -198,25 +199,22 @@ export function handleRoleOptTargetNtf(msg) {
     // 族钟繇 诫厉
     case 3483:
       if (targetSeatID === undefined) break
-      // 目前全局不可知
-      // 同样只展示牌堆 目标角色手牌需要在这里同步
       // Params: [pileCount, handCount, ...pileTopCardIDs, ...handCardIDs]
       if (Param == 1 && Params?.length > 0) {
         const pileCount = Number(Params[0]) || 0
         const handCount = Number(Params[1]) || 0
-
-        if (pileCount > 0) {
-          const trackerRoom = tracker.getReadyTrackerRoom()
-          if (trackerRoom) {
-            trackerRoom.getSkillState(SpellID).expectedPileCount = pileCount
-          }
+        const trackerRoom = tracker.getReadyTrackerRoom()
+        const actorSeat = Number(SrcSeatID ?? SeatID)
+        const targetSeat = Number(targetSeatID)
+        if (trackerRoom) {
+          recordJieLiContext(trackerRoom, { actorSeat, targetSeat, pileCount })
         }
 
+        // 协议已经做好视角隔离：只有发动者会收到后续牌 ID，
+        // 目标与其它座位只收到 Params=[pileCount]，因此这里无需再判断展示权限。
         if (Params.length > 2) {
-          // 牌堆
           if (pileCount > 0) revealPileCards(Params.slice(2, 2 + pileCount))
 
-          // 手牌
           if (handCount > 0 && targetSeatID !== 255) {
             const handCardIDs = Params.slice(2 + pileCount, 2 + pileCount + handCount)
             revealPlayerHandCards(
