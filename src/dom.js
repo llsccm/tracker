@@ -49,11 +49,15 @@ export function Init() {
 export function Exit() {
   unbindProtocolRecorderControls()
   void stopProtocolRecording()
+  Reflect.deleteProperty(window, 'innerWidth')
   return cleanupLifecycle({ resize, scheduleSetGameSize, SGSresize, globalState })
 }
 
 function resize() {
-  window.innerWidth = document.documentElement.clientWidth - window.padding
+  const padding = Number(window.padding) || 0
+  // innerWidth 是 Replaceable 属性；padding 为 0 时删除赋值产生的自有属性以恢复原生尺寸。
+  if (padding > 0) window.innerWidth = document.documentElement.clientWidth - padding
+  else Reflect.deleteProperty(window, 'innerWidth')
   document.documentElement.style.setProperty('--sgs-center-x', `${window.innerWidth / 2}px`)
 }
 
