@@ -8,15 +8,6 @@ export function addSeatUI(globalConfig) {
   seatUI.style.pointerEvents = 'none' // 确保点击事件穿透
   seatUI.style.display = ''
 
-  var rogueUI = document.createElement('div')
-  rogueUI.id = 'rogueUI'
-  rogueUI.style.position = 'absolute'
-  rogueUI.style.top = '50%'
-  rogueUI.style.left = '50%'
-  rogueUI.style.transform = 'translate(-50%, -50%)'
-  rogueUI.style.pointerEvents = 'none' // 确保点击事件穿透
-  rogueUI.style.display = ''
-
   var deckEdgeUI = document.createElement('div')
   deckEdgeUI.id = 'deckEdgeUI'
   deckEdgeUI.className = 'sorderContainer deckEdgeUI'
@@ -39,17 +30,13 @@ export function addSeatUI(globalConfig) {
     seatSlotFragment.appendChild(orderContainer)
   }
   seatUI.appendChild(seatSlotFragment)
-  // 初始化
-  // 关闭明牌框框 不需要将山河图的城市也关了
+  // 初始化明牌框显隐
   globalConfig.seatUISwitch
     ? (seatUI.style.display = 'block')
     : ((seatUI.style.display = 'none'),
-      document
-        .querySelectorAll('#seatUI > *:not(.city)')
-        .forEach((el) => (el.style.display = 'none')))
+      seatUI.querySelectorAll(':scope > *').forEach((el) => (el.style.display = 'none')))
 
   document.body.appendChild(seatUI)
-  document.body.appendChild(rogueUI)
 }
 
 export function resetOrderContainer() {

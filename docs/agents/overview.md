@@ -21,7 +21,7 @@
     - `seatOverlay.js`：座位覆盖层
     - `shell.js`：主窗口 shell（含可见性快捷键绑定）
     - `frameContent.js`：注入 HTML 初始化
-    - `CitiesUI.js`：山河图城市与商店 UI
+    - `CitiesUI.js`：山河图城市与商店 Laya UI
     - `lifecycle.js`：生命周期辅助
     - `effect.js`：视觉效果辅助
     - `PeiXiuMapWindow.js`：裴秀地图窗口
