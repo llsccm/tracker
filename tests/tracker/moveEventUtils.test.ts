@@ -15,8 +15,8 @@ function verifyPatchEventTypes(event: MoveEventDraft): void {
 void verifyPatchEventTypes
 
 describe('moveEventUtils', () => {
-  it('getPositiveIDs 转换、过滤并按首次出现顺序去重', () => {
-    expect(getPositiveIDs([3, '2', 3, 0, -1, 'invalid'])).toEqual([3, 2])
+  it('getPositiveIDs 过滤非正数并按首次出现顺序去重', () => {
+    expect(getPositiveIDs([3, 2, 3, 0, -1, NaN])).toEqual([3, 2])
   })
 
   it('patchEvent 只替换指定字段并浅合并 options', () => {
