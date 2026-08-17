@@ -1,4 +1,3 @@
-// import { laya } from '../runtime/gameAdapter'
 import { addTooltip } from './notification'
 
 const correction = [

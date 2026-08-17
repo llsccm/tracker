@@ -5,6 +5,10 @@ export function addDragHint() {
   document.body.appendChild(sidebarHint)
 }
 
+function getLayoutViewportWidth() {
+  return document.documentElement.clientWidth || window.innerWidth
+}
+
 export function initDragElement(globalConfig, globalState, refreshSidebarViewport) {
   // 1.在明牌框框内点击拖动三国杀页面元素会拖动不了
   // 2.拖动三国杀元素途径明牌框框，会拖动不了
@@ -105,12 +109,13 @@ export function initDragElement(globalConfig, globalState, refreshSidebarViewpor
     const left0 = rect.left - translateX
     const top0 = rect.top - translateY
     const width = rect.width || 230
+    const viewportWidth = getLayoutViewportWidth()
 
     translateX += deltaX
     translateY += deltaY
 
     const minX = -left0
-    const maxX = window.innerWidth - width - left0
+    const maxX = viewportWidth - width - left0
     const minY = -top0
     const maxY = window.innerHeight - 30 - top0
 
@@ -131,7 +136,7 @@ export function initDragElement(globalConfig, globalState, refreshSidebarViewpor
       })
     }
 
-    if (window.innerWidth - clientX < 25) {
+    if (viewportWidth - clientX < 25) {
       sidebarHint.style.backgroundColor = 'rgba(55, 40, 32, 1)'
     } else {
       sidebarHint.style.backgroundColor = 'rgba(55, 40, 32, 0.8)'
@@ -155,7 +160,7 @@ export function initDragElement(globalConfig, globalState, refreshSidebarViewpor
 
     const finalClientX =
       e.clientX ?? e.changedTouches?.[0]?.clientX ?? e.touches?.[0]?.clientX ?? startX
-    if (window.innerWidth - finalClientX < 25 && draggable.id === 'header') {
+    if (getLayoutViewportWidth() - finalClientX < 25 && draggable.id === 'header') {
       if (!globalConfig.padding) {
         if (globalState.closeIframe) {
           const toggle = document.getElementById('toggle-me')

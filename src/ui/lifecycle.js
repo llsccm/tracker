@@ -14,7 +14,6 @@ export function removeInjectedDom(globalState) {
   unbindTrackerVisibilityShortcut()
   //document.getElementById('injectCSS')?.remove()
   document.getElementById('seatUI')?.remove()
-  document.getElementById('rogueUI')?.remove()
   document.getElementById('cusBGDiv')?.remove()
   document.getElementById('createIframe')?.remove()
   destroyPeiXiuMapWindow()

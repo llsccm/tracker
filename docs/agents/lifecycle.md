@@ -55,7 +55,7 @@ graph TD
   1. [`src/index.js`](../../src/index.js) 若发现已有 `SGSMODULE`：将 `console.log` 临时改为 `console.info`，广播 `'EXIT'`，删除 `SGSMODULE`。
   2. [`src/dom.js`](../../src/dom.js) 的 `Exit()` → [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js) 的 `cleanupLifecycle()`。
   3. 移除 `resize` / `SGSresize` 监听，清空 `SGSMODULE`。
-  4. `removeInjectedDom()` 清理座位 UI、山河图 UI、iframe、裴秀地图窗口与可见性快捷键绑定。
+  4. `removeInjectedDom()` 清理座位 UI、iframe、裴秀地图窗口与可见性快捷键绑定；山河图城市由 Laya 场景持有，不再注入 DOM 容器。
 
 ---
 

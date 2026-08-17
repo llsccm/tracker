@@ -43,6 +43,11 @@ interface CardListOptions {
   ambiguous?: boolean
 }
 
+type HandCardKind = 'known' | 'candidate'
+
+const RENDER_NODE_SELECTOR = ':scope > .shoupai, :scope > .markedCard'
+const RENDER_KEY_ATTRIBUTE = 'data-tracker-render-key'
+
 /**
  * 按本局人数初始化武将手牌容器；后续渲染只更新容器内的动态牌节点。
  */
@@ -87,7 +92,7 @@ export function updateSeatLabel(
 
 /**
  * 渲染单个玩家的武将手牌明牌区：确定明牌 + 模糊明牌(候选席位角标) + 标记牌(按技能分组)
- * 容器 #playerHand<order+1> 内的 .order-body，按 syncViewGroups 稳定顺序重建
+ * 容器 #playerHand<order+1> 内的 .order-body，按 syncViewGroups 稳定顺序增量同步
  */
 export function renderPlayerHand(doc: Document, player: Player): void {
   const displayID = Number(player.fixedViewId)
@@ -97,41 +102,24 @@ export function renderPlayerHand(doc: Document, player: Player): void {
   const body = panel?.querySelector<HTMLElement>('#playerHand' + displayID + ' > .order-body')
   if (!body) return
 
-  body.querySelectorAll(':scope > .shoupai, :scope > .markedCard').forEach((e) => e.remove())
-
-  const fragment = doc.createDocumentFragment()
+  const renderedNodes: Element[] = []
 
   for (const card of player.knownHandCards) {
-    fragment.appendChild(createCardButton(doc, card))
+    renderedNodes.push(createHandCardNode(doc, card, 'known'))
   }
 
   for (const card of player.candidateHandCards) {
-    fragment.appendChild(createCardButton(doc, card, { ambiguous: true }))
+    renderedNodes.push(createHandCardNode(doc, card, 'candidate', true))
   }
 
   const markSpell = SkillsConfig.GetInstance().markSpell
 
   player.markCards.forEach((cards, spellID) => {
     if (!cards || !cards.length) return
-
-    const markedCard = doc.createElement('div')
-    markedCard.className = 'markedCard'
-
-    const mark = doc.createElement('span')
-    mark.className = 'mark'
-    mark.textContent = markSpell[spellID] ?? String(spellID)
-    markedCard.appendChild(mark)
-
-    for (const card of cards) {
-      markedCard.appendChild(
-        createCardButton(doc, card, { ambiguous: card.hasSubZoneCandidates?.() === true })
-      )
-    }
-
-    fragment.appendChild(markedCard)
+    renderedNodes.push(createMarkedCardNode(doc, spellID, cards, markSpell[spellID]))
   })
 
-  body.appendChild(fragment)
+  reconcileRenderedNodes(body, renderedNodes)
   syncSeatOverlayHand(doc, displayID, body)
 
   if (Number(player.seatID) === Number(player.room.mySeatID)) {
@@ -139,6 +127,119 @@ export function renderPlayerHand(doc: Document, player: Player): void {
       player.knownHandCards.map((card) => Number(card.id)).filter((id) => id > 0)
     )
   }
+}
+
+function createHandCardNode(
+  doc: Document,
+  card: Card,
+  kind: HandCardKind,
+  ambiguous = false
+): HTMLButtonElement {
+  const button = createCardButton(doc, card, { ambiguous })
+  return setRenderedNodeKey(button, `hand:${kind}:${card.id}`)
+}
+
+function createMarkedCardNode(
+  doc: Document,
+  spellID: number,
+  cards: Card[],
+  configuredLabel: string | undefined
+): HTMLElement {
+  const markedCard = doc.createElement('div')
+  markedCard.className = 'markedCard'
+
+  const label = configuredLabel ?? String(spellID)
+  const mark = doc.createElement('span')
+  mark.className = 'mark'
+  mark.textContent = label
+  markedCard.appendChild(mark)
+
+  cards.forEach((card) => {
+    const button = createCardButton(doc, card, {
+      ambiguous: card.hasSubZoneCandidates?.() === true
+    })
+    markedCard.appendChild(button)
+  })
+
+  return setRenderedNodeKey(markedCard, `mark:${spellID}`)
+}
+
+function setRenderedNodeKey<T extends Element>(node: T, key: string): T {
+  node.setAttribute(RENDER_KEY_ATTRIBUTE, key)
+  return node
+}
+
+function reconcileRenderedNodes(container: Element, desiredNodes: Element[]): void {
+  const currentNodes = getDirectRenderedNodes(container)
+  const currentByKey = new Map<string, Element>()
+
+  currentNodes.forEach((node) => {
+    const key = node.getAttribute(RENDER_KEY_ATTRIBUTE)
+    if (key && !currentByKey.has(key)) currentByKey.set(key, node)
+  })
+
+  const retainedNodes = new Set<Element>()
+  const nextNodes = desiredNodes.map((desiredNode) => {
+    const key = desiredNode.getAttribute(RENDER_KEY_ATTRIBUTE)
+    const currentNode = key ? currentByKey.get(key) : undefined
+    if (key) currentByKey.delete(key)
+
+    if (currentNode && hasSameRenderedContent(currentNode, desiredNode)) {
+      retainedNodes.add(currentNode)
+      return currentNode
+    }
+
+    return desiredNode
+  })
+
+  currentNodes.forEach((node) => {
+    if (!retainedNodes.has(node)) node.remove()
+  })
+
+  let cursor = getDirectRenderedNodes(container)[0] ?? null
+  nextNodes.forEach((node) => {
+    if (node === cursor) {
+      cursor = getNextRenderedSibling(cursor)
+      return
+    }
+
+    container.insertBefore(node, cursor)
+  })
+}
+
+/** 比较渲染器负责的内容；忽略显隐逻辑可能写入的内联 style。 */
+function hasSameRenderedContent(current: Element, desired: Element): boolean {
+  if (current.tagName !== desired.tagName) return false
+  if (current.className !== desired.className) return false
+  if (current.getAttribute('id') !== desired.getAttribute('id')) return false
+  if (current.getAttribute('title') !== desired.getAttribute('title')) return false
+  if (current.getAttribute('aria-disabled') !== desired.getAttribute('aria-disabled')) return false
+
+  const currentChildren = Array.from(current.children)
+  const desiredChildren = Array.from(desired.children)
+  if (currentChildren.length !== desiredChildren.length) return false
+
+  if (currentChildren.length === 0) {
+    return current.innerHTML === desired.innerHTML && current.textContent === desired.textContent
+  }
+
+  return currentChildren.every((child, index) =>
+    hasSameRenderedContent(child, desiredChildren[index])
+  )
+}
+
+function getDirectRenderedNodes(container: Element): Element[] {
+  return Array.from(container.querySelectorAll(RENDER_NODE_SELECTOR))
+}
+
+function getNextRenderedSibling(node: Element): Element | null {
+  let sibling = node.nextElementSibling
+  while (sibling && !isRenderedNode(sibling)) sibling = sibling.nextElementSibling
+  return sibling
+}
+
+function isRenderedNode(node: Element): boolean {
+  return node.classList.contains('shoupai') || node.classList.contains('markedCard')
 }
 
 function getPlayerHandPanel(doc: Document): HTMLElement | null {
@@ -197,18 +298,15 @@ function syncSeatOverlayHand(doc: Document, displayID: number, body: HTMLElement
   const target = doc.querySelector<HTMLElement>('#seatUI #s' + displayID)
   if (!target) return
 
-  clearSeatOverlayCards(target)
-
-  body.querySelectorAll(':scope > .shoupai, :scope > .markedCard').forEach((node) => {
-    target.appendChild(cloneRenderedNode(node))
-  })
+  const renderedNodes = getDirectRenderedNodes(body).map((node) => cloneRenderedNode(node))
+  reconcileRenderedNodes(target, renderedNodes)
   checkSeatOverlayOverflow(target)
 }
 
 /** 清空座位镜像内容，并同步清掉可能残留的省略号标记。 */
 export function clearSeatOverlayCards(orderBody: HTMLElement): void {
   invalidateEllipsisOverflow(orderBody)
-  orderBody.querySelectorAll(':scope > .shoupai, :scope > .markedCard').forEach((e) => e.remove())
+  orderBody.querySelectorAll(RENDER_NODE_SELECTOR).forEach((e) => e.remove())
 }
 
 function cloneRenderedNode(node: Element): Element {
