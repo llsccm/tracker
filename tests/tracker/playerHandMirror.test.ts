@@ -306,11 +306,8 @@ describe('主视角渲染手牌镜像', () => {
     expect(overlay.children[1]).toBe(overlayNodes[1])
     expect(body.insertBeforeCalls).toBe(mainInsertions)
     expect(overlay.insertBeforeCalls).toBe(overlayInsertions)
-    expect(
-      [...body.children, ...overlay.children].every(
-        (node) => node.getAttribute('data-tracker-render-signature') === null
-      )
-    ).toBe(true)
+    expect(getRenderedKeys(body)).toEqual(['hand:known:1', 'hand:known:2'])
+    expect(getRenderedKeys(overlay)).toEqual(['hand:known:1', 'hand:known:2'])
   })
 
   it('新增、移除和重排手牌时保留未变化节点', () => {
