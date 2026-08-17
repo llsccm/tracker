@@ -51,6 +51,7 @@ game.hasState('spell', spellID)
 ```ts
 const state = game.getSpellState<MyState>(spellID)
 const writableState = game.ensureSpellState(spellID, () => ({ count: 0 }))
+const spellSnapshot = game.getSpellStateSnapshot()
 
 game.setSpellState(spellID, { count: 1 })
 game.deleteSpellState(spellID)
@@ -118,10 +119,10 @@ tracker 状态；所需事实应由后续协议重新建立。
 
 | Key             | 技能 / 功能                    | 保存内容与用途                                      | 实现与清理                                                                                                    |
 | --------------- | ------------------------------ | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `三板斧`        | 山河图/战法【三板斧】          | 出杀累计次数，运行时按模运算更新战法展示            | `GameState.shaCounter()`、`src/runtime/gameAdapter.js`；统一生命周期清空                                      |
-| `手到擒来`      | 战法【手到擒来】               | 当前己方回合内用牌次数                              | `GameState.useCounter()`、`src/runtime/gameAdapter.js`；己方回合结束时归零                                    |
-| `神龙摆尾`      | 战法【神龙摆尾】               | 累计摸牌张数                                        | `GameState.drawCounter()`、`src/runtime/gameAdapter.js`；统一生命周期清空                                     |
-| `多多益善`      | 战法【多多益善】               | 当前己方回合内摸牌事件次数                          | `GameState.drawCounter()`、`src/runtime/gameAdapter.js`；己方回合结束时归零                                   |
+| `三板斧`        | 山河图/战法【三板斧】          | 出杀累计次数，运行时按模运算更新战法展示            | `GameRuntime.shaCounter()`（`src/runtime/gameAdapter.js`）；`GameState` 读写计数状态，统一生命周期清空         |
+| `手到擒来`      | 战法【手到擒来】               | 当前己方回合内用牌次数                              | `GameRuntime.useCounter()`（`src/runtime/gameAdapter.js`）；`GameState` 读写计数状态，己方回合结束时归零       |
+| `神龙摆尾`      | 战法【神龙摆尾】               | 累计摸牌张数                                        | `GameRuntime.drawCounter()`（`src/runtime/gameAdapter.js`）；`GameState` 读写计数状态，统一生命周期清空         |
+| `多多益善`      | 战法【多多益善】               | 当前己方回合内摸牌事件次数                          | `GameRuntime.drawCounter()`（`src/runtime/gameAdapter.js`）；`GameState` 读写计数状态，己方回合结束时归零       |
 | `3090`          | 【博图】                       | 当前轮次的发动计数                                  | `src/handler/PubGsCUseSpell.js`；`GameState.setTurn()` 删除                                                   |
 | `2143`          | 国战【乱击】                   | 本阶段已使用牌的花色集合，用于花色提示              | `src/handler/PubGsCUseSpell.js`；进入新的个人回合时删除                                                       |
 | `361`           | 【下书】                       | 展示 CardID、真实目标座位、发动者选择和座位         | `src/handler/skills/XiaShu.js`；配对手牌移动完成后删除                                                        |

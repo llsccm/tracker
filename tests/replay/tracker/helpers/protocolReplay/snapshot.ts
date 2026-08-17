@@ -31,7 +31,7 @@ export function createTrackerReplaySnapshot(
       round: gameState.round,
       phase: gameState.phase,
       currentSeatID: gameState.currentID ?? null,
-      spellState: normalizeJsonValue(gameState.spellSpace)
+      spellState: normalizeJsonValue(gameState.getSpellStateSnapshot())
     },
     room: room ? createRoomSnapshot(room) : null
   }

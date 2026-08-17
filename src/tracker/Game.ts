@@ -212,6 +212,16 @@ export class GameState {
     this.deleteState('spell', spellID)
   }
 
+  /** 只读导出 `spell` scope 当前快照，供回放或诊断输出使用。 */
+  getSpellStateSnapshot(): Record<string, unknown> {
+    const spellPrefix = 'spell:'
+    const snapshot: Record<string, unknown> = {}
+    for (const [key, value] of this.stateStore) {
+      if (key.startsWith(spellPrefix)) snapshot[key.slice(spellPrefix.length)] = value
+    }
+    return snapshot
+  }
+
   syncRoomSeats(room: Room | null = this.room): void {
     if (!room) return
     this.seatIDs = room.seatIDs.slice()
