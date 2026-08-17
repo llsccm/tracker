@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
+import type { UnassignedMarkSpaceState } from '@/tracker/roomMovement/types'
 import { createTestRoom, getCard } from './helpers/room'
 import { locationKeys, playerHand, publicLocation } from './helpers/locationCandidates'
 
@@ -57,7 +58,7 @@ describe('Room.moveCards 组合路线', () => {
     markPlaceholders.forEach((card) => {
       expect(card.seats.size).toBe(0)
     })
-    const markSpaceState = room.skillState.get('unassignedMarkSpaces')
+    const markSpaceState = room.readSkillState<UnassignedMarkSpaceState>('unassignedMarkSpaces')!
     expect(markSpaceState.spaces.get(35)).toEqual(expect.arrayContaining(markPlaceholders))
     expect(markSpaceState.spaces.get(35)).toHaveLength(5)
 
@@ -103,7 +104,7 @@ describe('Room.moveCards 组合路线', () => {
       sourceEvent: { type: 'test:popup-mark-36' }
     })
 
-    const markSpaceState = room.skillState.get('unassignedMarkSpaces')
+    const markSpaceState = room.readSkillState<UnassignedMarkSpaceState>('unassignedMarkSpaces')!
     const spell35Cards = [...markSpaceState.spaces.get(35)]
     const spell36Cards = [...markSpaceState.spaces.get(36)]
 
@@ -137,7 +138,7 @@ describe('Room.moveCards 组合路线', () => {
       sourceEvent: { type: 'test:popup-mark-explicit-source' }
     })
 
-    const markSpaceState = room.skillState.get('unassignedMarkSpaces')
+    const markSpaceState = room.readSkillState<UnassignedMarkSpaceState>('unassignedMarkSpaces')!
     const explicitSourceCard = markSpaceState.spaces.get(35)[0]
 
     room.moveCards([], 'pile', {
@@ -195,7 +196,7 @@ describe('Room.moveCards 组合路线', () => {
       sourceEvent: { type: 'test:known-source-replaced-from-hand' }
     })
 
-    const markSpaceState = room.skillState.get('unassignedMarkSpaces')
+    const markSpaceState = room.readSkillState<UnassignedMarkSpaceState>('unassignedMarkSpaces')!
 
     expect(knownMarkCard.location).toBe('discard')
     expect(room.zones.get('discard').cards).toContain(knownMarkCard)

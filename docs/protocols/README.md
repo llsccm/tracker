@@ -45,7 +45,7 @@
 
 | 协议 / 模式              | 处理入口                                | 状态 / 装饰                                             |
 | ------------------------ | --------------------------------------- | ------------------------------------------------------- |
-| `GsCRoleOptTargetNtf`    | `src/handler/GsCRoleOptTargetNtf.js`    | `tracker.revealTrackerCards` / `Room.getSkillState`     |
+| `GsCRoleOptTargetNtf`    | `src/handler/GsCRoleOptTargetNtf.js`    | `tracker.revealTrackerCards` / `Room.ensureSkillState`  |
 | `GsCUpdateRoleDataExNtf` | `src/handler/GsCUpdateRoleDataExNtf.js` | OPT_DATA_ADD_SPELL_EFFECT 8 / 巧织 3544 / 诡伏 3709 / 裴秀 4022 状态更新 |
 | `PubGsCMoveCard`         | `src/handler/PubGsCMoveCard.js`         | `src/tracker/MoveEventNormalizer.ts` → `Room.moveCards` |
 | 整手交换                 | 经 `decorateGenericMove`                | `src/tracker/skill/HandExchange.ts`                     |

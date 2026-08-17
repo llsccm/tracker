@@ -190,7 +190,7 @@ ToZoneParam: 0
 ### 批次账本
 
 ```text
-Room.skillState['handExchangeBatches'] = {
+Room.ensureSkillState('handExchangeBatches') -> {
   bySpell: {
     [spellID]: {
       batches: {

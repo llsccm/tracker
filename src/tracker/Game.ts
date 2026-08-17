@@ -9,6 +9,10 @@ export { ORDER_LABELS } from './helper/seatLabel'
 
 type GeneralChangeListener = (player: Player, orderLabels: readonly string[]) => void
 
+export type GameStateScope = 'spell' | 'tracker'
+export type GameStateKey = string | number
+type StoredGameStateKey = `${GameStateScope}:${string}`
+
 /**
  * 纯对局状态与运行时适配对象。
  *
@@ -26,7 +30,14 @@ export class GameState {
   declare round: number
   /** 用于记录当前回合阶段 */
   declare phase: number
-  declare spellSpace: Record<string | number, unknown>
+  /**
+   * 当前一局共用的临时状态仓库。
+   *
+   * Game 是跨模块通信使用的稳定单例门面，但这里保存的内容只属于当前一局。`spell` 与
+   * `tracker` 仅作为 key 命名空间，分别兼容 handler/UI 状态和记牌器推断状态；两者在
+   * GameState.end()、reset()/init() 以及 Room 替换或销毁时统一清理。
+   */
+  private readonly stateStore = new Map<StoredGameStateKey, unknown>()
   declare configHandCards: unknown[]
   declare configHandCardsMode: string
   declare configHandCardsRejected: boolean
@@ -70,18 +81,21 @@ export class GameState {
     this.isRecord = false
     this.isGameStart = false
     this.isPassed = true
-    this.spellSpace = {}
+    this.clearStateStore()
     this.resetConfigHandCards()
   }
 
   bindRoom(room: Room | null): void {
-    this.room = room ?? null
-    if (!room) {
+    const nextRoom = room ?? null
+    if (nextRoom !== this.room) this.clearStateStore()
+
+    this.room = nextRoom
+    if (!nextRoom) {
       this.resetRoomState()
       return
     }
 
-    this.syncRoomSeats(room)
+    this.syncRoomSeats(nextRoom)
   }
 
   /** 获取主视角房间座位 */
@@ -148,25 +162,54 @@ export class GameState {
     return getDisplayIdLabel(displayID, this.orderLabels)
   }
 
-  getSpellState<T = unknown>(spellID: PropertyKey): T | undefined {
-    return (this.spellSpace as Record<PropertyKey, unknown>)[spellID] as T | undefined
+  /** 判断当前一局的指定命名空间是否已经保存状态。 */
+  hasState(scope: GameStateScope, stateKey: GameStateKey): boolean {
+    return this.stateStore.has(this.getStateStoreKey(scope, stateKey))
   }
 
-  setSpellState(spellID: PropertyKey, value: unknown): void {
-    ;(this.spellSpace as Record<PropertyKey, unknown>)[spellID] = value
+  /** 只读获取当前一局状态；不存在时不创建。 */
+  readState<T = unknown>(scope: GameStateScope, stateKey: GameStateKey): T | undefined {
+    return this.stateStore.get(this.getStateStoreKey(scope, stateKey)) as T | undefined
   }
 
-  ensureSpellState<T>(spellID: PropertyKey, createState: () => T): T {
-    const existingState = this.getSpellState<T>(spellID)
-    if (existingState !== undefined) return existingState
+  /** 取得当前一局状态，不存在时按需创建。 */
+  ensureState<T>(scope: GameStateScope, stateKey: GameStateKey, createState: () => T): T {
+    const storeKey = this.getStateStoreKey(scope, stateKey)
+    if (this.stateStore.has(storeKey)) return this.stateStore.get(storeKey) as T
 
     const state = createState()
-    this.setSpellState(spellID, state)
+    this.stateStore.set(storeKey, state)
     return state
   }
 
-  deleteSpellState(spellID: PropertyKey): void {
-    delete (this.spellSpace as Record<PropertyKey, unknown>)[spellID]
+  /** 写入当前一局状态。 */
+  setState<T>(scope: GameStateScope, stateKey: GameStateKey, state: T): void {
+    this.stateStore.set(this.getStateStoreKey(scope, stateKey), state)
+  }
+
+  /** 删除当前一局状态。 */
+  deleteState(scope: GameStateScope, stateKey: GameStateKey): void {
+    this.stateStore.delete(this.getStateStoreKey(scope, stateKey))
+  }
+
+  /** handler/UI 使用的 `spell` 命名空间兼容读取入口。 */
+  getSpellState<T = unknown>(spellID: GameStateKey): T | undefined {
+    return this.readState<T>('spell', spellID)
+  }
+
+  /** handler/UI 使用的 `spell` 命名空间兼容写入入口。 */
+  setSpellState<T>(spellID: GameStateKey, value: T): void {
+    this.setState('spell', spellID, value)
+  }
+
+  /** handler/UI 使用的 `spell` 命名空间兼容创建入口。 */
+  ensureSpellState<T>(spellID: GameStateKey, createState: () => T): T {
+    return this.ensureState('spell', spellID, createState)
+  }
+
+  /** handler/UI 使用的 `spell` 命名空间兼容删除入口。 */
+  deleteSpellState(spellID: GameStateKey): void {
+    this.deleteState('spell', spellID)
   }
 
   syncRoomSeats(room: Room | null = this.room): void {
@@ -193,6 +236,9 @@ export class GameState {
   }
 
   end(): void {
+    // 对局结束即释放所有局内协议/UI 暂存和记牌器推断状态，避免下一局串状态。
+    this.clearStateStore()
+
     if (this.isGameStart && !this.isPassed) {
       this.isRecord = false
       this.isGameStart = false
@@ -222,14 +268,15 @@ export class GameState {
       if (!this.turn) this.start()
 
       if (this.currentID === this.myID) {
-        this.spellSpace['手到擒来'] = this.spellSpace['多多益善'] = 0
+        this.setSpellState('手到擒来', 0)
+        this.setSpellState('多多益善', 0)
       }
 
       this.currentID = seat
       this.round++
       this.phase = 0
       // 国战乱击
-      delete this.spellSpace[2143]
+      this.deleteSpellState(2143)
       // 畜鸣 3271
     } else {
       this.phase++
@@ -244,25 +291,39 @@ export class GameState {
     this.round = 0
 
     // 博图
-    delete this.spellSpace[3090]
+    this.deleteSpellState(3090)
   }
 
   shaCounter(): void {
-    this.spellSpace['三板斧'] = ((this.spellSpace['三板斧'] as number) || 0) + 1
+    const count = Number(this.getSpellState('三板斧')) || 0
+    this.setSpellState('三板斧', count + 1)
   }
 
   useCounter(): void {
-    this.spellSpace['手到擒来'] = ((this.spellSpace['手到擒来'] as number) || 0) + 1
+    const count = Number(this.getSpellState('手到擒来')) || 0
+    this.setSpellState('手到擒来', count + 1)
   }
 
   drawCounter(count: number): void {
-    this.spellSpace['神龙摆尾'] = ((this.spellSpace['神龙摆尾'] as number) || 0) + count
-    this.spellSpace['多多益善'] = ((this.spellSpace['多多益善'] as number) || 0) + 1
+    const drawCount = Number(this.getSpellState('神龙摆尾')) || 0
+    const drawTimes = Number(this.getSpellState('多多益善')) || 0
+    this.setSpellState('神龙摆尾', drawCount + count)
+    this.setSpellState('多多益善', drawTimes + 1)
   }
 
   reset(): void {
     this.resetSessionState()
     this.resetRoomState()
+  }
+
+  private getStateStoreKey(scope: GameStateScope, stateKey: GameStateKey): StoredGameStateKey {
+    const numericKey = Number(stateKey)
+    const normalizedKey = Number.isNaN(numericKey) ? String(stateKey) : String(numericKey)
+    return `${scope}:${normalizedKey}` as StoredGameStateKey
+  }
+
+  private clearStateStore(): void {
+    this.stateStore.clear()
   }
 }
 

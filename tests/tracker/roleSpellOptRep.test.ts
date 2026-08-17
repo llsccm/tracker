@@ -34,7 +34,7 @@ vi.mock('../../src/tracker/skill/JieLi', () => ({
 import { handleRoleSpellOptRep } from '@/handler/CGsRoleSpellOptRep'
 import { Game } from '@/tracker'
 import { Room } from '@/tracker/Room'
-import type { DuoQiState } from '@/tracker/skill/DuoQi'
+import { getDuoQiState } from '@/tracker/skill/DuoQi'
 
 describe('CGsRoleSpellOptRep', () => {
   beforeEach(() => {
@@ -130,7 +130,7 @@ describe('CGsRoleSpellOptRep', () => {
       Type: 72
     })
 
-    const state = Game.getSpellState<DuoQiState>(3731)
+    const state = getDuoQiState(room)
     expect(state?.active).toBe(true)
     expect(Array.from(state?.allCardIDs ?? [])).toEqual([63, 125])
     room.destroy()

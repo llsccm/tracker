@@ -32,6 +32,7 @@ function handleQianFu(context) {
     const spellCards = context.game.getSpellState(context.SpellID)
     if (spellCards?.length) {
       context.CardIDs.splice(0, Infinity, ...spellCards)
+      context.game.deleteSpellState(context.SpellID)
     }
   }
 }

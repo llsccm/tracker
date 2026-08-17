@@ -2,7 +2,7 @@ import { Card, hasRealIdentity, isAnonymous } from './Card'
 import { Player } from './Player'
 import { Zone } from './Zone'
 import { CardCounter } from './CardCounter'
-import { GameState } from './Game'
+import { GameState, type GameStateKey } from './Game'
 import { AmbiguousKnownIndex } from './AmbiguousKnownIndex'
 import { CardLocationIndex } from './CardLocationIndex'
 import {
@@ -40,6 +40,11 @@ const CONVERGENCE_ROUNDS_WARN = 8
 
 interface RoomOptions {
   gameState?: GameState
+}
+
+interface RoomSkillStateView {
+  has(stateKey: GameStateKey): boolean
+  get<T = unknown>(stateKey: GameStateKey): T | undefined
 }
 
 interface HandSlotCountSummary {
@@ -126,7 +131,11 @@ export class Room {
   declare zones: Map<PublicZoneName, Zone>
   declare skillHandlers: Map<SpellID, (...args: any[]) => unknown>
   declare moveEventHandlers: Map<SpellID | '*', ((event: any, room: Room) => any)[]>
-  declare skillState: Map<SpellID | string, any>
+  /**
+   * @deprecated 只读兼容视图；不再拥有独立 Map，数据由 GameState.stateStore 统一保存。
+   * 新代码使用 readSkillState() / hasSkillState()。
+   */
+  declare skillState: RoomSkillStateView
   declare constraintGroups: Map<string | number, ConstraintGroup>
   declare constraintGroupSeq: number
   declare constraintGroupsDirty: boolean
@@ -189,7 +198,10 @@ export class Room {
     // 5. 武将特判技能过滤注册表 (开闭原则解耦)
     this.skillHandlers = new Map()
     this.moveEventHandlers = new Map()
-    this.skillState = new Map()
+    this.skillState = {
+      has: (stateKey) => this.hasSkillState(stateKey),
+      get: <T = unknown>(stateKey: GameStateKey) => this.readSkillState<T>(stateKey)
+    }
 
     // 6. 局部约束组与明牌反查索引
     this.constraintGroups = new Map()
@@ -922,25 +934,53 @@ export class Room {
   }
 
   /**
-   * 获取技能级记牌器推理状态，只保存影响卡牌身份/候选/区域的状态。
+   * 只读获取当前 Room 的技能推断状态；数据实际位于 GameState 的统一单局状态仓库。
+   *
+   * 查询、结算和清理路径应优先使用本方法，避免一次只读检查留下空账本。
    */
-  getSkillState(spellID: SpellID | string, createState: () => any = () => ({})): any {
-    // skillState 既支持具体技能 ID，也支持房间级通用账本（字符串 key）。
-    const numericKey = Number(spellID)
-    const key = Number.isNaN(numericKey) ? String(spellID) : numericKey
-
-    if (!this.skillState.has(key)) {
-      this.skillState.set(key, createState())
-    }
-
-    return this.skillState.get(key)
+  readSkillState<T = unknown>(stateKey: GameStateKey): T | undefined {
+    if (!this.isCurrentGameRoom()) return undefined
+    return this.game.readState<T>('tracker', stateKey)
   }
 
-  clearSkillState(spellID: SpellID | string): void {
-    // 与 getSkillState 使用相同 key 规整逻辑，避免字符串账本无法清理。
-    const numericKey = Number(spellID)
-    const key = Number.isNaN(numericKey) ? String(spellID) : numericKey
-    this.skillState.delete(key)
+  /** 判断当前一局是否已经保存指定的记牌器推断状态。 */
+  hasSkillState(stateKey: GameStateKey): boolean {
+    if (!this.isCurrentGameRoom()) return false
+    return this.game.hasState('tracker', stateKey)
+  }
+
+  /** 取得当前 Room 的技能推断状态，不存在时按需创建。 */
+  ensureSkillState<T>(stateKey: GameStateKey, createState: () => T): T {
+    if (!this.isCurrentGameRoom()) return createState()
+    return this.game.ensureState('tracker', stateKey, createState)
+  }
+
+  /** 显式写入当前 Room 的技能推断状态。 */
+  setSkillState<T>(stateKey: GameStateKey, state: T): void {
+    if (!this.isCurrentGameRoom()) return
+    this.game.setState('tracker', stateKey, state)
+  }
+
+  /** 删除当前 Room 的技能推断状态。 */
+  deleteSkillState(stateKey: GameStateKey): void {
+    if (!this.isCurrentGameRoom()) return
+    this.game.deleteState('tracker', stateKey)
+  }
+
+  /**
+   * @deprecated 使用 ensureSkillState() 明确表达“读取并在缺失时创建”的语义。
+   */
+  getSkillState<T = any>(stateKey: GameStateKey, createState: () => T = () => ({}) as T): T {
+    return this.ensureSkillState(stateKey, createState)
+  }
+
+  /** @deprecated 使用 deleteSkillState()。 */
+  clearSkillState(stateKey: GameStateKey): void {
+    this.deleteSkillState(stateKey)
+  }
+
+  private isCurrentGameRoom(): boolean {
+    return this.game.room === this
   }
 
   /**
@@ -2500,7 +2540,6 @@ export class Room {
     this.maxResolveRounds = 0
     this.lastResolveRounds = 0
     this.moveEventHandlers.clear()
-    this.skillState.clear()
     this.ambiguousKnownIndex.items.clear()
     this.ambiguousKnownIndex.containerDependentCards.clear()
     this.ambiguousKnownIndex.lastConsumedSeq = 0

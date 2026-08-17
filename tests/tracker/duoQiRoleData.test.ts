@@ -2,15 +2,10 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { handleUpdateRoleDataExNtf } from '@/handler/GsCUpdateRoleDataExNtf'
 import { Game } from '@/tracker'
 import { Room } from '@/tracker/Room'
-import {
-  getDuoQiState,
-  initializeDuoQiState,
-  recordDuoQiActivation
-} from '@/tracker/skill/DuoQi'
+import { getDuoQiState, initializeDuoQiState, recordDuoQiActivation } from '@/tracker/skill/DuoQi'
 
 describe('GsCUpdateRoleDataExNtf 夺炁目标', () => {
   afterEach(() => {
-    Game.deleteSpellState(3731)
     Game.room?.destroy()
     Game.bindRoom(null)
   })
@@ -27,13 +22,15 @@ describe('GsCUpdateRoleDataExNtf 夺炁目标', () => {
     )
     room.initDeck([1, 2, 3])
     initializeDuoQiState(Game, [1, 2, 3])
-    expect(recordDuoQiActivation(Game, {
-      SpellID: 3730,
-      EffectIndex: 1,
-      SkillOwerSeatID: 4,
-      DestSeatIDs: [3]
-    })).toBeUndefined()
-    expect(getDuoQiState(Game)?.activations.has(3730)).toBe(false)
+    expect(
+      recordDuoQiActivation(Game, {
+        SpellID: 3730,
+        EffectIndex: 1,
+        SkillOwerSeatID: 4,
+        DestSeatIDs: [3]
+      })
+    ).toBeUndefined()
+    expect(getDuoQiState(room)?.activations.has(3730)).toBe(false)
 
     handleUpdateRoleDataExNtf({
       className: 'GsCUpdateRoleDataExNtf',
@@ -43,7 +40,7 @@ describe('GsCUpdateRoleDataExNtf 夺炁目标', () => {
       SeatID: 2
     })
 
-    expect(getDuoQiState(Game)?.activations.get(3730)).toMatchObject({
+    expect(getDuoQiState(room)?.activations.get(3730)).toMatchObject({
       ownerSeatID: 4,
       targetSeatID: 2,
       effectIndex: 1

@@ -61,6 +61,38 @@ describe('Room Node 导入边界', () => {
     expect(gameState.myID).toBeUndefined()
   })
 
+  it('GameState 统一保存 spell 与 tracker 状态，并随 Room 生命周期清理', () => {
+    const gameState = new GameState()
+    const room = new Room({ gameState })
+
+    gameState.setSpellState(3208, { scope: 'spell' })
+    room.setSkillState(3208, { scope: 'tracker' })
+
+    expect(gameState.getSpellState(3208)).toEqual({ scope: 'spell' })
+    expect(room.readSkillState(3208)).toEqual({ scope: 'tracker' })
+
+    const replacementRoom = new Room({ gameState })
+
+    expect(gameState.getSpellState(3208)).toBeUndefined()
+    expect(replacementRoom.readSkillState(3208)).toBeUndefined()
+
+    room.setSkillState('replacement', 'stale')
+    expect(replacementRoom.readSkillState('replacement')).toBeUndefined()
+
+    gameState.setSpellState('replacement', true)
+    replacementRoom.setSkillState('replacement', true)
+    room.deleteSkillState('replacement')
+    room.destroy()
+
+    expect(gameState.getSpellState('replacement')).toBe(true)
+    expect(replacementRoom.readSkillState('replacement')).toBe(true)
+
+    replacementRoom.destroy()
+
+    expect(gameState.getSpellState('replacement')).toBeUndefined()
+    expect(replacementRoom.readSkillState('replacement')).toBeUndefined()
+  })
+
   it('GameState 更新武将后通知注入的展示监听器', () => {
     const gameState = new GameState({ orderLabels: ['', '甲', '乙'] })
     const room = new Room({ gameState })
