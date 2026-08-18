@@ -143,7 +143,7 @@ interface PileIdentityLedgerState {
   cohorts: PileIdentityCohort[]
 }
 
-/** 账本快照需要稳定升序；正 ID 转换和去重统一复用公共 helper。 */
+/** 账本快照需要稳定升序；真实身份提取和去重统一复用公共 helper。 */
 function normalizeIDs(cardIDs: readonly CardID[]): CardID[] {
   return getPositiveIDs(cardIDs).sort((left, right) => left - right)
 }
