@@ -159,7 +159,7 @@ function settleChengLieInference(event: MoveEventDraft, room: Room, state: any):
     })
   }
 
-  room.clearSkillState(3208)
+  room.deleteSkillState(3208)
 }
 
 function isChengLieFinalDiscard(raw: any, ids: number[], state: any): boolean {
@@ -177,7 +177,7 @@ function getChengLieDiscardHint(raw: any): boolean {
 }
 
 function getPendingChengLieState(room: Room): any {
-  const state = room.skillState.get(3208)
+  const state = room.readSkillState<any>(3208)
   return state?.revealedIDs?.length > 0 ? state : null
 }
 
@@ -219,7 +219,7 @@ function getAmbiguousKnownHandCards(room: Room): any[] {
 }
 
 function getChengLieState(room: Room): any {
-  const state = room.getSkillState(3208, () => ({
+  const state = room.ensureSkillState(3208, () => ({
     revealedIDs: [],
     finalDiscardIDs: [],
     casterSeatID: null,

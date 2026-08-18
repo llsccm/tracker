@@ -49,16 +49,16 @@ type TianHouRoomState = {
   batch: TianHouBatch | null
 }
 
-function getStateReadonly(room: Room): TianHouRoomState | null {
-  return (room.skillState.get(TIAN_HOU_STATE_KEY) as TianHouRoomState | undefined) ?? null
+function getTianHouState(room: Room): TianHouRoomState | null {
+  return room.readSkillState<TianHouRoomState>(TIAN_HOU_STATE_KEY) ?? null
 }
 
-function getState(room: Room): TianHouRoomState {
-  return room.getSkillState(TIAN_HOU_STATE_KEY, () => ({ batch: null })) as TianHouRoomState
+function ensureTianHouState(room: Room): TianHouRoomState {
+  return room.ensureSkillState(TIAN_HOU_STATE_KEY, () => ({ batch: null }))
 }
 
 function clearBatch(room: Room, cleanupTemporaryCandidates = false): void {
-  const state = getStateReadonly(room)
+  const state = getTianHouState(room)
   const batch = state?.batch
   // 中途失配时撤销尚在交换区的临时候选；结算后的牌堆候选必须继续保留。
   if (cleanupTemporaryCandidates && batch && batch.phase !== 'awaiting-reveal') {
@@ -67,7 +67,7 @@ function clearBatch(room: Room, cleanupTemporaryCandidates = false): void {
     })
   }
 
-  room.clearSkillState(TIAN_HOU_STATE_KEY)
+  room.deleteSkillState(TIAN_HOU_STATE_KEY)
 }
 
 function isOtherView(room: Room, actorSeat: SeatID): boolean {
@@ -142,7 +142,7 @@ function decoratePileStage(event: MoveEventDraft, room: Room, actorSeat: SeatID)
   if (selectedPileCards.length !== count) return event
 
   clearBatch(room, true)
-  getState(room).batch = {
+  ensureTianHouState(room).batch = {
     actorSeat,
     count,
     selectedPileCards,
@@ -162,7 +162,7 @@ function decoratePileStage(event: MoveEventDraft, room: Room, actorSeat: SeatID)
 }
 
 function decorateHandStage(event: MoveEventDraft, room: Room, actorSeat: SeatID): MoveEventDraft {
-  const state = getStateReadonly(room)
+  const state = getTianHouState(room)
   const batch = state?.batch
   const count = getCount(event)
   if (
@@ -216,7 +216,7 @@ function decorateExchangeReorder(
   room: Room,
   actorSeat: SeatID
 ): MoveEventDraft {
-  const batch = getStateReadonly(room)?.batch
+  const batch = getTianHouState(room)?.batch
   if (
     !batch ||
     batch.phase !== 'hand-staged' ||
@@ -235,7 +235,7 @@ function decorateReturnToHand(
   room: Room,
   actorSeat: SeatID
 ): MoveEventDraft {
-  const batch = getStateReadonly(room)?.batch
+  const batch = getTianHouState(room)?.batch
   if (
     !batch ||
     batch.phase !== 'hand-staged' ||
@@ -271,7 +271,7 @@ function decorateReturnToPile(
   room: Room,
   actorSeat: SeatID
 ): MoveEventDraft {
-  const batch = getStateReadonly(room)?.batch
+  const batch = getTianHouState(room)?.batch
   if (
     !batch ||
     batch.phase !== 'hand-returned' ||
@@ -324,7 +324,7 @@ function decorateFinalReveal(event: MoveEventDraft, room: Room): MoveEventDraft 
   const cardID = Number(event.cardIDs?.[0])
   if (!(cardID > 0)) return event
 
-  const state = getStateReadonly(room)
+  const state = getTianHouState(room)
   const batch = state?.batch?.phase === 'awaiting-reveal' ? state.batch : null
   // 没有可配对批次且身份已精确位于牌顶三张时，保留更强的既有位置事实。
   if (!batch && isKnownExactPileTopThree(room, cardID)) return event

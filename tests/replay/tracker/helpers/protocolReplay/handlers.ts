@@ -355,7 +355,8 @@ function applyUseSpellState(
   switch (spellID) {
     case 3090:
       if (seatID === gameState.currentID && readNumber(payload.EffectIndex) === 1) {
-        gameState.spellSpace[3090] = Number(gameState.spellSpace[3090] ?? 0) + 1
+        const count = Number(gameState.getSpellState<number>(3090) ?? 0) + 1
+        gameState.setSpellState(3090, count)
         didApply = true
       }
       break

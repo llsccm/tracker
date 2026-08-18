@@ -230,10 +230,10 @@ describe('GsCRoleOptTargetNtf', () => {
 
   it('诫厉发动者视角可同步完整牌堆顶与目标部分手牌', () => {
     const skillState: Record<string, any> = {}
-    const getSkillState = vi.fn(() => skillState)
+    const ensureSkillState = vi.fn(() => skillState)
     vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({
       mySeatID: 3,
-      getSkillState,
+      ensureSkillState,
       getPlayer: vi.fn(() => ({ hasObservedHandCount: true, observedHandCount: 5 }))
     } as any)
 
@@ -249,7 +249,7 @@ describe('GsCRoleOptTargetNtf', () => {
       className: 'GsCRoleOptTargetNtf'
     })
 
-    expect(getSkillState).toHaveBeenCalledWith(3483, expect.any(Function))
+    expect(ensureSkillState).toHaveBeenCalledWith(3483, expect.any(Function))
     expect(skillState.context).toEqual({ actorSeat: 3, targetSeat: 4, pileCount: 4 })
     expect(revealTrackerCards).toHaveBeenCalledTimes(2)
     expect(revealTrackerCards).toHaveBeenNthCalledWith(
@@ -270,10 +270,10 @@ describe('GsCRoleOptTargetNtf', () => {
     { label: '其它视角', mySeatID: 2, actorSeat: 3, targetSeat: 4 }
   ])('诫厉 $label 只收到牌堆张数并记录上下文', ({ mySeatID, actorSeat, targetSeat }) => {
     const skillState: Record<string, any> = {}
-    const getSkillState = vi.fn(() => skillState)
+    const ensureSkillState = vi.fn(() => skillState)
     vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({
       mySeatID,
-      getSkillState
+      ensureSkillState
     } as any)
 
     handleRoleOptTargetNtf({
@@ -297,7 +297,7 @@ describe('GsCRoleOptTargetNtf', () => {
     const skillState: Record<string, any> = {}
     vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({
       mySeatID: 2,
-      getSkillState: vi.fn(() => skillState)
+      ensureSkillState: vi.fn(() => skillState)
     } as any)
 
     handleRoleOptTargetNtf({

@@ -1,4 +1,5 @@
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from './candidate/cardPositions'
+import { getPositiveIDs } from './helper/cardIDs'
 import type { CardID, PublicPosition } from './types'
 
 export type PileIdentityCohortKind = 'all-in-pile' | 'none-in-pile' | 'partial'
@@ -142,10 +143,9 @@ interface PileIdentityLedgerState {
   cohorts: PileIdentityCohort[]
 }
 
+/** 账本快照需要稳定升序；正 ID 转换和去重统一复用公共 helper。 */
 function normalizeIDs(cardIDs: readonly CardID[]): CardID[] {
-  return Array.from(new Set(cardIDs.map(Number).filter((cardID) => cardID > 0))).sort(
-    (left, right) => left - right
-  )
+  return getPositiveIDs(cardIDs).sort((left, right) => left - right)
 }
 
 function normalizeCount(count: number): number {

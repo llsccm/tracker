@@ -16,7 +16,7 @@ function recordDisplayedCards(event: MoveEventDraft, room: Room): void {
   const cardCount = getCount(event)
 
   if (cardCount <= 0 || displayedCardIDs.length !== cardCount) {
-    room.clearSkillState(QIAO_ZHI_SELECTION_STATE_KEY)
+    room.deleteSkillState(QIAO_ZHI_SELECTION_STATE_KEY)
     trackerLogger.debug('巧织暗取牌推断跳过', {
       stage: 'display',
       reason: '展示牌 ID 不完整',
@@ -26,14 +26,14 @@ function recordDisplayedCards(event: MoveEventDraft, room: Room): void {
     return
   }
 
-  const state = room.getSkillState(
+  const state = room.ensureSkillState(
     QIAO_ZHI_SELECTION_STATE_KEY,
     (): QiaoZhiSelectionState => ({
       displayedCardIDs: [],
       selectedCount: 0,
       targetSeatID: null
     })
-  ) as QiaoZhiSelectionState
+  )
 
   state.displayedCardIDs = displayedCardIDs
   state.selectedCount = 0
@@ -46,9 +46,7 @@ function recordDisplayedCards(event: MoveEventDraft, room: Room): void {
 }
 
 function recordHiddenGain(event: MoveEventDraft, room: Room, raw: any): void {
-  const state = room.skillState.get(QIAO_ZHI_SELECTION_STATE_KEY) as
-    | QiaoZhiSelectionState
-    | undefined
+  const state = room.readSkillState<QiaoZhiSelectionState>(QIAO_ZHI_SELECTION_STATE_KEY)
   if (!state?.displayedCardIDs.length) return
 
   const selectedCount = getCount(event)
@@ -58,7 +56,7 @@ function recordHiddenGain(event: MoveEventDraft, room: Room, raw: any): void {
   // 主视角（或其它能看到选取结果的视角）：协议直接给出正 CardIDs。
   // 真实移动已由后续 moveCards 完成，差集推断既不需要也不应再跑。
   if (visibleSelectedIDs.length > 0) {
-    room.clearSkillState(QIAO_ZHI_SELECTION_STATE_KEY)
+    room.deleteSkillState(QIAO_ZHI_SELECTION_STATE_KEY)
     trackerLogger.debug('巧织暗取牌推断跳过', {
       stage: 'hiddenGain',
       reason: '协议已给出选取明牌，主视角可见，跳过差集推断',
@@ -75,7 +73,7 @@ function recordHiddenGain(event: MoveEventDraft, room: Room, raw: any): void {
     selectedCount >= state.displayedCardIDs.length ||
     targetSeatID === undefined
   ) {
-    room.clearSkillState(QIAO_ZHI_SELECTION_STATE_KEY)
+    room.deleteSkillState(QIAO_ZHI_SELECTION_STATE_KEY)
     trackerLogger.debug('巧织暗取牌推断跳过', {
       stage: 'hiddenGain',
       reason: '暗取数量或座位不符合差集推断条件',
@@ -98,10 +96,8 @@ function recordHiddenGain(event: MoveEventDraft, room: Room, raw: any): void {
 }
 
 function settleHiddenGain(event: MoveEventDraft, room: Room): void {
-  const state = room.skillState.get(QIAO_ZHI_SELECTION_STATE_KEY) as
-    | QiaoZhiSelectionState
-    | undefined
-  room.clearSkillState(QIAO_ZHI_SELECTION_STATE_KEY)
+  const state = room.readSkillState<QiaoZhiSelectionState>(QIAO_ZHI_SELECTION_STATE_KEY)
+  room.deleteSkillState(QIAO_ZHI_SELECTION_STATE_KEY)
 
   if (!state || state.targetSeatID === null || !(state.selectedCount > 0)) return
 

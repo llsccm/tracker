@@ -22,25 +22,23 @@ export function handleUseSpell(msg) {
     // 博图计数器
     case 3090:
       if (SeatID === Game.currentID && msg.EffectIndex === 1) {
-        const prev = Number(Game.spellSpace[3090]) || 0
-        Game.spellSpace[3090] = prev + 1
+        const prev = Number(Game.getSpellState(3090)) || 0
+        Game.setSpellState(3090, prev + 1)
         // laya.ged?.event('SET_SEAT_STATE')
       }
       break
 
     // 国战乱击
     case 2143: {
-      if (!Game.spellSpace[2143]) {
-        Game.spellSpace[2143] = new Set()
-      }
+      const suits = Game.ensureSpellState(2143, () => new Set())
 
       const instance = CardConfig.GetInstance()
       for (const id of CardIDs) {
         if (id <= 0) continue
-        Game.spellSpace[2143].add(instance.getCard(id).c)
+        suits.add(instance.getCard(id).c)
       }
 
-      setSuitRecord(Array.from(Game.spellSpace[2143]).join(''))
+      setSuitRecord(Array.from(suits).join(''))
       break
     }
 

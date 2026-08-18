@@ -543,7 +543,7 @@ export class GameRuntime {
   shaCounter() {
     // 万一以后有角色在其他模式获得战法...
     if (!Game.isShanHeTu && !Game.isRoguelike1v1) return
-    const value = Game.spellSpace['三板斧'] % 3
+    const value = Number(Game.getSpellState('三板斧')) % 3
     const targetIds = [13033, 13034, 13035]
 
     for (const id of targetIds) {
@@ -556,7 +556,7 @@ export class GameRuntime {
 
   useCounter() {
     if (!Game.isShanHeTu && !Game.isRoguelike1v1) return
-    const value = Game.spellSpace['手到擒来']
+    const value = Game.getSpellState('手到擒来')
     const targetIds = [13070, 13071, 13072]
 
     for (const id of targetIds) {
@@ -569,8 +569,8 @@ export class GameRuntime {
 
   drawCounter() {
     if (!Game.isShanHeTu && !Game.isRoguelike1v1) return
-    const count = Game.spellSpace['神龙摆尾']
-    const times = Game.spellSpace['多多益善']
+    const count = Number(Game.getSpellState('神龙摆尾'))
+    const times = Game.getSpellState('多多益善')
 
     const shenlong1 = this.zhanfaMap.get(13091)
     if (shenlong1) shenlong1.Value = count % 9

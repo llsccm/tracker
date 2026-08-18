@@ -188,7 +188,8 @@ sequenceDiagram
 | `ClientLeavetableRep`        | [`handleLeaveTable()`](../../src/handler/MsgGameOver.js) | 只清理对局                                                |
 | `ClientRecommendShopItemRep` | `handleLeaveTable()`                                     | 当前用户退出录像时的清理兜底                              |
 
-两个入口最终复用 `cleanupGame()` 完成通用清理：隐藏 `.mizhu`、`Game.end()`、销毁裴秀地图窗口、
+两个入口最终复用 `cleanupGame()` 完成通用清理：隐藏 `.mizhu`、`Game.end()`（立即清空本局
+统一状态仓库）、销毁裴秀地图窗口、
 `resetSeatUIs()`，并由 `tracker.destroyTrackerRoom()` 依次卸载视图、销毁 Room、清空控制器中的
 `trackerRoom`。
 

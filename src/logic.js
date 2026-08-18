@@ -438,21 +438,21 @@ export function logic(msg) {
 //     seats[seatID] = { hp, maxHp, color }
 //   })
 
-//   Game.spellSpace.hpColor = {
+//   Game.setSpellState('hpColor', {
 //     turn: Game.turn,
 //     currentID: Game.currentID,
 //     seats,
 //     seen: new Set(),
 //     events: []
-//   }
+//   })
 
 //   drawHpColorTips()
 // }
 
 // function recordHpColorChange(arg) {
-//   let state = Game.spellSpace.hpColor
+//   let state = Game.getSpellState('hpColor')
 //   if (!state || state.turn != Game.turn || state.currentID != Game.currentID) resetHpColorTurn()
-//   state = Game.spellSpace.hpColor
+//   state = Game.getSpellState('hpColor')
 
 //   const seatID = Number(arg.SeatID)
 //   let prev = state.seats[seatID]
@@ -494,7 +494,7 @@ export function logic(msg) {
 //   const enabled = (Game.generals?.[Game.myID] || []).some(
 //     (id) => CharacterConfig.GetInstance().generalDict[id] == '魔张飞'
 //   )
-//   const state = Game.spellSpace.hpColor
+//   const state = Game.getSpellState('hpColor')
 //   setGeneralTip({
 //     key: 'hpColor',
 //     seatUis: laya.gamescene?.seatContainer?.seatUIs || [],

@@ -29,6 +29,20 @@ if (!room) return
 | 按旧协议 Zone 写入明牌 | `tracker.revealTrackerCardsInZone(protocolZone, cardIDs)` | 先做 Zone 映射，再复用上面的明牌路径。 |
 | 直接编排测试或已归一化移动 | `room.moveCards(cardIDs, toZone, options)` | 所有普通移动的 Room 级主入口。 |
 
+## 协议 CardID 输入约定
+
+技能/协议模块消费消息中的 `cardIDs` 时，统一用 `getPositiveIDs()` 归一化
+（定义于 `src/tracker/helper/cardIDs.ts`，经 `src/tracker/skill/moveEventUtils.ts`
+重导出）：
+
+- 丢弃 `0`、负数与 NaN，得到去重后的正数列表，并保留每个 ID 首次出现的顺序。
+- 结果不保证按数值排序；需要按数值排序的调用方应在返回结果上显式排序。
+- 上游协议约定 CardID 均为有限正整数，因此只按 `id > 0` 过滤，不逐项做
+  `Number.isFinite` 判断（NaN 已由 `Number(id) || 0` 归一化为 `0` 丢弃）。若未来
+  协议出现非有限 ID，应在协议入口统一拦截，而不是在消费热路径承担防御成本。
+- `0` 仅表示匿名占位、不是稳定身份（见“只有数量、没有 CardID 的暗牌”），
+  不要把 `0` 写入 `Card.id`。
+
 ## 获取某个角色的手牌
 
 先确定你要的是“牌实体”“身份 ID”“候选可能性”还是“数量”。这些入口不能互相替代：
@@ -251,7 +265,7 @@ publicCandidateReveal: { zone: 'pile', position: 'top', count: N }
 先用 `rg` 找候选符号，再用 Serena 做符号级读取/引用追踪；只有二者不适合或不可用时才退回 PowerShell：
 
 ```text
-rg -n "getPlayerHandCardIDs|knownHandCards|candidateHandCards" src tests
+rg -n "getPositiveIDs|getPlayerHandCardIDs|knownHandCards|candidateHandCards" src tests
 rg -n "revealTrackerCards|revealTrackerCardsInZone|moveCards" src tests
 ```
 

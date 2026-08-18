@@ -135,7 +135,7 @@ export abstract class RoomMovementHiddenMarkMethods {
     }
 
     let changed = false
-    const state = this.room.skillState.get(HIDDEN_MARK_STATE_KEY) as HiddenMarkState | undefined
+    const state = this.room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)
     const records: HiddenMarkRecord[] = []
     state?.records?.forEach((record) => {
       if (Number(record.spellID) === markID && Number(record.targetSeat) === sourceSeat) {
@@ -251,7 +251,7 @@ export abstract class RoomMovementHiddenMarkMethods {
    * 获取手牌暗置到标记区的房间级候选账本。
    */
   getHiddenMarkState(): HiddenMarkState {
-    return this.room.getSkillState(HIDDEN_MARK_STATE_KEY, () => {
+    return this.room.ensureSkillState(HIDDEN_MARK_STATE_KEY, () => {
        return { records: new Map<string, HiddenMarkRecord>() }
     })
   }
@@ -261,7 +261,7 @@ export abstract class RoomMovementHiddenMarkMethods {
    * 这类空间来自 seatID=255 的弹窗/标记协议，按 spellID 保存暗占位实体。
    */
   getUnassignedMarkSpaceState(): UnassignedMarkSpaceState {
-    return this.room.getSkillState(UNASSIGNED_MARK_SPACE_STATE_KEY, () => {
+    return this.room.ensureSkillState(UNASSIGNED_MARK_SPACE_STATE_KEY, () => {
       return { spaces: new Map<SpellID | string, Card[]>() }
     })
   }
@@ -294,9 +294,9 @@ export abstract class RoomMovementHiddenMarkMethods {
     if (protocolID === null || protocolID === undefined || Number.isNaN(protocolID)) return null
     if (this.room.seatIDs.includes(protocolID)) return null
 
-    const state = this.room.skillState.get(UNASSIGNED_MARK_SPACE_STATE_KEY) as
-      | UnassignedMarkSpaceState
-      | undefined
+    const state = this.room.readSkillState<UnassignedMarkSpaceState>(
+      UNASSIGNED_MARK_SPACE_STATE_KEY
+    )
     return state?.spaces?.has(protocolID) ? protocolID : null
   }
 
@@ -333,9 +333,9 @@ export abstract class RoomMovementHiddenMarkMethods {
   takeUnassignedMarkSpaceCards(count: number, spellID: SpellIDInput): Card[] {
     if (!(count > 0)) return []
 
-    const state = this.room.skillState.get(UNASSIGNED_MARK_SPACE_STATE_KEY) as
-      | UnassignedMarkSpaceState
-      | undefined
+    const state = this.room.readSkillState<UnassignedMarkSpaceState>(
+      UNASSIGNED_MARK_SPACE_STATE_KEY
+    )
     if (!state?.spaces?.size) return []
 
     const compatibleSpellIDs = getCompatibleMarkSpellIDs(spellID)
@@ -377,9 +377,9 @@ export abstract class RoomMovementHiddenMarkMethods {
   removeUnassignedMarkSpaceCards(cards: Card[]): void {
     if (cards.length === 0) return
 
-    const state = this.room.skillState.get(UNASSIGNED_MARK_SPACE_STATE_KEY) as
-      | UnassignedMarkSpaceState
-      | undefined
+    const state = this.room.readSkillState<UnassignedMarkSpaceState>(
+      UNASSIGNED_MARK_SPACE_STATE_KEY
+    )
     if (!state?.spaces?.size) return
 
     const removedCards = new Set(cards)
@@ -529,7 +529,7 @@ export abstract class RoomMovementHiddenMarkMethods {
    *
    * 流程：
    * 1. 找出来源手牌中所有可能参与暗置的明牌。
-   * 2. 写入 Room.skillState 账本，保留本次技能/座位维度的候选关系。
+   * 2. 通过 Room API 写入 GameState 的 tracker 状态，保留本次技能/座位维度的候选关系。
    * 3. 接管默认暗牌移动，避免错误地只搬走未知占位牌。
    * 4. 尝试把账本投影成可见候选位置与可收敛约束。
    */
@@ -641,7 +641,7 @@ export abstract class RoomMovementHiddenMarkMethods {
 
   // 某个暗标记占位被已知牌替换后，从旧账本中摘掉，避免后续重复迁移。
   removeHiddenMarkPlaceholder(card: Card): void {
-    const state = this.room.skillState.get(HIDDEN_MARK_STATE_KEY) as HiddenMarkState | undefined
+    const state = this.room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)
     if (!state?.records?.size) return
 
     state.records.forEach((record) => {
@@ -875,7 +875,7 @@ export abstract class RoomMovementHiddenMarkMethods {
 
   /** 实体 ID 被公共来源替换时，隐藏标记账本要继续指向新的暗占位实体 */
   replaceHiddenMarkPlaceholder(previousCard: Card, nextCard: Card): void {
-    const state = this.room.skillState.get(HIDDEN_MARK_STATE_KEY) as HiddenMarkState | undefined
+    const state = this.room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)
     if (!state?.records?.size) return
 
     state.records.forEach((record) => {
@@ -894,7 +894,7 @@ export abstract class RoomMovementHiddenMarkMethods {
   }
 
   /**
-   * 将 Room.skillState 账本投影到卡牌与约束组。
+   * 将当前一局的 tracker 状态账本投影到卡牌与约束组。
    *
    * 弱记录：只给卡牌追加“可能在标记区”的完整位置候选。
    * 强约束：当 min/max 相等且候选全集只剩来源手牌/目标标记时，
@@ -994,7 +994,7 @@ export abstract class RoomMovementHiddenMarkMethods {
    * 必须在 resolveKnownMoveCards 之前调用：否则匿名槽数量在物化时已错、明牌会被 createExternal。
    */
   resolveHiddenMarkCandidatesFromFullHandReveal(context: RoomMoveContext): boolean {
-    const state = this.room.skillState.get(HIDDEN_MARK_STATE_KEY) as HiddenMarkState | undefined
+    const state = this.room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)
     if (!state?.records?.size) return false
 
     const seat = context.sourceHandSeat
@@ -1076,7 +1076,7 @@ export abstract class RoomMovementHiddenMarkMethods {
   }
 
   resolveHiddenMarkCandidateFromMove(card: Card, context: RoomMoveContext): boolean {
-    const state = this.room.skillState.get(HIDDEN_MARK_STATE_KEY) as HiddenMarkState | undefined
+    const state = this.room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)
     if (!state?.records?.size) return false
 
     let changed = false
@@ -1216,7 +1216,7 @@ export abstract class RoomMovementHiddenMarkMethods {
    * 装备容器标记区出现完整快照时，按可见结果收敛暗标记账本。
    */
   resolveHiddenMarkCandidatesFromObservedMarkSnapshot(context: RoomMoveContext): boolean {
-    const state = this.room.skillState.get(HIDDEN_MARK_STATE_KEY) as HiddenMarkState | undefined
+    const state = this.room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)
     if (!state?.records?.size) return false
 
     const snapshot = this.getObservedEquipmentMarkSnapshot(context)

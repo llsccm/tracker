@@ -20,6 +20,7 @@
 | 测试策略、回归命令、补测约定、手工验收清单 | [`docs/agents/testing.md`](docs/agents/testing.md) | 选择验证命令、补充 Vitest 回归、更新遍历基线、撰写 PR 验证说明，或做浏览器手工验收时。 |
 | 记牌器当前实现、领域边界与二级路由 | [`docs/agents/card_tracker.md`](docs/agents/card_tracker.md) | 定位核心模块、排查协议或收敛异常，或按需继续读取收敛、技能特例与历史验证文档时。 |
 | Room 单局容器、状态所有权、行为模块与主入口 | [`docs/agents/room.md`](docs/agents/room.md) | 修改或排查 `Room.ts`、判断逻辑应放在 Room 还是行为模块、理清单局初始化/移动/收敛/销毁流程时。 |
+| 对局临时状态仓库、命名空间与当前使用清单 | [`docs/agents/skill_state.md`](docs/agents/skill_state.md) | 新增技能临时状态、选择 `spell` / `tracker` key、或排查跨协议状态串局时。 |
 | Card / Player / Zone 模型、候选投影与视图同步 | [`docs/agents/card_player_model.md`](docs/agents/card_player_model.md) | 修改或排查 `Card.ts`、`BaseCard.ts`、`Player.ts`、`Zone.ts`，处理牌实体字段、玩家区投影、公共区顺序或子区/容器/标记语义时。 |
 | 匿名牌堆、身份账本、cohort/generation、物化与 suspended 模型 | [`docs/agents/card_tracker_anonymous_pile.md`](docs/agents/card_tracker_anonymous_pile.md) | 排查匿名牌堆槽、牌堆身份守恒、洗牌世代、两阶段暗牌揭示或 `PileIdentityLedger` 异常时。 |
 | 记牌器开发 API 速查 | [`docs/agents/tracker_api.md`](docs/agents/tracker_api.md) | 需要快速查找角色手牌读取、手牌/牌堆揭示、移动、匿名占位或实体物化调用方式时。 |

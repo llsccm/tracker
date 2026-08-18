@@ -1,4 +1,6 @@
 import type { Card } from '../Card'
+import type { GameState } from '../Game'
+import { getPositiveIDs } from '../helper/cardIDs'
 import type { Room } from '../Room'
 import type { CardID, SeatID } from '../types'
 import { getRaw, patchEvent, type MoveEventDraft } from './moveEventUtils'
@@ -8,7 +10,8 @@ export const DUO_QI_GAIN_ALL_SPELL_ID = 3730
 /** 夺炁 */
 export const DUO_QI_RANDOM_GAIN_SPELL_ID = 3731
 
-export const DUO_QI_STATE_SPELL_ID = DUO_QI_RANDOM_GAIN_SPELL_ID
+/** 3730/3731 共享的当前 Room 推断状态。 */
+export const DUO_QI_STATE_KEY = 'duoQi'
 
 export type DuoQiSpellID = typeof DUO_QI_GAIN_ALL_SPELL_ID | typeof DUO_QI_RANDOM_GAIN_SPELL_ID
 
@@ -47,13 +50,6 @@ export interface DuoQiState {
   sequence: number
 }
 
-interface DuoQiGameStateLike {
-  myID?: SeatID
-  room?: Room | null
-  getSpellState?<T = unknown>(spellID: PropertyKey): T | undefined
-  setSpellState?(spellID: PropertyKey, value: unknown): void
-}
-
 interface DuoQiUseSpellMessage {
   SeatID?: SeatID
   SkillOwerSeatID?: SeatID
@@ -69,16 +65,9 @@ interface DuoQiRoleDataTargetMessage {
   SeatID?: SeatID
 }
 
-function normalizeCardIDs(cardIDs: readonly CardID[]): CardID[] {
-  return Array.from(new Set(cardIDs.map(Number).filter((cardID) => cardID > 0)))
-}
-
-function getGame(room: Room): DuoQiGameStateLike {
-  return room.game as DuoQiGameStateLike
-}
-
-export function getDuoQiState(game: DuoQiGameStateLike): DuoQiState | undefined {
-  const state = game.getSpellState?.<DuoQiState>(DUO_QI_STATE_SPELL_ID)
+/** 只读获取当前 Room 的夺炁推断状态，不存在时不创建。 */
+export function getDuoQiState(room: Room): DuoQiState | undefined {
+  const state = room.readSkillState<DuoQiState>(DUO_QI_STATE_KEY)
   return state?.active === true ? state : undefined
 }
 
@@ -132,11 +121,11 @@ function convergeInitialSeats(state: DuoQiState): void {
 }
 
 export function initializeDuoQiState(
-  game: DuoQiGameStateLike,
+  game: GameState,
   cardIDs: readonly CardID[]
 ): DuoQiState | undefined {
   const room = game.room
-  const normalizedCardIDs = normalizeCardIDs(cardIDs)
+  const normalizedCardIDs = getPositiveIDs(cardIDs)
   if (!room || normalizedCardIDs.length === 0) return undefined
   const state: DuoQiState = {
     active: true,
@@ -167,19 +156,22 @@ export function initializeDuoQiState(
   })
 
   convergeInitialSeats(state)
-  game.setSpellState?.(DUO_QI_STATE_SPELL_ID, state)
+  room.setSkillState(DUO_QI_STATE_KEY, state)
   return state
 }
 
 export function recordDuoQiActivation(
-  game: DuoQiGameStateLike,
+  game: GameState,
   msg: DuoQiUseSpellMessage
 ): DuoQiActivation | undefined {
   const spellID = Number(msg.SpellID)
   // 3731 的目标来自 PubGsCUseSpell；3730 必须等待 GsCUpdateRoleDataExNtf(DataID=8)。
   if (spellID !== DUO_QI_RANDOM_GAIN_SPELL_ID) return undefined
 
-  const state = getDuoQiState(game)
+  const room = game.room
+  if (!room) return undefined
+
+  const state = getDuoQiState(room)
   if (!state) return undefined
 
   const effectIndex = Number(msg.EffectIndex)
@@ -201,21 +193,24 @@ export function recordDuoQiActivation(
     effectIndex,
     sequence: ++state.sequence,
     // 主视角的实际获得牌会直接明示，保留初始化标记即可，无需建立技能私有模糊组。
-    skipInference: ownerSeatID === game.myID
+    skipInference: ownerSeatID === room.mySeatID
   }
   state.activations.set(spellID, activation)
   return activation
 }
 
 export function recordDuoQiRoleDataTarget(
-  game: DuoQiGameStateLike,
+  game: GameState,
   msg: DuoQiRoleDataTargetMessage
 ): DuoQiActivation | undefined {
   if (Number(msg.DataID) !== 8 || !Array.isArray(msg.Datas)) return undefined
   const spellID = Number(msg.Datas[0])
   if (spellID !== DUO_QI_GAIN_ALL_SPELL_ID) return undefined
 
-  const state = getDuoQiState(game)
+  const room = game.room
+  if (!room) return undefined
+
+  const state = getDuoQiState(room)
   if (!state) return undefined
 
   const targetSeatID = Number(msg.SeatID)
@@ -234,7 +229,7 @@ export function recordDuoQiRoleDataTarget(
     effectIndex: 1,
     sequence: ++state.sequence,
     // 主视角的实际获得牌会直接明示，保留初始化标记即可，无需建立技能私有模糊组。
-    skipInference: ownerSeatID === game.myID
+    skipInference: ownerSeatID === room.mySeatID
   }
   state.activations.set(DUO_QI_GAIN_ALL_SPELL_ID, activation)
   return activation
@@ -243,13 +238,13 @@ export function recordDuoQiRoleDataTarget(
 // 协议 FromID/ToID 会随区域改变含义；这里只接受归一化后的“目标手牌 -> owner 手牌”
 // 或“弃牌堆 -> owner 手牌”，避免同 SpellID 的装备、标记等后续移动误触发推断。
 function activationMatchesMove(activation: DuoQiActivation, event: MoveEventDraft): boolean {
-  const targetSeatInput = event.options?.seatID
+  const targetSeatInput: unknown = event.options?.seatID
   const targetSeatValues =
     targetSeatInput !== null &&
     targetSeatInput !== undefined &&
     typeof targetSeatInput !== 'string' &&
-    typeof targetSeatInput?.[Symbol.iterator] === 'function'
-      ? Array.from(targetSeatInput)
+    typeof (targetSeatInput as Iterable<unknown>)[Symbol.iterator] === 'function'
+      ? Array.from(targetSeatInput as Iterable<unknown>)
       : [targetSeatInput]
   const targetSeatIDs = targetSeatValues.map(Number).filter(Number.isFinite)
   if (
@@ -498,7 +493,7 @@ function decorateRandomDiscardGain(
 }
 
 export function decorateDuoQiMove(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const state = getDuoQiState(getGame(room))
+  const state = getDuoQiState(room)
   if (!state) return event
 
   const spellID = Number(getRaw(event).SpellID ?? event.options?.spellID)
@@ -553,7 +548,7 @@ function decorateRandomHandGain(event: MoveEventDraft, state: DuoQiState): MoveE
 }
 
 export function decorateDuoQiKnownMove(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const state = getDuoQiState(getGame(room))
+  const state = getDuoQiState(room)
   if (!state || state.pendingRandomHandGroups.length === 0) return event
 
   const fromSeatID = Number(event.options?.fromSeatID)
@@ -586,7 +581,7 @@ export function decorateDuoQiKnownMove(event: MoveEventDraft, room: Room): MoveE
 }
 
 export function decorateDuoQiEntitySafety(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const state = getDuoQiState(getGame(room))
+  const state = getDuoQiState(room)
   if (!state) return event
 
   const raw = getRaw(event)
@@ -633,10 +628,10 @@ function findInitialSeatByCard(state: DuoQiState, room: Room, cardID: CardID): S
 }
 
 export function observeDuoQiKnownCardIDs(room: Room, cardIDs: readonly CardID[]): void {
-  const state = getDuoQiState(getGame(room))
+  const state = getDuoQiState(room)
   if (!state) return
 
-  normalizeCardIDs(cardIDs).forEach((cardID) => {
+  getPositiveIDs(cardIDs).forEach((cardID) => {
     if (!state.allCardIDs.has(cardID)) return
     const initialSeatID = findInitialSeatByCard(state, room, cardID)
     if (initialSeatID !== undefined) bindInitialCardID(state, cardID, initialSeatID)
@@ -645,7 +640,7 @@ export function observeDuoQiKnownCardIDs(room: Room, cardIDs: readonly CardID[])
 }
 
 export function commitDuoQiMove(room: Room, event: MoveEventDraft): void {
-  const state = getDuoQiState(getGame(room))
+  const state = getDuoQiState(room)
   commitRandomHandCandidates(state, event)
   finishRandomHandGroupsAfterGainAll(state, event)
 }
@@ -683,7 +678,10 @@ function commitRandomHandCandidates(state: DuoQiState | undefined, event: MoveEv
   const group = state.pendingRandomHandGroups.find((candidate) => candidate.sequence === sequence)
   if (!group) return
 
-  normalizeCardIDs(event.options?.duoQiRandomHandCandidateIDs ?? []).forEach((cardID) => {
+  const candidateIDs = event.options?.duoQiRandomHandCandidateIDs
+  if (!Array.isArray(candidateIDs)) return
+
+  getPositiveIDs(candidateIDs).forEach((cardID) => {
     if (state.allCardIDs.has(cardID) && !state.initialSeatByCardID.has(cardID)) {
       group.candidateCardIDs.add(cardID)
     }
