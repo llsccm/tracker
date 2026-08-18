@@ -212,12 +212,18 @@ export class GameState {
     this.deleteState('spell', spellID)
   }
 
-  /** 只读导出 `spell` scope 当前快照，供回放或诊断输出使用。 */
+  /**
+   * 导出与内部状态隔离的 `spell` scope 当前快照，供回放或诊断输出使用。
+   *
+   * 快照中的数组、对象、Map 与 Set 等可变值均为副本，修改快照不会反向修改当前局状态。
+   */
   getSpellStateSnapshot(): Record<string, unknown> {
     const spellPrefix = 'spell:'
     const snapshot: Record<string, unknown> = {}
     for (const [key, value] of this.stateStore) {
-      if (key.startsWith(spellPrefix)) snapshot[key.slice(spellPrefix.length)] = value
+      if (key.startsWith(spellPrefix)) {
+        snapshot[key.slice(spellPrefix.length)] = structuredClone(value)
+      }
     }
     return snapshot
   }

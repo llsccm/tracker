@@ -93,6 +93,31 @@ describe('Room Node 导入边界', () => {
     expect(replacementRoom.readSkillState('replacement')).toBeUndefined()
   })
 
+  it('GameState spell 快照不暴露内部可变状态', () => {
+    const gameState = new GameState()
+    gameState.setSpellState(3208, {
+      cardIDs: [11, 12],
+      metadata: { targetSeatID: 3 },
+      colors: new Set([1, 2])
+    })
+
+    const snapshot = gameState.getSpellStateSnapshot()
+    const snapshotState = snapshot[3208] as {
+      cardIDs: number[]
+      metadata: { targetSeatID: number }
+      colors: Set<number>
+    }
+    snapshotState.cardIDs.push(13)
+    snapshotState.metadata.targetSeatID = 4
+    snapshotState.colors.add(3)
+
+    expect(gameState.getSpellState(3208)).toEqual({
+      cardIDs: [11, 12],
+      metadata: { targetSeatID: 3 },
+      colors: new Set([1, 2])
+    })
+  })
+
   it('GameState 更新武将后通知注入的展示监听器', () => {
     const gameState = new GameState({ orderLabels: ['', '甲', '乙'] })
     const room = new Room({ gameState })
