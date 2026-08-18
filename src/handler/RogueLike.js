@@ -83,6 +83,16 @@ export async function handleRogueLike(ProtoObj) {
   }
 }
 
+const ROGUE_ATTR_LABELS = {
+  rep: '声望',
+  tro: '战功',
+  wis: '智谋',
+  mar: '商才',
+  loy: '忠诚',
+  ass: '权谋',
+  cha: '魅力'
+}
+
 function renderRogueAttrInfo(attrInfo) {
   const container = document.getElementById('rogueAttrInfo')
   if (!container) return
@@ -92,7 +102,16 @@ function renderRogueAttrInfo(attrInfo) {
     if (!valueContainer) continue
 
     const value = Number(attrInfo?.[badge.dataset.rogueAttr])
-    valueContainer.textContent = Number.isFinite(value) ? value : 0
+    const nextValue = Number.isFinite(value) ? value : 0
+    const currentValue = Number(valueContainer.textContent)
+
+    // 初始占位符不是实际值，避免首次同步时为所有徽章弹出通知
+    if (Number.isFinite(currentValue) && currentValue !== nextValue) {
+      const label = ROGUE_ATTR_LABELS[badge.dataset.rogueAttr] ?? badge.dataset.rogueAttr
+      addTooltip(`${label}值变成了${nextValue}`, 'acTooltip', 3000)
+    }
+
+    valueContainer.textContent = nextValue
   }
 }
 
