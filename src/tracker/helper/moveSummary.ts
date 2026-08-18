@@ -22,7 +22,7 @@ type SummarizableMoveContext = Partial<RoomMoveContext> & {
 }
 
 function normalizeIDs(cardIDs: CardID[] | CardID = []): CardID[] {
-  return (Array.isArray(cardIDs) ? cardIDs : [cardIDs]).map((id) => Number(id) || 0)
+  return Array.isArray(cardIDs) ? [...cardIDs] : [cardIDs]
 }
 
 export function summarizeMoveEvent(

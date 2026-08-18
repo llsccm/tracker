@@ -104,11 +104,10 @@ export function getMoveTypeLabel(moveType: RawMoveCardEvent['MoveType']): string
 }
 
 /**
- * 协议可能传入单张牌、数组或空值，这里统一转换为数值数组。
- * 无法转换的牌 ID 用 0 占位，后续通过 hasKnownCards 判断是否可见。
+ * 协议可能传入单张牌、数组或缺省值；这里只统一容器形态，CardID 数值遵循宿主契约。
  */
 function normalizeIDs(cardIDs: CardID[] | CardID = []): CardID[] {
-  return (Array.isArray(cardIDs) ? cardIDs : [cardIDs]).map((id) => Number(id) || 0)
+  return Array.isArray(cardIDs) ? [...cardIDs] : [cardIDs]
 }
 
 /**

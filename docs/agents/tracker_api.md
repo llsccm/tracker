@@ -31,15 +31,16 @@ if (!room) return
 
 ## 协议 CardID 输入约定
 
-技能/协议模块消费消息中的 `cardIDs` 时，统一用 `getPositiveIDs()` 归一化
+技能/协议模块需要提取消息中的真实牌身份时，统一用 `getPositiveIDs()`
 （定义于 `src/tracker/helper/cardIDs.ts`，经 `src/tracker/skill/moveEventUtils.ts`
 重导出）：
 
-- 丢弃 `0`、负数与 NaN，得到去重后的正数列表，并保留每个 ID 首次出现的顺序。
+- 宿主协议保证 CardID 为数字；`0` 表示未公开身份，正数表示真实身份。
+- `getPositiveIDs()` 过滤 `0`，得到去重后的真实身份列表，并保留每个 ID 首次出现的顺序。
 - 结果不保证按数值排序；需要按数值排序的调用方应在返回结果上显式排序。
-- 上游协议约定 CardID 均为有限正整数，因此只按 `id > 0` 过滤，不逐项做
-  `Number.isFinite` 判断（NaN 已由 `Number(id) || 0` 归一化为 `0` 丢弃）。若未来
-  协议出现非有限 ID，应在协议入口统一拦截，而不是在消费热路径承担防御成本。
+- 不要对 CardID 逐项执行 `Number()`、`Number.isFinite()` 或 `Number.isInteger()`；协议中的
+  单值/数组形态只在入口统一为数组。若真实协议样例推翻该契约，应更新入口类型与解析测试，不在
+  各消费路径添加假设性兼容。
 - `0` 仅表示匿名占位、不是稳定身份（见“只有数量、没有 CardID 的暗牌”），
   不要把 `0` 写入 `Card.id`。
 
