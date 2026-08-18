@@ -9,6 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    silent: 'passed-only',
     include: ['tests/**/*.test.{js,ts}'],
     exclude: [...configDefaults.exclude, 'tests/replay/**'],
     coverage: {
