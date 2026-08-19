@@ -27,11 +27,11 @@ export default function decorateWenGua(event: MoveEventDraft, room: Room): MoveE
     return event
   }
 
-  const state = room.ensureSkillState<WenGuaState>(780, () => ({ trackedCard: null }))
   const currentSeatID = room?.game?.currentID
 
   // 当前角色获得问卦牌：记录实体，后续判断是否被其他角色放回牌堆。
   if (toZone === 5 && Number(raw.FromID) === Number(currentSeatID)) {
+    const state = room.ensureSkillState<WenGuaState>(780, () => ({ trackedCard: null }))
     const sourceCards = getEventSourceCards(event, room)
     state.trackedCard = sourceCards[0] ?? null
 
@@ -44,7 +44,7 @@ export default function decorateWenGua(event: MoveEventDraft, room: Room): MoveE
   }
 
   // 他人把被追踪的问卦牌放回牌堆：全暗事件也能补上真实 ID。
-  const trackedCard = state.trackedCard
+  const trackedCard = room.readSkillState<WenGuaState>(780)?.trackedCard
   if (
     toZone === 1 &&
     Number(raw.FromID) !== Number(currentSeatID) &&

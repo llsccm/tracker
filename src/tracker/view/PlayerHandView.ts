@@ -45,7 +45,10 @@ interface CardListOptions {
 
 type HandCardKind = 'known' | 'candidate'
 
-const RENDER_NODE_SELECTOR = ':scope > .shoupai, :scope > .markedCard'
+const RENDER_NODE_CLASS_NAMES = ['shoupai', 'markedCard'] as const
+const RENDER_NODE_SELECTOR = RENDER_NODE_CLASS_NAMES.map(
+  (className) => `:scope > .${className}`
+).join(', ')
 const RENDER_KEY_ATTRIBUTE = 'data-tracker-render-key'
 
 /**
@@ -239,7 +242,7 @@ function getNextRenderedSibling(node: Element): Element | null {
 }
 
 function isRenderedNode(node: Element): boolean {
-  return node.classList.contains('shoupai') || node.classList.contains('markedCard')
+  return RENDER_NODE_CLASS_NAMES.some((className) => node.classList.contains(className))
 }
 
 function getPlayerHandPanel(doc: Document): HTMLElement | null {
@@ -277,7 +280,7 @@ function renderCardList(
 ): void {
   const container = doc.getElementById(containerId)
   if (!container) return
-  container.querySelectorAll(':scope > .shoupai, :scope > .markedCard').forEach((e) => e.remove())
+  container.querySelectorAll(RENDER_NODE_SELECTOR).forEach((e) => e.remove())
 
   let i = 0
   while (i < cards.length) {

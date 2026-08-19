@@ -22,7 +22,7 @@ export function handleUseSpell(msg) {
     // 博图计数器
     case 3090:
       if (SeatID === Game.currentID && msg.EffectIndex === 1) {
-        const prev = Number(Game.getSpellState(3090)) || 0
+        const prev = Game.getSpellState(3090) ?? 0
         Game.setSpellState(3090, prev + 1)
         // laya.ged?.event('SET_SEAT_STATE')
       }
