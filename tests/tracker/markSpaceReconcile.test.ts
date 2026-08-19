@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
+import type { Room } from '@/tracker/Room'
 import { HIDDEN_MARK_STATE_KEY } from '@/tracker/roomMovement/types'
 import type { HiddenMarkRecord, HiddenMarkState } from '@/tracker/roomMovement/types'
 import { trackerLogger } from '@/utils/logger'
@@ -42,11 +43,11 @@ function hiddenHandToMark(room, { seatID, count, spellID }) {
   })
 }
 
-function getSingleRecord(room): HiddenMarkRecord {
-  const state = room.skillState.get(HIDDEN_MARK_STATE_KEY) as HiddenMarkState | undefined
+function getSingleRecord(room: Room): HiddenMarkRecord {
+  const state = room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)
   const records = Array.from(state?.records?.values() ?? [])
   expect(records.length).toBe(1)
-  return records[0]
+  return records[0]!
 }
 
 function countAnonymousHand(room, seatID: number): number {

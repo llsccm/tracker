@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { CARD_INSTANCE_STATUS } from '@/tracker/CardCounter'
+import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/roomMovement/types'
 import { getPublicFieldCandidateCards } from '@/tracker/view/publicFieldCandidates'
 import { trackerLogger } from '@/utils/logger'
 import { expectLocationIndexMatchesRebuild } from './helpers/locationIndex'
@@ -454,14 +455,18 @@ describe('阶段 1 匿名牌堆 spike', () => {
     })
 
     expect(room.counter.cardsByStatus[CARD_INSTANCE_STATUS.APPEARED]).toContain(hiddenMarkCard)
-    const recordBefore = room.getSkillState('hiddenMarkCandidates').records.get('1:1:700')
+    const recordBefore = room
+      .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
+      .records.get('1:1:700')!
     expect(recordBefore.placeholderCards.has(hiddenMarkCard)).toBe(true)
     const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
 
     try {
       room.shufflePile({ cardCount: 3 })
 
-      const recordAfter = room.getSkillState('hiddenMarkCandidates').records.get('1:1:700')
+      const recordAfter = room
+        .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
+        .records.get('1:1:700')!
       expect(recordAfter.placeholderCards.has(hiddenMarkCard)).toBe(true)
       expect(hiddenMarkCard).toSatisfy(isAnonymous)
       expect(hiddenMarkCard.location).toBe('player')

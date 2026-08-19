@@ -1,5 +1,6 @@
-import { n2C, n2N, shortName } from '@/utils'
+import { n2C, n2N } from '@/utils'
 import ConfigBase from './ConfigBase'
+import { shortName } from './shortName'
 
 /** 子类型编号 → 显示名称映射（火杀、雷杀、冰杀、闪闪） */
 export const SUB_TYPE_NAMES = {

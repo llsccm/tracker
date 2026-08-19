@@ -4,6 +4,10 @@ import { HAND_EXCHANGE_STATE_KEY } from '@/tracker/skill/HandExchange'
 import type { Room } from '@/tracker/Room'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
 
+type HandExchangeState = {
+  bySpell: Record<string, { batches: Record<string, { cards: unknown[] }[]> }>
+}
+
 describe('整手牌经交换区互易（通用协议模式）', () => {
   const seatA = 4
   const seatB = 5
@@ -266,7 +270,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     ).toBe(true)
     expect(decorated.options.cardCount).toBe(8)
 
-    const state = room.getSkillState(HAND_EXCHANGE_STATE_KEY)
+    const state = room.readSkillState<HandExchangeState>(HAND_EXCHANGE_STATE_KEY)!
     expect(state.bySpell['121'].batches[String(seatB)]).toHaveLength(1)
     expect(state.bySpell['121'].batches[String(seatB)][0].cards).toHaveLength(8)
   })
@@ -301,7 +305,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
 
     expect(room.getPlayer(seatA).observedHandCount).toBe(8)
     expect(room.getPlayer(seatB).observedHandCount).toBe(4)
-    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
   it('任意 SpellID 复用同一整手交换协议模式', () => {
@@ -310,7 +314,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(handIDs(room, seatA)).toEqual([...knownFromB, ...hiddenFromB].sort((a, b) => a - b))
     expect(handIDs(room, seatB)).toEqual([...hiddenFromA].sort((a, b) => a - b))
     expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
-    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
   it('双方整手全暗时仍按实体批次互换且不会公开身份', () => {
@@ -339,7 +343,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(room.getPlayer(1).observedHandCount).toBe(secondHandIDs.length)
     expect(room.getPlayer(2).observedHandCount).toBe(firstHandIDs.length)
     expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
-    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
   it('非整手的 5->10 交换不接管（避免误伤佐练类路径）', () => {
@@ -370,7 +374,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     const decorated = room.decorateMoveEvent(event)
     expect(decorated.cardIDs).toEqual([106])
     expect(decorated.options?.sourceCards).toBeUndefined()
-    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
   it('观测手牌数存在时不会用较短实体快照把单张移动误判为整手', () => {
@@ -411,7 +415,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
 
     expect(decorated.cardIDs).toEqual([])
     expect(decorated.options?.sourceCards).toBeUndefined()
-    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
   it('未登记批次回手时不创建空账本', () => {
@@ -441,7 +445,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
 
     const decorated = room.decorateMoveEvent(event)
     expect(decorated.options?.sourceCards).toBeUndefined()
-    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
   it('己方整手正 CardIDs 也会接管，并与对侧全暗批次完成互换', () => {
@@ -524,7 +528,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
       expect(card.isKnown).toBe(false)
     })
 
-    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
   it('结算中嵌套空手交换时不消费外层同座位批次', () => {
@@ -626,7 +630,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(handIDs(room, seatB)).toEqual([...hiddenFromA].sort((a, b) => a - b))
     expect(handIDs(room, 3)).toEqual([])
     expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
-    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
   it('交换双方共享的手牌候选在座位置换后保持候选', () => {
@@ -658,7 +662,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(room.getPlayer(1).observedHandCount).toBe(2)
     expect(room.getPlayer(2).observedHandCount).toBe(2)
     expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
-    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
   it('候选账本按 SpellID 隔离：非 121 技能同样能置换并完全清账', () => {
@@ -694,7 +698,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(room.getPlayer(2).observedHandCount).toBe(2)
     expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
     // 批次与候选都结算完毕后，SpellID 账本必须完全清空。
-    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
   it('交换期间通用约束排除的候选不会在回手时复活', () => {
@@ -858,7 +862,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(room.getPlayer(2).observedHandCount).toBe(2)
     expect(room.getPlayer(3).observedHandCount).toBe(2)
     expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
-    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
   it('己方收到完整明牌手牌时会确认出现候选并排除未出现候选', () => {
@@ -935,7 +939,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(room.getPlayer(2).observedHandCount).toBe(2)
     expect(room.getPlayer(3).observedHandCount).toBe(2)
     expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
-    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
   it('己方完整可见回手会用真实 ID 置换玩家 A 的匿名实体占位', () => {
@@ -1018,7 +1022,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(room.getPlayer(2).observedHandCount).toBe(2)
     expect(room.getPlayer(3).observedHandCount).toBe(2)
     expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
-    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
   it('嵌套空手交换会按各层批次依次置换候选座位', () => {
@@ -1139,6 +1143,6 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(room.getPlayer(2).observedHandCount).toBe(2)
     expect(room.getPlayer(3).observedHandCount).toBe(0)
     expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
-    expect(room.skillState.has(HAND_EXCHANGE_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 })

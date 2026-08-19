@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
-import type { RoomMoveContext } from '@/tracker/roomMovement/types'
+import {
+  HIDDEN_MARK_STATE_KEY,
+  type HiddenMarkState,
+  type RoomMoveContext
+} from '@/tracker/roomMovement/types'
 import { createTestRoom, getCard } from './helpers/room'
 import {
   equipmentContainer,
@@ -132,7 +136,9 @@ describe('隐藏标记区候选', () => {
       spellID: 414
     })
 
-    expect(room.getSkillState('hiddenMarkCandidates').records.has('6:6:414')).toBe(true)
+    expect(
+      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!.records.has('6:6:414')
+    ).toBe(true)
 
     room.moveCards([136], 'player', {
       seatID: 6,
@@ -148,7 +154,10 @@ describe('隐藏标记区候选', () => {
       sourceEvent: { type: 'test:known-mark-to-hand' }
     })
 
-    expect(room.getSkillState('hiddenMarkCandidates').records.has('6:6:414')).toBe(false)
+    expect(
+      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('6:6:414') ??
+        false
+    ).toBe(false)
     expect(knownCard.location).toBe('player')
     expect(knownCard.subZone).toBe('hand')
     expect(knownCard.seats.has(6)).toBe(true)
@@ -243,8 +252,8 @@ describe('隐藏标记区候选', () => {
       spellID: 1234
     })
 
-    const state = room.getSkillState('hiddenMarkCandidates')
-    const record = state.records.get('1:1:1234')
+    const state = room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
+    const record = state.records.get('1:1:1234')!
     const group = room.constraintGroups.get('hidden_mark_1:1:1234')
 
     expect(record.knownMarkMin).toBe(markCount)
@@ -275,7 +284,9 @@ describe('隐藏标记区候选', () => {
       spellID: 1234
     })
 
-    const record = room.getSkillState('hiddenMarkCandidates').records.get('1:1:1234')
+    const record = room
+      .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
+      .records.get('1:1:1234')!
 
     expect(record.knownMarkMin).toBe(0)
     expect(record.knownMarkMax).toBe(2)
@@ -394,8 +405,8 @@ describe('隐藏标记区候选', () => {
       spellID: 700
     })
 
-    const state = room.getSkillState('hiddenMarkCandidates')
-    const record = state.records.get('1:1:700')
+    const state = room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
+    const record = state.records.get('1:1:700')!
 
     expect(record.knownMarkMin).toBe(0)
     expect(record.knownMarkMax).toBe(1)
@@ -670,14 +681,19 @@ describe('隐藏标记区候选', () => {
       sourceEvent: { type: 'test:move-muniu-equip' }
     })
 
-    const record = room.getSkillState('hiddenMarkCandidates').records.get('4:5:700')
+    const record = room
+      .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
+      .records.get('4:5:700')!
 
     expect(muniu.location).toBe('player')
     expect(muniu.subZone).toBe('equip')
     expect(muniu.seats.has(5)).toBe(true)
     expect(record).toBeTruthy()
     expect(record.targetSeat).toBe(5)
-    expect(room.getSkillState('hiddenMarkCandidates').records.has('4:4:700')).toBe(false)
+    expect(
+      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('4:4:700') ??
+        false
+    ).toBe(false)
     expect(knownCard.location).toBe('player')
     expect(knownCard.subZone).toBe('hand')
     expect(knownCard.seats.has(4)).toBe(true)
@@ -810,7 +826,10 @@ describe('隐藏标记区候选', () => {
       }
     })
 
-    expect(room.getSkillState('hiddenMarkCandidates').records.has('6:7:700')).toBe(false)
+    expect(
+      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('6:7:700') ??
+        false
+    ).toBe(false)
     candidateCards.forEach((card) => {
       expect(card.location).toBe('player')
       expect(card.subZone).toBe('hand')
@@ -928,7 +947,10 @@ describe('隐藏标记区候选', () => {
       sourceEvent: { type: 'test:reveal-muniu-mark' }
     })
 
-    expect(room.getSkillState('hiddenMarkCandidates').records.has('4:4:700')).toBe(false)
+    expect(
+      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('4:4:700') ??
+        false
+    ).toBe(false)
     ;[candidateCard, hiddenCard].forEach((card) => {
       expect(card.location).toBe('player')
       expect(card.subZone).toBe('mark')

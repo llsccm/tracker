@@ -46,7 +46,7 @@ describe('巧织暗取牌推断', () => {
     )
 
     const room = controller.getTrackerRoom()
-    expect(room.skillState.has('qiaozhiSelection')).toBe(false)
+    expect(room.hasSkillState('qiaozhiSelection')).toBe(false)
 
     controller.revealTrackerCards(
       {
@@ -149,7 +149,7 @@ describe('巧织暗取牌推断', () => {
         (card) => card.location === 'player' && card.subZone === 'mark' && card.spellID === 3544
       )
     ).toEqual([])
-    expect(room.skillState.has('qiaozhiSelection')).toBe(false)
+    expect(room.hasSkillState('qiaozhiSelection')).toBe(false)
   })
 
   it('暗取协议已带正 CardIDs 时跳过差集推断（主视角可见）', () => {
@@ -185,7 +185,7 @@ describe('巧织暗取牌推断', () => {
 
     const room = controller.getTrackerRoom()
     // 已给出选取明牌：差集状态应被清掉，等待差集不应建立
-    expect(room.skillState.has('qiaozhiSelection')).toBe(false)
+    expect(room.hasSkillState('qiaozhiSelection')).toBe(false)
 
     const selectedCard = room.cardIndex.get(52)!
     expect(selectedCard.location).toBe('player')

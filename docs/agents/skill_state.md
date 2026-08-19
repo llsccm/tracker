@@ -71,8 +71,8 @@ room.deleteSkillState('example')
 room.hasSkillState('example')
 ```
 
-这些方法统一委托到当前 GameState 的 `tracker` scope。`Room.skillState` 仅保留为 deprecated 的只读
-兼容视图；新代码和测试都应优先使用明确的方法。
+这些方法统一委托到当前 GameState 的 `tracker` scope。Room 不再提供 `skillState`、`getSkillState()`
+或 `clearSkillState()` 兼容入口；读取、创建、判断和删除必须使用语义明确的方法。
 
 ## 生命周期
 

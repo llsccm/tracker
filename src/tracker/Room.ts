@@ -42,11 +42,6 @@ interface RoomOptions {
   gameState?: GameState
 }
 
-interface RoomSkillStateView {
-  has(stateKey: GameStateKey): boolean
-  get<T = unknown>(stateKey: GameStateKey): T | undefined
-}
-
 interface HandSlotCountSummary {
   knownCount: number
   candidateCount: number
@@ -131,11 +126,6 @@ export class Room {
   declare zones: Map<PublicZoneName, Zone>
   declare skillHandlers: Map<SpellID, (...args: any[]) => unknown>
   declare moveEventHandlers: Map<SpellID | '*', ((event: any, room: Room) => any)[]>
-  /**
-   * @deprecated 只读兼容视图；不再拥有独立 Map，数据由 GameState.stateStore 统一保存。
-   * 新代码使用 readSkillState() / hasSkillState()。
-   */
-  declare skillState: RoomSkillStateView
   declare constraintGroups: Map<string | number, ConstraintGroup>
   declare constraintGroupSeq: number
   declare constraintGroupsDirty: boolean
@@ -198,10 +188,6 @@ export class Room {
     // 5. 武将特判技能过滤注册表 (开闭原则解耦)
     this.skillHandlers = new Map()
     this.moveEventHandlers = new Map()
-    this.skillState = {
-      has: (stateKey) => this.hasSkillState(stateKey),
-      get: <T = unknown>(stateKey: GameStateKey) => this.readSkillState<T>(stateKey)
-    }
 
     // 6. 局部约束组与明牌反查索引
     this.constraintGroups = new Map()
@@ -965,18 +951,6 @@ export class Room {
   deleteSkillState(stateKey: GameStateKey): void {
     if (!this.isCurrentGameRoom()) return
     this.game.deleteState('tracker', stateKey)
-  }
-
-  /**
-   * @deprecated 使用 ensureSkillState() 明确表达“读取并在缺失时创建”的语义。
-   */
-  getSkillState<T = any>(stateKey: GameStateKey, createState: () => T = () => ({}) as T): T {
-    return this.ensureSkillState(stateKey, createState)
-  }
-
-  /** @deprecated 使用 deleteSkillState()。 */
-  clearSkillState(stateKey: GameStateKey): void {
-    this.deleteSkillState(stateKey)
   }
 
   private isCurrentGameRoom(): boolean {
