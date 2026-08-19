@@ -6,6 +6,7 @@ import type { Room } from '@/tracker/Room'
 import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import {
   commitDuoQiMove,
+  getDuoQiState,
   initializeDuoQiState,
   recordDuoQiActivation,
   recordDuoQiRoleDataTarget
@@ -87,7 +88,33 @@ describe('夺炁初始牌身份', () => {
     expect(Array.from(replacement.initialCardIDsBySeat.get(1) ?? []).sort()).toEqual([1, 2, 3, 4])
     expect(replacement.initialCardIDsBySeat.get(2)).toEqual(new Set())
     expect(replacement.initialCardIDsBySeat.get(3)).toEqual(new Set())
-    expect(gameState.getSpellState(3731)).toBe(replacement)
+    expect(getDuoQiState(room)).toBe(replacement)
+    expect(gameState.getSpellState(3731)).toBeUndefined()
+  })
+
+  it('Room 重建和对局结束统一清理当前一局状态', () => {
+    const { controller, gameState, room } = setup()
+    initializeDuoQiState(gameState, [1, 2, 3, 4, 5, 6, 7, 8])
+    gameState.setSpellState('duoQi-session-test', { active: true })
+
+    expect(getDuoQiState(room)).toBeDefined()
+    expect(gameState.getSpellState('duoQi-session-test')).toEqual({ active: true })
+
+    controller.initTrackerRoom()
+    const replacementRoom = controller.getTrackerRoom()!
+
+    expect(getDuoQiState(room)).toBeUndefined()
+    expect(getDuoQiState(replacementRoom)).toBeUndefined()
+    expect(gameState.getSpellState('duoQi-session-test')).toBeUndefined()
+
+    replacementRoom.setSkillState('end-test', { active: true })
+    gameState.setSpellState('end-test', { active: true })
+    gameState.start()
+
+    gameState.end()
+
+    expect(replacementRoom.readSkillState('end-test')).toBeUndefined()
+    expect(gameState.getSpellState('end-test')).toBeUndefined()
   })
 
   it('3730 分别从弃牌堆和目标手牌取走确定的剩余初始牌', () => {

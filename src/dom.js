@@ -26,11 +26,8 @@ import { loadInterfaceHtml } from './utils/htmlResource'
 import { addTooltip } from './utils/notification'
 import { setPeiXiuMapWindowVisible } from './ui/PeiXiuMapWindow'
 
-// import {buildActivityPlannerInput} from './utils/activityPlanner.js';
 let iframe = null
 const version = import.meta.env.VITE_version ?? '0.9.0'
-
-// export var Sdocument = document.getElementById('createSkinIframeSource')?.contentWindow?.document
 
 function getTrackedHandNumbers(seatID) {
   const config = CardConfig.GetInstance()
@@ -49,11 +46,15 @@ export function Init() {
 export function Exit() {
   unbindProtocolRecorderControls()
   void stopProtocolRecording()
+  Reflect.deleteProperty(window, 'innerWidth')
   return cleanupLifecycle({ resize, scheduleSetGameSize, SGSresize, globalState })
 }
 
 function resize() {
-  window.innerWidth = document.documentElement.clientWidth - window.padding
+  const padding = Number(window.padding) || 0
+  // innerWidth 是 Replaceable 属性；padding 为 0 时删除赋值产生的自有属性以恢复原生尺寸。
+  if (padding > 0) window.innerWidth = document.documentElement.clientWidth - padding
+  else Reflect.deleteProperty(window, 'innerWidth')
   document.documentElement.style.setProperty('--sgs-center-x', `${window.innerWidth / 2}px`)
 }
 
@@ -145,7 +146,6 @@ function setGameSize() {
   // let sgsBgVideo = document.getElementById('sgsBgVideo')
   // let imgBG = document.getElementById('sgsBgIMG')
   const seatUI = document.getElementById('seatUI')
-  const rogueUI = document.getElementById('rogueUI')
 
   const top =
     ((window.innerHeight * window.devicePixelRatio -
@@ -178,10 +178,6 @@ function setGameSize() {
   seatUI.style.left = window.innerWidth / 2 + 'px'
   seatUI.style.top = top + 'px'
   // drawDeckEdgeUI()
-  rogueUI.style.width = `${app.width}px`
-  rogueUI.style.height = `${app.height}px`
-  rogueUI.style.left = window.innerWidth / 2 + 'px'
-  rogueUI.style.top = top + 'px'
   UI.centerX = window.innerWidth > app.width ? app.width / 2 : window.innerWidth / 2
   UI.centerY = app.height / 2
   document.documentElement.style.setProperty('--sgs-center-x', `${UI.centerX}px`)

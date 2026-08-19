@@ -97,22 +97,6 @@ export function createMainShell(version) {
 
   div.appendChild(header)
 
-  // div.onmouseenter = function () {
-  //   const cityDivs = document.querySelectorAll('div.city')
-  //   cityDivs.forEach((city) => {
-  //     city.classList.remove('hide')
-  //     city.classList.add('show')
-  //   })
-  // }
-
-  // div.onmouseleave = function () {
-  //   const cityDivs = document.querySelectorAll('div.city')
-  //   cityDivs.forEach((city) => {
-  //     city.classList.remove('show')
-  //     city.classList.add('hide')
-  //   })
-  // }
-
   const btn = document.createElement('button')
   btn.innerText = '-'
   btn.id = 'toggle-me'

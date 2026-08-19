@@ -190,7 +190,7 @@ export interface PublicCandidatesToHandOptions {
 }
 
 export const PAIDUI_POSITIONS = ['top', 'bottom']
-// Room.skillState 中的通用账本 key：记录“手牌暗置到标记区”的明牌候选关系。
+// GameState tracker 命名空间中的通用账本 key：记录“手牌暗置到标记区”的明牌候选关系。
 export const HIDDEN_MARK_STATE_KEY = 'hiddenMarkCandidates'
-// Room.skillState 中的通用账本 key：记录 seatID=255 等无席位标记空间里的暗占位实体。
+// GameState tracker 命名空间中的通用账本 key：记录 seatID=255 等无席位标记空间里的暗占位实体。
 export const UNASSIGNED_MARK_SPACE_STATE_KEY = 'unassignedMarkSpaces'

@@ -192,7 +192,7 @@ describe('tracker protocol replay', () => {
     const report = replayer.replay(records)
 
     expect(report.success).toBe(true)
-    expect(getDuoQiState(replayer.gameState)?.activations.get(3730)).toMatchObject({
+    expect(getDuoQiState(replayer.gameState.room!)?.activations.get(3730)).toMatchObject({
       ownerSeatID: 1,
       targetSeatID: 2
     })

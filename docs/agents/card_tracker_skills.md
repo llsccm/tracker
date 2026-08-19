@@ -2,7 +2,8 @@
 
 > 只有在处理暗置标记、观虚、整手牌交换、诫厉、天候或相邻协议特例时才阅读本文。
 > 常规 `Room` / `Card` / `Player` API 调用先查 [`tracker_api.md`](tracker_api.md)，协议字段样例先查
-> [`docs/protocols/README.md`](../protocols/README.md)。
+> [`docs/protocols/README.md`](../protocols/README.md)。新增技能临时状态前先查
+> [`skill_state.md`](skill_state.md)，确认统一状态仓库中的 key 与访问入口。
 
 ## 快速索引
 
@@ -36,7 +37,8 @@
 当协议出现 `FromZone=5`、`ToZone=4/8`、`CardIDs` 全暗且 `CardCount > 0` 时，记牌器会检查来源手牌是否存在明牌候选：
 
 1. 若没有来源明牌，沿用普通暗牌占位移动逻辑。
-2. 若存在来源明牌，由 `RoomMovement.handleHiddenMarkMove()` 接管默认暗牌移动，并在 `Room.skillState.get('hiddenMarkCandidates')` 中记录候选账本。
+2. 若存在来源明牌，由 `RoomMovement.handleHiddenMarkMove()` 接管默认暗牌移动，并通过
+   `Room.readSkillState('hiddenMarkCandidates')` 访问统一状态仓库中的候选账本。
 3. 账本记录来源座位、当前投影目标座位、`spellID`、候选明牌、已确认手牌/标记牌，以及本次暗置的明牌落入标记区数量范围。这里的 `spellID` 表示标记空间 ID：协议 `zone 4` 按旧 `Zone` 规则优先取 `ZoneParam || SpellID`，`zone 8` 优先取 `SpellID || ZoneParam`；木牛流马（木马）的标记空间 ID 固定为 `700`。
 4. 先将候选明牌投影为完整位置候选：保留原有 `A 手牌 / B 手牌` 等候选，再追加目标标记位置。普通标记追加 `目标座位 标记`；木马追加装备容器候选 `container:equipment:161:700`，再由索引按 161 当前装备座位显示到玩家标记区。这一步不会丢掉既有跨角色候选。
 5. 当范围 `knownMarkMin === knownMarkMax` 且候选全集只剩 `来源手牌 / 目标标记` 时，创建 `ConstraintGroup.expectedSlotsByLocation` 精确约束，并同步可镜像的 `expectedSlotsBySubZone`，支持 4 选 1、4 选 2、4 选 3 等 N 选 K。木马容器候选只参与 `expectedSlotsByLocation`，不生成 `expectedSlotsBySubZone` 镜像。
@@ -131,6 +133,7 @@
 ## 相关入口
 
 - 当前记牌器架构、风险与未完成项：[`card_tracker.md`](card_tracker.md)
+- 技能状态所有权与当前使用清单：[`skill_state.md`](skill_state.md)
 - 常用方法调用速查：[`tracker_api.md`](tracker_api.md)
 - 协议样例索引：[`docs/protocols/README.md`](../protocols/README.md)
 - 测试选择与验证分层：[`testing.md`](testing.md)

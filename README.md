@@ -1,5 +1,7 @@
 # tracker
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/llsccm/tracker)
+
 一款记牌器
 
 work in progress

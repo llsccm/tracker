@@ -3,7 +3,8 @@
 > 当任务涉及 `src/tracker/Room.ts`，需要判断状态应由谁持有、入口应放在 Room 还是行为模块、
 > 或排查单局初始化、移动、收敛、索引同步与销毁问题时，按需阅读本文。
 > 只想调用现有能力时先查 [`tracker_api.md`](tracker_api.md)；应用级创建、View 挂载与销毁时序见
-> [`lifecycle.md`](lifecycle.md)。
+> [`lifecycle.md`](lifecycle.md)；GameState 统一单局状态仓库及 Room 访问入口见
+> [`skill_state.md`](skill_state.md)。
 
 ## 阅读路由
 
@@ -15,6 +16,7 @@
 | 修改约束或排查不收敛 | [`card_tracker_convergence.md`](card_tracker_convergence.md) | 不动点、数量约束、`changed` 契约与性能护栏 |
 | 处理匿名槽、物化、洗牌身份 | [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md) | cohort/generation、身份分区与 `PileIdentityLedger` |
 | 处理技能或协议特例 | [`card_tracker_skills.md`](card_tracker_skills.md) / [`../protocols/README.md`](../protocols/README.md) | 技能装饰、协议字段样例与特殊移动语义 |
+| 使用技能临时状态 | [`skill_state.md`](skill_state.md) | GameState 统一仓库、命名空间、Room 薄入口与当前技能清单 |
 | 排查 Room 创建、挂载或销毁 | [`lifecycle.md`](lifecycle.md) | Controller、Room、View 的应用级时序 |
 | 选择回归命令或补测试 | [`testing.md`](testing.md) | tracker 测试、类型检查、lint 与构建 |
 
@@ -50,7 +52,7 @@ flowchart LR
 | 注册座位 | `registerPlayers(infos, currentUserID)` | 重建 `players`、`seatIDs`、`size`，识别 `mySeatID`，同步录像状态与固定视角前置数据 |
 | 初始化牌堆 | `initDeck(cardIDs)` | 清空旧牌池，创建等量匿名物理槽，登记真实身份，初始化 generation 0、索引、快照与 `CardCounter`，最后置 `isDeckReady = true` |
 | 对局运行 | `moveCards()` / `shufflePile()` / reveal 相关入口 | 更新物理实体、身份账本、候选与手牌数事实，再执行收敛和派生同步 |
-| 销毁 | `destroy()` | 与 `GameState` 解绑，清空玩家、Zone、牌实体、约束、身份分区、脏状态和座位信息；整个实例随即失效，不再被 Controller 复用 |
+| 销毁 | `destroy()` | 与 `GameState` 解绑并触发统一临时状态清理，再清空玩家、Zone、牌实体、约束、身份分区、脏状态和座位信息；整个实例随即失效，不再被 Controller 复用 |
 
 浏览器侧可能在玩家注册后进行一次早期 View 挂载，但只有 `initDeck()` 完成后 Room 才能通过
 `getReadyTrackerRoom()` 对外提供完整记牌能力。具体挂载时序不要在 Room 内推断，见
@@ -65,7 +67,8 @@ flowchart LR
 | 座位与视角 | `players`、`seatIDs`、`size`、`mySeatID`、`firstID` | 本局玩家集合、主视角与固定显示顺位前置事实 |
 | 物理牌实体 | `cards`、`zones`、`cardIndex` | 已创建的 `Card` 实体、公共区有序关系与已定位正 ID 索引 |
 | 身份分区 | `deckIdentities`、`unlocatedIdentities`、`suspendedKnownCards`、`pileIdentityLedger` | 暗牌堆真实身份集合、未定位身份、暂停展示实体与 cohort/generation 权威账本 |
-| 推断约束 | `constraintGroups`、`skillState` | 局部位置/数量约束和仅属于本局的技能临时状态 |
+| 推断约束 | `constraintGroups` | 局部位置/数量约束 |
+| 技能临时账本 | GameState `tracker` scope（经 `read/ensure/set/deleteSkillState` 访问） | 当前 Room 的技能推断状态；存储和生命周期由 GameState 统一管理 |
 | 扩展注册表 | `skillHandlers`、`moveEventHandlers` | 移动装饰器与事件处理器；随 Room 销毁，不跨局复用状态 |
 
 ### 派生状态与缓存
@@ -153,7 +156,7 @@ handler 中直接修改 `Card`、`Zone` 或玩家投影；`TrackerController` / 
 | 约束组、暂停追踪、视图组同步 | `roomConstraints.ts` | 集中维护推断和稳定投影规则 |
 | 公共区查询、牌序读面、一致性诊断 | `roomPublicZones.ts` | 避免在 Room 重复实现 Zone 遍历 |
 | 稳定且高频的单局公开入口 | `Room.ts` 的薄门面 | 便于调用方检索与引用追踪 |
-| 技能专属事件装饰与临时账本 | `src/tracker/skill/` + `Room.skillState` | 技能状态按局隔离，通用移动核心不感知具体技能 |
+| 技能专属事件装饰与临时账本 | `src/tracker/skill/` + GameState `tracker` 状态 | 技能状态按局隔离，Room 仅提供领域访问入口 |
 | 牌实体、玩家事实或公共区模型语义 | `Card.ts` / `Player.ts` / `Zone.ts` | 由对应模型维护自身不变量 |
 | DOM、挂载、渲染合并与显隐 | `src/tracker/view/` / `src/ui/` | Room 只记录可供视图消费的状态与脏事件 |
 
@@ -162,7 +165,7 @@ handler 中直接修改 `Card`、`Zone` 或玩家投影；`TrackerController` / 
 
 ## 第六层：核心不变量与修改护栏
 
-- `Room` 只代表一局；技能临时状态、事件处理器、身份账本和索引不能跨 Room 复用。
+- `Room` 只代表一局；GameState 中的 tracker 临时状态、事件处理器、身份账本和索引不能跨 Room 复用。
 - `Room.cards` 是物理实体集合，不等于仍未出现的真实身份集合；生产 `initDeck()` 只创建匿名槽。
 - `Zone` 只表达公共区有序关系；玩家区事实由 `Card.location === 'player'` 与完整位置候选表达。
 - `Card.locationCandidates` 是完整位置候选主模型；`seats`、子区候选和公共候选是投影。

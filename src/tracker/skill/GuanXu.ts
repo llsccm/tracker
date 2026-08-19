@@ -54,27 +54,27 @@ type KnownMoveSelection = {
   knownResolution: ProtocolKnownCardResolution
 }
 
-function getState(room: Room): GuanXuRoomState {
-  return room.getSkillState(GUAN_XU_STATE_KEY, () => ({
+function ensureGuanXuState(room: Room): GuanXuRoomState {
+  return room.ensureSkillState(GUAN_XU_STATE_KEY, () => ({
     bySpell: {}
-  })) as GuanXuRoomState
+  }))
 }
 
-function getStateReadonly(room: Room): GuanXuRoomState | undefined {
-  return room.skillState.get(GUAN_XU_STATE_KEY) as GuanXuRoomState | undefined
+function getGuanXuState(room: Room): GuanXuRoomState | undefined {
+  return room.readSkillState<GuanXuRoomState>(GUAN_XU_STATE_KEY)
 }
 
 function getBatch(room: Room, spellID: number): GuanXuBatch | undefined {
-  return getStateReadonly(room)?.bySpell[String(spellID)]
+  return getGuanXuState(room)?.bySpell[String(spellID)]
 }
 
 function clearBatch(room: Room, spellID: number): void {
-  const state = getStateReadonly(room)
+  const state = getGuanXuState(room)
   if (!state) return
 
   delete state.bySpell[String(spellID)]
   if (Object.keys(state.bySpell).length === 0) {
-    room.clearSkillState(GUAN_XU_STATE_KEY)
+    room.deleteSkillState(GUAN_XU_STATE_KEY)
   }
 }
 
@@ -210,7 +210,7 @@ function stagePileToExchange(event: MoveEventDraft, room: Room, spellID: number)
     return event
   }
 
-  getState(room).bySpell[String(spellID)] = {
+  ensureGuanXuState(room).bySpell[String(spellID)] = {
     buckets: {
       [String(pileBucketID)]: {
         cards: selectedCards,

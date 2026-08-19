@@ -13,7 +13,6 @@ function createGameState(initialState = {}) {
   return {
     myID: 1,
     currentID: 1,
-    spellSpace: {},
     ensureSpellState(spellID, factory) {
       if (!states.has(spellID)) {
         states.set(spellID, factory())
@@ -241,6 +240,24 @@ describe('技能副作用注册表', () => {
 
     expect(context.CardIDs).toEqual([11, 12])
     expect(game.getSpellState(3157)).toBeUndefined()
+  })
+
+  it('迁附暗牌回堆时回填 CardIDs 并清理技能状态', () => {
+    const game = createGameState({ 3750: [11, 12] })
+    const context = createContext({
+      game,
+      SpellID: 3750,
+      CardIDs: [0, 0],
+      CardCount: 2,
+      FromZone: 2,
+      ToZone: 1,
+      MoveType: 15
+    })
+
+    applySpellEffect(context)
+
+    expect(context.CardIDs).toEqual([11, 12])
+    expect(game.getSpellState(3750)).toBeUndefined()
   })
 
   it('椒遇从无席位 mark 回手时按选择颜色补全其他视角的 CardIDs', () => {

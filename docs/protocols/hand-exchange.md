@@ -190,7 +190,7 @@ ToZoneParam: 0
 ### 批次账本
 
 ```text
-Room.skillState['handExchangeBatches'] = {
+Room.ensureSkillState('handExchangeBatches', createInitialState) -> {
   bySpell: {
     [spellID]: {
       batches: {
@@ -214,6 +214,8 @@ Room.skillState['handExchangeBatches'] = {
   nextBatchSeq: number
 }
 ```
+
+`createInitialState` 返回上方 `handExchangeBatches` 账本结构，供首次进入交换时初始化。
 
 - 进交换区（`5 -> 10`）时按 `SpellID + FromID` 登记。
 - 同一座位在结算中再次参与交换时，批次按栈保存；回手牌（`10 -> 5`）时按

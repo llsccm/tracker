@@ -4,6 +4,7 @@ import type { Room } from '../Room'
 import {
   getCount,
   getRaw,
+  getSourceZoneCards,
   hasPositiveID,
   nextGroupID,
   type MoveEventDraft,
@@ -25,7 +26,7 @@ export default function decorateSiQi(event: MoveEventDraft, room: Room): MoveEve
   }
 
   const cardCount = getCount(event)
-  const sourceCards = room.zones.get(event.options?.fromZone)?.cards ?? []
+  const sourceCards = getSourceZoneCards(event, room)
 
   // 弃牌区按展示顺序（顶 -> 底）挑红色牌作为思泣来源实体候选。
   const selectedCards: any[] = []

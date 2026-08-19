@@ -47,7 +47,7 @@ import {
 } from './moveEventUtils'
 
 /**
- * 房间级 skillState key。
+ * 当前一局 tracker 状态的共享 key。
  * value 形态：{ bySpell: { [spellID]: { batches: { [fromSeat]: batch[] } } } }
  * 按 SpellID 隔离，避免两个交换技能并发时串批。
  */
@@ -103,24 +103,24 @@ function resolveSpellID(event: MoveEventDraft): number {
 }
 
 /** 可写读取：进区登记时才创建房间账本。 */
-function getRoomExchangeState(room: Room): HandExchangeRoomState {
-  return room.getSkillState(HAND_EXCHANGE_STATE_KEY, () => ({
+function ensureRoomExchangeState(room: Room): HandExchangeRoomState {
+  return room.ensureSkillState(HAND_EXCHANGE_STATE_KEY, () => ({
     bySpell: {},
     nextBatchSeq: 0
-  })) as HandExchangeRoomState
+  }))
 }
 
 /**
  * 只读读取：不存在则返回 undefined，避免查询路径留下空 skillState。
  * 回手 / 清理 都应走这条路径。
  */
-function getRoomExchangeStateReadonly(room: Room): HandExchangeRoomState | undefined {
-  return room.skillState.get(HAND_EXCHANGE_STATE_KEY) as HandExchangeRoomState | undefined
+function readRoomExchangeState(room: Room): HandExchangeRoomState | undefined {
+  return room.readSkillState<HandExchangeRoomState>(HAND_EXCHANGE_STATE_KEY)
 }
 
 /** 可写读取：确保指定 SpellID 的批次字典存在。 */
-function getSpellExchangeState(room: Room, spellID: number): HandExchangeSpellState {
-  const roomState = getRoomExchangeState(room)
+function ensureSpellExchangeState(room: Room, spellID: number): HandExchangeSpellState {
+  const roomState = ensureRoomExchangeState(room)
   const key = String(spellID)
   if (!roomState.bySpell[key]) {
     // 候选记录随批次字典一起按 SpellID 建账，回手结算后随该技能账本一并清理。
@@ -130,20 +130,17 @@ function getSpellExchangeState(room: Room, spellID: number): HandExchangeSpellSt
 }
 
 /** 只读读取：未登记过该 SpellID 时不创建空字典。 */
-function getSpellExchangeStateReadonly(
-  room: Room,
-  spellID: number
-): HandExchangeSpellState | undefined {
-  return getRoomExchangeStateReadonly(room)?.bySpell[String(spellID)]
+function readSpellExchangeState(room: Room, spellID: number): HandExchangeSpellState | undefined {
+  return readRoomExchangeState(room)?.bySpell[String(spellID)]
 }
 
 /**
- * 某 SpellID 的批次与候选都结算完后清理其账本；房间账本空了再删 skillState key。
+ * 某 SpellID 的批次与候选都结算完后清理其账本；共享账本空了再删除 tracker 状态 key。
  * 必须在候选恢复（returnCandidateAlternatives）之后调用：候选记录已按 SpellID 隔离，
  * 过早删除该技能账本会连带丢失尚未回手的候选令牌。
  */
 function clearSpellExchangeStateIfEmpty(room: Room, spellID: number): void {
-  const roomState = getRoomExchangeStateReadonly(room)
+  const roomState = readRoomExchangeState(room)
   if (!roomState) return
 
   const state = roomState.bySpell[String(spellID)]
@@ -152,7 +149,7 @@ function clearSpellExchangeStateIfEmpty(room: Room, spellID: number): void {
   }
 
   if (Object.keys(roomState.bySpell).length === 0) {
-    room.clearSkillState(HAND_EXCHANGE_STATE_KEY)
+    room.deleteSkillState(HAND_EXCHANGE_STATE_KEY)
   }
 }
 
@@ -498,8 +495,8 @@ function stageHandToExchange(event: MoveEventDraft, room: Room, spellID: number)
   alignProtocolKnownCards(event, handCards)
 
   // 只有确认接管后才创建可写账本，避免非整手路径污染 skillState。
-  const roomState = getRoomExchangeState(room)
-  const state = getSpellExchangeState(room, spellID)
+  const roomState = ensureRoomExchangeState(room)
+  const state = ensureSpellExchangeState(room, spellID)
   const batchKey = String(fromSeat)
   const batchStack = state.batches[batchKey] ?? []
   // batchID 用房间级自增序号保证全局唯一；候选账本则取本 SpellID 私有的 state。
@@ -550,7 +547,7 @@ function returnExchangeBatchToHand(
   const raw = getRaw(event)
   // 回手协议：FromID = 原持有者批次键；ToID = 真正接收座位。
   const batchKey = String(raw.FromID)
-  const state = getSpellExchangeStateReadonly(room, spellID)
+  const state = readSpellExchangeState(room, spellID)
   const batchStack = state?.batches[batchKey]
   // 优先弹出内层批次，避免空手回牌事件误消费仍待结算的外层实体批次。
   const batch = batchStack?.pop()
@@ -577,7 +574,7 @@ function returnExchangeBatchToHand(
     revealsWholeBatch
   )
 
-  // 批次与候选都结算后再清理该 SpellID 账本；房间账本空了顺带删除 skillState key。
+  // 批次与候选都结算后再清理该 SpellID 账本；共享账本空了顺带删除 tracker 状态 key。
   clearSpellExchangeStateIfEmpty(room, spellID)
 
   // 即使所有成员都已离开 exchange，也必须保留协议手牌变化量；不能退回原事件去抽取其它批次。

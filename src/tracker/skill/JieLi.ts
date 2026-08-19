@@ -44,8 +44,6 @@ export type JieLiSelectionData = {
 
 type JieLiInformationMode = 'full' | 'limited'
 
-type JieLiContext = JieLiContextData
-
 type JieLiSelection = {
   handToPileCards: Card[]
   pileToHandCardIDs: number[]
@@ -82,27 +80,27 @@ type JieLiObserverBatch = {
 }
 
 type JieLiState = {
-  context?: JieLiContext
+  context?: JieLiContextData
   batch?: JieLiBatch
   observerBatch?: JieLiObserverBatch
 }
 
 type JieLiViewMode = 'default' | 'target-full' | 'target-limited' | 'observer-limited' | 'skip'
 
-function getState(room: Room): JieLiState {
-  return room.getSkillState(JIE_LI_SPELL_ID, () => ({})) as JieLiState
+function ensureJieLiState(room: Room): JieLiState {
+  return room.ensureSkillState<JieLiState>(JIE_LI_SPELL_ID, () => ({}))
 }
 
-function getStateReadonly(room: Room): JieLiState | undefined {
-  return room.skillState.get(JIE_LI_SPELL_ID) as JieLiState | undefined
+function getJieLiState(room: Room): JieLiState | undefined {
+  return room.readSkillState<JieLiState>(JIE_LI_SPELL_ID)
 }
 
 function getBatch(room: Room): JieLiBatch | undefined {
-  return getStateReadonly(room)?.batch
+  return getJieLiState(room)?.batch
 }
 
 function clearJieLiState(room: Room): void {
-  room.clearSkillState(JIE_LI_SPELL_ID)
+  room.deleteSkillState(JIE_LI_SPELL_ID)
 }
 
 function readPositiveInteger(value: unknown): number | null {
@@ -128,7 +126,7 @@ export function recordJieLiContext(room: Room, data: JieLiContextData): boolean 
     return false
   }
 
-  const state = getState(room)
+  const state = ensureJieLiState(room)
   state.context = { actorSeat, targetSeat, pileCount }
   delete state.batch
   delete state.observerBatch
@@ -215,7 +213,7 @@ export function recordJieLiSelection(room: Room, data: JieLiSelectionData): bool
 }
 
 function resolveViewMode(room: Room, eventActorSeat?: unknown): JieLiViewMode {
-  const context = getStateReadonly(room)?.context
+  const context = getJieLiState(room)?.context
   const actorSeat = readSeatID(eventActorSeat) ?? context?.actorSeat ?? null
 
   // 发动者有自身完整信息，不需要任何 JieLi 推断。
@@ -303,7 +301,7 @@ function hasTargetHandBranch(card: Card, targetSeat: number): boolean {
  */
 function stageObserverPile(event: MoveEventDraft, room: Room): MoveEventDraft {
   const raw = getRaw(event)
-  const context = getStateReadonly(room)?.context
+  const context = getJieLiState(room)?.context
   const count = getCount(event)
   const actorSeat = Number(raw.ToID)
 
@@ -311,7 +309,7 @@ function stageObserverPile(event: MoveEventDraft, room: Room): MoveEventDraft {
     return failObserverInference(event, room)
   }
 
-  getState(room).observerBatch = {
+  ensureJieLiState(room).observerBatch = {
     actorSeat,
     targetSeat: context.targetSeat,
     pileCount: count,
@@ -328,7 +326,7 @@ function stageObserverPile(event: MoveEventDraft, room: Room): MoveEventDraft {
  */
 function stageObserverTargetHand(event: MoveEventDraft, room: Room): MoveEventDraft {
   const raw = getRaw(event)
-  const batch = getStateReadonly(room)?.observerBatch
+  const batch = getJieLiState(room)?.observerBatch
   const count = getCount(event)
   if (
     !batch ||
@@ -353,7 +351,7 @@ function stageObserverTargetHand(event: MoveEventDraft, room: Room): MoveEventDr
  */
 function returnObserverCardsToPile(event: MoveEventDraft, room: Room): MoveEventDraft {
   const raw = getRaw(event)
-  const batch = getStateReadonly(room)?.observerBatch
+  const batch = getJieLiState(room)?.observerBatch
   if (
     !batch ||
     batch.phase !== 'hand-staged' ||
@@ -376,7 +374,7 @@ function returnObserverCardsToPile(event: MoveEventDraft, room: Room): MoveEvent
  */
 function returnObserverCardsToTargetHand(event: MoveEventDraft, room: Room): MoveEventDraft {
   const raw = getRaw(event)
-  const batch = getStateReadonly(room)?.observerBatch
+  const batch = getJieLiState(room)?.observerBatch
   if (
     !batch ||
     batch.phase !== 'pile-returned' ||
@@ -423,7 +421,7 @@ function stagePileToExchange(
   informationMode: JieLiInformationMode
 ): MoveEventDraft {
   const raw = getRaw(event)
-  const state = getStateReadonly(room)
+  const state = getJieLiState(room)
   const context = state?.context
   const count = getCount(event)
   const pileProtocolCardIDs = getPositiveIDs(event.cardIDs ?? [])
@@ -472,7 +470,7 @@ function stagePileToExchange(
     }
   }
 
-  getState(room).batch = {
+  ensureJieLiState(room).batch = {
     actorSeat,
     targetSeat: context.targetSeat,
     informationMode,

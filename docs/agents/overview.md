@@ -21,7 +21,7 @@
     - `seatOverlay.js`：座位覆盖层
     - `shell.js`：主窗口 shell（含可见性快捷键绑定）
     - `frameContent.js`：注入 HTML 初始化
-    - `CitiesUI.js`：山河图城市与商店 UI
+    - `CitiesUI.js`：山河图城市与商店 Laya UI
     - `lifecycle.js`：生命周期辅助
     - `effect.js`：视觉效果辅助
     - `PeiXiuMapWindow.js`：裴秀地图窗口
@@ -45,7 +45,8 @@
   - `src/tracker/`：当前主动记牌器与运行时状态核心；详细边界见 [`card_tracker.md`](card_tracker.md)：
     - `index.ts`：仅导出 `globalConfig`、`globalState`、`rogueMap`、`UI`、`user`、`Game`。
     - `state.ts` / `configStore.ts` / `user.ts` / `userModel.ts` / `Game.ts` / `types.ts` / `traversalStats.ts`：配置代理、全局 UI、用户态、对局状态（`GameState` + `Game` 实例）、遍历插桩。
-    - `Room.ts`：单局状态源；状态所有权、生命周期与行为模块边界见 [`room.md`](room.md)。
+    - `Room.ts`：单局记牌器领域状态源；状态所有权、生命周期与行为模块边界见 [`room.md`](room.md)，
+      GameState 统一临时状态仓库与清单见 [`skill_state.md`](skill_state.md)。
     - `Card.ts` / `BaseCard.ts` / `Player.ts` / `Zone.ts`：牌/玩家/公共区模型；字段与不变量见 [`card_player_model.md`](card_player_model.md)。
     - `ConstraintGroup.ts` / `AmbiguousKnownIndex.ts` / `CardLocationIndex.ts` / `CardCounter.ts`：约束与增量索引。
     - `MoveEventNormalizer.ts` / `protocolZones.ts`：移动归一化与协议区映射。
