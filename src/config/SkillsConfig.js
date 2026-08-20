@@ -1,5 +1,5 @@
-import { shortName } from '@/utils'
 import ConfigBase from './ConfigBase'
+import { shortName } from './shortName'
 
 export class SkillsConfig extends ConfigBase {
   spellDict = new Map()

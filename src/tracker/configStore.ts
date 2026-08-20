@@ -10,7 +10,7 @@ export type ConfigStore = Record<PropertyKey, unknown>
 
 interface ConfigStoreOptions {
   entries?: readonly ConfigEntry[]
-  storage?: StorageAdapter
+  storage?: StorageAdapter | null
   eventTarget?: EventTarget | null
   effects?: ConfigEffects
 }
@@ -47,10 +47,6 @@ export function createMemoryStorageAdapter(seed: Record<string, unknown> = {}): 
   }
 }
 
-export function createBrowserStorageAdapter(storage: StorageAdapter | null = null): StorageAdapter {
-  return storage ?? createMemoryStorageAdapter()
-}
-
 function readStoredValue(storage: StorageAdapter, id: string, defaultValue: unknown): unknown {
   let rawValue: string | null | undefined
   try {
@@ -83,17 +79,18 @@ function writeStoredValue(storage: StorageAdapter, id: string, value: unknown): 
 
 export function createConfigStore({
   entries = ACTIVE_CONFIG_ENTRIES,
-  storage = createMemoryStorageAdapter(),
+  storage = null,
   eventTarget = null,
   effects = {}
 }: ConfigStoreOptions = {}): ConfigStore {
+  const resolvedStorage = storage ?? createMemoryStorageAdapter()
   const configMetaMap = new Map(
     entries.map(([key, id, defaultValue]) => [key, { id, defaultValue }])
   )
   const initialData: ConfigStore = Object.fromEntries(
     Array.from(configMetaMap.entries()).map(([key, { id, defaultValue }]) => [
       key,
-      readStoredValue(storage, id, defaultValue)
+      readStoredValue(resolvedStorage, id, defaultValue)
     ])
   )
 
@@ -103,7 +100,7 @@ export function createConfigStore({
       const meta = configMetaMap.get(property)
       if (!meta) return target[property]
 
-      const latestValue = readStoredValue(storage, meta.id, target[property])
+      const latestValue = readStoredValue(resolvedStorage, meta.id, target[property])
       target[property] = latestValue
       return latestValue
     },
@@ -116,7 +113,7 @@ export function createConfigStore({
       const oldValue = target[property]
       if (oldValue === value) return true
 
-      if (!writeStoredValue(storage, meta.id, value)) return false
+      if (!writeStoredValue(resolvedStorage, meta.id, value)) return false
       target[property] = value
 
       effects[property]?.(value)

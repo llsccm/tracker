@@ -179,7 +179,7 @@ describe('黄承彦观虚目标视角交换', () => {
     expect(pile.cards).not.toContain(gainedPileCard)
     expect(exchange.cards).toHaveLength(0)
     expect(room.cards).toHaveLength(entityCountBefore)
-    expect(room.skillState.has(GUAN_XU_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(GUAN_XU_STATE_KEY)).toBe(false)
   })
 
   it('交换桶 ToPosition 为 RANDOM 时仍保留牌顶范围候选', () => {
@@ -360,7 +360,7 @@ describe('黄承彦观虚目标视角交换', () => {
     ]
     exchangeMoves.forEach((move) => controller.syncTrackerMove(move))
 
-    const guanXuState = room.skillState.get(GUAN_XU_STATE_KEY) as {
+    const guanXuState = room.readSkillState(GUAN_XU_STATE_KEY) as {
       bySpell: Record<string, { buckets: Record<string, { cards: Card[] }> }>
     }
     const returnedPileCardIDs = guanXuState.bySpell[String(987)].buckets[String(actorSeat)].cards
@@ -417,7 +417,7 @@ describe('黄承彦观虚目标视角交换', () => {
     })
 
     expect(captureMaterializationState(room, pileTopFive)).toEqual(before)
-    expect(room.skillState.has(GUAN_XU_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(GUAN_XU_STATE_KEY)).toBe(false)
   })
 
   it('手牌分桶校验失败不会把匿名手牌提前物化', () => {
@@ -468,7 +468,7 @@ describe('黄承彦观虚目标视角交换', () => {
     })
 
     expect(captureMaterializationState(room, handCards)).toEqual(before)
-    expect(room.skillState.has(GUAN_XU_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(GUAN_XU_STATE_KEY)).toBe(false)
   })
 
   it('交换桶转移校验失败不会消耗后续匿名槽', () => {
@@ -527,6 +527,6 @@ describe('黄承彦观虚目标视角交换', () => {
     })
 
     expect(captureMaterializationState(room, exchangeCards)).toEqual(before)
-    expect(room.skillState.has(GUAN_XU_STATE_KEY)).toBe(true)
+    expect(room.hasSkillState(GUAN_XU_STATE_KEY)).toBe(true)
   })
 })

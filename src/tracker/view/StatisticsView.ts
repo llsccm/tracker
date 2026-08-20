@@ -44,7 +44,7 @@ export function buildCardTypeButtons(room: Room, doc: Document, onQuery: QueryCa
     const button = doc.createElement('button')
     button.id = 'number' + number
     button.className = 'cardType'
-    button.textContent = number === 0 ? '闪电牌' : n2N(number)
+    button.textContent = number === 0 ? '闪电牌' : String(n2N(number))
     button.onclick = () => onQuery('numberIndex', number)
     numberContainer.appendChild(button)
   }
@@ -73,7 +73,7 @@ export function renderStatistics(room: Room, doc: Document): void {
     const n = countInSet(set, pileSet)
     const lb = doc.getElementById('number' + number)
     if (!lb) continue
-    const numText = number === 0 ? '电' : n2N(number)
+    const numText = number === 0 ? '电' : String(n2N(number))
     lb.textContent = n > 1 ? `${numText}*${n}` : numText
     lb.className = n > 0 ? 'cardType active' : 'cardType inactive'
   }

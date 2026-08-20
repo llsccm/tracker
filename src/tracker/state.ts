@@ -1,4 +1,4 @@
-import { createBrowserStorageAdapter, createConfigStore } from './configStore'
+import { createConfigStore } from './configStore'
 import type { ConfigEffects } from './configStore'
 
 interface GlobalState {
@@ -72,7 +72,7 @@ const effectRegistry: ConfigEffects = {
 }
 
 const globalConfig = createConfigStore({
-  storage: createBrowserStorageAdapter(getBrowserStorage()),
+  storage: getBrowserStorage(),
   eventTarget: getBrowserEventTarget(),
   effects: effectRegistry
 })
