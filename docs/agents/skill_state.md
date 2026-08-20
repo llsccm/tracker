@@ -149,7 +149,7 @@ tracker 状态；所需事实应由后续协议重新建立。
 ## 相关入口
 
 - `src/tracker/Game.ts`：统一 `stateStore`、通用 API、兼容 spell API 与生命周期清理。
-- `src/tracker/Room.ts`：tracker scope 的领域薄入口和只读兼容视图。
+- `src/tracker/Room.ts`：tracker scope 的领域薄入口。
 - [`room.md`](room.md)：Room 状态所有权和生命周期。
 - [`card_tracker_skills.md`](card_tracker_skills.md)：技能与协议特例。
 - [`lifecycle.md`](lifecycle.md)：Game、Room 与浏览器运行时的创建/销毁时序。

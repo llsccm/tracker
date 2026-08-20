@@ -56,11 +56,11 @@ export async function wait(callback, times = 10, interval = 500, { immediate = f
  * 点数编号转显示文本（1→A, 11→J, 12→Q, 13→K）
  * @param {number} n - 点数编号
  * @param {boolean} A - 是否将 1 显示为 'A'（默认 true）
- * @returns {string} 点数显示文本
+ * @returns {string | number} 点数显示文本
  */
 export function n2N(n, A = true) {
   const ranks = ['', A ? 'A' : 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 'J', 'Q', 'K']
-  return String(ranks[n] ?? '')
+  return ranks[n] ?? ''
 }
 
 /**
