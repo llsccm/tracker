@@ -37,6 +37,9 @@ import type {
 
 // 收敛轮数看门狗阈值：正常收敛 ≤2 轮，超过即疑似某处虚报 changed 的非终止回归（见 #2）。
 const CONVERGENCE_ROUNDS_WARN = 8
+const SHADOW_INDEX_ASSERT_INTERVAL = 32
+
+type ShadowIndexAssertionMode = 'disabled' | 'sampled' | 'always'
 
 interface RoomOptions {
   gameState?: GameState
@@ -82,6 +85,18 @@ function diffGuiFuRevealSnapshot(
 ): CardID[] {
   const previousCardIDSet = new Set(previousCardIDs)
   return receivedCardIDs.filter((cardID) => !previousCardIDSet.has(cardID))
+}
+
+function readShadowIndexAssertionMode(): ShadowIndexAssertionMode {
+  try {
+    const debugAssert = new URLSearchParams(globalThis.location?.search ?? '').get('debugAssert')
+    if (debugAssert === '1') return 'always'
+    if (debugAssert === '0') return 'disabled'
+  } catch {
+    // 宿主 location 不可读时退回默认抽样，不让诊断配置影响记牌主流程。
+  }
+
+  return 'sampled'
 }
 
 interface ShufflePileOptions {
@@ -179,11 +194,18 @@ export class Room {
   declare guiFuRevealSnapshots: Map<SeatID, CardID[]>
   /** 计数器 */
   declare counter: CardCounter
+  declare private readonly shadowIndexAssertionMode: ShadowIndexAssertionMode
+  declare private shadowIndexAssertionCount: number
 
   /**
    * @param cardIDs - 卡牌的物理 ID 列表，用以初始化卡牌池
    */
   constructor({ gameState = new GameState() }: RoomOptions = {}) {
+    if (import.meta.env.DEV) {
+      this.shadowIndexAssertionMode = readShadowIndexAssertionMode()
+      this.shadowIndexAssertionCount = 0
+    }
+
     // 2. 初始化逻辑分区与公共区域
     this.players = new Map() // seatID -> Player
     this.zones = new Map([
@@ -251,6 +273,7 @@ export class Room {
 
   initDeck(cardIDs: CardID[]): void {
     this.isDeckReady = false
+    if (import.meta.env.DEV) this.shadowIndexAssertionCount = 0
     this.cards.length = 0
     this.cardIndex.clear()
     this.unlocatedIdentities = new Set(cardIDs.filter((id) => id > 0))
@@ -2136,7 +2159,9 @@ export class Room {
     // 纯公共区之间的暗牌移动不发脏牌事件，靠 Zone 变更累积的 dirtyPublicZones 补齐。
     this.locationIndex.applyDirtyCardEvents(this, { dirtyPublicZones: this.dirtyPublicZones })
     this.dirtyPublicZones.clear()
-    this.assertLocationIndexConsistency()
+    const shouldAssertShadowIndexes =
+      import.meta.env.DEV && this.shouldAssertShadowIndexConsistency()
+    if (shouldAssertShadowIndexes) this.assertLocationIndexConsistency()
 
     // 约束收敛完毕后同步视图物理组排序
     this.constraints.syncViewGroups()
@@ -2150,7 +2175,8 @@ export class Room {
     } else {
       this.ambiguousKnownIndex.applyDirtyCardEvents(constraintGroups)
     }
-    this.assertAmbiguousKnownIndexConsistency()
+
+    if (shouldAssertShadowIndexes) this.assertAmbiguousKnownIndexConsistency()
 
     // 触发计数器与视图订阅更新
     this.counter.update()
@@ -2373,6 +2399,18 @@ export class Room {
     }
   }
 
+  private shouldAssertShadowIndexConsistency(): boolean {
+    if (this.shadowIndexAssertionMode === 'disabled') return false
+
+    this.shadowIndexAssertionCount += 1
+    if (this.shadowIndexAssertionMode === 'always') return true
+
+    return (
+      this.shadowIndexAssertionCount === 1 ||
+      this.shadowIndexAssertionCount % SHADOW_INDEX_ASSERT_INTERVAL === 0
+    )
+  }
+
   /**
    * 开发期一致性检查：增量维护后的 locationIndex 必须与全量 rebuild 影子结果逐桶一致。
    * 仅告警不自愈，便于集成测试在收敛后用同一比对暴露分歧；生产环境零成本。
@@ -2537,6 +2575,7 @@ export class Room {
     this.cards.forEach((card) => card.reset())
     this.constraintGroups.clear()
     this.constraintGroupsDirty = false
+    if (import.meta.env.DEV) this.shadowIndexAssertionCount = 0
     this.maxResolveRounds = 0
     this.lastResolveRounds = 0
     this.moveEventHandlers.clear()
