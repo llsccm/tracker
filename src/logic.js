@@ -416,6 +416,20 @@ export function logic(msg) {
           })
         break
 
+      case 'decodeServerSkinWishPoolDataResp':
+      case 'decodeServerGeneralWishPoolDataResp':
+        // {round: 1, wish_item: 9052101, epic_num: 5, ratio: 1162}
+        if (Array.isArray(ProtoObj.list) && ProtoObj.list.length > 0) {
+          const data = ProtoObj.list[0]
+          if (!data || !data.ratio) break
+          addTooltip(
+            `心愿活动: 已开启${data.epic_num}, 当前进度: ${data.ratio / 100}%`,
+            'acTooltip',
+            2000
+          )
+        }
+        break
+
       default:
         break
     }
