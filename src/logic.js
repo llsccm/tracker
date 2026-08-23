@@ -22,6 +22,7 @@ import { laya } from './runtime/gameAdapter'
 import { Game, globalConfig, UI, user } from './tracker'
 import { tracker } from './tracker/runtime/browser'
 import { recordTrackerProtocol } from './tracker/runtime/protocolRecorder'
+import { showStatusTip } from './ui/statusTip'
 import { wait } from './utils'
 import { addTooltip } from './utils/notification'
 import { handleBroadMsg } from './handler/chat'
@@ -416,19 +417,21 @@ export function logic(msg) {
           })
         break
 
-      case 'decodeServerSkinWishPoolDataResp':
-      case 'decodeServerGeneralWishPoolDataResp':
+      case 'decodeServerGeneralWishPoolDataResp': {
         // {round: 1, wish_item: 9052101, epic_num: 5, ratio: 1162}
-        if (Array.isArray(ProtoObj.list) && ProtoObj.list.length > 0) {
-          const data = ProtoObj.list[0]
-          if (!data || !data.ratio) break
-          addTooltip(
-            `心愿活动: 已开启${data.epic_num}, 当前进度: ${data.ratio / 100}%`,
-            'acTooltip',
-            2000
-          )
-        }
+        const data = Array.isArray(ProtoObj?.list) ? ProtoObj.list[0] : null
+        if (!data?.ratio) break
+        showStatusTip('wishPool', `心愿武将当前进度: ${data.ratio / 100}%`)
         break
+      }
+
+      case 'decodeServerSkinWishPoolDataResp': {
+        const list = Array.isArray(ProtoObj?.list) ? ProtoObj.list : []
+        const data = list.find((item) => item?.round === list.length)
+        if (!data?.ratio) break
+        showStatusTip('wishPool', `心愿皮肤当前进度: ${data.ratio / 100}%`)
+        break
+      }
 
       default:
         break
