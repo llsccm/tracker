@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
+import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/roomMovement/types'
 import { TrackerController } from '@/tracker/runtime/trackerController'
 import {
   createTrackerControllerHarness,
@@ -811,7 +812,10 @@ describe('TrackerController', () => {
       [152, 153]
     )
 
-    expect(room.getSkillState('hiddenMarkCandidates').records.has('4:4:700')).toBe(false)
+    expect(
+      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('4:4:700') ??
+        false
+    ).toBe(false)
     ;[candidateCard, hiddenCard].forEach((card) => {
       expect(card.location).toBe('player')
       expect(card.subZone).toBe('mark')

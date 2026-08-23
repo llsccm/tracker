@@ -611,7 +611,10 @@ function applyJieLi(
   const room = requireReadyRoom(context, record, '重放诫厉观看结果')
   const pileCount = Number(params[0]) || 0
   const handCount = Number(params[1]) || 0
-  if (pileCount > 0) room.getSkillState(3483).expectedPileCount = pileCount
+  if (pileCount > 0) {
+    room.ensureSkillState<{ expectedPileCount?: number }>(3483, () => ({})).expectedPileCount =
+      pileCount
+  }
   if (params.length <= 2) return applied()
 
   if (pileCount > 0) revealPileCards(context, record, params.slice(2, 2 + pileCount))

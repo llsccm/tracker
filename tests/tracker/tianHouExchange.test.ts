@@ -172,7 +172,7 @@ describe('周群天候其他视角换牌候选', () => {
     ])
     expectHandOrPileTop(knownCards[1], 2)
     expect(room.zones.get('pile')!.cards.map((card) => card.id)).toEqual(pileBeforeShow)
-    expect(room.skillState.has(TIAN_HOU_STATE_KEY)).toBe(false)
+    expect(room.hasSkillState(TIAN_HOU_STATE_KEY)).toBe(false)
   })
 
   it('交换一张且展示命中原手牌时，该牌确定为牌顶并排除其余换出候选', () => {

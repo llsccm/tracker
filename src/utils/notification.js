@@ -1,7 +1,7 @@
 const notificationQueue = [] // 队列来存储通知
 let isNotificationShowing = false // 标志当前是否有通知正在显示
 let currentTimeout = null // Store timeout for updating notifications
-const TOOLTIP_BG = "url('https://web.sanguosha.com/220/h5_2/res/assets/bigPng/propGet.png')"
+export const TOOLTIP_BG = "url('https://web.sanguosha.com/220/h5_2/res/assets/bigPng/propGet.png')"
 const TOOLTIP_STYLE = {
   position: 'fixed',
   top: '20px',

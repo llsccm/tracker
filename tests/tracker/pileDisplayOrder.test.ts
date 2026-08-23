@@ -4,6 +4,7 @@ import { isAnonymous, type Card } from '@/tracker/Card'
 import { CARD_INSTANCE_STATUS } from '@/tracker/CardCounter'
 import type { Room } from '@/tracker/Room'
 import { getPileDisplayCards } from '@/tracker/helper/pileOrder'
+import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/roomMovement/types'
 import { getPublicFieldCandidateCards } from '@/tracker/view/publicFieldCandidates'
 import { trackerLogger } from '@/utils/logger'
 import { createTestRoom, getSuspendedIdentityIDs } from './helpers/room'
@@ -587,12 +588,16 @@ describe('牌堆展示顺序', () => {
       sourceEvent: { type: 'test:hidden-mark-before-shuffle' }
     })
 
-    const record = room.getSkillState('hiddenMarkCandidates').records.get('1:1:700')
+    const record = room
+      .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
+      .records.get('1:1:700')!
     expect(record.placeholderCards.has(hiddenMarkPlaceholder)).toBe(true)
 
     room.shufflePile({ cardCount: 3 })
 
-    const updatedRecord = room.getSkillState('hiddenMarkCandidates').records.get('1:1:700')
+    const updatedRecord = room
+      .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
+      .records.get('1:1:700')!
     const placeholderCards = Array.from(updatedRecord.placeholderCards) as Card[]
     const currentPlaceholder = placeholderCards[0]
 

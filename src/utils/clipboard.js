@@ -26,33 +26,12 @@ export async function toClipboard(text, filter) {
 
   // laya.chat(text) // 复制消息到聊天框
 
-  // Internet Explorer-specific code path to prevent textarea being shown while dialog is visible.
-  if (window?.clipboardData?.setData) {
-    const copied = window.clipboardData.setData('Text', text)
-    if (copied) addTooltip('复制成功！')
-    return copied
+  try {
+    await navigator.clipboard.writeText(text)
+    addTooltip('复制成功！')
+    return true
+  } catch (error) {
+    console.info('Copy to clipboard failed.', error)
+    return false
   }
-
-  if (document?.queryCommandSupported?.('copy')) {
-    const textarea = document.createElement('textarea')
-    textarea.textContent = text
-    // Prevent scrolling to bottom of page in Microsoft Edge.
-    textarea.style.position = 'fixed'
-    document.body.appendChild(textarea)
-    textarea.select()
-
-    // Security exception may be thrown by some browsers.
-    try {
-      const copied = document.execCommand('copy')
-      if (copied) addTooltip('复制成功！')
-      return copied
-    } catch (ex) {
-      console.info('Copy to clipboard failed.', ex)
-      return prompt('Copy to clipboard: Ctrl+C, Enter', text)
-    } finally {
-      document.body.removeChild(textarea)
-    }
-  }
-
-  return false
 }

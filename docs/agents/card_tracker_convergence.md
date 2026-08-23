@@ -94,6 +94,10 @@ flowchart TD
 - **E1：手牌槽按座位缓存**。首轮批量计算有观测手牌数的座位，后续轮次只为受影响座位懒重算；缓存只在单次 `resolveConstraints()` 内有效。
 - **E2：跳过未触碰座位**。首轮处理全部玩家，后续轮次跳过上一轮与本轮至今都未触碰的座位。
 
+两套增量索引的影子全量重建只用于 DEV 诊断：默认在每个 Room 的首次收敛及之后每 32 次收敛时成对抽样；
+URL 参数 `debugAssert=1` 会恢复逐次检查，`debugAssert=0` 会关闭收敛尾部的影子索引检查。显式调用
+`assertLocationIndexConsistency()` / `assertAmbiguousKnownIndexConsistency()` 仍会立即执行完整比对。
+
 `Room.notifyCardChanged()` 会把变更后的 `card.seats`、事件中的 `previousSeats`，以及前后 owner / resolved seat 加入 `resolveTouchedSeats`。候选缩小时，被删除的座位只能从 `previousSeats` 恢复，因此新增候选变更路径必须保留这一事件信息。
 
 达到不动点后，`resolveConstraints()` 依次完成：

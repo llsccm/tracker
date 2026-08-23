@@ -18,6 +18,9 @@ const retainedLogicMessages = new Set([
   'CClientGameRewardPointNTF',
   'ClientGeneralSkinRep',
   'ClientChestOpenReplaceInfoNtf',
+  'decodeServerGeneralWishPoolDataResp',
+  'decodeServerDrawGeneralWishResp',
+  'decodeServerSkinWishPoolDataResp',
 
   // 山河图展示：仅绘制/隐藏山河图信息，不触发自动操作。
   'decodeRogueLikeDataSync',

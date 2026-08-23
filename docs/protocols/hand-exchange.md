@@ -292,7 +292,7 @@ Room.ensureSkillState('handExchangeBatches', createInitialState) -> {
   - 4 号手牌实体 = 原 5 号 8 张；其中 `106/14/68/67` 仍为明牌。
   - 5 号手牌实体 = 原 4 号 4 张暗牌；不得因交换被标成 known。
 - 交换区在序列结束后为空。
-- `skillState['handExchangeBatches']` 在两批回手后清空。
+- `hasSkillState('handExchangeBatches')` 在两批回手后返回 `false`。
 - 观测手牌数：4 号 `8`，5 号 `4`（若进区前已正确观测）。
 - 交换双方共享候选不被实锤；仅涉及一名交换者的候选只置换该座位分支。
 - 己方收到完整明牌手牌时，候选会根据“出现/未出现”证据收敛到确定座位。

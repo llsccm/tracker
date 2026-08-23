@@ -71,8 +71,8 @@ room.deleteSkillState('example')
 room.hasSkillState('example')
 ```
 
-这些方法统一委托到当前 GameState 的 `tracker` scope。`Room.skillState` 仅保留为 deprecated 的只读
-兼容视图；新代码和测试都应优先使用明确的方法。
+这些方法统一委托到当前 GameState 的 `tracker` scope。Room 不再提供 `skillState`、`getSkillState()`
+或 `clearSkillState()` 兼容入口；读取、创建、判断和删除必须使用语义明确的方法。
 
 ## 生命周期
 
@@ -149,7 +149,7 @@ tracker 状态；所需事实应由后续协议重新建立。
 ## 相关入口
 
 - `src/tracker/Game.ts`：统一 `stateStore`、通用 API、兼容 spell API 与生命周期清理。
-- `src/tracker/Room.ts`：tracker scope 的领域薄入口和只读兼容视图。
+- `src/tracker/Room.ts`：tracker scope 的领域薄入口。
 - [`room.md`](room.md)：Room 状态所有权和生命周期。
 - [`card_tracker_skills.md`](card_tracker_skills.md)：技能与协议特例。
 - [`lifecycle.md`](lifecycle.md)：Game、Room 与浏览器运行时的创建/销毁时序。
