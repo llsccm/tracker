@@ -1,6 +1,7 @@
 import { CardConfig } from './config'
 import { ConfigManager } from './config/ConfigManager'
 import { clearZoneMirrors, drawMiZhu, drawSeatUIs } from './draw'
+import { laya } from './runtime/gameAdapter'
 import { Game, globalConfig, globalState, UI } from './tracker'
 import { setTrackerSeatUIReader, tracker } from './tracker/runtime/browser'
 import { stopProtocolRecording } from './tracker/runtime/protocolRecorder'
@@ -535,11 +536,21 @@ function buttonClick() {
 
   // bindExternalLinks()
 
-  document.getElementById('mizhu').onmousedown = function () {
-    // const mzBTNs = document.querySelectorAll('.mizhu')
-    // mzBTNs.forEach((e) => (e.style.display = 'none'))
-    drawMiZhu(getTrackedHandNumbers(Game.myID))
-    // 统率可能要算糜竺 暂不兼容
+  const mizhuBtn = document.getElementById('mizhu')
+  if (mizhuBtn) {
+    mizhuBtn.onclick = function () {
+      // const mzBTNs = document.querySelectorAll('.mizhu')
+      // mzBTNs.forEach((e) => (e.style.display = 'none'))
+      drawMiZhu(getTrackedHandNumbers(Game.myID))
+      // 统率可能要算糜竺 暂不兼容
+    }
+  }
+
+  const openWelfareBtn = document.getElementById('openWelfareBtn')
+  if (openWelfareBtn) {
+    openWelfareBtn.onclick = function () {
+      laya.ShowWindow('WelfareWindow')
+    }
   }
 
   // 屏蔽设置对话框控制

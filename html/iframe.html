@@ -35,7 +35,8 @@
       background: rgb(44, 44, 44);
     }
 
-    html, body {
+    html,
+    body {
       height: 100%;
       margin: 0;
       padding: 0;
@@ -703,7 +704,6 @@
     .calRes {
       width: 98%;
       height: 20px;
-      float: left;
       text-align: center;
       color: var(--text-gold);
       background: var(--bg-primary);
@@ -712,6 +712,7 @@
       border-radius: 5px;
       font-size: 13px;
       margin: 1px;
+      cursor: pointer;
     }
 
     /* 仅在按钮未被禁用时应用的 hover 效果 */
@@ -765,9 +766,11 @@
       animation-iteration-count: infinite;
     }
 
-    .res {
+    #result {
       width: 100%;
-      float: left;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
     }
 
     /* 超链接*/
@@ -1700,7 +1703,7 @@
             <button class="function mizhuBTN" id="mizhu">糜竺小抄</button>
             <!-- <button class="function mizhu mySeatID" id="mySeatID1">座位：1</button> -->
             <!-- <button class="function mizhu mySeatID" id="mySeatID2">座位：2</button> -->
-            <div class="function res" id="result">结果样式：1 1 1 1 = 4</div>
+            <div class="function" id="result">结果样式：1 1 1 1 = 4</div>
           </div>
         </div>
       </div>
@@ -1743,53 +1746,25 @@
         <div class="detail">
           <div class="detail-head rogue-attr-head">结局倾向</div>
           <div class="detail-body rogue-attr-body" id="rogueAttrInfo">
-            <span
-              class="rogue-attr-badge"
-              data-rogue-attr="rep"
-              title="声望值影响最终结局"
-            >
+            <span class="rogue-attr-badge" data-rogue-attr="rep" title="声望值影响最终结局">
               声望:<span class="rogue-attr-value">--</span>
             </span>
-            <span
-              class="rogue-attr-badge"
-              data-rogue-attr="tro"
-              title="战斗奇遇选择战斗会提升战功值; 普通+5 精英+10"
-            >
+            <span class="rogue-attr-badge" data-rogue-attr="tro" title="战斗奇遇选择战斗会提升战功值; 普通+5 精英+10">
               战功:<span class="rogue-attr-value">--</span>
             </span>
-            <span
-              class="rogue-attr-badge"
-              data-rogue-attr="wis"
-              title="交互奇遇选择道具会提升智谋值"
-            >
+            <span class="rogue-attr-badge" data-rogue-attr="wis" title="交互奇遇选择道具会提升智谋值">
               智谋:<span class="rogue-attr-value">--</span>
             </span>
-            <span
-              class="rogue-attr-badge"
-              data-rogue-attr="mar"
-              title="交互奇遇选择拿铜币会提升商才值"
-            >
+            <span class="rogue-attr-badge" data-rogue-attr="mar" title="交互奇遇选择拿铜币会提升商才值">
               商才:<span class="rogue-attr-value">--</span>
             </span>
-            <span
-              class="rogue-attr-badge"
-              data-rogue-attr="loy"
-              title="当前忠诚倾向值，可能影响最终结局"
-            >
+            <span class="rogue-attr-badge" data-rogue-attr="loy" title="当前忠诚倾向值，可能影响最终结局">
               忠诚:<span class="rogue-attr-value">--</span>
             </span>
-            <span
-              class="rogue-attr-badge"
-              data-rogue-attr="ass"
-              title="当前权谋倾向值，可能影响最终结局"
-            >
+            <span class="rogue-attr-badge" data-rogue-attr="ass" title="当前权谋倾向值，可能影响最终结局">
               权谋:<span class="rogue-attr-value">--</span>
             </span>
-            <span
-              class="rogue-attr-badge"
-              data-rogue-attr="cha"
-              title="当前魅力倾向值，可能影响最终结局"
-            >
+            <span class="rogue-attr-badge" data-rogue-attr="cha" title="当前魅力倾向值，可能影响最终结局">
               魅力:<span class="rogue-attr-value">--</span>
             </span>
           </div>
@@ -1863,10 +1838,7 @@
               <span class="status"></span>
             </label>
           </div>
-          <div
-            class="switch-container"
-            data-tooltip="仅在本次开启；只保存牌局协议"
-          >
+          <div class="switch-container" data-tooltip="仅在本次开启；只保存牌局协议">
             <label class="explanation" for="protocolRecordSwitch">协议录制</label>
             <label class="switch">
               <input id="protocolRecordSwitch" type="checkbox" />
@@ -1876,34 +1848,23 @@
           </div>
         </div>
       </div>
+      <!-- 录制 -->
       <div class="protocol-recorder-controls" id="protocolRecorderControls">
         <div class="protocol-recorder-actions">
-          <button
-            class="protocol-recorder-button"
-            id="protocolRecordExport"
-            type="button"
-            disabled
-          >
+          <button class="protocol-recorder-button" id="protocolRecordExport" type="button" disabled>
             导出协议
           </button>
-          <button
-            class="protocol-recorder-button"
-            id="protocolRecordClear"
-            type="button"
-            disabled
-          >
+          <button class="protocol-recorder-button" id="protocolRecordClear" type="button" disabled>
             清空记录
           </button>
         </div>
-        <div
-          class="protocol-recorder-status"
-          id="protocolRecordStatus"
-          data-recording="false"
-          aria-live="polite"
-        >
+        <div class="protocol-recorder-status" id="protocolRecordStatus" data-recording="false" aria-live="polite">
           未录制
         </div>
       </div>
+      <!-- 按钮 -->
+      <button class="calRes" id="openWelfareBtn" type="button">打开福利窗口</button>
+      <!-- 按钮 -->
       <div class="width"></div>
       <div style="text-align: center">
         <div class="width"></div>
