@@ -15,7 +15,7 @@ export function removeInjectedDom(globalState) {
   //document.getElementById('injectCSS')?.remove()
   document.getElementById('seatUI')?.remove()
   document.getElementById('cusBGDiv')?.remove()
-  document.getElementById('createIframe')?.remove()
+  document.getElementById('tracker-shell')?.remove()
   destroyPeiXiuMapWindow()
   document.getElementById('peixiu-map-style')?.remove()
   globalState.isFrameAdd = false
@@ -25,7 +25,6 @@ export function cleanupLifecycle({ resize, scheduleSetGameSize, SGSresize, globa
   window.removeEventListener('resize', resize, true)
   window.removeEventListener('resize', scheduleSetGameSize)
   window.removeEventListener('SGSresize', SGSresize)
-  window.SGSMODULE.splice(0, Infinity) // 清空模块
   removeInjectedDom(globalState)
   return true
 }

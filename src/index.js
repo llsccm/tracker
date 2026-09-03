@@ -1,30 +1,14 @@
 import { logic } from './logic.js'
 import { Init, Exit } from './dom.js'
 import { notifyScriptError } from './utils/errorNotifier.js'
-// 初始化性能监控
-// initPerformanceMonitor();
-
-// 在运行脚本前，删除全局对象（如果存在）
-if (typeof SGSMODULE !== 'undefined') {
-  Object.defineProperty(window.console, 'log', {
-    get() {
-      return console.info
-    },
-    set() {
-      return
-    }
-  })
-
-  window.SGSMODULE.forEach((fn) => fn('EXIT'))
-  delete window.SGSMODULE
-}
 
 console.info(
   '%c三国杀小抄',
   'font-weight: bold; color: white; background-color: #525288; padding: 1px 4px; border-radius: 4px;'
 )
 
-window.SGSMODULE = []
+const _SGSMODULE = []
+window._SGSMODULE = _SGSMODULE
 
 const sgsConsoleLog = function (...args) {
   const msg = args[0]
@@ -36,16 +20,25 @@ const sgsConsoleLog = function (...args) {
   ) {
     console.info(...args)
   }
-  window.SGSMODULE.forEach((fn) => fn?.(...args))
+  window._SGSMODULE.forEach((fn) => fn?.(...args))
 }
 
-Object.defineProperty(window.console, 'log', {
-  get() {
-    return sgsConsoleLog
-  },
-  set() {
-    return
+const originalConsole = window.console
+
+window.console = new Proxy(originalConsole, {
+  set(target, prop, value, receiver) {
+    if (prop === 'log') {
+      return true
+    }
+    return Reflect.set(target, prop, value, receiver)
   }
+})
+
+Object.defineProperty(originalConsole, 'log', {
+  value: sgsConsoleLog,
+  writable: true,
+  configurable: true,
+  enumerable: true
 })
 
 function main() {
@@ -63,5 +56,5 @@ function main() {
 }
 
 main('INIT').then((r) => {
-  if (r) window.SGSMODULE.push(main)
+  if (r) window._SGSMODULE.push(main)
 })
