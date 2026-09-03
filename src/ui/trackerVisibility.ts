@@ -1,4 +1,4 @@
-const TRACKER_ROOT_ID = 'createIframe'
+const TRACKER_ROOT_ID = 'tracker-shell'
 const TRACKER_OVERLAY_SELECTOR = '#seatUI .shoupai, #seatUI .markedCard'
 
 let trackerHidden = false

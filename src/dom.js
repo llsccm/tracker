@@ -134,11 +134,11 @@ function setGameSize() {
     height: ((SystemContext.gameHeight * SystemContext.gameScale) >> 0) / window.devicePixelRatio
   }
 
-  if (globalConfig.padding && document.getElementById('createIframe')) {
+  if (globalConfig.padding && document.getElementById('tracker-shell')) {
     document.getElementById('bgDiv').style.width = document.documentElement.clientWidth + 'px'
-    document.getElementById('createIframe').style.height = '100%'
-    document.getElementById('createIframe').style.right = '0px' // 启用窗口调整大小
-    document.getElementById('createIframe').style.top = '0px' // 启用窗口调整大小
+    document.getElementById('tracker-shell').style.height = '100%'
+    document.getElementById('tracker-shell').style.right = '0px' // 启用窗口调整大小
+    document.getElementById('tracker-shell').style.top = '0px' // 启用窗口调整大小
   } else {
     document.getElementById('bgDiv').style.width = document.documentElement.clientWidth + 'px'
   }
@@ -379,7 +379,7 @@ export function getSeatUIs() {
 setTrackerSeatUIReader(getSeatUIs)
 
 export async function addFrame() {
-  if (!document.getElementById('createIframe')) {
+  if (!document.getElementById('tracker-shell')) {
     const shell = createMainShell(version)
     iframe = shell.iframe
 
@@ -475,7 +475,7 @@ function buttonClick() {
     toggle.onclick = function () {
       globalState.closeIframe = !globalState.closeIframe
 
-      const container = document.getElementById('createIframe')
+      const container = document.getElementById('tracker-shell')
       if (globalState.closeIframe) {
         container.classList.add('collapsed')
         toggle.innerText = '+'
@@ -516,9 +516,9 @@ function buttonClick() {
   // 2 状态 在侧边栏 则展示全部
   if (window.padding == 0) {
     toggle?.click()
-    // document.getElementById('createIframe').style.top = '0px'
-    // document.getElementById('createIframe').style.right = '0px';
-    // document.getElementById('createIframe').style.left = '';
+    // document.getElementById('tracker-shell').style.top = '0px'
+    // document.getElementById('tracker-shell').style.right = '0px';
+    // document.getElementById('tracker-shell').style.left = '';
   }
   refreshSidebarViewport()
 
@@ -526,7 +526,7 @@ function buttonClick() {
     setSwitchChecked(configKey, Boolean(globalConfig[configKey]))
   )
 
-  const switchRoot = document.getElementById('createIframe')
+  const switchRoot = document.getElementById('tracker-shell')
   if (switchRoot && !switchRoot.dataset.switchDelegationBound) {
     switchRoot.dataset.switchDelegationBound = 'true'
     switchRoot.addEventListener('change', handleSwitchChange)

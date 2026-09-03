@@ -65,7 +65,7 @@ export function initDragElement(globalConfig, globalState, refreshSidebarViewpor
 
   // 获取需要拖动的元素
   const draggable = document.getElementById('header')
-  const container = document.getElementById('createIframe') // 获取整个容器
+  const container = document.getElementById('tracker-shell') // 获取整个容器
   const sidebarHint = document.getElementById('sidebarHint')
 
   // 初始化状态

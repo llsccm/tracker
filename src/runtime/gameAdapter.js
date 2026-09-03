@@ -594,6 +594,7 @@ export class GameRuntime {
     }
   }
 
+  // TODO 厚实等数据存在实例上 但是实例会销毁重建
   zhanfaCounter(SkillId) {
     const zhanfa = this.zhanfaMap.get(SkillId)
 

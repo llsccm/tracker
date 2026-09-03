@@ -135,6 +135,19 @@ export function handleUpdateRoleDataExNtf(msg) {
 
       break
 
+    // 化刃
+    case 7128:
+      // 此时获得一个技能 山河图需要刷新战法缓存
+      // Datas: [1, 1, 1513, 1, 20334, 1]
+      if (!Array.isArray(Datas)) break
+      if (SeatID !== undefined && SeatID !== Game.myID) return
+      if (Game.isShanHeTu || Game.isRoguelike1v1) {
+        setTimeout(() => {
+          laya.zhanfaRegister()
+        }, 0)
+      }
+
+      break
     default:
       break
   }

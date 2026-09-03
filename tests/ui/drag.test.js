@@ -26,7 +26,7 @@ describe('主面板拖动', () => {
       body: { classList: { add: vi.fn(), remove: vi.fn() } },
       getElementById(id) {
         if (id === 'header') return draggable
-        if (id === 'createIframe') return container
+        if (id === 'tracker-shell') return container
         if (id === 'sidebarHint') return sidebarHint
         return null
       },

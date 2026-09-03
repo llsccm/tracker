@@ -8,7 +8,7 @@ function ensureStyle() {
   style = document.createElement('style')
   style.id = STYLE_ID
   style.textContent = `
-    .createIframe {
+    #tracker-shell {
       position: fixed;
       overflow: hidden;
       resize: vertical;
@@ -28,13 +28,13 @@ function ensureStyle() {
       transform-origin: top right;
       transform: translate(0px, 0px);
     }
-    .createIframe.collapsed {
+    #tracker-shell.collapsed {
       height: 30px !important;
       width: 75px !important;
       opacity: 0.6 !important;
       resize: none !important;
     }
-    .createIframe .header {
+    #tracker-shell .header {
       margin: 1px;
       user-select: none;
       cursor: grab;
@@ -43,10 +43,10 @@ function ensureStyle() {
       font-size: 20px;
       border-radius: 5px;
     }
-    .createIframe #title {
+    #tracker-shell #title {
       margin-right: auto;
     }
-    .createIframe #toggle-me {
+    #tracker-shell #toggle-me {
       text-align: center;
       color: #f2de9c;
       background: rgb(107, 30, 30);
@@ -62,17 +62,17 @@ function ensureStyle() {
       margin: 1px;
       font-size: 20px;
     }
-    .createIframe #toggle-me:hover {
+    #tracker-shell #toggle-me:hover {
       background-color: rgb(130, 30, 30);
     }
-    .createIframe #iframe-source {
+    #tracker-shell .tracker-content {
       border: none;
       width: 230px;
       height: 100%;
       margin: 0px;
       overflow: hidden;
     }
-    .createIframe.collapsed #iframe-source {
+    #tracker-shell.collapsed .tracker-content {
       display: none !important;
     }
   `
@@ -83,8 +83,7 @@ export function createMainShell(version) {
   ensureStyle()
 
   const div = document.createElement('div')
-  div.id = 'createIframe'
-  div.className = 'createIframe'
+  div.id = 'tracker-shell'
 
   const header = document.createElement('p')
   header.id = 'header'
@@ -109,7 +108,7 @@ export function createMainShell(version) {
   bindTrackerVisibilityShortcut()
 
   const iframe = document.createElement('div')
-  iframe.id = 'iframe-source'
+  iframe.className = 'tracker-content'
   div.append(iframe)
 
   return { div, iframe }
