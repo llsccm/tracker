@@ -8,7 +8,6 @@ console.info(
 )
 
 const _SGSMODULE = []
-
 window._SGSMODULE = _SGSMODULE
 
 const sgsConsoleLog = function (...args) {
@@ -24,7 +23,9 @@ const sgsConsoleLog = function (...args) {
   window._SGSMODULE.forEach((fn) => fn?.(...args))
 }
 
-window.console = new Proxy(window.console, {
+const originalConsole = window.console
+
+window.console = new Proxy(originalConsole, {
   set(target, prop, value, receiver) {
     if (prop === 'log') {
       return true
@@ -33,7 +34,7 @@ window.console = new Proxy(window.console, {
   }
 })
 
-Object.defineProperty(window.console, 'log', {
+Object.defineProperty(originalConsole, 'log', {
   value: sgsConsoleLog,
   writable: true,
   configurable: true,
