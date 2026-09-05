@@ -5,7 +5,7 @@ export function addDragHint() {
   document.body.appendChild(sidebarHint)
 }
 
-function getLayoutViewportWidth() {
+export function getLayoutViewportWidth() {
   return document.documentElement.clientWidth || window.innerWidth
 }
 

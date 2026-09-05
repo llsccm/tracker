@@ -1,4 +1,5 @@
 import { PEIXIU_DIRECTIONS } from '../utils/peixiuRouteFeature'
+import { getLayoutViewportWidth } from './drag'
 
 const WINDOW_ID = 'peixiu-map-window'
 const STYLE_ID = 'peixiu-map-style'
@@ -281,7 +282,7 @@ function ensureStyle() {
   document.head.appendChild(style)
 }
 
-function bindDrag(element, handle) {
+function bindPeiXiuMapWindowDrag(element, handle) {
   cleanupDrag?.()
   let pointerId = null
   let offsetX = 0
@@ -290,7 +291,7 @@ function bindDrag(element, handle) {
   const move = (event) => {
     if (event.pointerId !== pointerId) return
     const left = Math.min(
-      Math.max(0, window.innerWidth - element.offsetWidth),
+      Math.max(0, getLayoutViewportWidth() - element.offsetWidth),
       Math.max(0, event.clientX - offsetX)
     )
     const top = Math.min(
@@ -352,7 +353,7 @@ function createWindow() {
   document.body.appendChild(element)
   if (lastPosition) {
     const left = Math.min(
-      Math.max(0, window.innerWidth - element.offsetWidth),
+      Math.max(0, getLayoutViewportWidth() - element.offsetWidth),
       Math.max(0, lastPosition.left)
     )
     const top = Math.min(
@@ -364,7 +365,7 @@ function createWindow() {
     element.style.right = 'auto'
     lastPosition = { left, top }
   }
-  bindDrag(element, element.querySelector('.peixiu-header'))
+  bindPeiXiuMapWindowDrag(element, element.querySelector('.peixiu-header'))
   return element
 }
 
