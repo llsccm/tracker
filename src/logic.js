@@ -156,6 +156,7 @@ export function logic(msg) {
 
         if (ProtoObj.matchName === '单骑无双') {
           Game.isRoguelike1v1 = true
+          Game.needShowName = true
           return
         }
 
@@ -179,7 +180,6 @@ export function logic(msg) {
       case 'decodeGsClientUserSeatFlagNtf':
         // 新录像两个消息都有 旧录像只有这个消息
         handleRecordStartGame(msg)
-        if (Game.needShowName && globalConfig.showNameSwitch) laya.showName()
         break
 
       case 'GsCUpdateRoleDataNtf':
@@ -280,6 +280,10 @@ export function logic(msg) {
           Game.resetConfigHandCards()
           tracker.initTrackerDeck(paidui)
         }
+
+        setTimeout(() => {
+          if (Game.needShowName && globalConfig.showNameSwitch) laya.showName()
+        }, 500)
 
         break
 

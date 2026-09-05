@@ -75,6 +75,7 @@ export function handleUpdateRoleDataExNtf(msg) {
 
     // OPT_DATA_UPDATE_NEW_SPELL
     case 17:
+      // 飞扬技能通过此消息获得
       if (!Array.isArray(Datas)) break
       if (SeatID !== undefined && SeatID == Game.myID && import.meta.env.DEV) {
         console.info(msg)
