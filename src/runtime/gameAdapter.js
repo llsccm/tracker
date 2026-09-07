@@ -1,3 +1,4 @@
+import { globalConfig } from '@/tracker'
 import { Game } from '@/tracker/Game'
 import { addTooltip } from '@/utils/notification'
 
@@ -499,15 +500,26 @@ export class GameRuntime {
     return foundWindow ?? null
   }
 
+  HideStartLoadingListener() {
+    const GameEventDispatcher = this.ged
+    if (!GameEventDispatcher) return
+    GameEventDispatcher.on('HIDE_CHALLENGE_GAME_START', this, this.showName)
+  }
+
   showName() {
-    this.gamescene?.seatContainer?.seatUIs?.forEach(({ seat, otherTopManager }) => {
-      if (seat?.playerInfo?.ClientId >= 4e9) return
-      otherTopManager?.createPlayerNameBg()
-      otherTopManager?.createPlayerName()
-      otherTopManager?.UpdatePlayerName(seat.playerInfo)
-      otherTopManager?.SetPlayNameVisible(true)
-      otherTopManager?.layout()
-    })
+    if (!globalConfig.showNameSwitch) return
+
+    setTimeout(() => {
+      if (!Game.needShowName) return
+      this.gamescene?.seatContainer?.seatUIs?.forEach(({ seat, otherTopManager }) => {
+        if (seat?.playerInfo?.ClientId >= 4e9) return
+        otherTopManager?.createPlayerNameBg()
+        otherTopManager?.createPlayerName()
+        otherTopManager?.UpdatePlayerName(seat.playerInfo)
+        otherTopManager?.SetPlayNameVisible(true)
+        otherTopManager?.layout()
+      })
+    }, 1000)
   }
 
   /**

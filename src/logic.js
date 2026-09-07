@@ -281,10 +281,6 @@ export function logic(msg) {
           tracker.initTrackerDeck(paidui)
         }
 
-        setTimeout(() => {
-          if (Game.needShowName && globalConfig.showNameSwitch) laya.showName()
-        }, 500)
-
         break
 
       // 选择武将
