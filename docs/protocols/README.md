@@ -15,6 +15,12 @@
 | [`move-position.md`](move-position.md) | `PubGsCMoveCard` 目标位置 | 公共区顶、底、随机与普通数值精确插槽                 | `ToPosition` 通用解析；普通整数按目标区底端零基定位     |
 | [`hand-exchange.md`](hand-exchange.md) | `PubGsCMoveCard` 整手交换 | 双方整手牌经 `exchange(10)` 互易；示例 SpellID=`121` | `MoveType=11` + `5<->10` + 整手张数；不绑单一 SpellID  |
 
+## `PubGsCMoveCard`
+
+| 文档 | SpellID | 场景 | 关键识别 |
+| --- | ---: | --- | --- |
+| [`PubGsCMoveCard-3752.md`](PubGsCMoveCard-3752.md) | `3752` | 焚巢从弃牌堆获得最早入堆的指定牌 | `2 -> 5`、`MoveType=18`、随机来源且无正 `CardIDs` |
+
 ## `GsCRoleOptTargetNtf`
 
 | 文档                                                         |       SpellID | 场景                                             | 关键识别                                                                           |

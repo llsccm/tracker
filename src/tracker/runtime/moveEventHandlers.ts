@@ -1,5 +1,6 @@
 import { POSITION_RANDOM } from '../candidate/cardPositions'
 import type { Room } from '../Room'
+import decorateFenChao from '../skill/FenChao'
 import decorateGuanXu, { isGuanXuSpellID } from '../skill/GuanXu'
 import decorateHandExchange from '../skill/HandExchange'
 import decorateJieLi from '../skill/JieLi'
@@ -124,6 +125,9 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
 
   //【思泣】：协议不公开返回牌 ID，按弃牌堆顺序筛选红牌实体作为明确来源。
   room.registerMoveEventHandler(3543, decorateSiQi)
+
+  //【焚巢】：从弃牌堆暗取时，优先最早入堆的杀、决斗、南蛮、万箭和火攻。
+  room.registerMoveEventHandler(3752, decorateFenChao)
 
   // 魔吕布【夺炁】： 3730/3731 获取修正。
   room.registerMoveEventHandler(3730, decorateDuoQiMove)
