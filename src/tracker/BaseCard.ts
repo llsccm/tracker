@@ -11,6 +11,8 @@ export class BaseCard {
   declare color: number
   declare number: number
   declare type: number
+  /** 卡牌自身技能 ID，与运行时 Card.spellID 区分。 */
+  declare spellId: number
   declare ncn: string
 
   /**
@@ -30,6 +32,7 @@ export class BaseCard {
     this.color = cardInfo?.color ?? 0
     this.number = cardInfo?.number ?? 0
     this.type = cardInfo?.type ?? 0
+    this.spellId = cardInfo?.spellId ?? 0
     this.ncn = cardInfo?.ncn ?? this.name
     return this
   }

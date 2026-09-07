@@ -13,8 +13,8 @@ import {
 } from './moveEventUtils'
 
 const FEN_CHAO_SPELL_ID = 3752
-// CardConfig 将南蛮入侵、万箭齐发归一为简称，属性杀保留各自名称。
-const FEN_CHAO_CARD_NAMES = new Set(['杀', '火杀', '雷杀', '冰杀', '决斗', '南蛮', '万箭', '火攻'])
+// 杀（含属性杀）、决斗、南蛮入侵、万箭齐发、火攻。
+const FEN_CHAO_CARD_SPELL_IDS = new Set([1, 8, 9, 10, 83])
 
 export default function decorateFenChao(event: MoveEventDraft, room: Room): MoveEventDraft {
   const raw = getRaw(event)
@@ -34,7 +34,7 @@ export default function decorateFenChao(event: MoveEventDraft, room: Room): Move
   const sourceCards: Card[] = []
   // 按实测结果推断焚巢优先获得最早入堆的目标牌；弃牌数组按底 -> 顶保存。
   for (const card of room.zones.get('discard')?.cards ?? []) {
-    if (!FEN_CHAO_CARD_NAMES.has(card.name)) continue
+    if (!FEN_CHAO_CARD_SPELL_IDS.has(card.spellId)) continue
     sourceCards.push(card)
     if (sourceCards.length === cardCount) break
   }

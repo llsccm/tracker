@@ -1,14 +1,37 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { CardConfig } from '@/config/CardConfig'
 import { Card } from '@/tracker/Card'
 import { CARD_INSTANCE_STATUS } from '@/tracker/CardCounter'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import { createTestRoom, getCard } from './helpers/room'
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 function ids(set: Set<number>): number[] {
   return Array.from(set).sort((a, b) => a - b)
 }
 
 describe('CardCounter 状态索引', () => {
+  it('红黑杀按卡牌技能 ID 分类，显示名不影响识别', () => {
+    const cardInfos = [
+      { name: '更名后的红杀', color: 1, spellId: 1 },
+      { name: '火杀', color: 2, spellId: 1 },
+      { name: '雷杀', color: 3, spellId: 1 },
+      { name: '冰杀', color: 4, spellId: 1 },
+      { name: '杀', color: 1, spellId: 8 },
+      { name: '雷杀', color: 3 }
+    ]
+    vi.spyOn(CardConfig.GetInstance(), 'getCard').mockImplementation((id) => cardInfos[id - 1])
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5, 6], seatIDs: [1] })
+
+    room.counter.query('colorIndex', 5)
+    expect(ids(room.counter.querySet)).toEqual([1, 2])
+    room.counter.query('colorIndex', 6)
+    expect(ids(room.counter.querySet)).toEqual([3, 4])
+  })
+
   it('按未知、出现、弃牌、移出游戏四类同步派生索引', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5], seatIDs: [1] })
 
