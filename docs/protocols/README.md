@@ -19,7 +19,7 @@
 
 | 文档 | SpellID | 场景 | 关键识别 |
 | --- | ---: | --- | --- |
-| [`PubGsCMoveCard-3752.md`](PubGsCMoveCard-3752.md) | `3752` | 焚巢从弃牌堆获得最早入堆的指定牌 | `2 -> 5`、`MoveType=18`、随机来源且无正 `CardIDs` |
+| [焚巢](PubGsCMoveCard-3752.md) | `3752` | 弃牌堆取目标牌 | `2 -> 5`、获得、随机、无正 ID |
 
 ## `GsCRoleOptTargetNtf`
 
