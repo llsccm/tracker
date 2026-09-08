@@ -189,7 +189,7 @@ export class CardCounter {
       this.numberIndex[0].add(cardID)
     }
 
-    if (instance.name.match(/^(冰|火|雷)?杀$/)) {
+    if (instance.spellId === 1) {
       this.colorIndex[Math.ceil(instance.color / 2) + 4].add(cardID)
     }
 

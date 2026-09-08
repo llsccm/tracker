@@ -28,7 +28,9 @@
 ## BaseCard：静态元数据
 
 - `BaseCard` 构造时通过 `CardConfig.GetInstance().getCard(id)` 自动拉取 `name`、`color`、
-  `number`、`type`、`ncn`。
+  `number`、`type`、`spellId`、`ncn`。
+- `spellId` 是卡牌自身技能 ID，匿名牌或配置缺失时为 `0`；与移动协议、标记区使用的
+  `Card.spellID` 含义不同。焚巢筛牌与红黑杀统计使用此字段识别牌种。
 - `setCardInfo(id)` 是元数据刷新入口；匿名槽物化为真实身份时由
   `Card.materializeIdentity()` 调用，避免外部直接改写内部展示字段。
 

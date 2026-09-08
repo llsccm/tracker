@@ -1,11 +1,39 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { CardConfig } from '@/config/CardConfig'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import type { RawMoveCardEvent } from '@/tracker/types'
 import { getCard } from './helpers/room'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
 
-function createRoomWithDiscard(cardNames: string[]) {
+const CARD_SPELL_IDS: Record<string, number> = {
+  杀: 1,
+  火杀: 1,
+  雷杀: 1,
+  冰杀: 1,
+  决斗: 8,
+  南蛮: 9,
+  南蛮入侵: 9,
+  万箭: 10,
+  万箭齐发: 10,
+  火攻: 83
+}
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+function createRoomWithDiscard(
+  cardNames: string[],
+  cardSpellIds = cardNames.map((name) => CARD_SPELL_IDS[name] ?? 0)
+) {
+  const cardInfos = cardNames.map((name, index) => ({
+    id: index + 1,
+    name,
+    spellId: cardSpellIds[index]
+  }))
+  vi.spyOn(CardConfig.GetInstance(), 'getCard').mockImplementation((id) => cardInfos[id - 1])
+
   const { controller } = createTrackerControllerHarness()
   controller.initTrackerRoom()
   controller.registerTrackerPlayers(
@@ -21,9 +49,6 @@ function createRoomWithDiscard(cardNames: string[]) {
   controller.syncTrackerMove(protocolMove({ CardIDs: cardIDs, ToZone: 2, ToID: 255, MoveType: 16 }))
 
   const room = controller.getTrackerRoom()!
-  cardIDs.forEach((cardID, index) => {
-    getCard(room, cardID)!.name = cardNames[index]
-  })
 
   return { controller, room }
 }
@@ -75,7 +100,7 @@ describe('焚巢弃牌堆取牌', () => {
     }
   )
 
-  it.each(['杀', '火杀', '雷杀', '冰杀', '决斗', '南蛮', '万箭', '火攻'])(
+  it.each(['杀', '火杀', '雷杀', '冰杀', '决斗', '南蛮', '南蛮入侵', '万箭', '万箭齐发', '火攻'])(
     '识别 %s 并优先获得同名牌中最早入堆的一张',
     (name) => {
       const { controller, room } = createRoomWithDiscard(['闪', name, '桃', name, '无懈'])
@@ -86,6 +111,20 @@ describe('焚巢弃牌堆取牌', () => {
       expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual([1, 3, 4, 5])
     }
   )
+
+  it.each([1, 8, 9, 10, 83])('按卡牌技能 ID %i 识别目标牌，不受显示名影响', (spellId) => {
+    const { controller, room } = createRoomWithDiscard(
+      ['杀', '更名后的卡牌', '决斗'],
+      [7, spellId, 0]
+    )
+
+    controller.syncTrackerMove(createFenChaoMove({ CardCount: 1 }))
+
+    expect(room.players.get(7)!.knownHandCards.map((card) => card.id)).toEqual([2])
+    expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual([1, 3])
+    expect(getCard(room, 2)!.spellId).toBe(spellId)
+    expect(getCard(room, 2)!.spellID).toBe(3752)
+  })
 
   it('连续获得按当前弃牌顺序继续筛选，张数以协议为准', () => {
     const { controller, room } = createRoomWithDiscard([
