@@ -1,7 +1,6 @@
 import { logic } from './logic.js'
 import { Init, Exit } from './dom.js'
 import { notifyScriptError } from './utils/errorNotifier.js'
-import { laya } from './runtime/gameAdapter.js'
 
 console.info(
   '%c三国杀小抄',
@@ -59,6 +58,5 @@ function main() {
 main('INIT').then((r) => {
   if (r) {
     window._SGSMODULE.push(main)
-    laya.HideStartLoadingListener()
   }
 })

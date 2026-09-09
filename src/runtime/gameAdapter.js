@@ -1,5 +1,5 @@
-import { globalConfig } from '@/tracker'
 import { Game } from '@/tracker/Game'
+import { wait } from '@/utils'
 import { addTooltip } from '@/utils/notification'
 
 // 每回合都可以发动
@@ -506,20 +506,18 @@ export class GameRuntime {
     GameEventDispatcher.on('HIDE_CHALLENGE_GAME_START', this, this.showName)
   }
 
-  showName() {
-    if (!globalConfig.showNameSwitch) return
+  async showName() {
+    const seatUIs = await wait(() => this.gamescene?.seatContainer?.seatUIs)
+    if (!seatUIs) return
 
-    setTimeout(() => {
-      if (!Game.needShowName) return
-      this.gamescene?.seatContainer?.seatUIs?.forEach(({ seat, otherTopManager }) => {
-        if (seat?.playerInfo?.ClientId >= 4e9) return
-        otherTopManager?.createPlayerNameBg()
-        otherTopManager?.createPlayerName()
-        otherTopManager?.UpdatePlayerName(seat.playerInfo)
-        otherTopManager?.SetPlayNameVisible(true)
-        otherTopManager?.layout()
-      })
-    }, 1000)
+    seatUIs.forEach(({ seat, otherTopManager }) => {
+      if (seat?.playerInfo?.ClientId >= 4e9) return
+      otherTopManager?.createPlayerNameBg()
+      otherTopManager?.createPlayerName()
+      otherTopManager?.UpdatePlayerName(seat.playerInfo)
+      otherTopManager?.SetPlayNameVisible(true)
+      otherTopManager?.layout()
+    })
   }
 
   /**
