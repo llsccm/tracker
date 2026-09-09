@@ -56,5 +56,7 @@ function main() {
 }
 
 main('INIT').then((r) => {
-  if (r) window._SGSMODULE.push(main)
+  if (r) {
+    window._SGSMODULE.push(main)
+  }
 })

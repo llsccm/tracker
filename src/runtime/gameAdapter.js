@@ -1,4 +1,5 @@
 import { Game } from '@/tracker/Game'
+import { wait } from '@/utils'
 import { addTooltip } from '@/utils/notification'
 
 // 每回合都可以发动
@@ -499,8 +500,17 @@ export class GameRuntime {
     return foundWindow ?? null
   }
 
-  showName() {
-    this.gamescene?.seatContainer?.seatUIs?.forEach(({ seat, otherTopManager }) => {
+  HideStartLoadingListener() {
+    const GameEventDispatcher = this.ged
+    if (!GameEventDispatcher) return
+    GameEventDispatcher.on('HIDE_CHALLENGE_GAME_START', this, this.showName)
+  }
+
+  async showName() {
+    const seatUIs = await wait(() => this.gamescene?.seatContainer?.seatUIs)
+    if (!seatUIs) return
+
+    seatUIs.forEach(({ seat, otherTopManager }) => {
       if (seat?.playerInfo?.ClientId >= 4e9) return
       otherTopManager?.createPlayerNameBg()
       otherTopManager?.createPlayerName()
