@@ -3,8 +3,10 @@ import { user } from '@/tracker'
 import { tracker } from '@/tracker/runtime/browser'
 import { addTooltip } from '@/utils/notification'
 import { hideOrderContainer, resetOrderContainer } from '@/ui/seatOverlay'
+import { cancelGameOverTask } from './MsgGameOver'
 
 function registerGamePlayers(infos) {
+  cancelGameOverTask()
   resetSeatUIs()
   tracker.initTrackerRoom()
   tracker.registerTrackerPlayers(infos, user.userID)
