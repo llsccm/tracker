@@ -42,6 +42,7 @@ const ALLOWED_CLASSES = new Set([
 // ])
 
 const ShanHeTu_regex = /\[\d+\]$/
+let lastClassName = null
 
 export function logic(msg) {
   try {
@@ -50,6 +51,15 @@ export function logic(msg) {
     if (msg.className === undefined && msg.ClassName === undefined) return
 
     const className = msg.ClassName || msg.className || msg.toString()
+    // 宿主会连续重复发送这两类消息，只处理连续消息中的第一条。
+    if (
+      className === lastClassName &&
+      (className === 'decodeGameRecordInitInfo' || className === 'MsgGameOver')
+    ) {
+      return
+    }
+    lastClassName = className
+
     const { ProtoObj, SeatID } = msg
 
     // 录制器有独立的记牌协议规则，需先于功能白名单执行，以保留路由遗漏现场。
@@ -137,7 +147,7 @@ export function logic(msg) {
         // })
         break
 
-      // 用于判断模式 此消息会触发两次
+      // 用于判断模式
       case 'decodeGameRecordInitInfo':
         if (import.meta.env.DEV) console.info(msg)
         Game.init()
@@ -240,7 +250,7 @@ export function logic(msg) {
         break
 
       case 'MsgGameOver':
-        // 此消息会触发两次
+        if (import.meta.env.DEV) console.info(msg)
         handleGameOver()
         break
 
