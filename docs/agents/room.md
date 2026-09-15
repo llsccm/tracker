@@ -124,7 +124,8 @@ handler 中直接修改 `Card`、`Zone` 或玩家投影；`TrackerController` / 
 
 `shufflePile()` 不是普通 `moveCards()` 的简单组合。真实弃牌洗回时必须先让
 `PileIdentityLedger` 原子提交 generation 过渡，再按提交结果处理匿名化、suspended 身份与物理牌堆重建；
-只随机弃牌堆部分，保留原剩余牌堆相对顺序。完整语义见
+最终物理张数以协议 `CardCount` 为准，身份候选独立保留。匿名槽补足/退出委托给
+`RoomPublicZones.resizeShuffledPile()`；通常只随机弃牌部分，保留原剩余牌堆相对顺序。完整语义见
 [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md)。
 
 ### 高风险移动边界

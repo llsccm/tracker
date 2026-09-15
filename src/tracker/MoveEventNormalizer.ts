@@ -311,15 +311,14 @@ function inferEventType(event: RawMoveCardEvent, cardIDs: CardID[]): RawMoveEven
 
 /**
  * 为特定协议移动补充更精确的业务标签。
- * 当前只标记“从牌堆获取牌”，用于日志或调试界面区别普通获得。
+ * 按牌堆或弃牌堆来源标记获取事件，供日志或调试界面使用。
  */
 export function getProtocolMoveSpecialLabel(event: RawMoveCardEvent = {}): string | undefined {
-  if (
-    getProtocolPublicZone(event.FromZone) === 'pile' &&
-    Number(event.MoveType) === MOVE_TYPE.GAIN
-  ) {
-    return '从牌堆获取牌'
-  }
+  if (Number(event.MoveType) !== MOVE_TYPE.GAIN) return undefined
+
+  const fromZone = getProtocolPublicZone(event.FromZone)
+  if (fromZone === 'pile') return '从牌堆获取牌'
+  if (fromZone === 'discard') return '从弃牌堆获取牌'
 
   return undefined
 }

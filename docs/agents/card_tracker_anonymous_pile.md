@@ -202,23 +202,31 @@ accountedPileCount
 - 明确位置的已知牌进入牌堆时，账本登记为 `knownPileIdentityIDs`，物理 `Zone` 保存端点顺序。
 - 随机插入已知牌无法保留批次边界时，Room 会把物理实体匿名化，身份回到 cohort。
 - 匿名回堆只能增加物理暗槽数量，无法证明具体身份或精确插入边界，因此统一保守合并/降级。
-- 协议声明的牌堆张数大于物理实体数时只告警，不补建匿名牌堆槽。
+- 洗牌通知以协议 `CardCount` 校正最终物理张数，匿名槽不足时补足，多余时退出追踪区；身份候选独立保留。
 
 ### 洗牌与 generation
 
 真实弃牌洗回由 `Room.shufflePile()` 处理，顺序与普通移动不同：
 
-1. `PileIdentityLedger` 先原子提交旧 cohort 关闭和新批次建立。
+1. 按协议 `CardCount` 确定目标物理张数，`PileIdentityLedger` 先原子提交旧 cohort 关闭和新批次建立。
 2. Room 根据已提交的 `PileIdentityShuffleTransition` 处理 `expiringIdentityIDs` 与
    `recycledIdentityIDs`。
 3. 旧 generation 尚未出现的身份转成 detached suspended 展示实体。
-4. 洗回弃牌实体全部匿名化，再与剩余牌堆实体重建物理牌堆。
+4. 洗回弃牌身份全部转入未定位分区，再由 `RoomPublicZones.resizeShuffledPile()` 按目标张数
+   补足或裁减匿名槽，与剩余牌堆实体重建物理牌堆；裁减不删除候选身份。
 5. 收敛并执行 Room/ledger 最终一致性检查。
 
-开局 `2 -> 9` 的两种形态不关闭 generation 0：
+协议未给出 `CardCount` 时沿用本地枚举数量；显式 `0` 表示空牌堆。账本使用 Room 在洗牌前核对的
+回堆身份集合，覆盖可能残留已离堆身份的旧弃牌快照。已确认在玩家区或其它公共区的身份不能被重新洗回。
 
-- 弃牌堆数量为 `0`；或
-- 弃牌堆数量等于整副身份全集。
+公开牌堆身份及相对顺序在协议数量允许时保留；若协议总数小于原有明牌数量，则整组降级为身份候选，
+不能任意挑选某张明牌继续断言在堆。候选身份集合可大于实际槽数，账本基数与物理槽数必须一致。
+
+有效回收张数按目标牌堆张数减去洗牌前剩余牌堆张数计算，最低为零。开局 `2 -> 9` 的两种形态
+不关闭 generation 0：
+
+- 有效回收张数为 `0`；或
+- 有效回收张数等于整副身份全集。
 
 只有后续部分弃牌真实洗回才视为 generation 滚动，并创建旧世代 suspended 身份。
 
@@ -277,6 +285,7 @@ accountedPileCount
 
 - `tests/tracker/pileIdentityLedger.test.ts`：纯账本事件、cohort 基数、降级、守恒与快照。
 - `tests/tracker/pileIdentityLedgerIntegration.test.ts`：Controller/Room/ledger 事务、洗牌与 suspended。
+- `tests/tracker/shuffleProtocolCount.test.ts`：匿名弃牌获得后的协议张数校正、候选保留、已知身份排除、零张及连续洗牌。
 - `tests/tracker/trackerController.test.ts`：协议端到端移动、游戏外实体、两阶段匿名揭示。
 - `tests/tracker/knownDiscardConfirm.test.ts`：known 缺口、正 ID 暗实体确认与诊断。
 - `tests/tracker/publicEndpointCards.test.ts`、`pileDisplayOrder.test.ts`：端点选择、物化与物理顺序。

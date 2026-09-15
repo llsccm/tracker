@@ -196,8 +196,10 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
 - `pileIdentityLedger.test.ts` 覆盖 cohort 基数、批次消费、已知/匿名回堆、初洗与一致性。
 - `pileIdentityLedgerIntegration.test.ts` 覆盖 Controller 事务、常规摸牌、匿名获得、连续洗牌、
   suspended 身份恢复，以及两种开局初洗协议。
-- 开局 `2 -> 9` 在弃牌堆数量为 `0`，或等于整副卡池身份数时，都不得滚动 generation 或
-  创建 suspended；全量弃牌形态仍需把物理实体洗回匿名牌堆。
+- 开局 `2 -> 9` 在有效回收张数为 `0`，或等于整副卡池身份数时，都不得滚动 generation 或
+  创建 suspended；有效回收张数由协议最终牌堆张数减去原剩余牌堆张数确定。
+- `shuffleProtocolCount.test.ts` 覆盖暗取后的洗牌数量校正：物理槽按协议张数补足或退出，
+  回堆候选身份独立保留；同时验证已亮牌身份排除、零张、旧明牌位置失效及连续洗牌。
 - 真实的部分弃牌洗回必须暂停旧 cohort 尚未出现身份；suspended 只承担展示，原暗实体继续
   承担玩家/mark 等物理槽位。
 - `MoveType=1` 常规摸牌按端点顺序精确移走牌顶/牌底明牌；`MoveType=18` 无 CardIDs 时只消费
