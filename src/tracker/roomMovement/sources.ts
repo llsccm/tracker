@@ -678,6 +678,10 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
         const explicitCards = Array.from(new Set(sourceCards)).filter(Boolean).slice(0, count)
         // 显式 sourceCards 也可能指向无席位 mark 空间实体，不能绕过账本清理。
         this.removeUnassignedMarkSpaceCards(explicitCards)
+        // 弃牌获得可能同时携带来源席位，仍需补齐未确定的数量。
+        if (isDiscardGain && explicitCards.length < count) {
+          explicitCards.push(...this.room.createExternalCards([], count - explicitCards.length))
+        }
         return explicitCards
       }
 

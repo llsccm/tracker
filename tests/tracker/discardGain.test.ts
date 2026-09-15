@@ -112,6 +112,45 @@ describe('弃牌堆未知获得', () => {
     expect(onError).not.toHaveBeenCalled()
   })
 
+  it.each([
+    { scenario: '部分来源', sourceIDs: [2], cardCount: 3, unknownCount: 2 },
+    { scenario: '重复来源', sourceIDs: [2, 2], cardCount: 3, unknownCount: 2 },
+    { scenario: '完整来源', sourceIDs: [2, 5], cardCount: 2, unknownCount: 0 }
+  ])('有效 fromSeat 的$scenario 获得保留真实牌并补齐标记区数量', (testCase) => {
+    const { room } = createRoomWithDiscard()
+    const sourceCards = testCase.sourceIDs.map((id) => room.cardIndex.get(id)!)
+    const entityCountBefore = room.cards.length
+
+    room.moveCards([], 'player', {
+      fromZone: 'discard',
+      fromSeatID: 1,
+      fromSubZone: 'mark',
+      seatID: 3,
+      subZone: 'mark',
+      spellID: 4023,
+      moveType: 18,
+      cardCount: testCase.cardCount,
+      sourceCards
+    })
+
+    const markCards = room.players
+      .get(3)!
+      .cards.filter((card) => card.subZone === 'mark' && card.spellID === 4023)
+    expect(markCards).toHaveLength(testCase.cardCount)
+    expect(new Set(markCards.filter((card) => card.id > 0))).toEqual(new Set(sourceCards))
+    const placeholders = markCards.filter(isAnonymous)
+    expect(placeholders).toHaveLength(testCase.unknownCount)
+    expect(new Set(placeholders.map((card) => card.id)).size).toBe(testCase.unknownCount)
+    placeholders.forEach((card) => {
+      expect(card.id).toBeLessThan(0)
+      expect(card.entityID).toBe(card.id)
+      expect(card.isKnown).toBe(false)
+      expect(card.owner).toBe(3)
+    })
+    expect(room.cards).toHaveLength(entityCountBefore + testCase.unknownCount)
+    expect(sourceCards.map((card) => card.id)).toEqual(testCase.sourceIDs)
+  })
+
   it('缺少弃牌历史时仍按协议张数创建暗牌', () => {
     const { controller, room, onError } = createRoomWithDiscard([])
 
