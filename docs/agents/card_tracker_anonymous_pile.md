@@ -160,8 +160,11 @@ accountedPileCount
   对应身份作为 `knownPileIdentityIDsConsumed` 精确提交给账本。
 - 非标准牌堆获得且 `CardIDs=[]` 时只消费匿名槽，跳过全部已公开牌堆身份；`POSITION_RANDOM` 只表示
   匿名代表和批次边界不确定，不证明某个已知身份离堆。
-- `discard`、`process`、`exchange`、`exile` 等非牌堆公共来源在 `CardIDs=[]` 时仍按端点取实际实体，
-  不能套用“只取匿名槽”的牌堆特例。
+- 弃牌堆 `MoveType=18` 获得未公开身份的牌时，创建等量负 ID 暗牌占位，保留无法确定去向的
+  来源实体；规则不绑定 SpellID 或来源位置。显式 `CardIDs` 或技能 `sourceCards` 仍精确移动，
+  其余未确定部分也创建暗牌，不从弃牌端点补足。
+- 其余 `discard`、`process`、`exchange`、`exile` 等非牌堆公共来源的无 ID 移动仍按端点取实际
+  实体，不能套用“只取匿名槽”的牌堆特例。
 
 ### 已知身份物化
 
@@ -255,16 +258,16 @@ accountedPileCount
 | 某身份既不在 Room 也不在 suspended | `cohort-identity-missing-from-room-partition` |
 | 某身份同时 unlocated 与 suspended | `cohort-identity-duplicated-in-room-partition` |
 | 匿名获得错误消耗牌顶明牌 | 是否误把非标准无 ID 获得按常规端点摸牌处理 |
-| 非牌堆来源残留明牌 | 是否错误套用了“只消费匿名槽”的牌堆规则 |
+| 非牌堆确定端点移动后残留明牌 | 是否错误套用了“只消费匿名槽”的牌堆规则；弃牌堆未知获得除外 |
 | 洗牌产生过多 suspended | 是否错误关闭了开局 generation 0，或把已公开身份留在 cohort |
 
 ## 修改护栏
 
 - 新协议优先将原始消息交给 `tracker.syncTrackerMove()`，不要在 handler 中直接改
   `PileIdentityLedger`。
-- 只有确实代表游戏外新实体时才使用 `createExternalCards()`；已存在匿名槽时应物化。
+- `createExternalCards()` 用于游戏外新实体或无法确定来源的弃牌获得占位；已存在明确匿名来源槽时应物化。
 - 新增公共 known 路径时必须测试端点范围、正 ID 暗端点、匿名槽不足和重复消息幂等。
-- 新增无 CardIDs 路径时先区分牌堆与非牌堆来源，再决定“只取匿名槽”还是“取实际端点实体”。
+- 新增无 CardIDs 路径时先区分牌堆、弃牌堆未知获得与其余公共来源，再选择匿名槽、补建占位或实际端点实体。
 - 修改洗牌逻辑时同时验证物理槽数、cohort 基数、公开牌顶/牌底、suspended 分区及连续洗牌。
 - 不把 `PileIdentityLedgerSnapshot.cohort` 直接接入用户 UI；当前产品裁决仍是不展示 cohort 分组。
 

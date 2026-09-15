@@ -70,13 +70,15 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     if (uniqueCards.length >= count) return uniqueCards
 
     const selected = new Set(uniqueCards)
-    const fallbackCards = this.takeCardsFromPublicZone(
-      count - uniqueCards.length,
-      fallback.fromZone,
-      fallback.fromPosition
-    ).filter((card) => !selected.has(card))
+    const fallbackCards = fallback.anonymousFallback
+      ? this.room.createExternalCards([], count - uniqueCards.length)
+      : this.takeCardsFromPublicZone(
+          count - uniqueCards.length,
+          fallback.fromZone,
+          fallback.fromPosition
+        )
 
-    return [...uniqueCards, ...fallbackCards]
+    return [...uniqueCards, ...fallbackCards.filter((card) => !selected.has(card))]
   }
 
   /**
@@ -667,6 +669,9 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       sourceCards,
       sourceEvent
     } = options
+    const moveType = Number(sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType ?? options.moveType)
+    const isDiscardGain =
+      (fromZone === 'discard' || Number(fromZone) === 2) && moveType === MOVE_TYPE.GAIN
 
     if (sourceCards?.length) {
       if (fromSeat !== null && !Number.isNaN(fromSeat)) {
@@ -676,7 +681,11 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
         return explicitCards
       }
 
-      return this.takeSpecificSourceCards(sourceCards, count, { fromZone, fromPosition })
+      return this.takeSpecificSourceCards(sourceCards, count, {
+        fromZone,
+        fromPosition,
+        anonymousFallback: isDiscardGain
+      })
     }
 
     if (sourceIsOutside) {
@@ -751,12 +760,14 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       return [...selectedUnknownCards, ...knownCards]
     }
 
-    const moveType = Number(sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType ?? options.moveType)
+    // 获得协议未公开身份时，弃牌堆顺序不能证明实际取走哪张牌；创建暗牌等待后续揭示。
+    if (isDiscardGain) return this.room.createExternalCards([], count)
+
     const isPileSource = fromZone === 'pile' || Number(fromZone) === 1
     const isRegularPileDraw = isPileSource && moveType === MOVE_TYPE.DRAW
 
-    // 常规摸牌与非牌堆公共区都必须按端点移动真实实体；只有牌堆的非标准无 ID 获取
-    // 才跳过已展示明牌，避免把本地端点顺序误当成服务器实际选择。
+    // 其余非牌堆公共区移动与常规摸牌仍按端点移动真实实体；牌堆的非标准无 ID 获取
+    // 只消费暗槽，保留已展示明牌。
     if (!isPileSource || isRegularPileDraw) {
       return this.takeCardsFromPublicZone(count, fromZone, fromPosition)
     }

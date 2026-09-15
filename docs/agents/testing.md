@@ -202,9 +202,10 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
   承担玩家/mark 等物理槽位。
 - `MoveType=1` 常规摸牌按端点顺序精确移走牌顶/牌底明牌；`MoveType=18` 无 CardIDs 时只消费
   匿名槽并跳过端点明牌，且规则不绑定某个 SpellID。
-- 上述“只消费匿名槽”只适用于明确的牌堆来源。`discard`、`process`、`exchange` 等非牌堆
-  公共区在无 CardIDs 时仍须按端点移除实际实体，包括已知牌；否则会遗留来源明牌并虚构
-  匿名 fallback。
+- 弃牌堆 `MoveType=18` 未知获得创建负 ID 暗牌占位，不按弃牌顺序猜测身份；回归须覆盖
+  空/零 ID、部分已知 ID、技能来源推断不足与后续揭示，规则不绑定单个技能或来源位置。
+- 上述“只消费匿名槽”只适用于明确的牌堆来源。除弃牌堆未知获得外，`discard`、`process`、
+  `exchange` 等非牌堆公共区在无 CardIDs 时仍须按端点移除实际实体，包括已知牌。
 - Room/ledger 事务完成后，cohort 身份必须恰好位于 `unlocatedIdentities` 或
   `suspendedKnownCards`，不能缺失或同时存在于两边。
 
