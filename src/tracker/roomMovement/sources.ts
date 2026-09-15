@@ -715,6 +715,9 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       return externalCards
     }
 
+    // 弃牌来源优先于附带的席位；未公开身份时创建暗牌，不消费玩家或标记区实体。
+    if (isDiscardGain) return this.room.createExternalCards([], count)
+
     if (fromSeat !== null && !Number.isNaN(fromSeat)) {
       const sourceSubZone = fromSubZone ?? subZone ?? 'hand'
       const inferredSourceSpellID =
@@ -763,9 +766,6 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
 
       return [...selectedUnknownCards, ...knownCards]
     }
-
-    // 获得协议未公开身份时，弃牌堆顺序不能证明实际取走哪张牌；创建暗牌等待后续揭示。
-    if (isDiscardGain) return this.room.createExternalCards([], count)
 
     const isPileSource = fromZone === 'pile' || Number(fromZone) === 1
     const isRegularPileDraw = isPileSource && moveType === MOVE_TYPE.DRAW

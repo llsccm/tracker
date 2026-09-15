@@ -151,6 +151,70 @@ describe('弃牌堆未知获得', () => {
     expect(sourceCards.map((card) => card.id)).toEqual(testCase.sourceIDs)
   })
 
+  it.each([
+    {
+      scenario: '手牌且省略 sourceCards',
+      seatID: 1,
+      fromSeat: 1,
+      subZone: 'hand' as const,
+      emptySource: false
+    },
+    {
+      scenario: '标记区且 sourceCards 为空',
+      seatID: 1,
+      fromSeat: 1,
+      subZone: 'mark' as const,
+      emptySource: true
+    },
+    {
+      scenario: '无席位标记区',
+      seatID: 255,
+      fromSeat: 35,
+      subZone: 'mark' as const,
+      emptySource: true
+    }
+  ])('弃牌获得不消费 fromSeat 指向的$scenario', (testCase) => {
+    const { room } = createRoomWithDiscard()
+    const playerSourceCards = [...room.zones.get('pile')!.cards]
+    room.moveCards([], 'player', {
+      seatID: testCase.seatID,
+      subZone: testCase.subZone,
+      spellID: 35,
+      fromZone: 'pile',
+      moveType: 1,
+      cardCount: 2
+    })
+    const discardBefore = [...room.zones.get('discard')!.cards]
+    const entityCountBefore = room.cards.length
+    const sourceOptions = {
+      fromSeat: testCase.fromSeat,
+      fromSubZone: testCase.subZone,
+      fromSpellID: 35,
+      spellID: 35,
+      moveType: 18,
+      sourceCards: testCase.emptySource ? [] : undefined
+    }
+
+    const gainedCards = room.movement.takeSourceCards(2, { ...sourceOptions, fromZone: 'discard' })
+
+    expect(gainedCards).toHaveLength(2)
+    expect(gainedCards.every(isAnonymous)).toBe(true)
+    gainedCards.forEach((card) => {
+      expect(playerSourceCards).not.toContain(card)
+      expect(card.location).toBe('outside')
+    })
+    expect(room.cards).toHaveLength(entityCountBefore + 2)
+    expect(room.zones.get('discard')!.cards).toEqual(discardBefore)
+
+    // 同一来源随后仍可按正常玩家/标记路径取出，证明弃牌获得没有消费其实体或空间账本。
+    const regularSourceCards = room.movement.takeSourceCards(2, {
+      ...sourceOptions,
+      fromZone: null
+    })
+    expect(new Set(regularSourceCards)).toEqual(new Set(playerSourceCards))
+    expect(room.cards).toHaveLength(entityCountBefore + 2)
+  })
+
   it('缺少弃牌历史时仍按协议张数创建暗牌', () => {
     const { controller, room, onError } = createRoomWithDiscard([])
 
