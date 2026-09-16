@@ -160,8 +160,11 @@ accountedPileCount
   对应身份作为 `knownPileIdentityIDsConsumed` 精确提交给账本。
 - 非标准牌堆获得且 `CardIDs=[]` 时只消费匿名槽，跳过全部已公开牌堆身份；`POSITION_RANDOM` 只表示
   匿名代表和批次边界不确定，不证明某个已知身份离堆。
-- `discard`、`process`、`exchange`、`exile` 等非牌堆公共来源在 `CardIDs=[]` 时仍按端点取实际实体，
-  不能套用“只取匿名槽”的牌堆特例。
+- 弃牌堆 `MoveType=18` 获得未公开身份的牌时，创建等量负 ID 暗牌占位，保留无法确定去向的
+  来源实体；规则不绑定 SpellID 或来源位置。显式 `CardIDs` 或技能 `sourceCards` 仍精确移动，
+  其余未确定部分也创建暗牌，不从弃牌端点补足。
+- 其余 `discard`、`process`、`exchange`、`exile` 等非牌堆公共来源的无 ID 移动仍按端点取实际
+  实体，不能套用“只取匿名槽”的牌堆特例。
 
 ### 已知身份物化
 
@@ -199,23 +202,31 @@ accountedPileCount
 - 明确位置的已知牌进入牌堆时，账本登记为 `knownPileIdentityIDs`，物理 `Zone` 保存端点顺序。
 - 随机插入已知牌无法保留批次边界时，Room 会把物理实体匿名化，身份回到 cohort。
 - 匿名回堆只能增加物理暗槽数量，无法证明具体身份或精确插入边界，因此统一保守合并/降级。
-- 协议声明的牌堆张数大于物理实体数时只告警，不补建匿名牌堆槽。
+- 洗牌通知以协议 `CardCount` 校正最终物理张数，匿名槽不足时补足，多余时退出追踪区；身份候选独立保留。
 
 ### 洗牌与 generation
 
 真实弃牌洗回由 `Room.shufflePile()` 处理，顺序与普通移动不同：
 
-1. `PileIdentityLedger` 先原子提交旧 cohort 关闭和新批次建立。
+1. 按协议 `CardCount` 确定目标物理张数，`PileIdentityLedger` 先原子提交旧 cohort 关闭和新批次建立。
 2. Room 根据已提交的 `PileIdentityShuffleTransition` 处理 `expiringIdentityIDs` 与
    `recycledIdentityIDs`。
 3. 旧 generation 尚未出现的身份转成 detached suspended 展示实体。
-4. 洗回弃牌实体全部匿名化，再与剩余牌堆实体重建物理牌堆。
+4. 洗回弃牌身份全部转入未定位分区，再由 `RoomPublicZones.resizeShuffledPile()` 按目标张数
+   补足或裁减匿名槽，与剩余牌堆实体重建物理牌堆；裁减不删除候选身份。
 5. 收敛并执行 Room/ledger 最终一致性检查。
 
-开局 `2 -> 9` 的两种形态不关闭 generation 0：
+协议未给出 `CardCount` 时沿用本地枚举数量；显式 `0` 表示空牌堆。账本使用 Room 在洗牌前核对的
+回堆身份集合，覆盖可能残留已离堆身份的旧弃牌快照。已确认在玩家区或其它公共区的身份不能被重新洗回。
 
-- 弃牌堆数量为 `0`；或
-- 弃牌堆数量等于整副身份全集。
+公开牌堆身份及相对顺序在协议数量允许时保留；若协议总数小于原有明牌数量，则整组降级为身份候选，
+不能任意挑选某张明牌继续断言在堆。候选身份集合可大于实际槽数，账本基数与物理槽数必须一致。
+
+有效回收张数按目标牌堆张数减去洗牌前剩余牌堆张数计算，最低为零。开局 `2 -> 9` 的两种形态
+不关闭 generation 0：
+
+- 有效回收张数为 `0`；或
+- 有效回收张数等于整副身份全集。
 
 只有后续部分弃牌真实洗回才视为 generation 滚动，并创建旧世代 suspended 身份。
 
@@ -255,16 +266,16 @@ accountedPileCount
 | 某身份既不在 Room 也不在 suspended | `cohort-identity-missing-from-room-partition` |
 | 某身份同时 unlocated 与 suspended | `cohort-identity-duplicated-in-room-partition` |
 | 匿名获得错误消耗牌顶明牌 | 是否误把非标准无 ID 获得按常规端点摸牌处理 |
-| 非牌堆来源残留明牌 | 是否错误套用了“只消费匿名槽”的牌堆规则 |
+| 非牌堆确定端点移动后残留明牌 | 是否错误套用了“只消费匿名槽”的牌堆规则；弃牌堆未知获得除外 |
 | 洗牌产生过多 suspended | 是否错误关闭了开局 generation 0，或把已公开身份留在 cohort |
 
 ## 修改护栏
 
 - 新协议优先将原始消息交给 `tracker.syncTrackerMove()`，不要在 handler 中直接改
   `PileIdentityLedger`。
-- 只有确实代表游戏外新实体时才使用 `createExternalCards()`；已存在匿名槽时应物化。
+- `createExternalCards()` 用于游戏外新实体或无法确定来源的弃牌获得占位；已存在明确匿名来源槽时应物化。
 - 新增公共 known 路径时必须测试端点范围、正 ID 暗端点、匿名槽不足和重复消息幂等。
-- 新增无 CardIDs 路径时先区分牌堆与非牌堆来源，再决定“只取匿名槽”还是“取实际端点实体”。
+- 新增无 CardIDs 路径时先区分牌堆、弃牌堆未知获得与其余公共来源，再选择匿名槽、补建占位或实际端点实体。
 - 修改洗牌逻辑时同时验证物理槽数、cohort 基数、公开牌顶/牌底、suspended 分区及连续洗牌。
 - 不把 `PileIdentityLedgerSnapshot.cohort` 直接接入用户 UI；当前产品裁决仍是不展示 cohort 分组。
 
@@ -274,6 +285,7 @@ accountedPileCount
 
 - `tests/tracker/pileIdentityLedger.test.ts`：纯账本事件、cohort 基数、降级、守恒与快照。
 - `tests/tracker/pileIdentityLedgerIntegration.test.ts`：Controller/Room/ledger 事务、洗牌与 suspended。
+- `tests/tracker/shuffleProtocolCount.test.ts`：匿名弃牌获得后的协议张数校正、候选保留、已知身份排除、零张及连续洗牌。
 - `tests/tracker/trackerController.test.ts`：协议端到端移动、游戏外实体、两阶段匿名揭示。
 - `tests/tracker/knownDiscardConfirm.test.ts`：known 缺口、正 ID 暗实体确认与诊断。
 - `tests/tracker/publicEndpointCards.test.ts`、`pileDisplayOrder.test.ts`：端点选择、物化与物理顺序。

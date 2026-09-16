@@ -1667,9 +1667,16 @@ export class Room {
     const remainingPileCards = [...pile.cards]
     const recycledCards = [...discard.cards]
     const hasAuthoritativeIdentityMove = options.identityMove !== undefined
-    const hasDiscardCards = recycledCards.length > 0
     const projectedPileCount = remainingPileCards.length + recycledCards.length
-    const knownDiscardIdentityIDsBefore = recycledCards
+    const targetPileCount = hasProtocolPileCount ? normalizedCardCount : projectedPileCount
+    const knownRemainingPileCards = remainingPileCards.filter(
+      (card) => card.id > 0 && card.isKnown === true
+    )
+    // 协议总数连现有明牌都容纳不了时，旧位置事实已失效，整组降级为候选而不猜测保留哪张。
+    const ambiguousRemainingPileCards =
+      knownRemainingPileCards.length > targetPileCount ? knownRemainingPileCards : []
+    const shuffleIdentityCards = [...recycledCards, ...ambiguousRemainingPileCards]
+    const knownDiscardIdentityIDsBefore = shuffleIdentityCards
       .map((card) => card.id)
       .filter((cardID) => cardID > 0)
     const identityMove = {
@@ -1678,17 +1685,18 @@ export class Room {
         fromZone: 2,
         toZone: 9,
         cardIDs: [],
-        cardCount: hasProtocolPileCount ? normalizedCardCount : projectedPileCount,
+        cardCount: targetPileCount,
         pileCountBefore: remainingPileCards.length
       }),
+      ...(ambiguousRemainingPileCards.length > 0 ? { visiblePileIdentityIDsAfter: [] } : {}),
       ambiguousDiscardRecycleGroups: options.ambiguousDiscardRecycleGroups
     }
     // 洗牌会同时关闭旧 cohort 与建立洗回批次；必须先让账本原子提交这次过渡，Room 才能
     // 把提交结果投影成 suspended/匿名实体，避免物理状态领先于身份权威。
     const shuffleTransition = this.applyPileIdentityShuffleBeforePhysicalMove(
       identityMove,
-      projectedPileCount,
-      recycledCards.length,
+      targetPileCount,
+      Math.max(0, targetPileCount - remainingPileCards.length),
       knownDiscardIdentityIDsBefore
     )
     const closesPileGeneration = shuffleTransition?.closesGeneration === true
@@ -1697,7 +1705,6 @@ export class Room {
     )
     const expiringIdentityIDs = shuffleTransition?.expiringIdentityIDs ?? []
     const identityContext = `move:${identityMove.eventType}`
-    const anonymizedIdentityIDs: CardID[] = []
     const newlySuspendedCardIDs: CardID[] = []
 
     const rebuildPileAfterShuffle = () => {
@@ -1709,7 +1716,10 @@ export class Room {
         recycledCards[i] = recycledCard
       }
 
-      const rebuiltPileCards = [...recycledCards, ...remainingPileCards]
+      const rebuiltPileCards = this.publicZones.resizeShuffledPile(
+        [...recycledCards, ...remainingPileCards],
+        targetPileCount
+      )
       pile.replaceAll(rebuiltPileCards)
       return rebuiltPileCards
     }
@@ -1721,20 +1731,16 @@ export class Room {
         expiringIdentityIDs,
         recycledIdentityIDs
       )
-      anonymizedIdentityIDs.push(...suspensionResult.anonymizedIdentityIDs)
       newlySuspendedCardIDs.push(...suspensionResult.suspendedIdentityIDs)
     }
 
-    if (hasDiscardCards) {
+    if (shuffleIdentityCards.length > 0) {
       // 无论是真实换代还是全量弃牌形态的初洗，洗回后的随机位置都不再承载正 ID；区别仅
       // 在于前者会暂停旧世代未出现身份，后者仍把全部身份保留在 generation 0 未决集合。
-      recycledCards.forEach((card) => {
+      // 全部身份都先保留到未定位分区，多余物理槽退出牌堆时不会带走候选身份。
+      shuffleIdentityCards.forEach((card) => {
         if (card.id <= 0) return
-        const releasedIdentityID = this.anonymizeLocatedIdentity(
-          card,
-          'shufflePile:recycledIdentity'
-        )
-        if (releasedIdentityID) anonymizedIdentityIDs.push(releasedIdentityID)
+        this.anonymizeLocatedIdentity(card, 'shufflePile:recycledIdentity')
       })
     }
 
@@ -1749,26 +1755,19 @@ export class Room {
 
     // rebuiltPileCards 是本次写入 pile.replaceAll() 的实体列表；写入后它应与 pile.cards 长度一致，
     // 且 discard 中被洗回的牌应已被 replaceAll() 从弃牌堆移除。
-    if (actualPileCount !== rebuiltPileCount || discardCountAfterShuffle !== 0) {
+    if (
+      actualPileCount !== targetPileCount ||
+      actualPileCount !== rebuiltPileCount ||
+      discardCountAfterShuffle !== 0
+    ) {
       trackerLogger.warn('洗牌后实际牌堆实体数量不一致', {
         reason: 'shufflePile:actualPileConsistency',
+        targetPileCount,
         actualPileCount,
         rebuiltPileCount,
         discardCountAfterShuffle,
         rebuiltPileCardIDs: rebuiltPileCards.map((card) => card.id),
         actualPileCardIDs: pile.cards.map((card) => card.id)
-      })
-    }
-
-    if (hasProtocolPileCount && actualPileCount < normalizedCardCount) {
-      trackerLogger.warn('洗牌后实际牌堆实体少于协议牌堆张数，未创建匿名牌堆占位', {
-        reason: 'shufflePile:pileSlotShortage',
-        cardCount: normalizedCardCount,
-        actualPileCount,
-        rebuiltPileCount,
-        remainingPileCount: remainingPileCards.length,
-        recycledCardCount: recycledCards.length,
-        anonymizedIdentityIDs
       })
     }
 

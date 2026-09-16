@@ -41,6 +41,30 @@ export class RoomPublicZones {
     this.room = room
   }
 
+  resizeShuffledPile(cards: Card[], cardCount: number): Card[] {
+    const missingCount = cardCount - cards.length
+    if (missingCount >= 0) {
+      return missingCount === 0
+        ? cards
+        : [...this.room.createExternalCards([], missingCount), ...cards]
+    }
+
+    const retiredCards: Card[] = []
+    let excessCount = -missingCount
+    // 洗回身份已先释放到候选池；只裁减暗槽，保留仍有效的公开牌堆身份与相对顺序。
+    const retainedCards = cards.filter((card) => {
+      if (excessCount === 0 || card.isKnown === true) return true
+      retiredCards.push(card)
+      excessCount -= 1
+      return false
+    })
+    this.clearCardsFromPublicZones(retiredCards)
+    retiredCards.forEach((card) => {
+      this.room.releaseUnknownPlaceholderToOutside(card, 'shufflePile:protocolCount')
+    })
+    return retainedCards
+  }
+
   /**
    * 从所有公共区数组中移除指定实体牌，避免同一实体同时留在多个公共区。
    */

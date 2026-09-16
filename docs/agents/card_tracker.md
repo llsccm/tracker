@@ -80,7 +80,7 @@
 - `AmbiguousKnownIndex`：替代旧 `Zone.obj.unknown` 的部分展示语义，跟踪跨座位候选、完整位置候选、装备容器候选与公共候选的明牌；用于 `Card.getLocationDescription()` 的优先反查。已改为增量维护：通过事件流游标进行单牌增量更新，仅在约束组结构变化（`Room.constraintGroupsDirty === true`）时回退全量 `rebuild()`。容器候选展示时按当前装备承载座位展开。
 - `CardLocationIndex`：提供确定手牌、候选手牌、装备、判定、标记与公共区分组；`RoomConstraints.syncViewGroups()` 和公共区视图读取该索引，避免渲染阶段现场高频分类。已改为增量维护：消费 `dirtyCardEvents` 事件流游标进行投影增量更新，公共区变化通过 `Room.dirtyPublicZones` 变更集局部重算。在游标断档时自动回退全量 `rebuild()`。装备容器候选会先投影成当前承载座位的标记区，再进入玩家视图。
 - `CardCounter`：基于 `Room.cards` 生成 `CardInstance` 查询副本，建立名称、花色、点数、类型倒排索引，并根据 `Card.location` 同步牌堆、玩家、弃牌、销毁四类状态。状态桶已从全量 `update()` 改为增量同步：`Room.markCounterDirty()` / `CardCounter.markDirty()` 收集状态变化牌，getter 在无新变化时复用干净缓存；`createExternalCards()` 会显式注册新牌并推进连续已注册的尾部游标，避免后续更新再次扫描同一批实体。
-- `MoveEventNormalizer`：将原始 `PubGsCMoveCard` 字段归一为标准事件包，依赖 `protocolZones.ts` 处理 `FromZone`、`ToZone`、玩家子区与 `CardIDs` 等字段。
+- `MoveEventNormalizer`：将原始 `PubGsCMoveCard` 字段归一为标准事件包，依赖 `protocolZones.ts` 处理 `FromZone`、`ToZone`、玩家子区与 `CardIDs` 等字段；`MoveType=18` 按来源标记“从牌堆获取牌”或“从弃牌堆获取牌”。
 - `Game.ts`：`GameState` 承载纯对局状态与生命周期，`Game` 是浏览器运行时单例实例。
 - `src/tracker/runtime/bridge.ts` + `browser.ts`：装配并导出 `tracker` 单例（`TrackerController`）；浏览器代码通常从 `runtime/browser` 导入。单局构建、移动同步（`syncTrackerMove`）、明牌输入（`revealTrackerCards`，含界强识 `fullHand`）与视图调度的实现位于 `runtime/trackerController.ts`；随机手牌转移等候选构建位于 `roomMovement/candidates.ts`。
 - `src/tracker/view/`：直接操作主文档节点渲染统计、公共区、玩家手牌、查询面板和按钮；`dirtyRenderState.ts` 按脏集合局部重绘，`trackerVisibility` 控制显隐。
@@ -185,11 +185,14 @@
 - 匿名槽 G0/G1 真实回放已经完成并决定 NO-GO / 收缩；临时浏览器回放探针已退役。历史证据按需见 [`replay.md`](replay.md)。
 - 初始牌堆初始化后，`pile.cards` 顺序应独立于 `room.cards`。
 - 摸暗牌、摸明牌时手牌额度及状态维护应保持准确。
-- 洗牌时协议 `cardCount` 与本地可枚举牌堆不一致属于高风险路径：需要确认 cohort generation 滚动、匿名实体数量、剩余牌堆相对顺序、牌顶/牌底公开明牌保留、玩家/mark 原对象与账本引用，以及数量不足时只告警而不补槽。
+- 洗牌以协议 `cardCount` 校准物理槽位，候选身份数可以大于实际张数。需确认 cohort generation
+  滚动、匿名槽补足/退出、剩余牌堆相对顺序、公开身份、玩家/mark 原对象与账本引用；退出槽位前
+  必须保留其候选身份，身份全集不足时保留容量诊断。
 - 公共 known 物化必须限定在协议 `cardCount` 端点范围；除来源区中的同 ID 实体外只能消费
   匿名槽，不能穿透正 ID 暗端点寻找更深处匿名槽，也不能把 displaced 身份转成 suspended。
-- 非牌堆公共区（`discard` / `process` / `exchange`）的无 CardIDs 移动必须消费实际端点实体；
-  只有牌堆的非标准无 ID 获取才允许跳过已展示明牌并只取匿名槽。
+- 弃牌堆 `MoveType=18` 的未知获得创建负 ID 暗牌占位，不按弃牌顺序猜测身份；显式
+  `CardIDs` 或技能 `sourceCards` 仍精确移动，未确定部分继续补位。其余非牌堆公共区移动
+  消费实际端点实体；牌堆的非标准无 ID 获取只取匿名槽。
 - 玩家来源明牌残留公共区时，需要确认旧公共区槽位被占位修复，且同批已知牌不会被用作其它明牌的回补占位。
 - `AmbiguousKnownIndex.describe()` 多候选位置展示应准确。
 - 手牌暗置到标记区的 4 选 1 / 4 选 2 / 4 选 3、逐张明置、混有暗牌和叠加跨角色候选的场景应保持保守且可收敛。

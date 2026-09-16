@@ -51,7 +51,10 @@ describe('移动事件日志', () => {
     })
   })
 
-  it('控制器对牌堆 MoveType 18 使用特殊日志标题并保留来源与目标位置', () => {
+  it.each([
+    { fromZone: 1, label: '从牌堆获取牌' },
+    { fromZone: 2, label: '从弃牌堆获取牌' }
+  ])('控制器对 $label 使用特殊日志标题并保留来源与目标位置', ({ fromZone, label }) => {
     const infoCalls: unknown[][] = []
     const logger: TrackerLogger = {
       debug() {},
@@ -75,14 +78,26 @@ describe('移动事件日志', () => {
     controller.initTrackerDeck([1, 2])
     controller.syncTrackerMove({
       ...pileGainMove,
+      FromZone: fromZone,
       FromPosition: POSITION_RANDOM,
       ToPosition: 2
     })
 
-    const protocolInput = infoCalls.find(([label]) => label === '从牌堆获取牌')
+    const protocolInput = infoCalls.find(([title]) => title === label)
     expect(protocolInput?.[1]).toMatchObject({
       raw: { FromPosition: POSITION_RANDOM, ToPosition: 2 },
       patched: { FromPosition: POSITION_RANDOM, ToPosition: 2 }
     })
+  })
+
+  it('弃牌堆类型 18 的已知牌和暗牌都带从弃牌堆获取牌标签', () => {
+    for (const CardIDs of [[], [29]]) {
+      const event = normalizeMoveEvent({ ...pileGainMove, FromZone: 2, CardIDs })
+      expect(event.options.sourceEvent?.label).toBe('从弃牌堆获取牌')
+      expect(summarizeMoveEvent(event).label).toBe('从弃牌堆获取牌')
+    }
+    expect(
+      getProtocolMoveSpecialLabel({ ...pileGainMove, FromZone: 2, MoveType: 15 })
+    ).toBeUndefined()
   })
 })

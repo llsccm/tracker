@@ -58,9 +58,9 @@ export interface PileIdentityLedgerMove {
   toPosition?: PublicPosition
   moveType?: number | string | null
   spellID?: number | string | null
-  /** 洗牌事务开始前的物理弃牌张数；未提供时兼容读取上一条账本观测。 */
+  /** 协议校准后的有效回收张数；未提供时兼容读取上一条账本观测。 */
   discardCountBefore?: number
-  /** 洗牌前弃牌区可确认的身份；用于直接 Room 调用补齐尚未双写的测试事实。 */
+  /** Room 在洗牌前核对的回堆候选身份；提供时优先于账本的旧弃牌快照。 */
   knownDiscardIdentityIDsBefore?: readonly CardID[]
   /** 弃牌堆中只知道集合与洗回数量的局部模糊组。 */
   ambiguousDiscardRecycleGroups?: readonly AmbiguousDiscardRecycleGroup[]
@@ -466,10 +466,9 @@ export class PileIdentityLedger {
 
   private createShuffleTransition(move: PileIdentityLedgerMove): PileIdentityShuffleTransition {
     const discardCountBefore = normalizeCount(move.discardCountBefore ?? this.previousDiscardCount)
-    const recycledIdentityIDs = normalizeIDs([
-      ...this.knownDiscardIdentityIDs,
-      ...(move.knownDiscardIdentityIDsBefore ?? [])
-    ])
+    const recycledIdentityIDs = normalizeIDs(
+      move.knownDiscardIdentityIDsBefore ?? [...this.knownDiscardIdentityIDs]
+    )
     const closesGeneration = !isInitialPileShuffle(discardCountBefore, this.identityUniverse.size)
     const ambiguousDiscardRecycleGroups = (move.ambiguousDiscardRecycleGroups ?? [])
       .map((group) => ({
@@ -514,11 +513,19 @@ export class PileIdentityLedger {
     )
 
     if (!transition.closesGeneration) {
-      if (discardCountBefore > 0) {
+      if (discardCountBefore > 0 || recycledIdentityIDs.length > 0 || ambiguousRecycledCount > 0) {
         // “整副牌暂存在弃牌堆”只是初始化载体差异，不代表 generation 0 已结束。已知弃牌
         // 身份先退回未决集合，匿名弃牌则由 reconcile 恢复完整牌堆基数；两者最终仍属于
-        // 当前 generation，而不会建立新的牌底批次。
+        // 当前 generation，不滚动洗牌世代。
         recycledIdentityIDs.forEach((cardID) => this.prepareIdentityForPile(cardID))
+        // 协议可能把全部匿名获得后的剩余量校正为零，仍需保留这些身份的零张候选批次。
+        if (recycledIdentityIDs.length > 0) {
+          this.cohorts.push({
+            generation: this.generation,
+            candidateIdentityIDs: new Set(recycledIdentityIDs),
+            remainingPileCount: Math.min(discardCountBefore, recycledIdentityIDs.length)
+          })
+        }
         ambiguousDiscardRecycleGroups.forEach((group) => {
           const identities = normalizeIDs(group.candidateIdentityIDs)
           identities.forEach((cardID) => this.prepareIdentityForPile(cardID))
