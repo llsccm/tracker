@@ -19,7 +19,7 @@ export function cancelGameOverTask() {
 function isCurrentGameOverTask(task) {
   if (gameOverTask !== task) return false
   const room = tracker.getTrackerRoom()
-  return room === null || room === task.room
+  return room === task.room
 }
 
 function scheduleCloseGameOverWindows(task) {
