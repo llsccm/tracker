@@ -121,6 +121,7 @@ export interface UnassignedMarkSpaceState {
 export interface TakeSpecificSourceFallback {
   fromZone?: SourceZoneInput
   fromPosition?: PublicPosition
+  anonymousFallback?: boolean
 }
 
 export interface TakeSourceCardsOptions {

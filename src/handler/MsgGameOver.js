@@ -6,63 +6,64 @@ import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
 import { wait } from '@/utils'
 
 let closeGameOverWindowsTimer = null
-let isPveRoguelike = false
+let gameOverTask = null
 
-// 应该存在一个更好的方法
-function scheduleCloseGameOverWindows() {
+export function cancelGameOverTask() {
   if (closeGameOverWindowsTimer !== null) {
     clearTimeout(closeGameOverWindowsTimer)
     closeGameOverWindowsTimer = null
   }
+  gameOverTask = null
+}
 
+function isCurrentGameOverTask(task) {
+  if (gameOverTask !== task) return false
+  const room = tracker.getTrackerRoom()
+  return room === task.room
+}
+
+function scheduleCloseGameOverWindows(task) {
   if (!globalConfig.blockMvpSettlementSwitch) {
-    cleanupGame()
+    cleanupGame(task.room)
     return
   }
 
   closeGameOverWindowsTimer = setTimeout(async () => {
     closeGameOverWindowsTimer = null
+    if (!isCurrentGameOverTask(task)) return
 
     const getWindow = (name) => {
       const win = laya.GetWindow(name)
       return win && win.visible ? win : null
     }
 
-    // 此时关闭战绩 山河图结算数据还不存在导致窗口空白
-    const resultWin = await wait(() => getWindow('GameResultWindow'))
-    if (!resultWin) {
-      cleanupGame()
-      return
+    for (const windowName of task.windowNames) {
+      const win = await wait(() => !isCurrentGameOverTask(task) || getWindow(windowName))
+      if (!isCurrentGameOverTask(task)) return
+      if (!win) break
+
+      win.laterClose?.()
     }
 
-    // 等山河图结算窗口初始化
-    // if (isPveRoguelike) await wait(() => getWindow('RogueZhanJiWindow'))
-    // if (zhanJiWin) return
-    resultWin.laterClose?.()
-
-    // 山河图没有mvp窗口
-    // mvp窗口在战绩后出现
-    if (!isPveRoguelike) {
-      const mvpWin = await wait(() => getWindow('GameMvpWindow'))
-      if (mvpWin) {
-        mvpWin.laterClose?.()
-      }
-    }
-
-    cleanupGame()
-  }, 1000)
+    if (isCurrentGameOverTask(task)) cleanupGame(task.room)
+  }, 500)
 }
 
 export function handleGameOver() {
-  isPveRoguelike = Game.isShanHeTu
-  scheduleCloseGameOverWindows()
+  cancelGameOverTask()
+  gameOverTask = {
+    room: tracker.getTrackerRoom(),
+    windowNames: Game.isShanHeTu ? ['GameResultWindow'] : ['GameResultWindow', 'GameMvpWindow']
+  }
+  scheduleCloseGameOverWindows(gameOverTask)
 }
 
 export function handleLeaveTable() {
   cleanupGame()
 }
 
-function cleanupGame() {
+function cleanupGame(room = tracker.getTrackerRoom()) {
+  if (tracker.getTrackerRoom() !== room) return
   // document.querySelectorAll('.mizhu').forEach((e) => (e.style.display = 'none'))
   Game.isPassed = null
   laya.zhanfaMap.clear()

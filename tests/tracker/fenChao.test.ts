@@ -176,21 +176,36 @@ describe('焚巢弃牌堆取牌', () => {
     expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual([1, 2, 3])
   })
 
-  it('来源含匿名牌时复用不同实体补足数量，保留已识别明牌', () => {
-    const { controller, room } = createRoomWithDiscard(['火攻', '闪'])
-    controller.syncTrackerMove(
-      protocolMove({ CardCount: 1, CardIDs: [], FromZone: 0, ToZone: 2, ToID: 255, MoveType: 19 })
-    )
+  it.each([false, true])(
+    '来源含匿名牌=%s 时只移动已识别明牌，其余创建暗牌补位',
+    (hasAnonymousSource) => {
+      const { controller, room } = createRoomWithDiscard(['火攻', '闪'])
+      if (hasAnonymousSource) {
+        controller.syncTrackerMove(
+          protocolMove({
+            CardCount: 1,
+            CardIDs: [],
+            FromZone: 0,
+            ToZone: 2,
+            ToID: 255,
+            MoveType: 19
+          })
+        )
+      }
+      const remainingDiscardCards = room.zones.get('discard')!.cards.filter((card) => card.id !== 1)
 
-    controller.syncTrackerMove(createFenChaoMove())
+      controller.syncTrackerMove(createFenChaoMove())
 
-    const player = room.players.get(7)!
-    expect(player.knownHandCards.map((card) => card.id)).toEqual([1])
-    expect(player.observedHandCount).toBe(2)
-    expect(player.unknownCardCount).toBe(1)
-    expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual([2])
-    expect(room.cards).toHaveLength(3)
-  })
+      const player = room.players.get(7)!
+      expect(player.knownHandCards.map((card) => card.id)).toEqual([1])
+      expect(player.observedHandCount).toBe(2)
+      expect(player.unknownCardCount).toBe(1)
+      const hiddenHandCards = player.cards.filter((card) => card.id < 0)
+      expect(hiddenHandCards).toHaveLength(1)
+      expect(remainingDiscardCards).not.toContain(hiddenHandCards[0])
+      expect(room.zones.get('discard')!.cards).toEqual(remainingDiscardCards)
+    }
+  )
 
   it.each([
     { scenario: '其他技能', overrides: { SpellID: 9999 } },

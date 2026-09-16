@@ -268,18 +268,7 @@ describe('牌堆展示顺序', () => {
     })
   })
 
-  it.each([
-    {
-      name: '协议牌堆数量精确时暗手牌身份原地匿名化',
-      cardCount: 3,
-      expectWarnAboutSlotShortage: false
-    },
-    {
-      name: '协议牌堆空间数量偏大时告警但不补入实际牌堆',
-      cardCount: 5,
-      expectWarnAboutSlotShortage: true
-    }
-  ])('$name', ({ cardCount, expectWarnAboutSlotShortage }) => {
+  it.each([3, 5])('洗牌按协议 %i 张调整暗槽并保留暗手牌实体', (cardCount) => {
     const { room } = createTestRoom({
       cardIDs: [1, 2, 3, 4, 5],
       seatIDs: [1],
@@ -292,16 +281,9 @@ describe('牌堆展示顺序', () => {
     withWarnSpy((warnSpy) => {
       room.shufflePile({ cardCount })
 
-      if (expectWarnAboutSlotShortage) {
-        expect(warnSpy).toHaveBeenCalledWith(
-          expect.stringContaining('未创建匿名牌堆占位'),
-          expect.objectContaining({ cardCount, actualPileCount: 3 })
-        )
-      } else {
-        expect(warnSpy).not.toHaveBeenCalled()
-      }
+      expect(warnSpy).not.toHaveBeenCalled()
 
-      expect(getPile(room).cards).toHaveLength(3)
+      expect(getPile(room).cards).toHaveLength(cardCount)
       expect(getPile(room).cards.every(isAnonymous)).toBe(true)
       hiddenHandCards.forEach((card) => {
         expect(card).toSatisfy(isAnonymous)
@@ -321,7 +303,7 @@ describe('牌堆展示顺序', () => {
     })
   })
 
-  it('协议牌堆空间数量偏大但无正 ID 可解释时只提示不补匿名占位', () => {
+  it('协议张数超过已知身份全集时补足暗槽并保留身份容量诊断', () => {
     const { room } = createTestRoom({
       cardIDs: [1, 2, 3],
       materializeDeckIdentities: false
@@ -332,16 +314,15 @@ describe('牌堆展示顺序', () => {
     withWarnSpy((warnSpy) => {
       room.shufflePile({ cardCount: 5 })
 
-      expect(pile.cards).toHaveLength(3)
+      expect(pile.cards).toHaveLength(5)
       expect(pile.cards.every(isAnonymous)).toBe(true)
+      expect(room.deckIdentities).toEqual(new Set([1, 2, 3]))
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('未创建匿名牌堆占位'),
+        expect.any(String),
         expect.objectContaining({
-          cardCount: 5,
-          actualPileCount: 3,
-          remainingPileCount: 2,
-          recycledCardCount: 1,
-          rebuiltPileCount: 3
+          reason: 'pile-identity-capacity-shortage',
+          targetHiddenCount: 5,
+          candidateCount: 3
         })
       )
       expectConsistentPublicZones(room)
