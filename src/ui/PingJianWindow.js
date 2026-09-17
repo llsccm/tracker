@@ -13,38 +13,11 @@ function createWindow() {
     styleId: STYLE_ID,
     styleText: `
     #${WINDOW_ID} {
-      position: fixed;
       top: 60px;
-      right: 20px;
-      z-index: 10000000020;
-      box-sizing: border-box;
       min-width: 140px;
-      padding: 0 6px 6px;
-      color: #f4ead8;
-      background: #292724;
-      border: 1px solid #7b292d;
-      box-shadow: 0 7px 18px rgba(0, 0, 0, 0.42);
-      font-family: "Microsoft YaHei", sans-serif;
-      user-select: none;
     }
-    #${WINDOW_ID} * { box-sizing: border-box; }
-    #${WINDOW_ID} .pingjian-header {
-      height: 22px;
-      margin: 0 -6px;
-      padding: 0 6px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: #7b292d;
-      cursor: grab;
-    }
-    #${WINDOW_ID}.is-dragging .pingjian-header { cursor: grabbing; }
     #${WINDOW_ID} .pingjian-title {
-      overflow: hidden;
       font-size: 16px;
-      font-weight: 700;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
     #${WINDOW_ID} .pingjian-list {
       margin: 4px 0 0;
@@ -66,8 +39,8 @@ function createWindow() {
     }
   `,
     markup: `
-    <header class="pingjian-header">
-      <div class="pingjian-title">评鉴</div>
+    <header class="draggable-window-header pingjian-header">
+      <div class="draggable-window-title pingjian-title">评鉴</div>
     </header>
     <ul class="pingjian-list"></ul>
   `,

@@ -120,38 +120,11 @@ function createWindow() {
     styleId: STYLE_ID,
     styleText: `
     #${WINDOW_ID} {
-      position: fixed;
       top: 50px;
-      right: 20px;
-      z-index: 10000000020;
-      box-sizing: border-box;
       width: 264px;
-      padding: 0 6px 6px;
-      color: #f4ead8;
-      background: #292724;
-      border: 1px solid #7b292d;
-      box-shadow: 0 7px 18px rgba(0, 0, 0, 0.42);
-      font-family: "Microsoft YaHei", sans-serif;
-      user-select: none;
     }
-    #${WINDOW_ID} * { box-sizing: border-box; }
-    #${WINDOW_ID} .peixiu-header {
-      height: 22px;
-      margin: 0 -6px;
-      padding: 0 6px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: #7b292d;
-      cursor: grab;
-    }
-    #${WINDOW_ID}.is-dragging .peixiu-header { cursor: grabbing; }
     #${WINDOW_ID} .peixiu-title {
-      overflow: hidden;
       font-size: 12px;
-      font-weight: 700;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
     #${WINDOW_ID} .peixiu-fixed-skill {
       min-height: 38px;
@@ -280,8 +253,8 @@ function createWindow() {
     }
   `,
     markup: `
-    <header class="peixiu-header">
-      <div class="peixiu-title"></div>
+    <header class="draggable-window-header peixiu-header">
+      <div class="draggable-window-title peixiu-title"></div>
     </header>
     <div class="peixiu-fixed-skill"></div>
     <div class="peixiu-presets">
