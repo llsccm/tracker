@@ -105,7 +105,7 @@ export function handleRoleSpellOptRep(msg = {}) {
       // Datas: [1, 13, 31, 1225, 3539, 0, 1, 1]
       if (Type !== 82 || SeatID !== Game.myID) break
       // Datas 为空时销毁
-      if (Datas.length === 0) {
+      if (Array.isArray(Datas) && Datas.length === 0) {
         destroyPingJianWindow()
       }
 

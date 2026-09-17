@@ -324,7 +324,7 @@ export function handleRoleOptTargetNtf(msg) {
         const pj = pingJianDic.get(Number(zhangongId))
         if (pj?.name) {
           const startPos = Number(group[0])
-          if (Number.isInteger(startPos) && startPos >= 0) {
+          if (Number.isInteger(startPos) && startPos >= 0 && startPos < 36) {
             const row = Math.floor(startPos / 6) + 1
             const col = (startPos % 6) + 1
             entries.push({
