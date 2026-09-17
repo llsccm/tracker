@@ -341,6 +341,7 @@ describe('GsCRoleOptTargetNtf', () => {
 
     expect(renderPingJianWindow).toHaveBeenCalledOnce()
     expect(renderPingJianWindow).toHaveBeenCalledWith(['战功百胜 (1行1列)', '一骑当千 (3行2列)'])
+    expect(Game.getSpellState(3911)).toEqual([2, 13, 14, 102, 302, 0, 1, 101, 301])
   })
 
   it('评鉴技能3911非主视角或非Type 28不展示浮窗', () => {

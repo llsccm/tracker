@@ -12,6 +12,7 @@
 |     `361` |   `22` | 下书 | 首项 `1` 取展示牌，`2` 取暗牌 |
 |    `7009` |   `30` | 鹰视 | 本次看到的牌堆顶卡牌 ID |
 |    `3336` |   `50` | 嚣翻 | 本次看到的牌堆底卡牌 ID |
+|    `3911` |   `82` | 评鉴 | 成功、帮助、干扰三段数据回复 |
 |    `4021` |      - | 裴秀 | 地图 ID 和起始格        |
 
 下书的展示牌和目标座位由 `GsCRoleOptTargetNtf` 的 `Params` / `targetSeatID` 记录；该选择回复实测早于
@@ -164,9 +165,33 @@ const mapConfig = spellExtendConfig.PeiXiuCellDic.get(Number(mapID))
 const reward = spellExtendConfig.PeiXiuBonus.get(73)
 ```
 
+## 评鉴：三段式数据替换与篡改
+
+`SpellID = 3911, Type = 82` 对应评鉴操作回复。
+
+### `Datas` 结构
+
+```text
+[成功数 N1, ...N1 条 4 元组, 帮助数 N2, ...N2 条 4 元组, 干扰数 N3, ...N3 个干扰值]
+```
+
+每条成功/帮助数据均为 4 元组 `[startPos, endPos, zhangongID, skillID]`。
+
+### 处理逻辑
+
+1. 收到 `GsCRoleOptTargetNtf`（SpellID 3911，Type 28）时，存储完整候选列表 `Params` 到 `Game.spellState`。
+2. 收到 `CGsRoleSpellOptRep`（SpellID 3911，Type 82）时：
+   - 保留成功段（`Datas[0]` 及前 `N1 * 4` 项）；
+   - 将帮助段替换为 `GsCRoleOptTargetNtf` 存储的完整技能候选数据；
+   - 将干扰段数量设为 `0`；
+   - 回写修改后的 `msg.Datas`。
+3. 当 `Datas` 为空数组时，销毁评鉴悬浮窗并清理存储状态。
+
 ## 代码位置
 
-- 消息路由及裴秀分支：`src/logic.js`
+- 消息路由及各分支：`src/logic.js`
+- 技能回复处理：`src/handler/CGsRoleSpellOptRep.js`
+- 目标通知处理与状态存储：`src/handler/GsCRoleOptTargetNtf.js`
 - 配置加载：`src/config/ConfigManager.js`
 - 配置索引：`src/config/SpellExtendConfig.js`
 - 地图配置解析与路线计算：`src/utils/peixiuRouteFeature.js`

@@ -7,14 +7,16 @@ const {
   recordJieLiSelection,
   revealTrackerCards,
   revealTrackerCardsInZone,
-  setTrackerFirstHand
+  setTrackerFirstHand,
+  destroyPingJianWindow
 } = vi.hoisted(() => ({
   getReadyTrackerRoom: vi.fn(),
   parseJieLiSelectionData: vi.fn(),
   recordJieLiSelection: vi.fn(),
   revealTrackerCards: vi.fn(),
   revealTrackerCardsInZone: vi.fn(),
-  setTrackerFirstHand: vi.fn()
+  setTrackerFirstHand: vi.fn(),
+  destroyPingJianWindow: vi.fn()
 }))
 
 vi.mock('../../src/tracker/runtime/browser', () => ({
@@ -31,6 +33,10 @@ vi.mock('../../src/tracker/skill/JieLi', () => ({
   recordJieLiSelection
 }))
 
+vi.mock('@/ui/PingJianWindow', () => ({
+  destroyPingJianWindow
+}))
+
 import { handleRoleSpellOptRep } from '@/handler/CGsRoleSpellOptRep'
 import { Game } from '@/tracker'
 import { Room } from '@/tracker/Room'
@@ -44,8 +50,11 @@ describe('CGsRoleSpellOptRep', () => {
     revealTrackerCards.mockClear()
     revealTrackerCardsInZone.mockClear()
     setTrackerFirstHand.mockClear()
+    destroyPingJianWindow.mockClear()
+    Game.bindRoom(null)
     Game.deleteSpellState(361)
     Game.deleteSpellState(3731)
+    Game.deleteSpellState(3911)
     Game.isGameStart = false
     Game.round = 0
     Game.phase = 0
@@ -211,5 +220,76 @@ describe('CGsRoleSpellOptRep', () => {
       { id: 255, zone: 1, pos: POSITION_BOTTOM },
       [125, 63, 2, 158]
     )
+  })
+
+  it('评鉴 3911 Datas 为空时销毁窗口并清理存储数据', () => {
+    Game.bindRoom({ mySeatID: 0, seatIDs: [0], size: 1 } as any)
+    Game.setSpellState(3911, [1, 0, 1, 101, 301])
+
+    handleRoleSpellOptRep({
+      Datas: [],
+      SeatID: 0,
+      SpellID: 3911,
+      Type: 82
+    })
+
+    expect(destroyPingJianWindow).toHaveBeenCalledOnce()
+    expect(Game.getSpellState(3911)).toBeUndefined()
+  })
+
+  it('评鉴 3911 保留成功数据、替换帮助数据为完整存储数据并移除干扰数据（样例 1）', () => {
+    Game.bindRoom({ mySeatID: 0, seatIDs: [0], size: 1 } as any)
+    const storedParams = [
+      5, 1, 4, 1192, 3503, 7, 10, 181, 93, 25, 29, 412, 717, 32, 35, 497, 236, 0, 24, 90, 52
+    ]
+    Game.setSpellState(3911, storedParams)
+
+    const msg = {
+      Datas: [1, 13, 31, 1225, 3539, 0, 1, 1],
+      SeatID: 0,
+      SpellID: 3911,
+      Type: 82
+    }
+
+    handleRoleSpellOptRep(msg)
+
+    expect(msg.Datas).toEqual([1, 13, 31, 1225, 3539, ...storedParams, 0])
+  })
+
+  it('评鉴 3911 保留成功数据、替换帮助数据为完整存储数据并移除干扰数据（样例 2）', () => {
+    Game.bindRoom({ mySeatID: 0, seatIDs: [0], size: 1 } as any)
+    const storedParams = [
+      5, 1, 4, 1192, 3503, 7, 10, 181, 93, 25, 29, 412, 717, 32, 35, 497, 236, 0, 24, 90, 52
+    ]
+    Game.setSpellState(3911, storedParams)
+
+    const successPart = [2, 0, 24, 90, 52, 32, 35, 497, 236]
+    const helpPart = [2, 32, 35, 497, 236, 0, 24, 90, 52]
+    const disturbPart = [5, 10, 12, 15, 24, 20]
+    const msg = {
+      Datas: [...successPart, ...helpPart, ...disturbPart],
+      SeatID: 0,
+      SpellID: 3911,
+      Type: 82
+    }
+
+    handleRoleSpellOptRep(msg)
+
+    expect(msg.Datas).toEqual([...successPart, ...storedParams, 0])
+  })
+
+  it('评鉴 3911 若无存储数据则不修改原 Datas', () => {
+    Game.bindRoom({ mySeatID: 0, seatIDs: [0], size: 1 } as any)
+    const originalDatas = [1, 13, 31, 1225, 3539, 0, 1, 1]
+    const msg = {
+      Datas: [...originalDatas],
+      SeatID: 0,
+      SpellID: 3911,
+      Type: 82
+    }
+
+    handleRoleSpellOptRep(msg)
+
+    expect(msg.Datas).toEqual(originalDatas)
   })
 })

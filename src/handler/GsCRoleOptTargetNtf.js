@@ -344,6 +344,8 @@ export function handleRoleOptTargetNtf(msg) {
         entries.sort((a, b) => a.startPos - b.startPos)
         renderPingJianWindow(entries.map((entry) => entry.text))
       }
+
+      Game.setSpellState(3911, [count, ...validParams])
       break
     }
     default:

@@ -103,10 +103,25 @@ export function handleRoleSpellOptRep(msg = {}) {
     // 评鉴
     case 3911:
       // Datas: [1, 13, 31, 1225, 3539, 0, 1, 1]
+      // [2, 0, 24, 90, 52, 32, 35, 497, 236, 2, 32, 35, 497, 236, 0, 24, 90, 52, 5, 10, 12, 15, 24, 20]
       if (Type !== 82 || SeatID !== Game.myID) break
       // Datas 为空时销毁
       if (Array.isArray(Datas) && Datas.length === 0) {
         destroyPingJianWindow()
+        Game.deleteSpellState(3911)
+      }
+
+      if (Array.isArray(Datas) && Datas.length > 0) {
+        const storedParams = Game.getSpellState(3911)
+        if (Array.isArray(storedParams) && storedParams.length > 0) {
+          const successCount = Number(Datas[0]) || 0
+          const successData = Datas.slice(1, 1 + successCount * 4)
+          const helpCount = Number(storedParams[0]) || 0
+          const helpData = storedParams.slice(1, 1 + helpCount * 4)
+          const nextDatas = [successCount, ...successData, helpCount, ...helpData, 0]
+          Datas.splice(0, Datas.length, ...nextDatas)
+          msg.Datas = Datas
+        }
       }
 
       break
