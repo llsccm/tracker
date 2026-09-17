@@ -1,13 +1,14 @@
 import { PEIXIU_DIRECTIONS } from '../utils/peixiuRouteFeature'
-import { getLayoutViewportWidth } from './drag'
+import {
+  createDraggableWindow,
+  destroyDraggableWindow,
+  setDraggableWindowVisible
+} from './draggableWindow'
 
 const WINDOW_ID = 'peixiu-map-window'
 const STYLE_ID = 'peixiu-map-style'
 const CELL_SIZE = 50
 const SUIT_ORDER = [3, 4, 1, 2]
-
-let cleanupDrag = null
-let lastPosition = null
 
 function getRewardInfo(reward, bonuses) {
   if (!reward) return null
@@ -113,45 +114,17 @@ export function buildPeiXiuMapViewModel(state, bonuses) {
   }
 }
 
-function ensureStyle() {
-  if (document.getElementById(STYLE_ID)) return
-
-  const style = document.createElement('style')
-  style.id = STYLE_ID
-  style.textContent = `
+function createWindow() {
+  return createDraggableWindow({
+    id: WINDOW_ID,
+    styleId: STYLE_ID,
+    styleText: `
     #${WINDOW_ID} {
-      position: fixed;
       top: 50px;
-      right: 20px;
-      z-index: 10000000020;
-      box-sizing: border-box;
       width: 264px;
-      padding: 0 6px 6px;
-      color: #f4ead8;
-      background: #292724;
-      border: 1px solid #7b292d;
-      box-shadow: 0 7px 18px rgba(0, 0, 0, 0.42);
-      font-family: "Microsoft YaHei", sans-serif;
-      user-select: none;
     }
-    #${WINDOW_ID} * { box-sizing: border-box; }
-    #${WINDOW_ID} .peixiu-header {
-      height: 22px;
-      margin: 0 -6px;
-      padding: 0 6px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: #7b292d;
-      cursor: grab;
-    }
-    #${WINDOW_ID}.is-dragging .peixiu-header { cursor: grabbing; }
     #${WINDOW_ID} .peixiu-title {
-      overflow: hidden;
       font-size: 12px;
-      font-weight: 700;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
     #${WINDOW_ID} .peixiu-fixed-skill {
       min-height: 38px;
@@ -278,67 +251,10 @@ function ensureStyle() {
       color: #6f2025;
       font-size: 13px;
     }
-  `
-  document.head.appendChild(style)
-}
-
-function bindPeiXiuMapWindowDrag(element, handle) {
-  cleanupDrag?.()
-  let pointerId = null
-  let offsetX = 0
-  let offsetY = 0
-
-  const move = (event) => {
-    if (event.pointerId !== pointerId) return
-    const left = Math.min(
-      Math.max(0, getLayoutViewportWidth() - element.offsetWidth),
-      Math.max(0, event.clientX - offsetX)
-    )
-    const top = Math.min(
-      Math.max(0, window.innerHeight - element.offsetHeight),
-      Math.max(0, event.clientY - offsetY)
-    )
-    element.style.left = `${left}px`
-    element.style.top = `${top}px`
-    element.style.right = 'auto'
-    lastPosition = { left, top }
-  }
-  const stop = (event) => {
-    if (event.pointerId !== pointerId) return
-    pointerId = null
-    element.classList.remove('is-dragging')
-    handle.releasePointerCapture?.(event.pointerId)
-  }
-  const start = (event) => {
-    if (event.button !== 0) return
-    const rect = element.getBoundingClientRect()
-    pointerId = event.pointerId
-    offsetX = event.clientX - rect.left
-    offsetY = event.clientY - rect.top
-    element.classList.add('is-dragging')
-    handle.setPointerCapture?.(pointerId)
-  }
-
-  handle.addEventListener('pointerdown', start)
-  handle.addEventListener('pointermove', move)
-  handle.addEventListener('pointerup', stop)
-  handle.addEventListener('pointercancel', stop)
-  cleanupDrag = () => {
-    handle.removeEventListener('pointerdown', start)
-    handle.removeEventListener('pointermove', move)
-    handle.removeEventListener('pointerup', stop)
-    handle.removeEventListener('pointercancel', stop)
-    cleanupDrag = null
-  }
-}
-
-function createWindow() {
-  ensureStyle()
-  const element = document.createElement('section')
-  element.id = WINDOW_ID
-  element.innerHTML = `
-    <header class="peixiu-header">
-      <div class="peixiu-title"></div>
+  `,
+    markup: `
+    <header class="draggable-window-header peixiu-header">
+      <div class="draggable-window-title peixiu-title"></div>
     </header>
     <div class="peixiu-fixed-skill"></div>
     <div class="peixiu-presets">
@@ -349,24 +265,9 @@ function createWindow() {
     <div class="peixiu-required-suits"></div>
     <div class="peixiu-route peixiu-dynamic-route" data-route="dynamic"></div>
     <div class="peixiu-hand-suits"></div>
-  `
-  document.body.appendChild(element)
-  if (lastPosition) {
-    const left = Math.min(
-      Math.max(0, getLayoutViewportWidth() - element.offsetWidth),
-      Math.max(0, lastPosition.left)
-    )
-    const top = Math.min(
-      Math.max(0, window.innerHeight - element.offsetHeight),
-      Math.max(0, lastPosition.top)
-    )
-    element.style.left = `${left}px`
-    element.style.top = `${top}px`
-    element.style.right = 'auto'
-    lastPosition = { left, top }
-  }
-  bindPeiXiuMapWindowDrag(element, element.querySelector('.peixiu-header'))
-  return element
+  `,
+    handleSelector: '.peixiu-header'
+  })
 }
 
 function setSkillLine(element, desc) {
@@ -440,11 +341,9 @@ export function renderPeiXiuMapWindow(state, bonuses) {
 }
 
 export function destroyPeiXiuMapWindow() {
-  cleanupDrag?.()
-  document.getElementById(WINDOW_ID)?.remove()
+  destroyDraggableWindow(WINDOW_ID)
 }
 
 export function setPeiXiuMapWindowVisible(visible) {
-  const element = document.getElementById(WINDOW_ID)
-  if (element) element.style.display = visible ? '' : 'none'
+  setDraggableWindowVisible(WINDOW_ID, visible)
 }

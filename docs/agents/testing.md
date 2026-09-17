@@ -117,9 +117,14 @@ CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑�
 
 ---
 
+## UI 验证规则
+
+- **禁止编写 UI 自动化测试**：不得新增 UI 测试文件，也不得在现有测试中新增或扩展 UI 用例。范围包括 DOM/视图渲染、布局、样式、拖拽、点击、快捷键等界面交互，不因使用 mock/stub 或放在其他测试目录而例外。
+- UI 改动通过适用的 lint、构建与手工验收验证；修复 UI 缺陷同样不补 UI 自动化测试。
+
 ## 什么时候必须补测试
 
-优先补自动化测试，而不是只写“本地看过”：
+以下非 UI 逻辑优先补自动化测试，而不是只写“本地看过”：
 
 1. **记牌器状态机**
    - `Room.moveCards()` 新路线或边界组合
@@ -133,12 +138,12 @@ CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑�
 3. **增量索引 / 性能路径**
    - `CardLocationIndex`、`AmbiguousKnownIndex`、player 快照
    - 任何新增全牌池扫描：必须 `recordTraversal(...)` 插桩，并更新 `traversalBaseline` 场景
-4. **可见但可单测的纯逻辑**
-   - 计数器、展示顺序、花色 glyph、裴秀路线求解
+4. **纯业务逻辑**
+   - 计数器、牌序计算、裴秀路线求解
 5. **回归过的 bug**
    - 每个已修复的协议/收敛缺陷，尽量留最小复现测试
 
-可以先不强制自动化、但需要手工验收的：
+以下场景通过手工验收验证：
 
 - 真实浏览器注入、Tampermonkey 权限/匹配
 - iframe HTML 布局、拖拽、快捷键手感
@@ -222,7 +227,7 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
 - 优先复用 `tests/tracker/helpers/`，避免每个用例重复搭 Room / Controller
 - 测试名写清场景与期望，例如“洗牌 cardCount 大于本地枚举时保持匿名占位账本”
 - 断言关注**可观察状态**：owner、locationCandidates、手牌额度、公共区顺序、脏集合、遍历计数；少断言实现细节私有字段
-- 不要依赖真实 DOM / Laya；需要视图时用 helper 中的 noop 或最小 stub
+- 不要依赖真实 DOM / Laya；非 UI 业务测试需要隔离视图依赖时使用 helper 中的 noop 或最小 stub，不编写 UI 行为断言
 - 保持与源码一致的风格：2 空格、LF、单引号、无分号（Prettier）
 - Style Guide 同样适用于测试：优先 `const`、early return、避免别名导入
 - 不为了过测试削弱生产断言；必要时拆“可注入依赖”而不是删护栏

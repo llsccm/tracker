@@ -91,8 +91,10 @@ export class SpellExtendConfig extends ConfigBase {
     this.originData = data
     this.PeiXiuBonus.clear()
     this.PeiXiuCellDic.clear()
+    this.PingJianDic.clear()
     this.initPeiXiuBonus()
     this.initPeiXiuCellData()
+    this.initPingJianData()
   }
 
   initPeiXiuBonus() {
@@ -110,6 +112,16 @@ export class SpellExtendConfig extends ConfigBase {
 
     for (const cell of cells) {
       this.PeiXiuCellDic.set(Number(cell.cellID), cell)
+    }
+  }
+
+  PingJianDic = new Map()
+
+  initPingJianData() {
+    const XSPJ = this.originData?.XSPJ
+    if (!XSPJ) return
+    for (const pj of XSPJ) {
+      this.PingJianDic.set(Number(pj.id), pj)
     }
   }
 }
