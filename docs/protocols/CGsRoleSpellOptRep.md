@@ -179,10 +179,10 @@ const reward = spellExtendConfig.PeiXiuBonus.get(73)
 
 ### 处理逻辑
 
-1. 收到 `GsCRoleOptTargetNtf`（SpellID 3911，Type 28）时，存储完整候选列表 `Params` 到 `Game.spellState`。
+1. 收到 `GsCRoleOptTargetNtf`（SpellID 3911，Type 28）时，按 `Params` 首项的技能数量截取有效候选数据，并以 `[技能数量, ...有效候选数据]` 写入 `Game.spellState`，而非存储完整 `Params`。
 2. 收到 `CGsRoleSpellOptRep`（SpellID 3911，Type 82）时：
    - 保留成功段（`Datas[0]` 及前 `N1 * 4` 项）；
-   - 将帮助段替换为 `GsCRoleOptTargetNtf` 存储的完整技能候选数据；
+   - 将帮助段替换为 `GsCRoleOptTargetNtf` 存储的有效技能候选数据；
    - 将干扰段数量设为 `0`；
    - 回写修改后的 `msg.Datas`。
 3. 当 `Datas` 为空数组时，销毁评鉴悬浮窗并清理存储状态。
