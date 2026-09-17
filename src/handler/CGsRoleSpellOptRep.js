@@ -4,6 +4,7 @@ import { tracker } from '@/tracker/runtime/browser'
 import { initializeDuoQiState } from '@/tracker/skill/DuoQi'
 import { parseJieLiSelectionData, recordJieLiSelection } from '@/tracker/skill/JieLi'
 import { handleXiaShuChoice } from './skills/XiaShu'
+import { destroyPingJianWindow } from '@/ui/PingJianWindow'
 
 const PROTOCOL_PILE_ZONE = 1
 const PROTOCOL_HAND_ZONE = 5
@@ -97,6 +98,17 @@ export function handleRoleSpellOptRep(msg = {}) {
         const selection = parseJieLiSelectionData(Datas)
         if (selection) recordJieLiSelection(room, selection)
       }
+      break
+
+    // 评鉴
+    case 3911:
+      // Datas: [1, 13, 31, 1225, 3539, 0, 1, 1]
+      if (Type !== 82 || SeatID !== Game.myID) break
+      // Datas 为空时销毁
+      if (Datas.length === 0) {
+        destroyPingJianWindow()
+      }
+
       break
 
     // 裴秀地图结果暂由地图消息链消费。4021 4022

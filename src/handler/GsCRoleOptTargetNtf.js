@@ -1,5 +1,6 @@
 import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
-import { CardConfig } from '../config'
+import { renderPingJianWindow } from '@/ui/PingJianWindow'
+import { CardConfig, SpellExtendConfig } from '../config'
 import { drawChengXiang, drawYanJiao, drawYiCheng } from '../draw'
 import { Game } from '../tracker'
 import { tracker } from '../tracker/runtime/browser'
@@ -301,6 +302,50 @@ export function handleRoleOptTargetNtf(msg) {
       break
     }
 
+    // 评鉴
+    case 3911: {
+      if (Type !== 28 || SeatID === undefined || SeatID !== Game.myID) break
+      // Params: [技能数量, 起始位置, 结束位置, 战功ID, 技能ID, ...]
+      if (!Array.isArray(Params) || Params.length < 5) break
+
+      const count = Number(Params[0]) || 0
+      if (count <= 0) break
+
+      // 根据可获得的技能数量切割有效数据，过滤末尾可能存在的干扰数据
+      const validParams = Params.slice(1, 1 + count * 4)
+      const pingJianDic = SpellExtendConfig.GetInstance().PingJianDic
+      const entries = []
+
+      for (let i = 0; i < validParams.length; i += 4) {
+        const group = validParams.slice(i, i + 4)
+        if (group.length < 4) break
+        const zhangongId = group[2]
+        if (!zhangongId) continue
+        const pj = pingJianDic.get(Number(zhangongId))
+        if (pj?.name) {
+          const startPos = Number(group[0])
+          if (Number.isInteger(startPos) && startPos >= 0) {
+            const row = Math.floor(startPos / 6) + 1
+            const col = (startPos % 6) + 1
+            entries.push({
+              startPos,
+              text: `${pj.name} (${row}行${col}列)`
+            })
+          } else {
+            entries.push({
+              startPos: Infinity,
+              text: pj.name
+            })
+          }
+        }
+      }
+
+      if (entries.length > 0) {
+        entries.sort((a, b) => a.startPos - b.startPos)
+        renderPingJianWindow(entries.map((entry) => entry.text))
+      }
+      break
+    }
     default:
       break
   }

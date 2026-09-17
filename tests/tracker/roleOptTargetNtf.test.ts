@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { destroyPeiXiuMapWindow, drawChengXiang, revealTrackerCards } = vi.hoisted(() => ({
-  destroyPeiXiuMapWindow: vi.fn(),
-  drawChengXiang: vi.fn(),
-  revealTrackerCards: vi.fn()
-}))
+const { destroyPeiXiuMapWindow, drawChengXiang, revealTrackerCards, renderPingJianWindow } =
+  vi.hoisted(() => ({
+    destroyPeiXiuMapWindow: vi.fn(),
+    drawChengXiang: vi.fn(),
+    revealTrackerCards: vi.fn(),
+    renderPingJianWindow: vi.fn()
+  }))
 
 vi.mock('@/tracker/runtime/browser', () => ({
   tracker: {
@@ -17,13 +19,17 @@ vi.mock('@/ui/PeiXiuMapWindow', () => ({
   destroyPeiXiuMapWindow
 }))
 
+vi.mock('@/ui/PingJianWindow', () => ({
+  renderPingJianWindow
+}))
+
 vi.mock('@/draw', () => ({
   drawChengXiang,
   drawYanJiao: vi.fn(),
   drawYiCheng: vi.fn()
 }))
 
-import { CardConfig } from '@/config'
+import { CardConfig, SpellExtendConfig } from '@/config'
 import { handleRoleOptTargetNtf } from '@/handler/GsCRoleOptTargetNtf'
 import { Game } from '@/tracker'
 import { tracker } from '@/tracker/runtime/browser'
@@ -34,6 +40,7 @@ describe('GsCRoleOptTargetNtf', () => {
     destroyPeiXiuMapWindow.mockClear()
     drawChengXiang.mockClear()
     revealTrackerCards.mockClear()
+    renderPingJianWindow.mockClear()
     vi.mocked(tracker.getReadyTrackerRoom).mockReset()
     Game.bindRoom(null)
     Game.deleteSpellState(361)
@@ -314,5 +321,47 @@ describe('GsCRoleOptTargetNtf', () => {
 
     expect(revealTrackerCards).not.toHaveBeenCalled()
     expect(skillState.context).toEqual({ actorSeat: 3, targetSeat: 4, pileCount: 4 })
+  })
+
+  it('评鉴技能3911按技能数量切割Params并过滤末尾干扰数据', () => {
+    Game.bindRoom({ mySeatID: 1, seatIDs: [1, 2], size: 2 } as any)
+    const config = SpellExtendConfig.GetInstance()
+    config.PingJianDic.set(101, { id: 101, name: '战功百胜' })
+    config.PingJianDic.set(102, { id: 102, name: '一骑当千' })
+    config.PingJianDic.set(999, { id: 999, name: '干扰战功' })
+
+    // Params: [count, start, end, zhangongId, spellId, ...] 后面带有干扰数据
+    // 传入顺序：startPos 13 先于 startPos 0，期望最终按 startPos 升序排序展示
+    handleRoleOptTargetNtf({
+      SpellID: 3911,
+      Type: 28,
+      SeatID: 1,
+      Params: [2, 13, 14, 102, 302, 0, 1, 101, 301, 999, 999, 999, 999, 888]
+    })
+
+    expect(renderPingJianWindow).toHaveBeenCalledOnce()
+    expect(renderPingJianWindow).toHaveBeenCalledWith(['战功百胜 (1行1列)', '一骑当千 (3行2列)'])
+  })
+
+  it('评鉴技能3911非主视角或非Type 28不展示浮窗', () => {
+    Game.bindRoom({ mySeatID: 1, seatIDs: [1, 2], size: 2 } as any)
+    const config = SpellExtendConfig.GetInstance()
+    config.PingJianDic.set(101, { id: 101, name: '战功百胜' })
+
+    handleRoleOptTargetNtf({
+      SpellID: 3911,
+      Type: 28,
+      SeatID: 2,
+      Params: [1, 0, 1, 101, 301]
+    })
+
+    handleRoleOptTargetNtf({
+      SpellID: 3911,
+      Type: 29,
+      SeatID: 1,
+      Params: [1, 0, 1, 101, 301]
+    })
+
+    expect(renderPingJianWindow).not.toHaveBeenCalled()
   })
 })

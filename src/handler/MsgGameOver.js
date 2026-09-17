@@ -3,6 +3,7 @@ import { laya } from '@/runtime/gameAdapter'
 import { Game, globalConfig } from '@/tracker'
 import { tracker } from '@/tracker/runtime/browser'
 import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
+import { destroyPingJianWindow } from '@/ui/PingJianWindow'
 import { wait } from '@/utils'
 
 let closeGameOverWindowsTimer = null
@@ -69,6 +70,7 @@ function cleanupGame(room = tracker.getTrackerRoom()) {
   laya.zhanfaMap.clear()
   Game.end()
   destroyPeiXiuMapWindow()
+  destroyPingJianWindow()
   // 重置 UI
   resetSeatUIs()
   tracker.destroyTrackerRoom()
