@@ -348,6 +348,15 @@ export function handleRoleOptTargetNtf(msg) {
       Game.setSpellState(3911, [count, ...validParams])
       break
     }
+
+    // 择行
+    case 3854:
+      if (Type !== 29 || SeatID === undefined || SeatID !== Game.myID) break
+      // Param: 3 代表黑桃
+      // Params: [41, 10, 109, 77, 132]
+      if (Params?.length > 0) revealPlayerHandCards(targetSeatID, Params)
+      break
+
     default:
       break
   }
