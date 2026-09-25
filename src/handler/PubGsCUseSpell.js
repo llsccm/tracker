@@ -3,7 +3,6 @@ import { drawCard } from '@/draw'
 import { laya } from '@/runtime/gameAdapter'
 import { Game } from '@/tracker'
 import { recordDuoQiActivation } from '@/tracker/skill/DuoQi'
-// import { laya } from '@/runtime/gameAdapter'
 import { setSuitRecord } from '@/utils'
 
 /**
@@ -45,10 +44,10 @@ export function handleUseSpell(msg) {
     // CardIDs: [110, 49] SeatID: 6 DestSeatIDs: [5]
     case 3157: // 夏侯玄 清议
     case 3511: // 李婉 联句
-      if (Game.myID === undefined) break
+    case 3854: // 择行
       // 主视角
-      if (SeatID === Game.myID) break
-      // 联句的目标角色
+      if (Game.myID === undefined || SeatID === Game.myID) break
+      // 联句/择行 目标角色
       if (msg.dest_Count === 1 && msg.DestSeatIDs?.[0] === Game.myID) break
 
       if (CardIDs?.length === msg.card_count) Game.setSpellState(SpellID, CardIDs)

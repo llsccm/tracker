@@ -395,6 +395,7 @@ export function logic(msg) {
 
       // 皮肤信息
       case 'ClientGeneralSkinRep':
+        if (import.meta.env.DEV) console.info(msg)
         // 屏蔽动态
         if (globalConfig.blockSkinStateSwitch) {
           const GeneralSkinList = msg.GeneralSkinList || []
