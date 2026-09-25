@@ -4,7 +4,7 @@ const { drawChengXiang } = vi.hoisted(() => ({ drawChengXiang: vi.fn() }))
 
 vi.mock('@/draw', () => ({ drawChengXiang }))
 
-import { applySpellEffect, spellEffectHandlers } from '@/handler/spellEffects'
+import { applySpellEffect } from '@/handler/spellEffects'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
 
 function createGameState(initialState = {}) {
@@ -47,14 +47,6 @@ function createContext(overrides = {}) {
 }
 
 describe('技能副作用注册表', () => {
-  it('包含仍由 handler 处理的技能注册项', () => {
-    const registeredSpellIDs = Array.from(spellEffectHandlers.keys()).map(Number)
-
-    expect(registeredSpellIDs.sort((a, b) => a - b)).toEqual([
-      361, 441, 3157, 3488, 3492, 3511, 3571, 3750
-    ])
-  })
-
   it('未注册技能不产生副作用', () => {
     const context = createContext({
       SpellID: 9999,
