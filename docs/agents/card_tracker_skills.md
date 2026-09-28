@@ -15,6 +15,7 @@
 | 整手牌交换 | `MoveType=11` + `5<->10` + 整手张数 | `src/tracker/skill/HandExchange.ts` |
 | 诫厉观看与暂存 | `SpellID=3483` | `handleRoleOptTargetNtf`、`tests/tracker/roleOptTargetNtf.test.ts` |
 | 天候私有观看与展示 | `SpellID=3903` | `src/tracker/skill/TianHou.ts`、`tests/tracker/tianHouExchange.test.ts` |
+| 兴作牌底与手牌交换 | `SpellID=3776` | `src/tracker/skill/XingZuo.ts`、`tests/tracker/xingZuo.test.ts` |
 
 ## 下书明暗选择（SpellID=361）
 
@@ -129,6 +130,14 @@
 - 回归：`tests/tracker/roleOptTargetNtf.test.ts`、`tests/tracker/pubGsCMoveCard.test.ts`、
   `tests/tracker/moveEventNormalizer.test.ts`、`tests/tracker/trackerController.test.ts`、
   `tests/tracker/tianHouExchange.test.ts`。
+
+## 兴作牌底与手牌交换（SpellID=3776）
+
+- 协议样例与各步含义见 `docs/protocols/PubGsCMoveCard-3776.md`。
+- 兴作必定与目标全部手牌置换，`5 -> 10` 的 `CardCount` 表示目标整手张数，不做部分换牌推断。
+- `1 -> 10` 的 RANDOM 来源按技能事实取真实牌底，保留已有明牌；后续按原牌底/原手牌批次拆回。
+- 两条 `10 -> 10` 为动画通知，不重排实体；`3776` 显式绕过通用 `HandExchange`。
+- 原手牌无 ID 回底时，已知牌只建立底部范围候选；身份账本通过 `pileIdentityCardIDs` 同步推断身份。
 
 ## 相关入口
 

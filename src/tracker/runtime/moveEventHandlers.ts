@@ -4,6 +4,7 @@ import decorateFenChao from '../skill/FenChao'
 import decorateGuanXu, { isGuanXuSpellID } from '../skill/GuanXu'
 import decorateHandExchange from '../skill/HandExchange'
 import decorateJieLi from '../skill/JieLi'
+import decorateXingZuo, { XING_ZUO_SPELL_ID } from '../skill/XingZuo'
 import decorateSiQi from '../skill/SiQi'
 import decorateTianHou from '../skill/TianHou'
 import decorateZuoLian from '../skill/ZuoLian'
@@ -63,8 +64,14 @@ export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEven
 
   // observePendingChengLieFinalDiscard(event, room)
 
-  // 观虚、诫厉、天候都有技能专属交换批次，不能落入整手交换账本。
-  if (spellID === 3483 || spellID === 3903 || isGuanXuSpellID(spellID)) return event
+  // 牌堆与手牌交换有技能专属批次，不能落入双方整手交换账本。
+  if (
+    spellID === 3483 ||
+    spellID === 3903 ||
+    spellID === XING_ZUO_SPELL_ID ||
+    isGuanXuSpellID(spellID)
+  )
+    return event
 
   // 整手牌经交换区互易：按协议模式处理，不绑定单一 SpellID。
   return decorateHandExchange(event, room)
@@ -122,6 +129,9 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
 
   // 周群【天候】：其他视角的匿名换牌批次及最终单牌范围揭示。
   room.registerMoveEventHandler(3903, decorateTianHou)
+
+  //【兴作】：牌底与手牌整批交换，保留牌底已有的明牌。
+  room.registerMoveEventHandler(XING_ZUO_SPELL_ID, decorateXingZuo)
 
   //【思泣】：协议不公开返回牌 ID，按弃牌堆顺序筛选红牌实体作为明确来源。
   room.registerMoveEventHandler(3543, decorateSiQi)
