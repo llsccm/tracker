@@ -58,6 +58,12 @@ flowchart LR
 `getReadyTrackerRoom()` 对外提供完整记牌能力。具体挂载时序不要在 Room 内推断，见
 [`lifecycle.md`](lifecycle.md)。
 
+Room 解绑只清理 Room 关联状态与统一临时状态仓库，不清理 Game 持有的对局 ID、模式和
+`needShowName`，避免旧 Room 销毁时擦除先到的新局初始化信息；这些信息随对局重置或结束清理。
+Controller 每次创建 Room 后、注册座位前调用 `Game.beginPlayback()`，重置本轮运行状态并按
+保留的模式名称重新应用模式默认值。同一录像重新播放也创建新 Room，不能仅凭相同 `gameId`
+跳过播放状态重置。
+
 ## 第三层：Room 持有什么
 
 ### 权威事实

@@ -205,6 +205,7 @@ export class TrackerController {
     try {
       this.trackerRoom?.destroy()
       this.trackerRoom = this.roomFactory({ gameState: this.gameState })
+      this.trackerRoom.game.beginPlayback?.()
       this.getRuntime()?.bindRoom?.(this.trackerRoom)
       this.controllerLogger.info('Room 初始化')
       this.registerMoveEventHandlers(this.trackerRoom)

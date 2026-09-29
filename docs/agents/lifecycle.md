@@ -76,20 +76,27 @@ sequenceDiagram
     Logic ->> Logic: Init() / initFrame()
     Logic ->> Logic: 注入 html/iframe.html 骨架
 
+    Note over Engine,View: 对局标识与模式预识别
+    Engine ->> Logic: decodeGameRecordInitInfo
+    Logic ->> Logic: Game.updateRecordInfo({ gameId, matchName })
+    Note over Logic: 只更新对局信息，不重置播放状态
+
     Note over Engine,View: 单局开始（录像当前主路径）
     Engine ->> Logic: decodeGsClientUserSeatFlagNtf
     Logic ->> Handler: handleRecordStartGame(msg)
     Handler ->> Handler: resetSeatUIs()
     Handler ->> Bridge: tracker.initTrackerRoom()
     Bridge ->> Room: new Room()
+    Bridge ->> Logic: Game.beginPlayback()
+    Note over Logic: 每次座位开局都重置运行状态，同一录像重播也生效
     Bridge ->> Room: registerDefaultMoveEventHandlers(room)
     Handler ->> Bridge: tracker.registerTrackerPlayers(seatinfo, user.userID)
     Bridge ->> View: mount(room)
     View ->> View: 初始化固定手牌容器 / 同步可见性
 
-    Note over Engine,View: 模式预识别
+    Note over Engine,View: 同局重复初始化通知（也可能在座位消息前到达）
     Engine ->> Logic: decodeGameRecordInitInfo
-    Logic ->> Logic: matchName -> isDouDiZhu / isRoguelike1v1 / isShanHeTu
+    Logic ->> Logic: 相同 gameId 保留座位、回合与技能状态
 
     Note over Engine,View: 牌堆就绪
     Engine ->> Logic: MsgGamePlayCardNtf
@@ -139,13 +146,26 @@ sequenceDiagram
 执行顺序（以 `handleRecordStartGame` / `handleStartGame` 为准）：
 
 1. `resetSeatUIs()`：清理上一局的座位数据与镜像，重置布局提交状态。
-2. `tracker.initTrackerRoom()`（[`TrackerController`](../../src/tracker/runtime/trackerController.ts)）：销毁旧 Room，创建新 Room，注册默认移动事件处理器。
+2. `tracker.initTrackerRoom()`（[`TrackerController`](../../src/tracker/runtime/trackerController.ts)）：销毁旧 Room，创建新 Room，在注册玩家前调用其 GameState 的 `beginPlayback()`，重置本轮运行状态，再注册默认移动事件处理器。
 3. `tracker.registerTrackerPlayers(infos, user.userID)`：
    - `Room.registerPlayers()` 兼容 `SeatID`/`seat_id`、`ClientID`/`user_temp_id`；
    - 按 `user.userID` 匹配主视角；匹配不到则 `Game.isRecord = true`；
    - `size` / `seatIDs` 由 Room 写入，再 `syncRoomSeats` 到 Game；
    - 早期 `view.mount(trackerRoom)`（牌堆未就绪时只建固定手牌容器）。
-4. 注册完成后重置并裁剪 `.sorderContainer`；`decodeGameRecordInitInfo` 可根据 `matchName` 预置 `isDouDiZhu` / `isRoguelike1v1` / `isShanHeTu`（不触发布局）。
+4. 注册完成后重置并裁剪 `.sorderContainer`；Room 重建保留已经收到的对局 ID 和模式信息。
+
+`decodeGameRecordInitInfo` 由 `Game.updateRecordInfo()` 处理：按 `gameId` 的无符号高低位
+生成稳定键，新 ID 清理旧对局元信息再更新模式，但不重置座位、轮次、录像标记或技能状态。
+有效 `matchName` 更新模式；缺省名称不清理已知模式，相同名称不覆盖牌堆协议后续确认的模式。
+
+`gameId` 标识对局内容，当前 Room 实例标识一次运行。同一录像点击重新播放也会再次收到
+`decodeGsClientUserSeatFlagNtf`；该消息经 Controller 调用 `Game.beginPlayback()`，清空回合、
+主视角、手牌配置与全部 `spell` / `tracker` 暂存，并重建 Room。模式标记先恢复默认值，再根据
+保留的 `matchName` 重新识别，避免上一轮牌堆推导的标记残留。重复初始化信息无论出现在座位
+消息之前或之后，都不会再次重置运行状态；缺少 `gameId` 的旧数据也使用同一座位开局边界。
+
+对局 ID 与模式名称随显式对局重置或 `Game.end()` 清理，不随 `bindRoom(null)` 清理。
+初始化通知不再按相邻类名过滤，录制器保留 `gameId` 和 `matchName`。
 
 ### 3. 先手与固定视角
 

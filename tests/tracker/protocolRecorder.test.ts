@@ -423,7 +423,8 @@ describe('tracker protocol projection', () => {
     })
   })
 
-  it('只为录像模式协议读取必要的 ProtoObj.matchName', () => {
+  it('为录像初始化协议保留完整 gameId 与 matchName，不保存其它元信息', () => {
+    const gameId = { low: -1804863040, high: 207369892, unsigned: true }
     const message = {
       accountName: '不需要保存',
       className: 'decodeGameRecordInitInfo',
@@ -431,14 +432,28 @@ describe('tracker protocol projection', () => {
     }
     Object.defineProperty(message, 'ProtoObj', {
       get() {
-        return { matchName: '斗地主', timestamp: 9000, ignored: true }
+        return {
+          gameId,
+          matchName: '斗地主',
+          ex_type: { low: 1930291071, high: 4074631, unsigned: true },
+          timestamp: 9000,
+          ignored: true
+        }
       }
     })
 
     expect(projectTrackerProtocol(message)).toEqual({
       className: 'decodeGameRecordInitInfo',
-      payload: { ProtoObj: { matchName: '斗地主' } }
+      payload: { ProtoObj: { gameId, matchName: '斗地主' } }
     })
+  })
+
+  it('初始化信息缺少模式名时仍保留 gameId，旧数据缺少 gameId 时保留模式名', () => {
+    const gameId = { low: -1804863040, high: 207369892, unsigned: true }
+    for (const ProtoObj of [{ gameId }, { matchName: '新欢乐排位' }]) {
+      const projected = projectTrackerProtocol({ className: 'decodeGameRecordInitInfo', ProtoObj })
+      expect(projected?.payload).toEqual({ ProtoObj })
+    }
   })
 
   it('只在处理或回放实际使用 isSend 的协议中保留该字段', () => {
