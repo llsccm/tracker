@@ -51,7 +51,7 @@ function renderCities(cities, cityView) {
     const { x, y } = cityData
 
     const cityContainer = new Laya.Sprite()
-    cityContainer.pos(x, y)
+    cityContainer.pos(x, y - 10)
     cityContainer.zOrder = 999
     cityContainer.name = 'city'
 
@@ -72,7 +72,7 @@ function renderCities(cities, cityView) {
 
 // 样式常量
 const STYLES = {
-  TITLE: { color: '#f2de9c', fontSize: 18, bold: true },
+  TITLE: { color: '#f2de9c', fontSize: 18, bold: false },
   GENERAL: { normal: '#f2de9c', warning: 'rgb(240, 65, 85)', fontSize: 18 },
   GET_INFO: { color: '#f2de9c', fontSize: 16, bold: false }
 }
@@ -80,7 +80,7 @@ const STYLES = {
 const CITY_LAYOUT = {
   paddingX: 5,
   space: 4,
-  minContentWidth: 150,
+  minContentWidth: 120,
   dividerHeight: 1,
   backgroundColor: 'rgba(59, 58, 39, 0.75)',
   dividerColor: 'rgba(255, 255, 255, 0.2)'
@@ -157,9 +157,14 @@ function processChooseEvent(baseEvent, rows) {
   const roguelikeConfig = RoguelikeConfig.GetInstance()
   const adventure = roguelikeConfig.getAdventure(baseEvent)
 
+  const title = roguelikeConfig.getText(adventure?.chapname)
+  rows.push(createTextRow({ text: title, ...STYLES.TITLE }))
+
   for (const option of adventure?.options || []) {
     const eventData = roguelikeConfig.getChoice(option.effect)
     if (!eventData) continue
+    // 添加分割线
+    rows.push(createDividerRow())
 
     // 处理武将选项
     if (eventData.generals) {
@@ -167,9 +172,6 @@ function processChooseEvent(baseEvent, rows) {
         rows.push(createGeneralRow(general, rogueMap.difficulty, eventData))
       })
     }
-
-    // 添加分割线
-    rows.push(createDividerRow())
 
     // 添加获取信息
     const textParts = []

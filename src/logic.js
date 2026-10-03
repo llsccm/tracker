@@ -365,9 +365,11 @@ export function logic(msg) {
       // 皮肤信息
       case 'ClientGeneralSkinRep':
         if (import.meta.env.DEV) console.info(msg)
+        if (!Game.isGameStart) return
         // 屏蔽动态
         if (globalConfig.blockSkinStateSwitch) {
           const GeneralSkinList = msg.GeneralSkinList || []
+
           GeneralSkinList.forEach((GeneralSkin) => {
             if (!GeneralSkin) return
             // 只显示主视角动态皮肤
