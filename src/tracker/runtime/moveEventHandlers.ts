@@ -40,7 +40,9 @@ export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEven
     return patchEvent(event, {
       options: {
         fromZone: 'outside',
-        position: POSITION_RANDOM
+        position: POSITION_RANDOM,
+        // 随机入堆即失去具体位置，先匿名化，避免账本把代表实体重新确认为牌顶明牌。
+        resetKnownToUnknown: true
       }
     })
   }

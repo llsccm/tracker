@@ -4,6 +4,91 @@ import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candid
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
 
 describe('PileIdentityLedger integration', () => {
+  it.each([
+    { drawIDs: [19, 56], toPosition: POSITION_TOP + 1 },
+    { drawIDs: [], toPosition: POSITION_RANDOM }
+  ])('浑天仪随机入堆后匿名化，装备与摸牌不串用身份（%j）', ({ drawIDs, toPosition }) => {
+    const onError = vi.fn()
+    const { controller } = createTrackerControllerHarness({ onError })
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 100 }], 100)
+    controller.initTrackerDeck([19, 56, 80, 81])
+
+    const room = controller.getTrackerRoom()!
+    const pile = room.zones.get('pile')!
+    const huntianyiIDs = [31023, 31022, 31021, 31020]
+
+    huntianyiIDs.forEach((cardID, index) => {
+      controller.syncTrackerMove(
+        protocolMove({
+          CardIDs: [cardID],
+          FromZone: 0,
+          ToZone: 1,
+          ToID: 255,
+          ToPosition: toPosition,
+          MoveType: 19,
+          SpellID: 3694
+        })
+      )
+
+      expect(pile.cards).toHaveLength(5 + index)
+      expect(pile.cards.every((card) => isAnonymous(card) && !card.isKnown)).toBe(true)
+      expect(room.cardIndex.has(cardID)).toBe(false)
+      expect(room.unlocatedIdentities.has(cardID)).toBe(true)
+      expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([])
+      expect(room.assertPileIdentityLedgerConsistency('test:huntianyi-insert')).toEqual([])
+    })
+
+    const entityCount = room.cards.length
+    const createExternalSpy = vi.spyOn(room, 'createExternalCards')
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [31022],
+        FromPosition: POSITION_RANDOM,
+        ToID: 3,
+        ToZone: 6,
+        ToPosition: POSITION_RANDOM,
+        MoveType: 15,
+        SpellID: 3694
+      })
+    )
+
+    const equipment = room.cardIndex.get(31022)!
+    expect(equipment.location).toBe('player')
+    expect(equipment.subZone).toBe('equip')
+    expect(equipment.seats).toEqual(new Set([3]))
+    expect(equipment.isKnown).toBe(true)
+    expect(pile.cards).toHaveLength(7)
+
+    controller.syncTrackerMove(protocolMove({ CardIDs: drawIDs, CardCount: 2, ToID: 3 }))
+
+    const handCards = room.cards.filter(
+      (card) => card.location === 'player' && card.subZone === 'hand' && card.seats.has(3)
+    )
+    expect(handCards).toHaveLength(2)
+    if (drawIDs.length > 0) {
+      expect(handCards.map((card) => card.id).sort((a, b) => a - b)).toEqual(drawIDs)
+      expect(handCards.every((card) => card.isKnown)).toBe(true)
+    }
+    if (drawIDs.length === 0) {
+      expect(handCards.every((card) => isAnonymous(card) && !card.isKnown)).toBe(true)
+    }
+    expect(pile.cards).toHaveLength(5)
+    expect(pile.cards.every((card) => isAnonymous(card) && !card.isKnown)).toBe(true)
+    expect(room.cardIndex.get(31022)).toBe(equipment)
+    expect(equipment.subZone).toBe('equip')
+    huntianyiIDs
+      .filter((cardID) => cardID !== 31022)
+      .forEach((cardID) => {
+        expect(room.cardIndex.has(cardID)).toBe(false)
+        expect(room.unlocatedIdentities.has(cardID)).toBe(true)
+      })
+    expect(room.cards).toHaveLength(entityCount)
+    expect(createExternalSpy).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalled()
+    expect(room.assertPileIdentityLedgerConsistency('test:huntianyi-draw')).toEqual([])
+  })
+
   it('开局空弃牌堆洗牌通知不滚动世代或暂停初始卡池身份', () => {
     const { controller } = createTrackerControllerHarness()
     controller.initTrackerRoom()
