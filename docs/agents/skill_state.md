@@ -10,8 +10,11 @@
 - `GameState` 使用唯一的私有 `stateStore` 保存所有对局临时状态，不再由 Room 维护独立 Map。
 - `spell` 与 `tracker` 只是同一 Map 内的 key 命名空间，用于避免 handler 状态和记牌器推断状态碰撞，
   不代表不同生命周期。
-- 新 Room 绑定、当前 Room 销毁、`GameState.init()`、`reset()` 和 `end()` 都会清空统一仓库，
+- 新 Room 绑定、当前 Room 销毁、`GameState.beginPlayback()`、`init()`、`reset()` 和 `end()` 都会清空统一仓库，
   所有状态都不会带入下一局或新的 Room。
+- `GameState.updateRecordInfo()` 只更新对局 ID 与模式，不清空统一仓库。座位开局经 Controller
+  调用 `beginPlayback()`，即使重新播放同一 `gameId` 也清空本轮状态；初始化信息重复到达不影响它。
+  对局 ID 和模式名称独立于 Room 绑定状态，随对局信息切换、显式重置或结束清理。
 - Room 的 `readSkillState()` 等方法只是 `tracker` 命名空间的领域薄入口；tracker 代码不应直接导入
   全局 `Game`，以保留测试隔离和依赖注入能力。
 
@@ -80,6 +83,8 @@ room.hasSkillState('example')
 | ------------------------------ | ---------------------------------------- |
 | 创建 `GameState`               | 初始化空仓库                             |
 | `GameState.init()` / `reset()` | 清空当前全部 `spell` / `tracker` 状态    |
+| `GameState.beginPlayback()` | 每次座位开局清空全部状态，包括同一录像重新播放 |
+| `GameState.updateRecordInfo()` | 只更新对局信息，不清空状态仓库 |
 | 绑定新的 Room                  | Room 实例发生变化时清空全部状态          |
 | 销毁当前绑定 Room              | `bindRoom(null)` 清空全部状态并解绑 Room |
 | 销毁已经被替换的旧 Room        | 不影响当前 Room 的新状态                 |

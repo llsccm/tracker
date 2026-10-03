@@ -3,52 +3,15 @@ import { rogueMap } from '@/tracker'
 import { laya } from '@/runtime/gameAdapter'
 import { wait } from '@/utils'
 
-export function drawCitiesUI(cities, _display) {
-  rogueMap.res = []
-  const roguelikeConfig = RoguelikeConfig.GetInstance()
+let cityRenderVersion = 0
 
-  for (const city of cities) {
-    const cityData = roguelikeConfig.getCity(city.id)
-    if (!cityData) {
-      continue
-    }
-    const { x, y } = cityData
-    let containerHeight = 0
+export function drawCitiesUI(cities) {
+  const renderVersion = ++cityRenderVersion
 
-    // 创建容器
-    const cityContainer = new Laya.VBox()
-    cityContainer.pos(x, y)
-    cityContainer.zOrder = 999
-    cityContainer.name = 'city'
-
-    // 创建背景
-    const background = new Laya.Sprite()
-    background.alpha = 0.7
-    cityContainer.addChild(background)
-
-    const fight = roguelikeConfig.getFight(city.event)
-
-    if (fight) {
-      // 战斗事件处理
-      containerHeight = processFightEvent(
-        {
-          ...fight,
-          event: city.event
-        },
-        cityContainer
-      )
-    } else {
-      containerHeight += processChooseEvent(city.event, cityContainer)
-    }
-
-    // 设置容器布局
-    setupCityContainer(cityContainer, background, containerHeight)
-    rogueMap.res.push({ id: city.id, city: cityContainer })
-  }
-
-  // 更新场景显示
   wait(
     () => {
+      // 过期请求提前结束轮询，由下方序号检查阻止更新场景。
+      if (renderVersion !== cityRenderVersion) return true
       const rogueScene = laya.find('SceneLayer', 'RogueSmallMapScene')
       return rogueScene?.cityView ? rogueScene : undefined
     },
@@ -57,137 +20,172 @@ export function drawCitiesUI(cities, _display) {
     { immediate: true }
   )
     .then((rogueScene) => {
+      if (renderVersion !== cityRenderVersion) return
       const cityView = rogueScene?.cityView
-      if (!cityView) return
+      if (!cityView || cityView.destroyed) return
 
-      // 清理旧内容
-      for (let i = cityView.numChildren - 1; i >= 0; i--) {
-        const child = cityView.getChildAt(i)
-        if (child.name === 'city') {
-          cityView.removeChild(child)
-        }
-      }
-
-      // 添加新内容
-      if (cities) {
-        rogueMap.res.forEach(({ city }) => {
-          cityView.addChild(city)
-        })
-      }
+      // 仅在场景就绪且请求仍有效时创建节点，避免留下未挂载的容器。
+      renderCities(cities, cityView)
     })
     .catch((err) => {
       console.error(err)
     })
 }
 
+function renderCities(cities, cityView) {
+  // 清理旧内容及其子节点、事件资源。
+  for (let i = cityView.numChildren - 1; i >= 0; i--) {
+    const child = cityView.getChildAt(i)
+    if (child.name === 'city') {
+      child.destroy(true)
+    }
+  }
+
+  rogueMap.res = []
+  const roguelikeConfig = RoguelikeConfig.GetInstance()
+
+  for (const city of cities) {
+    const cityData = roguelikeConfig.getCity(city.id)
+    if (!cityData) continue
+
+    const { x, y } = cityData
+
+    const cityContainer = new Laya.Sprite()
+    cityContainer.pos(x, y - 10)
+    cityContainer.zOrder = 999
+    cityContainer.name = 'city'
+
+    const rows = []
+    const fight = roguelikeConfig.getFight(city.event)
+
+    if (fight) {
+      processFightEvent({ ...fight, event: city.event }, rows)
+    } else {
+      processChooseEvent(city.event, rows)
+    }
+
+    layoutCityContainer(cityContainer, rows)
+    rogueMap.res.push({ id: city.id, city: cityContainer })
+    cityView.addChild(cityContainer)
+  }
+}
+
 // 样式常量
 const STYLES = {
-  TITLE: { color: '#f2de9c', fontSize: 20, bold: true },
-  HR: { text: '--------------------', color: '#ccc', fontSize: 15 },
-  GENERAL: { normal: '#f2de9c', warning: 'rgb(240, 65, 85)', fontSize: 20 },
-  GET_INFO: { color: '#f2de9c', fontSize: 20, bold: true }
+  TITLE: { color: '#f2de9c', fontSize: 18, bold: false },
+  GENERAL: { normal: '#f2de9c', warning: 'rgb(240, 65, 85)', fontSize: 18 },
+  GET_INFO: { color: '#f2de9c', fontSize: 16, bold: false }
 }
 
-// 创建通用标签组件
-function createLabel(config) {
-  const label = new Laya.Label()
-  label.text = config.text || ''
-  label.color = config.color || '#ffffff'
-  label.fontSize = config.fontSize || 16
-  label.bold = config.bold || false
-  label.align = 'center'
-  label.valign = 'middle'
-
-  label.width = 210 // 新增宽度设置
-  return label
+const CITY_LAYOUT = {
+  paddingX: 5,
+  space: 4,
+  minContentWidth: 120,
+  dividerHeight: 1,
+  backgroundColor: 'rgba(59, 58, 39, 0.75)',
+  dividerColor: 'rgba(255, 255, 255, 0.2)'
 }
 
-// 创建水平分割线
-function createHrLine() {
-  return createLabel({
-    text: STYLES.HR.text,
-    color: STYLES.HR.color,
-    fontSize: STYLES.HR.fontSize,
-    bold: false
-  })
+function layoutCityContainer(container, rows) {
+  if (rows.length === 0) return
+
+  const { paddingX, space, minContentWidth, backgroundColor, dividerColor } = CITY_LAYOUT
+  const contentWidth = Math.max(minContentWidth, ...rows.map((row) => row.width))
+  const width = contentWidth + paddingX * 2
+  const height = rows.reduce((sum, row) => sum + row.height + (row.text ? 0 : space * 2), 0) + 4
+
+  container.size(width, height)
+  container.graphics.drawRect(0, 0, width, height, backgroundColor)
+
+  // 内容只在创建时排版；分割线占据行高，但不创建显示节点。
+  let y = 2
+
+  for (const row of rows) {
+    if (row.text) {
+      row.text.pos(paddingX + (contentWidth - row.width) / 2, y)
+      container.addChild(row.text)
+    } else {
+      y += space
+      container.graphics.drawRect(paddingX, y, contentWidth, row.height, dividerColor)
+      y += space
+    }
+
+    y += row.height
+  }
 }
 
-// 初始化容器布局
-function setupCityContainer(container, background, height) {
-  container.layoutEnabled = true
-  container.vScrollBarSkin = ''
-  background.graphics.clear()
-  background.graphics.drawRect(0, 0, 210, height, '#3B3A27')
-  background.pos(0, 0)
+function createTextRow(config) {
+  const text = new Laya.Text()
+  text.text = config.text || ''
+  text.color = config.color || '#ffffff'
+  text.fontSize = config.fontSize || 16
+  text.bold = config.bold || false
+
+  text.font = 'fzltchjw'
+  text.stroke = config.stroke || 2
+  text.strokeColor = config.strokeColor || '#18140f'
+
+  // Laya 默认延迟排版，先完成测量再读取包含换行的实际尺寸。
+  text.typeset()
+
+  return { text, width: text.textWidth, height: text.textHeight }
+}
+
+function createDividerRow() {
+  return { text: null, width: CITY_LAYOUT.minContentWidth, height: CITY_LAYOUT.dividerHeight }
 }
 
 // 处理战斗事件内容
-function processFightEvent(eventData, cityContainer) {
-  let height = 0
-
+function processFightEvent(eventData, rows) {
   // 处理武将列表
   eventData.generals.forEach((general) => {
-    const generalLabel = createGeneralLabel(general, rogueMap.difficulty, eventData)
-    cityContainer.addChild(generalLabel)
-    height += generalLabel.height
+    rows.push(createGeneralRow(general, rogueMap.difficulty, eventData))
   })
 
-  const hrLine1 = createHrLine()
-  cityContainer.addChild(hrLine1)
-  height += hrLine1.height
+  rows.push(createDividerRow())
   // 添加获取信息
-  const getLabel = createLabel({
-    text: eventData.get,
-    ...STYLES.GET_INFO
-  })
-
-  cityContainer.addChild(getLabel)
-  height += getLabel.height
-
-  return height
+  rows.push(
+    createTextRow({
+      text: eventData.get,
+      ...STYLES.GET_INFO
+    })
+  )
 }
 
 // 处理选择事件内容
-function processChooseEvent(baseEvent, cityContainer) {
-  let totalHeight = 0
+function processChooseEvent(baseEvent, rows) {
   const roguelikeConfig = RoguelikeConfig.GetInstance()
   const adventure = roguelikeConfig.getAdventure(baseEvent)
+
+  const title = roguelikeConfig.getText(adventure?.chapname)
+  rows.push(createTextRow({ text: title, ...STYLES.TITLE }))
 
   for (const option of adventure?.options || []) {
     const eventData = roguelikeConfig.getChoice(option.effect)
     if (!eventData) continue
+    // 添加分割线
+    rows.push(createDividerRow())
 
     // 处理武将选项
     if (eventData.generals) {
       eventData.generals.forEach((general) => {
-        const generalLabel = createGeneralLabel(general, rogueMap.difficulty, eventData)
-        cityContainer.addChild(generalLabel)
-        totalHeight += generalLabel.height
+        rows.push(createGeneralRow(general, rogueMap.difficulty, eventData))
       })
     }
 
     // 添加获取信息
     const textParts = []
-    if (!eventData.generals && eventData.lost)
+
+    if (!eventData.generals && eventData.lost) {
       textParts.push(`${eventData.lost} ${findLostItemByName(eventData.lost)}`)
+    }
+
     if (eventData.get) textParts.push(`${eventData.get}`)
 
     if (textParts.length > 0) {
-      const getLabel = createLabel({
-        text: textParts.join('\n'),
-        ...STYLES.GET_INFO
-      })
-      cityContainer.addChild(getLabel)
-      totalHeight += getLabel.height
+      rows.push(createTextRow({ text: textParts.join('\n'), ...STYLES.GET_INFO }))
     }
-
-    // 添加分割线
-    const hrLine = createHrLine()
-    cityContainer.addChild(hrLine)
-    totalHeight += hrLine.height
   }
-
-  return totalHeight
 }
 
 function findLostItemByName(descText) {
@@ -228,18 +226,17 @@ function findLostItemByName(descText) {
 }
 
 // 处理武将信息显示
-function createGeneralLabel(general, difficulty, eventData) {
+function createGeneralRow(general, difficulty, eventData) {
   const [skills, red] = highlightedSkill(general, difficulty)
   const canStart = String(eventData.CanStart || '')
     .split(';')
     .includes(String(difficulty))
   const start = general.start && canStart ? '[先行]' : ''
 
-  return createLabel({
+  return createTextRow({
     text: `${general.generalname}${start}${red ? ' ' + skills.join(' ') : ''}`,
     color: red ? STYLES.GENERAL.warning : STYLES.GENERAL.normal,
-    fontSize: STYLES.GENERAL.fontSize,
-    bold: true
+    fontSize: STYLES.GENERAL.fontSize
   })
 }
 

@@ -41,7 +41,6 @@ const ALLOWED_CLASSES = new Set([
 //   'MsgGameOver'
 // ])
 
-const ShanHeTu_regex = /\[\d+\]$/
 let lastClassName = null
 
 export function logic(msg) {
@@ -51,11 +50,8 @@ export function logic(msg) {
     if (msg.className === undefined && msg.ClassName === undefined) return
 
     const className = msg.ClassName || msg.className || msg.toString()
-    // 宿主会连续重复发送这两类消息，只处理连续消息中的第一条。
-    if (
-      className === lastClassName &&
-      (className === 'decodeGameRecordInitInfo' || className === 'MsgGameOver')
-    ) {
+    // 结束消息只处理连续消息中的第一条；初始化通知仅幂等更新对局信息。
+    if (className === lastClassName && className === 'MsgGameOver') {
       return
     }
     lastClassName = className
@@ -147,37 +143,10 @@ export function logic(msg) {
         // })
         break
 
-      // 用于判断模式
+      // 更新对局标识与模式，运行状态在座位开局入口统一重置。
       case 'decodeGameRecordInitInfo':
         if (import.meta.env.DEV) console.info(msg)
-        Game.init()
-        if (!ProtoObj?.matchName) break
-
-        if (ProtoObj.matchName === '斗地主') {
-          Game.isDouDiZhu = true
-          Game.needShowName = true
-          return
-        }
-
-        if (ProtoObj.matchName === '新欢乐排位' || ProtoObj.matchName.includes('cmk')) {
-          Game.needShowName = true
-          return
-        }
-
-        if (ProtoObj.matchName === '单骑无双') {
-          Game.isRoguelike1v1 = true
-          Game.needShowName = true
-          return
-        }
-
-        // 长安行[20610702]
-        if (ShanHeTu_regex.test(ProtoObj.matchName) || ProtoObj.matchName.includes('山河图')) {
-          Game.isShanHeTu = true
-          return
-        }
-
-        // 身份演武军争
-
+        if (ProtoObj) Game.updateRecordInfo(ProtoObj)
         break
 
       case 'GsCModifyUserseatNtf': // 游戏开始标志 / 游戏结束标志
@@ -396,9 +365,11 @@ export function logic(msg) {
       // 皮肤信息
       case 'ClientGeneralSkinRep':
         if (import.meta.env.DEV) console.info(msg)
+        if (!Game.isGameStart) return
         // 屏蔽动态
         if (globalConfig.blockSkinStateSwitch) {
           const GeneralSkinList = msg.GeneralSkinList || []
+
           GeneralSkinList.forEach((GeneralSkin) => {
             if (!GeneralSkin) return
             // 只显示主视角动态皮肤

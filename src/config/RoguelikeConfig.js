@@ -346,6 +346,7 @@ export class RoguelikeConfig extends ConfigBase {
   }
 
   getText(textId) {
+    if (textId == '9998') return ''
     return this.text.get(String(textId)) ?? textId
   }
 

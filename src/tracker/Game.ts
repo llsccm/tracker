@@ -13,6 +13,11 @@ export type GameStateScope = 'spell' | 'tracker'
 export type GameStateKey = string | number
 type StoredGameStateKey = `${GameStateScope}:${string}`
 
+export interface GameRecordInitInfo {
+  gameId?: { low: number; high: number; unsigned?: boolean }
+  matchName?: string
+}
+
 /**
  * 纯对局状态与运行时适配对象。
  *
@@ -22,6 +27,8 @@ export class GameState {
   isRecord = false
   isGameStart = false
   isPassed = true
+  private currentGameKey: string | null = null
+  private recordMatchName: string | null = null
 
   declare orderLabels: string[]
   /** 轮次 */
@@ -69,8 +76,7 @@ export class GameState {
   constructor({ orderLabels = ORDER_LABELS }: { orderLabels?: string[] } = {}) {
     this.orderLabels = orderLabels
     this.room = null
-    this.resetSessionState()
-    this.resetRoomState()
+    this.reset()
   }
 
   private resetSessionState(): void {
@@ -117,17 +123,25 @@ export class GameState {
     // this.mySeats = []
     this.myGenerals.length = 0
 
+    this.size = undefined
+    this.isDuanXian = false
+
+    this.zhanfaSet.clear()
+  }
+
+  private resetGameInfo(): void {
+    this.currentGameKey = null
+    this.recordMatchName = null
+    this.resetModeState()
+  }
+
+  private resetModeState(): void {
     this.isShanHeTu = false
     this.isGuoZhan = false
     this.isDouDiZhu = false
     this.isRoguelike1v1 = false
     this.isSWJG = false
-
-    this.size = undefined
-    this.isDuanXian = false
     this.needShowName = false
-
-    this.zhanfaSet.clear()
   }
 
   setGeneral(seatID: SeatID, generalID: number | undefined, index = 0, _an = false): void {
@@ -241,8 +255,45 @@ export class GameState {
     this.configHandCardsRejected = false
   }
 
+  updateRecordInfo({ gameId, matchName }: GameRecordInitInfo): void {
+    // gameId 是 64 位整数，按高低位比较，不能转换成可能丢失精度的 Number。
+    const gameKey = gameId ? `${gameId.high >>> 0}:${gameId.low >>> 0}` : null
+    if (gameKey && gameKey !== this.currentGameKey) {
+      this.resetGameInfo()
+      this.currentGameKey = gameKey
+    }
+
+    // 同局可能重复通知；缺省名称不擦除模式，相同名称不覆盖牌堆协议的后续识别结果。
+    if (!matchName || matchName === this.recordMatchName) return
+    this.recordMatchName = matchName
+    this.applyRecordMode()
+  }
+
+  private applyRecordMode(): void {
+    const matchName = this.recordMatchName
+    if (!matchName) return
+    this.isDouDiZhu = matchName === '斗地主'
+    this.isRoguelike1v1 = matchName === '单骑无双'
+    this.needShowName =
+      this.isDouDiZhu ||
+      this.isRoguelike1v1 ||
+      matchName === '新欢乐排位' ||
+      matchName.includes('cmk')
+    this.isShanHeTu =
+      !this.needShowName && (/\[\d+\]$/.test(matchName) || matchName.includes('山河图'))
+  }
+
   init(): void {
-    this.reset()
+    this.resetGameInfo()
+    this.beginPlayback()
+  }
+
+  beginPlayback(): void {
+    // 同一 gameId 也可以重新播放；座位开局入口负责重置运行状态，再应用保留的模式信息。
+    this.resetSessionState()
+    this.resetRoomState()
+    this.resetModeState()
+    this.applyRecordMode()
     this.isGameStart = true
     this.isPassed = false
     trackerLogger.info('GameState 游戏已重置并开始')
@@ -254,6 +305,7 @@ export class GameState {
   end(): void {
     // 对局结束即释放所有局内协议/UI 暂存和记牌器推断状态，避免下一局串状态。
     this.clearStateStore()
+    this.resetGameInfo()
 
     if (this.isGameStart && !this.isPassed) {
       this.isRecord = false
@@ -330,6 +382,7 @@ export class GameState {
   reset(): void {
     this.resetSessionState()
     this.resetRoomState()
+    this.resetGameInfo()
   }
 
   private getStateStoreKey(scope: GameStateScope, stateKey: GameStateKey): StoredGameStateKey {

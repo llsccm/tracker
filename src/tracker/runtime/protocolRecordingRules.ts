@@ -419,10 +419,12 @@ function appendRecordInitPayload(message: ProtocolObject, payload: Record<string
   const protoObj = readProtocolField(message, 'ProtoObj')
   if (!isProtocolObject(protoObj)) return
 
-  const matchName = cloneProtocolValue(readProtocolField(protoObj, 'matchName'))
-  if (matchName === OMITTED) return
-
-  payload.ProtoObj = { matchName }
+  const recordInfo: Record<string, unknown> = {}
+  for (const key of ['gameId', 'matchName']) {
+    const value = cloneProtocolValue(readProtocolField(protoObj, key))
+    if (value !== OMITTED) recordInfo[key] = value
+  }
+  if (Object.keys(recordInfo).length > 0) payload.ProtoObj = recordInfo
 }
 
 function appendSeatInfoPayload(message: ProtocolObject, payload: Record<string, unknown>): void {
