@@ -52,7 +52,7 @@ const RENDER_NODE_SELECTOR = RENDER_NODE_CLASS_NAMES.map(
 const RENDER_KEY_ATTRIBUTE = 'data-tracker-render-key'
 
 /**
- * 按本局人数初始化武将手牌容器；后续渲染只更新容器内的动态牌节点。
+ * 按注册人数初始化手牌容器；后续按当前顺位绑定玩家并更新动态牌节点。
  */
 export function initPlayerHandContainers(doc: Document, room: Room): void {
   const panel: HTMLElement | null = getPlayerHandPanel(doc)
@@ -80,17 +80,56 @@ function createPlayerHandContainer(doc: Document, displayID: number): HTMLElemen
   return container
 }
 
+/** 顺位变化时重新绑定容器、武将标签和手牌，隐藏多余的容器。 */
+export function syncPlayerHandContainers(doc: Document, room: Room): boolean {
+  const panel = getPlayerHandPanel(doc)
+  if (!panel) return false
+
+  const playersByDisplayID = new Map<number, Player>()
+  for (const player of room.players.values()) {
+    const viewID = room.getFixedViewId(player.seatID)
+    if (viewID !== undefined) playersByDisplayID.set(viewID + 1, player)
+  }
+
+  let changed = false
+  for (const container of panel.querySelectorAll<HTMLElement>(':scope > .orderContainer')) {
+    const displayID = Number(container.id.slice('playerHand'.length))
+    const player = playersByDisplayID.get(displayID)
+    const seatID = player ? String(player.seatID) : ''
+    const display = player ? '' : 'none'
+    if (player) {
+      updateSeatLabel(
+        doc,
+        { fixedViewId: displayID, generals: player.generals },
+        room.game.orderLabels
+      )
+    }
+    if (container.dataset.seatId === seatID && container.style.display === display) continue
+
+    container.dataset.seatId = seatID
+    container.style.display = display
+    // 只清除旧顺位的显示节点；调用方随后按 seatID 对应的 Player 数据全量重绘。
+    container.querySelector('.order-body')?.replaceChildren()
+    changed = true
+  }
+  return changed
+}
+
 /** 将玩家武将名和顺位标签写入座位覆盖层。 */
 export function updateSeatLabel(
   doc: Document,
   player: Pick<Player, 'fixedViewId' | 'generals'>,
   orderLabels: readonly string[]
 ): void {
-  const fixedViewId = player.fixedViewId ?? 1
+  const fixedViewId = player.fixedViewId
+  if (fixedViewId === undefined) return
   const container = doc.getElementById('playerHand' + fixedViewId)
   if (!container) return
 
-  container.style.setProperty('--No-content', `"${formatPlayerSeatLabel(player, { orderLabels })}"`)
+  const label = `"${formatPlayerSeatLabel(player, { orderLabels })}"`
+  if (container.style.getPropertyValue('--No-content') !== label) {
+    container.style.setProperty('--No-content', label)
+  }
 }
 
 /**

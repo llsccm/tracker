@@ -75,6 +75,86 @@ describe('初始化消息路由', () => {
     expect(Game.isDouDiZhu).toBe(true)
   })
 
+  it('八座位注册和身份通知后更新显隐，并按显示玩家重排固定顺位', () => {
+    logic({
+      className: 'decodeGsClientUserSeatFlagNtf',
+      data: {
+        protoObj: {
+          seatinfo: Array.from({ length: 8 }, (_, seat_id) => ({
+            seat_id,
+            user_temp_id: 100 + seat_id
+          }))
+        }
+      }
+    })
+    for (let SeatID = 0; SeatID < 8; SeatID++) {
+      logic({ className: 'MsgGameShowFigure', SeatID, Figure: SeatID === 2 ? 1 : 3 })
+    }
+    const room = tracker.getTrackerRoom()!
+    const players = Array.from(room.players.values())
+    expect(players.map((player) => player.fixedViewId)).toEqual([7, 8, 1, 2, 3, 4, 5, 6])
+    expect(room.isDeckReady).toBe(false)
+    expect(players.every((player) => player.isShown)).toBe(true)
+
+    logic({
+      className: 'MsgGamePlayerShowStatusNtf',
+      Count: 3,
+      SeatData: [
+        [1, 0],
+        [4, 0],
+        [7, 0]
+      ]
+    })
+
+    expect(players.filter((player) => player.isShown).map((player) => player.seatID)).toEqual([
+      0, 2, 3, 5, 6
+    ])
+    expect(Array.from(room.players.values())).toEqual(players)
+    expect(players.map((player) => player.fixedViewId)).toEqual([
+      5,
+      undefined,
+      1,
+      2,
+      undefined,
+      3,
+      4,
+      undefined
+    ])
+    expect(room.size).toBe(8)
+    expect(Game.seatIDs).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+    expect(room.firstID).toBe(2)
+
+    logic({ className: 'MsgGamePlayerShowStatusNtf', Count: 1, SeatData: [[4, 1]] })
+    expect(players.filter((player) => player.isShown).map((player) => player.seatID)).toEqual([
+      0, 2, 3, 4, 5, 6
+    ])
+    expect(players.map((player) => player.fixedViewId)).toEqual([
+      6,
+      undefined,
+      1,
+      2,
+      3,
+      4,
+      5,
+      undefined
+    ])
+    logic({ className: 'MsgGamePlayerShowStatusNtf', Count: 0, SeatData: [] })
+    expect(room.getPlayer(0)?.isShown).toBe(true)
+  })
+
+  it('重新注册同一组座位时不继承上局隐藏状态', () => {
+    const seats = {
+      className: 'decodeGsClientUserSeatFlagNtf',
+      data: { protoObj: { seatinfo: [{ seat_id: 0, user_temp_id: 100 }, { seat_id: 1 }] } }
+    }
+    logic(seats)
+    logic({ className: 'MsgGamePlayerShowStatusNtf', Count: 1, SeatData: [[1, 0]] })
+    expect(tracker.getTrackerRoom()?.getPlayer(1)?.isShown).toBe(false)
+
+    logic(seats)
+    expect(tracker.getTrackerRoom()?.getPlayer(1)?.isShown).toBe(true)
+  })
+
   it('重新播放的相同 gameId 由座位消息触发重置，第二条初始化信息保留新播放状态', () => {
     const message = {
       className: 'decodeGameRecordInitInfo',

@@ -1,7 +1,7 @@
 import { CardConfig } from './config'
 import { clearElement } from './draw/drawHelpers'
 import { checkEllipsisOverflow, invalidateEllipsisOverflow } from './ui/overflowEllipsis'
-import { UI } from './tracker'
+import { Game, UI } from './tracker'
 import { laya } from './runtime/gameAdapter'
 import { getCardFaceHtml } from './utils'
 
@@ -221,6 +221,13 @@ export function drawSeatUIs() {
     return { displayID, orderContainer, seat }
   })
   if (layouts.some(({ orderContainer }) => !orderContainer)) return false
+
+  const visibleContainers = new Set(layouts.map(({ orderContainer }) => orderContainer))
+  for (const container of seatUI.querySelectorAll('.sorderContainer:not(.deckEdgeUI)')) {
+    const isShown = visibleContainers.has(container)
+    container.style.display = isShown ? 'flex' : 'none'
+    container.style.visibility = isShown && Game.turn > 0 ? 'visible' : 'hidden'
+  }
 
   for (const { displayID, orderContainer, seat } of layouts) {
     applySeatContainerLayout(orderContainer, seat, defaultWidth)
