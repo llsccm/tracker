@@ -268,6 +268,12 @@ export class TrackerController {
     this.controllerView.scheduleRender()
   }
 
+  setTrackerPlayerShowStatuses(statuses: readonly [SeatID, number][]): void {
+    if (!this.trackerRoom?.setPlayerShowStatuses(statuses)) return
+    this.getSeatUIs()
+    this.controllerView.scheduleRender()
+  }
+
   setTrackerFirstHand(seatID: SeatID): void {
     if (!this.trackerRoom) return
 
