@@ -1,5 +1,6 @@
 import { POSITION_RANDOM } from '../candidate/cardPositions'
 import type { Room } from '../Room'
+import { decorateChengLieMove } from '../skill/ChengLie'
 import decorateFenChao from '../skill/FenChao'
 import decorateGuanXu, { isGuanXuSpellID } from '../skill/GuanXu'
 import decorateHandExchange from '../skill/HandExchange'
@@ -68,6 +69,7 @@ export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEven
 
   // 牌堆与手牌交换有技能专属批次，不能落入双方整手交换账本。
   if (
+    spellID === 3208 ||
     spellID === 3483 ||
     spellID === 3903 ||
     spellID === XING_ZUO_SPELL_ID ||
@@ -146,7 +148,7 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
   room.registerMoveEventHandler(3731, decorateDuoQiMove)
 
   // 马承【骋烈】
-  // room.registerMoveEventHandler(3208, decorateChengLie)
+  room.registerMoveEventHandler(3208, decorateChengLieMove)
 
   // 族钟繇【诫厉】：目标视角定位换出槽位，第三方视角保留手牌/牌顶范围弱候选。
   room.registerMoveEventHandler(3483, decorateJieLi)
