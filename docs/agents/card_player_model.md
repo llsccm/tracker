@@ -80,9 +80,14 @@
 
 `Player` 由 `Room` 按座位持有，记录固定视图位序、手牌数事实和供渲染读取的视图分组。
 
+`seatID` 是玩家及牌区记录的稳定标识，`fixedViewId` 仅表示当前展示位置。显隐导致顺位重排时，
+手牌记录仍属于原 `seatID`，视图按新顺位重新绑定容器并重绘；例如座位 6 激活成为五号位后，
+座位 7 的原有手牌随其显示到六号位，不转交给座位 6。
+
 | 字段 | 语义 |
 | --- | --- |
-| `seatID` / `fixedViewId` | 物理座位号和牌局显示顺位 |
+| `seatID` / `fixedViewId` | 物理座位号和牌局显示顺位；显隐变化时按显示座位从 1 连续重排，隐藏座位无显示顺位 |
+| `isShown` | 座位当前是否显示；临时隐藏保留玩家和牌区数据，新局默认显示 |
 | `hasObservedHandCount` / `observedHandCount` | 协议或移动事件给出的手牌总数事实 |
 | `unknownCardCount` | 收敛后仍需匿名槽覆盖的暗牌额度 |
 | `knownHandCards` | 确定普通手牌明牌，由 `Room.syncViewGroups()` 同步 |

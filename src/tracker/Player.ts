@@ -25,6 +25,8 @@ export class Player {
   declare room: Room
   /** 牌局中的顺位 一号位开始 */
   declare fixedViewId: number | undefined
+  /** 协议通知的座位显隐，隐藏时仍保留玩家与牌区状态。 */
+  isShown = true
   declare hasObservedHandCount: boolean
   declare observedHandCount: number
   declare unknownCardCount: number
@@ -217,6 +219,7 @@ export class Player {
    * 重置玩家状态
    */
   reset(): void {
+    this.isShown = true
     this.hasObservedHandCount = false
     this.observedHandCount = 0
     this.unknownCardCount = 0

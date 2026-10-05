@@ -162,6 +162,12 @@ export function logic(msg) {
         if (globalConfig.showNameSwitch && Game.needShowName) laya.showName()
         break
 
+      // 山河图等模式的座位临时显隐
+      case 'MsgGamePlayerShowStatusNtf':
+        // msg.Count
+        tracker.setTrackerPlayerShowStatuses(msg.SeatData)
+        break
+
       case 'GsCUpdateRoleDataNtf':
         // DATA_MARK_SWJG_RANK 抓鬼等有此消息?
         // if (msg.StateID === 47) {

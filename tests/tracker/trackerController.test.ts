@@ -11,6 +11,38 @@ import {
 import { getCard as getCardFixture } from './helpers/room'
 
 describe('TrackerController', () => {
+  it('临时隐藏和恢复座位保留手牌事实，重复状态不产生卡牌变更', () => {
+    const { controller } = createTrackerControllerHarness()
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }], 100)
+    controller.initTrackerDeck([1, 2, 3])
+    controller.setTrackerFirstHand(0)
+    controller.syncTrackerMove(protocolMove({ CardIDs: [1], ToID: 1 }))
+
+    const room = controller.getTrackerRoom()!
+    const player = room.getPlayer(1)!
+    const card = room.cardIndex.get(1)!
+    const dirtyCardSeq = room.dirtyCardSeq
+    expect(player.observedHandCount).toBe(1)
+    expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([1])
+
+    controller.setTrackerPlayerShowStatuses([[1, 0]])
+    expect(player.isShown).toBe(false)
+    expect(player.observedHandCount).toBe(1)
+    expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([1])
+    expect(room.cardIndex.get(1)).toBe(card)
+
+    room.viewDirty = false
+    controller.setTrackerPlayerShowStatuses([[1, 0]])
+    expect(room.viewDirty).toBe(false)
+    controller.setTrackerPlayerShowStatuses([[1, 1]])
+    expect(player.isShown).toBe(true)
+    expect(room.viewDirty).toBe(true)
+    expect(room.getPlayer(1)).toBe(player)
+    expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([1])
+    expect(room.dirtyCardSeq).toBe(dirtyCardSeq)
+  })
+
   it('读取已跟踪的玩家手牌 ID，未准备时返回空数组', () => {
     const controller = new TrackerController()
 

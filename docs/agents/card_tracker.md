@@ -12,7 +12,7 @@
 | Card / Player / Zone 模型 | [`card_player_model.md`](card_player_model.md) | 排查牌实体字段、玩家区投影、公共区顺序，或新增子区/装备容器/标记区 |
 | 匿名牌堆与身份账本 | [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md) | 匿名物理槽、`PileIdentityLedger`、cohort/generation、`unlocated`/`suspended` 分区、物化、洗牌身份守恒 |
 | 约束收敛与不动点 | [`card_tracker_convergence.md`](card_tracker_convergence.md) | 修改 `resolveConstraints()`、`ConstraintGroup`、完整位置名额、观测手牌数排他，或排查过度收敛、欠收敛、空转与遍历量回归 |
-| 技能与协议特例 | [`card_tracker_skills.md`](card_tracker_skills.md) | 暗置标记、观虚 `987/988`、整手牌交换、诫厉 `3483`、天候 `3903` 等 |
+| 技能与协议特例 | [`card_tracker_skills.md`](card_tracker_skills.md) | 暗置标记、观虚 `987/988`、整手牌交换、骋烈 `3208`、诫厉 `3483`、天候 `3903` 等 |
 | 对局临时状态 | [`skill_state.md`](skill_state.md) | 使用 GameState 统一状态仓库、选择 key 命名空间，或核对当前技能使用清单 |
 | 历史验证记录 | [`card_tracker_validation_history.md`](card_tracker_validation_history.md) | 追溯里程碑、旧测试数量、遍历基线或历史决策 |
 | 回放历史证据 | [`replay.md`](replay.md) | 任务明确涉及 JSONL 回放、`tests/replay/` 或匿名槽回放决策 |
@@ -113,6 +113,8 @@
 - 观虚目标视角交换（`SpellID=987/988`）。
 - 整手牌交换、诫厉观看与交换区暂存（`SpellID=3483`）。
 - 天候私有观看与单牌展示（`SpellID=3903`）。
+- 骋烈其他视角的牌顶展示、暗中互换、暗标记分配与近似弃置（`SpellID=3208`，完整样例见
+  [`../protocols/PubGsCMoveCard-3208.md`](../protocols/PubGsCMoveCard-3208.md)）。
 
 通用协议字段与位置语义仍以 [`docs/protocols/README.md`](../protocols/README.md) 及其专页为准。
 

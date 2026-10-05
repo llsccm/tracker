@@ -852,6 +852,24 @@ export class Room {
     return this.players.get(seatID)
   }
 
+  setPlayerShowStatuses(statuses: readonly (readonly [SeatID, number])[]): boolean {
+    let changed = false
+
+    for (const [seatID, status] of statuses) {
+      const player = this.getPlayer(seatID)
+      if (!player || player.isShown === (status === 1)) continue
+      player.isShown = status === 1
+      changed = true
+    }
+
+    if (changed) {
+      this.updateFixedViewIds()
+      this.markViewDirty('player-show-status')
+    }
+
+    return changed
+  }
+
   /**
    * 设定当前客户端的主视角座位 ID (对应 user.userID)
    *
@@ -883,7 +901,7 @@ export class Room {
   }
 
   /**
-   * 主动根据当前的先手位置 and 分配的房间座位计算并设定每一个玩家的 fixedViewId
+   * 根据先手位置和当前显示的座位重新计算 fixedViewId；隐藏座位不占顺位。
    *
    * fixedViewId 用于定位玩家在牌局中的顺位序号 一号位开始
    */
@@ -908,18 +926,15 @@ export class Room {
 
   /** 牌局中的顺位 0开始 */
   getFixedViewId(seatID: SeatID): number | undefined {
-    if (!this.seatIDs.includes(seatID)) return undefined
+    const shownSeatIDs = this.seatIDs.filter((id) => this.getPlayer(id)?.isShown)
+    const targetIndex = shownSeatIDs.indexOf(seatID)
+    if (targetIndex < 0) return undefined
 
-    // 顺位基准位置
-    const firstSeat = this.firstID !== undefined ? this.firstID : this.seatIDs[0]
-    const originIndex = this.seatIDs.indexOf(firstSeat)
-    const targetIndex = this.seatIDs.indexOf(seatID)
+    const firstSeat = this.firstID ?? shownSeatIDs[0]
+    const originIndex = shownSeatIDs.indexOf(firstSeat)
+    if (originIndex < 0) return undefined
 
-    if (targetIndex !== -1 && originIndex !== -1) {
-      return (targetIndex - originIndex + this.size) % this.size
-    }
-
-    return undefined
+    return (targetIndex - originIndex + shownSeatIDs.length) % shownSeatIDs.length
   }
 
   /**

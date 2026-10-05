@@ -19,6 +19,7 @@
 
 | 文档 | SpellID | 场景 | 关键识别 |
 | --- | ---: | --- | --- |
+| [骋烈（其他视角）](PubGsCMoveCard-3208.md) | `3208` | 牌顶展示、暗中交换、暗标记分配与弃置 | `1/5 -> 10`、两条 `10 -> 10`、`10 -> 5/4`、`4 -> 2`；仅最初展示有 ID |
 | [焚巢](PubGsCMoveCard-3752.md) | `3752` | 弃牌堆取目标牌 | `2 -> 5`、获得、随机、无正 ID |
 | [兴作](PubGsCMoveCard-3776.md) | `3776` | 牌底与目标手牌经交换区互换 | `MoveType=11`、`1/5 -> 10 -> 5/1`；牌底明牌随批次保留 |
 
@@ -56,6 +57,7 @@
 | `GsCUpdateRoleDataExNtf` | `src/handler/GsCUpdateRoleDataExNtf.js` | OPT_DATA_ADD_SPELL_EFFECT 8 / 巧织 3544 / 诡伏 3709 / 裴秀 4022 状态更新 |
 | `PubGsCMoveCard`         | `src/handler/PubGsCMoveCard.js`         | `src/tracker/MoveEventNormalizer.ts` → `Room.moveCards` |
 | 整手交换                 | 经 `decorateGenericMove`                | `src/tracker/skill/HandExchange.ts`                     |
+| 骋烈其他视角           | 经 `SpellID=3208` 装饰                  | `src/tracker/skill/ChengLie.ts` 的 `decorateChengLieMove` |
 | 诫厉目标视角交换         | 经 `SpellID=3483` 装饰                  | `src/tracker/skill/JieLi.ts`                            |
 | `CGsRoleSpellOptRep`     | `src/handler/` 技能回复相关处理器       | 见专页                                                  |
 | 裴秀地图                 | `src/handler/GsCRoleOptTargetNtf.js` 等 | `src/ui/PeiXiuMapWindow.js` / 路线工具                  |

@@ -171,6 +171,11 @@ sequenceDiagram
 
 - `GsCFirstPhaseRole` → `tracker.setTrackerFirstHand(SeatID)`：写入 `firstID` 并执行 `updateFixedViewIds()`；主视角与先手都确定后计算 `.sorderContainer` 位置，但容器保持隐藏，首轮开始时再显示。
 - `MsgGameShowFigure` 且 `Type == 1 && Figure === 1` 时也会 `setTrackerFirstHand`（身份/地主等）。
+- `MsgGamePlayerShowStatusNtf` 读取 `SeatData` 中的 `[座位号, 状态]`，由
+  `setTrackerPlayerShowStatuses` 更新 `Player.isShown`（`0` 隐藏、`1` 显示）。主面板手牌框与
+  座位覆盖层按显示状态刷新，并重新计算 `fixedViewId`：沿先手座位方向对显示玩家从 1 连续
+  编号，隐藏玩家的顺位清空。该消息在身份通知之后到达，先手玩家始终显示。手牌容器、武将标签和覆盖层
+  同步重排；注册人数、物理座位和玩家牌区状态保留，后续通知可恢复显示。牌堆尚未就绪时也同步。
 - 录像主视角还可由 `GsCUpdateRoleDataNtf`（StateID 58）、斗地主 `SmsgGameSetCharacter`、以及摸牌路径中的明牌首摸等兜底设置（见 `setTrackerMySeatID` / `gameFlowState`）。
 
 ### 4. 牌堆就绪

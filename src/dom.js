@@ -363,15 +363,18 @@ export function getSeatUIs() {
   if (startIndex < 0) return
 
   // 从主视角开始循环排列物理座位，同时保留相对先手的固定顺位。
-  UI.seatUIs = seatIDs.map((_, index) => {
-    const seatID = seatIDs[(startIndex + index) % seatIDs.length]
-    return {
-      seatID,
-      fixedViewId: players.get(Number(seatID))?.fixedViewId
-    }
-  })
+  UI.seatUIs = seatIDs
+    .map((_, index) => {
+      const seatID = seatIDs[(startIndex + index) % seatIDs.length]
+      return {
+        seatID,
+        fixedViewId: players.get(Number(seatID))?.fixedViewId
+      }
+    })
+    // 主视角保留为布局原点，其余只计算当前显示的座位。
+    .filter((seat, index) => index === 0 || players.get(seat.seatID)?.isShown)
 
-  // 先手和主视角都确定后才计算位置，容器仍保持 hidden，首轮开始时再显示。
+  // 先手和主视角都确定后提交布局；首轮前保持隐藏，局中显隐变化即时生效。
   getSeatUiPos()
   if (trackerRoom.firstID !== undefined) drawSeatUIs()
 }

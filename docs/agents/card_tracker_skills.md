@@ -1,6 +1,6 @@
 # 记牌器技能与协议特例（按需）
 
-> 只有在处理暗置标记、观虚、整手牌交换、诫厉、天候或相邻协议特例时才阅读本文。
+> 只有在处理暗置标记、观虚、整手牌交换、骋烈、诫厉、天候或相邻协议特例时才阅读本文。
 > 常规 `Room` / `Card` / `Player` API 调用先查 [`tracker_api.md`](tracker_api.md)，协议字段样例先查
 > [`docs/protocols/README.md`](../protocols/README.md)。新增技能临时状态前先查
 > [`skill_state.md`](skill_state.md)，确认统一状态仓库中的 key 与访问入口。
@@ -13,6 +13,7 @@
 | 暗置标记区候选 | `FromZone=5`、`ToZone=4/8`、全暗 `CardIDs` | `RoomMovement.handleHiddenMarkMove()`、`hiddenMarkCandidates` |
 | 观虚目标视角交换 | `SpellID=987/988` | `src/tracker/skill/GuanXu.ts`、`tests/tracker/guanXuExchange.test.ts` |
 | 整手牌交换 | `MoveType=11` + `5<->10` + 整手张数 | `src/tracker/skill/HandExchange.ts` |
+| 骋烈其他视角的暗中交换与弃置 | `SpellID=3208` | `src/tracker/skill/ChengLie.ts`、`tests/tracker/chengLie.test.ts` |
 | 诫厉观看与暂存 | `SpellID=3483` | `handleRoleOptTargetNtf`、`tests/tracker/roleOptTargetNtf.test.ts` |
 | 天候私有观看与展示 | `SpellID=3903` | `src/tracker/skill/TianHou.ts`、`tests/tracker/tianHouExchange.test.ts` |
 | 兴作牌底与手牌交换 | `SpellID=3776` | `src/tracker/skill/XingZuo.ts`、`tests/tracker/xingZuo.test.ts` |
@@ -91,6 +92,19 @@
 - 候选批次回到己方且 `CardIDs` 完整覆盖整手时，正 ID 直接确认对应候选，未出现的候选排除该批次分支。
 - 暗实体占位仍随物理批次移动；回到己方并由正 ID 揭示时，真实身份若尚在其它公共区，使用 exchange 暗实体回填原槽位后再把真实身份移入手牌，避免占位残留或重复计数。
 - 明牌回填 `cardIDs`，暗实体回填 `sourceCards`；明暗混合批次不共用 `combinationID`。
+
+## 骋烈其他视角的暗中交换与弃置（SpellID=3208）
+
+- 完整十二条协议样例与字段含义见
+  [`../protocols/PubGsCMoveCard-3208.md`](../protocols/PubGsCMoveCard-3208.md)。
+- 最初 `1 -> 1` 展示牌顶三张，随后 `1/5 -> 10` 暂存；两条 `10 -> 10` 表示真实暗中互换，
+  不能因通用归一化为 `noop` 就认定没有业务变化。后续 `10 -> 5/4` 分别回手和暗置标记，
+  最后的 `4 -> 2` 弃置同样不公开 ID。
+- 当前单一 `exchange` 容器不区分内部两侧；无 ID 离区前统一匿名化，不按交换前顺序确认
+  目标身份。`chengLieDiscardQueue` 在标记弃置时按张数近似回填展示身份，不表示协议证明了
+  具体标记或弃牌的真实身份。
+- `3208` 显式绕过 `HandExchange`，即使参与交换的一张手牌恰好是发动者整手也不例外。
+- 当前入口为 `decorateChengLieMove`；已有回归见 `tests/tracker/chengLie.test.ts`。
 
 ## 诫厉观看与交换区暂存（SpellID=3483）
 

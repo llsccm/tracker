@@ -1,7 +1,8 @@
 import { POSITION_RANDOM } from '../candidate/cardPositions'
 import type { Room } from '../Room'
+import { decorateChengLieMove } from '../skill/ChengLie'
 import decorateFenChao from '../skill/FenChao'
-import decorateGuanXu, { isGuanXuSpellID } from '../skill/GuanXu'
+import decorateGuanXu from '../skill/GuanXu'
 import decorateHandExchange from '../skill/HandExchange'
 import decorateJieLi from '../skill/JieLi'
 import decorateXingZuo, { XING_ZUO_SPELL_ID } from '../skill/XingZuo'
@@ -26,6 +27,15 @@ import {
 
 export type MoveEventHandler = (event: MoveEventDraft, room: Room) => MoveEventDraft
 
+const HAND_EXCHANGE_EXCLUDED_SPELL_IDS: ReadonlySet<number> = new Set([
+  3208, // 骋烈
+  3483, // 诫厉
+  3903, // 天候
+  XING_ZUO_SPELL_ID,
+  987, // 观虚
+  988 // 观虚
+])
+
 export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEventDraft {
   const raw = getRaw(event)
   const spellID = Number(raw.SpellID ?? event.options?.spellID)
@@ -40,7 +50,9 @@ export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEven
     return patchEvent(event, {
       options: {
         fromZone: 'outside',
-        position: POSITION_RANDOM
+        position: POSITION_RANDOM,
+        // 随机入堆即失去具体位置，先匿名化，避免账本把代表实体重新确认为牌顶明牌。
+        resetKnownToUnknown: true
       }
     })
   }
@@ -65,13 +77,7 @@ export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEven
   // observePendingChengLieFinalDiscard(event, room)
 
   // 牌堆与手牌交换有技能专属批次，不能落入双方整手交换账本。
-  if (
-    spellID === 3483 ||
-    spellID === 3903 ||
-    spellID === XING_ZUO_SPELL_ID ||
-    isGuanXuSpellID(spellID)
-  )
-    return event
+  if (HAND_EXCHANGE_EXCLUDED_SPELL_IDS.has(spellID)) return event
 
   // 整手牌经交换区互易：按协议模式处理，不绑定单一 SpellID。
   return decorateHandExchange(event, room)
@@ -144,7 +150,7 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
   room.registerMoveEventHandler(3731, decorateDuoQiMove)
 
   // 马承【骋烈】
-  // room.registerMoveEventHandler(3208, decorateChengLie)
+  room.registerMoveEventHandler(3208, decorateChengLieMove)
 
   // 族钟繇【诫厉】：目标视角定位换出槽位，第三方视角保留手牌/牌顶范围弱候选。
   room.registerMoveEventHandler(3483, decorateJieLi)

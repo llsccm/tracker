@@ -7,7 +7,8 @@ import {
   clearSeatOverlayCards,
   initPlayerHandContainers,
   renderPlayerHand,
-  renderPublicZones
+  renderPublicZones,
+  syncPlayerHandContainers
 } from './PlayerHandView'
 import {
   collectDirtyRenderState,
@@ -46,6 +47,7 @@ export function mount(room: Room | null): void {
     initPlayerHandContainers(doc, currentRoom)
   }
 
+  syncPlayerHandContainers(doc, currentRoom)
   syncTrackerVisibility(doc)
   if (!currentRoom.isDeckReady) return
 
@@ -76,7 +78,7 @@ function doUnmount(): void {
  * 一帧内多次调用只执行一次
  */
 export function scheduleRender(): void {
-  if (!currentRoom?.isDeckReady || !doc) return
+  if (!currentRoom || !doc) return
   if (rafScheduled) return
   rafScheduled = true
   requestAnimationFrame(() => {
@@ -86,7 +88,9 @@ export function scheduleRender(): void {
 }
 
 function flushRender(): void {
-  if (!currentRoom?.isDeckReady || !doc) return
+  if (!currentRoom || !doc) return
+  if (syncPlayerHandContainers(doc, currentRoom)) markFullPlayerRender(currentRoom)
+  if (!currentRoom.isDeckReady) return
   const renderState = collectDirtyRenderState(currentRoom)
 
   // 没有新的脏牌、面板状态或强制全量请求时，跳过本帧全部 DOM 操作。
@@ -133,6 +137,7 @@ export function reset(): void {
 
   clearRenderedContent(doc)
   initPlayerHandContainers(doc, currentRoom)
+  syncPlayerHandContainers(doc, currentRoom)
   if (!currentRoom.isDeckReady) return
   buildCardTypeButtons(currentRoom, doc, setQuery)
   currentRoom.markViewDirty('tracker-view-reset')
@@ -185,14 +190,18 @@ function getPlayersForRender(
 }
 
 function getOrderedPlayers(room: Room): Player[] {
-  return Array.from(room.players.values()).sort((a, b) => {
-    return (a.fixedViewId ?? Number.MAX_SAFE_INTEGER) - (b.fixedViewId ?? Number.MAX_SAFE_INTEGER)
-  })
+  return Array.from(room.players.values())
+    .filter((player) => player.isShown)
+    .sort((a, b) => {
+      return (a.fixedViewId ?? Number.MAX_SAFE_INTEGER) - (b.fixedViewId ?? Number.MAX_SAFE_INTEGER)
+    })
 }
 
 function hasResolvedPlayerOrder(room: Room): boolean {
   if (room.firstID === undefined || room.firstID === null) return false
-  return Array.from(room.players.values()).every((player) => Number.isFinite(player.fixedViewId))
+  return Array.from(room.players.values()).every(
+    (player) => !player.isShown || Number.isFinite(player.fixedViewId)
+  )
 }
 
 function syncTrackerVisibility(targetDoc: Document): void {
