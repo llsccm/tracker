@@ -2,7 +2,7 @@ import { POSITION_RANDOM } from '../candidate/cardPositions'
 import type { Room } from '../Room'
 import { decorateChengLieMove } from '../skill/ChengLie'
 import decorateFenChao from '../skill/FenChao'
-import decorateGuanXu, { isGuanXuSpellID } from '../skill/GuanXu'
+import decorateGuanXu from '../skill/GuanXu'
 import decorateHandExchange from '../skill/HandExchange'
 import decorateJieLi from '../skill/JieLi'
 import decorateXingZuo, { XING_ZUO_SPELL_ID } from '../skill/XingZuo'
@@ -26,6 +26,15 @@ import {
 } from '../skill/DuoQi'
 
 export type MoveEventHandler = (event: MoveEventDraft, room: Room) => MoveEventDraft
+
+const HAND_EXCHANGE_EXCLUDED_SPELL_IDS: ReadonlySet<number> = new Set([
+  3208, // 骋烈
+  3483, // 诫厉
+  3903, // 天候
+  XING_ZUO_SPELL_ID,
+  987, // 观虚
+  988 // 观虚
+])
 
 export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEventDraft {
   const raw = getRaw(event)
@@ -68,14 +77,7 @@ export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEven
   // observePendingChengLieFinalDiscard(event, room)
 
   // 牌堆与手牌交换有技能专属批次，不能落入双方整手交换账本。
-  if (
-    spellID === 3208 ||
-    spellID === 3483 ||
-    spellID === 3903 ||
-    spellID === XING_ZUO_SPELL_ID ||
-    isGuanXuSpellID(spellID)
-  )
-    return event
+  if (HAND_EXCHANGE_EXCLUDED_SPELL_IDS.has(spellID)) return event
 
   // 整手牌经交换区互易：按协议模式处理，不绑定单一 SpellID。
   return decorateHandExchange(event, room)
