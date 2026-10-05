@@ -18,7 +18,12 @@ const CHENG_LIE_DISCARD_QUEUE = 'chengLieDiscardQueue'
 /** 骋烈暗标记不绑定身份；按约定在标记弃置时逐张近似回收展示牌。 */
 export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEventDraft {
   const raw = getRaw(event)
-  if (raw.SpellID !== 3208) return event
+  if (event.type === 'noop' || Number(raw.SpellID) !== 3208) return event
+
+  const fromZone = Number(raw.FromZone)
+  const toZone = Number(raw.ToZone)
+  const fromZoneParam = Number(raw.FromZoneParam)
+  const moveType = Number(raw.MoveType)
 
   const pendingIDs = room.readSkillState<number[]>(CHENG_LIE_DISCARD_QUEUE)
   if (hasPositiveID(event.cardIDs)) {
@@ -33,13 +38,7 @@ export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEve
     return event
   }
 
-  if (
-    raw.FromZone === 4 &&
-    raw.FromZoneParam === 3208 &&
-    raw.ToZone === 2 &&
-    raw.MoveType === 15 &&
-    pendingIDs
-  ) {
+  if (fromZone === 4 && fromZoneParam === 3208 && toZone === 2 && moveType === 15 && pendingIDs) {
     const availableIDs = pendingIDs.filter((id) => room.cardIndex.get(id)?.location === 'outside')
     const cardIDs = availableIDs.slice(0, getCount(event))
     const remainingIDs = availableIDs.slice(cardIDs.length)
@@ -50,7 +49,10 @@ export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEve
     return patchEvent(event, { cardIDs, options: { pileIdentityCardIDs: cardIDs } })
   }
 
-  if (raw.FromZone === 10) {
+  if (fromZone === 10) {
+    // 交换区内部事件没有实际移出，不能提前替换实体或改变身份状态。
+    if (toZone === 10) return event
+
     // 暗中换牌后，交换区的代表顺序不能证明某张展示牌进入了手牌或标记。
     // 展示牌暂存在本轮待弃置队列，物理数量由匿名槽承接。
     const exchange = room.zones.get('exchange')
@@ -71,7 +73,7 @@ export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEve
     return event
   }
 
-  if (raw.MoveType !== MOVE_TYPE.EXCHANGE || raw.FromZone !== 1 || raw.ToZone !== 10) {
+  if (moveType !== MOVE_TYPE.EXCHANGE || fromZone !== 1 || toZone !== 10) {
     return event
   }
 
