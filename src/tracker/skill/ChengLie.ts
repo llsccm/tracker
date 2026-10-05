@@ -1,4 +1,5 @@
-import { POSITION_BOTTOM } from '../candidate/cardPositions'
+import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
+import { MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Room } from '../Room'
 import { trackerLogger } from '@/utils/logger'
 import {
@@ -11,6 +12,82 @@ import {
   getPositiveIDs
 } from '../skill/moveEventUtils'
 import { CARD_INSTANCE_STATUS } from '../CardCounter'
+
+const CHENG_LIE_DISCARD_QUEUE = 'chengLieDiscardQueue'
+
+/** 骋烈暗标记不绑定身份；按约定在标记弃置时逐张近似回收展示牌。 */
+export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEventDraft {
+  const raw = getRaw(event)
+  if (raw.SpellID !== 3208) return event
+
+  const pendingIDs = room.readSkillState<number[]>(CHENG_LIE_DISCARD_QUEUE)
+  if (hasPositiveID(event.cardIDs)) {
+    // 显式身份优先，已经重新出现的牌不再参与之后的近似弃置。
+    if (pendingIDs) {
+      const ids = new Set(getPositiveIDs(event.cardIDs))
+      room.setSkillState(
+        CHENG_LIE_DISCARD_QUEUE,
+        pendingIDs.filter((id) => !ids.has(id))
+      )
+    }
+    return event
+  }
+
+  if (
+    raw.FromZone === 4 &&
+    raw.FromZoneParam === 3208 &&
+    raw.ToZone === 2 &&
+    raw.MoveType === 15 &&
+    pendingIDs
+  ) {
+    const availableIDs = pendingIDs.filter((id) => room.cardIndex.get(id)?.location === 'outside')
+    const cardIDs = availableIDs.slice(0, getCount(event))
+    const remainingIDs = availableIDs.slice(cardIDs.length)
+    if (remainingIDs.length > 0) room.setSkillState(CHENG_LIE_DISCARD_QUEUE, remainingIDs)
+    else room.deleteSkillState(CHENG_LIE_DISCARD_QUEUE)
+    // 这是用户指定的近似记账，并非协议公开的对应关系；按数量消费标记暗槽，
+    // 同时把推定身份提交给弃牌账本，供后续洗牌回收。
+    return patchEvent(event, { cardIDs, options: { pileIdentityCardIDs: cardIDs } })
+  }
+
+  if (raw.FromZone === 10) {
+    // 暗中换牌后，交换区的代表顺序不能证明某张展示牌进入了手牌或标记。
+    // 展示牌暂存在本轮待弃置队列，物理数量由匿名槽承接。
+    const exchange = room.zones.get('exchange')
+    if (!exchange) return event
+    const knownCards = exchange.cards.filter((card) => card.id > 0)
+    const placeholders = room.createExternalCards([], knownCards.length)
+    knownCards.forEach((card, index) => {
+      const placeholder = placeholders[index]
+      placeholder.moveToPublicZone('exchange')
+      exchange.replaceCard(card, placeholder)
+      if (pendingIDs?.includes(card.id)) {
+        room.removeCardsFromConstraintGroups([card])
+        card.moveToPublicZone('outside')
+      } else {
+        room.constraints.suspendKnownCard(card, 'chengLie:hiddenExchange')
+      }
+    })
+    return event
+  }
+
+  if (raw.MoveType !== MOVE_TYPE.EXCHANGE || raw.FromZone !== 1 || raw.ToZone !== 10) {
+    return event
+  }
+
+  const cards = room.getPublicEndpointCards('pile', getCount(event), POSITION_TOP)
+  const knownCards = new Set(cards.filter((card) => card.id > 0 && card.isKnown === true))
+  const cardIDs = Array.from(knownCards, (card) => card.id)
+  room.setSkillState(CHENG_LIE_DISCARD_QUEUE, [...new Set([...(pendingIDs ?? []), ...cardIDs])])
+  return patchEvent(event, {
+    cardIDs,
+    options: {
+      fromPosition: POSITION_TOP,
+      sourceCards: cards.filter((card) => !knownCards.has(card)),
+      pileIdentityCardIDs: cardIDs
+    }
+  })
+}
 
 // 马承【骋烈】：记录亮出集合，并在标记牌最终明置进弃牌堆时做前后集合差分。
 export function decorateChengLie(event: MoveEventDraft, room: Room): MoveEventDraft {

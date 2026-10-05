@@ -111,7 +111,7 @@ tracker 状态；所需事实应由后续协议重新建立。
 | ---------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `hiddenMarkCandidates` | 通用暗置标记推断；覆盖普通标记、`414/3389` 兼容标记空间及木牛流马容器 `700` | 明牌候选、匿名占位、来源/目标座位、标记空间、数量范围与约束组关系          | `src/tracker/roomMovement/hiddenMarks.ts`；随候选结算维护，统一生命周期兜底清空       |
 | `unassignedMarkSpaces` | `seatID=255` 等无席位弹窗/标记空间                                          | `spellID -> Card[]` 暗占位实体桶                                           | `src/tracker/roomMovement/hiddenMarks.ts`；取牌或实体移出时更新，统一生命周期兜底清空 |
-| `3208`                 | 马承【骋烈】                                                                | 展示 ID、最终弃置 ID、发动者座位、展示前是否已有模糊明牌                   | `src/tracker/skill/ChengLie.ts`；最终弃置结算后删除                                   |
+| `chengLieDiscardQueue` | 马承【骋烈】 | 待近似弃置的牌顶展示 ID；暗标记不绑定身份，每条标记弃置按张数消费队列，显式 ID 优先 | `src/tracker/skill/ChengLie.ts`；队列耗尽后删除 |
 | `duoQi`                | 【狂魔】`3730` 与【夺炁】`3731` 共享                                        | 初始手牌归属、`Card` 实体归属、未决 CardID、发动记录及随机获得候选组       | `src/tracker/skill/DuoQi.ts`；初始化替换旧状态，统一生命周期兜底清空                  |
 | `guanXuExchange`       | 黄承彦【观虚】`987/988`                                                     | 牌堆侧/手牌侧 exchange 逻辑桶、桶内 `Card` 引用与牌顶范围候选              | `src/tracker/skill/GuanXu.ts`；各 SpellID 桶结算后删除，全部为空时删除总账本          |
 | `handExchangeBatches`  | 通用整手牌交换模式；完整实战样例为 `SpellID=121`，实现不绑定单一技能        | 按 SpellID 和原持有座位保存整手批次、`Card` 引用、候选批次令牌与恢复元数据 | `src/tracker/skill/HandExchange.ts`；单个 SpellID 结算后删分账，全部为空时删除总账本  |
