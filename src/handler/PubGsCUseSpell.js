@@ -93,6 +93,13 @@ export function handleUseSpell(msg) {
 
       break
 
+    case 3434:
+      if (Game.myID === undefined || SeatID === Game.myID) break
+      // Params: [82, 0] 虚拟牌技能id
+      // EffectIndex: 2
+      Game.setSpellState(3434, CardIDs)
+      break
+
     default:
       break
   }
