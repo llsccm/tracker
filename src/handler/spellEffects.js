@@ -1,5 +1,5 @@
 import handleJiaoYu from './skills/JiaoYu'
-import handleShengMo from './skills/shengmo'
+import handleShengMo from './skills/ShengMo'
 import handleXiaShu from './skills/XiaShu'
 import handleZeXing from './skills/ZeXing'
 import handleZuoLian from './skills/ZuoLian'
