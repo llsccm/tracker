@@ -575,6 +575,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       const movedUnknownCards = isPendingDiscardGain
         ? this.room.createExternalCards([], unknownCount)
         : this.takeSourceCards(unknownCount, {
+            toZone,
             sourceIsOutside,
             fromSeat,
             fromSubZone,
@@ -639,6 +640,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     }
 
     const movedUnknownCards = this.takeSourceCards(unknownCount, {
+      toZone,
       sourceIsOutside,
       fromSeat,
       fromSubZone,
