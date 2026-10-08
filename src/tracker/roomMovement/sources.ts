@@ -670,8 +670,10 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       sourceEvent
     } = options
     const moveType = Number(sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType ?? options.moveType)
+    // MOVE 也用于弃牌回堆，只对移入玩家区的未知获得补暗牌。
     const isDiscardGain =
-      (fromZone === 'discard' || Number(fromZone) === 2) && moveType === MOVE_TYPE.GAIN
+      (fromZone === 'discard' || Number(fromZone) === 2) &&
+      (moveType === MOVE_TYPE.GAIN || (moveType === MOVE_TYPE.MOVE && options.toZone === 'player'))
 
     if (sourceCards?.length) {
       if (fromSeat !== null && !Number.isNaN(fromSeat)) {

@@ -131,6 +131,7 @@ export interface TakeSourceCardsOptions {
   subZone?: SubZone
   spellID?: SpellID | null
   fromZone?: SourceZoneInput
+  toZone?: MoveTargetZone
   fromPosition?: PublicPosition
   fromSpellID?: SpellID | null
   sourceCards?: Card[]
