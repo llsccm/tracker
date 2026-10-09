@@ -1,6 +1,9 @@
-export default function handleZeXing(context) {
+import type { CardID } from '@/tracker/types'
+import type { SkillMoveContext } from './types'
+
+export default function handleZeXing(context: SkillMoveContext): void {
   const { game } = context
-  const spellCards = game.getSpellState(context.SpellID)
+  const spellCards = game.getSpellState<CardID[]>(context.SpellID)
 
   if (
     context.FromZone == 5 &&

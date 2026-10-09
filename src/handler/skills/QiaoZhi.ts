@@ -1,6 +1,11 @@
 import { tracker } from '@/tracker/runtime/browser'
+import type { SeatID } from '@/tracker/types'
+import type { RoleDataMessage } from './types'
 
-export function handleQiaoZhi(msg = {}, currentSeatID) {
+export function handleQiaoZhi(
+  msg: RoleDataMessage = {},
+  currentSeatID: SeatID | string | null
+): void {
   if (msg.SeatID === null || msg.SeatID === undefined) return
   if (currentSeatID === null || currentSeatID === undefined) return
 

@@ -80,7 +80,7 @@ className: "CGsRoleSpellOptRep"
 
 ## 代码入口
 
-- 展示与移动状态：`src/handler/skills/XiaShu.js`
+- 展示与移动状态：`src/handler/skills/XiaShu.ts`
 - 移动前后副作用：`src/handler/PubGsCMoveCard.js`、`src/handler/spellEffects.js`
 - 选择回复：`src/handler/CGsRoleSpellOptRep.js`
 - 回归：`tests/tracker/xiaShu.test.ts`

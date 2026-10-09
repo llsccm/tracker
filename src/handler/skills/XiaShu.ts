@@ -1,19 +1,59 @@
+import type { GameState } from '@/tracker/Game'
+import type { TrackerController } from '@/tracker/runtime/trackerController'
+import type { CardID, RawMoveCardEvent, SeatID, SubZone } from '@/tracker/types'
+
+type XiaShuGame = Pick<GameState, 'getSpellState' | 'setSpellState' | 'deleteSpellState'>
+type XiaShuTracker = Pick<TrackerController, 'revealTrackerCards'>
+
+interface XiaShuState {
+  shownCardIDs: CardID[]
+  targetSeatID: SeatID
+  choice?: 1 | 2
+  actorSeatID?: SeatID
+}
+
+interface XiaShuTargetNotice {
+  Param?: number | string
+  Params?: CardID[]
+  targetSeatID?: SeatID | string
+  Type?: number | string
+  [key: string]: unknown
+}
+
+interface XiaShuChoiceMessage {
+  Datas?: number[]
+  SeatID?: SeatID | string
+  Type?: number | string
+  data_count?: number | string
+  [key: string]: unknown
+}
+
+interface XiaShuMoveContext extends RawMoveCardEvent {
+  game: XiaShuGame
+  tracker?: XiaShuTracker
+  fromSeatID?: SeatID | null
+  toSeatID?: SeatID | null
+  fromSubZone?: SubZone | null
+  toSubZone?: SubZone | null
+  afterMove?: (callback: () => void) => void
+}
+
 const XIA_SHU_SPELL_ID = 361
 const XIA_SHU_TAKE_SHOWN = 1
 const XIA_SHU_TAKE_HIDDEN = 2
 
-function isValidSeatID(value) {
+function isValidSeatID(value: SeatID | string): boolean {
   const seatID = Number(value)
   return Number.isInteger(seatID) && seatID >= 0 && seatID !== 255
 }
 
-function getXiaShuState(game) {
-  const state = game.getSpellState(XIA_SHU_SPELL_ID)
+function getXiaShuState(game: XiaShuGame): XiaShuState | undefined {
+  const state = game.getSpellState<XiaShuState>(XIA_SHU_SPELL_ID)
   if (!state || Array.isArray(state) || typeof state !== 'object') return undefined
   return state
 }
 
-export function handleXiaShuTargetNotice(msg, game) {
+export function handleXiaShuTargetNotice(msg: XiaShuTargetNotice, game: XiaShuGame): boolean {
   const { Param, Params, targetSeatID, Type } = msg
   if (Number(Param) !== 0 || Number(Type) !== 29 || !Array.isArray(Params)) return false
 
@@ -22,14 +62,14 @@ export function handleXiaShuTargetNotice(msg, game) {
   if (!shownCardIDs.length || !Number.isInteger(targetSeat) || targetSeat === 255) return false
 
   // 该通知同时给出展示牌与真实目标座位；SeatID/SrcSeatID 则都是技能发动者。
-  game.setSpellState(XIA_SHU_SPELL_ID, {
+  game.setSpellState<XiaShuState>(XIA_SHU_SPELL_ID, {
     shownCardIDs,
     targetSeatID: targetSeat
   })
   return true
 }
 
-function settleXiaShuAfterMove(game, tracker) {
+function settleXiaShuAfterMove(game: XiaShuGame, tracker?: XiaShuTracker): boolean {
   const state = getXiaShuState(game)
   if (!state) return false
   if (state.choice !== XIA_SHU_TAKE_SHOWN && state.choice !== XIA_SHU_TAKE_HIDDEN) return false
@@ -60,7 +100,7 @@ function settleXiaShuAfterMove(game, tracker) {
   return true
 }
 
-export function handleXiaShuChoice(msg, game) {
+export function handleXiaShuChoice(msg: XiaShuChoiceMessage, game: XiaShuGame): boolean {
   const { Datas, SeatID, Type } = msg
   const dataCount = Number(msg.data_count ?? Datas?.length)
   if (Number(Type) !== 22 || dataCount !== 2 || !Array.isArray(Datas)) return false
@@ -80,7 +120,7 @@ export function handleXiaShuChoice(msg, game) {
   return true
 }
 
-export default function handleXiaShuMove(context) {
+export default function handleXiaShuMove(context: XiaShuMoveContext): void {
   const isHandTransfer =
     Number(context.SpellID) === XIA_SHU_SPELL_ID &&
     Number(context.FromZone) === 5 &&

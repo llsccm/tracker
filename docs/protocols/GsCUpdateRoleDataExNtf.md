@@ -128,7 +128,7 @@ Datas: [cardID, 0]
 | `0` | `cardID` | 巧织暗取到的牌 ID |
 | `1` | 截止符 | 固定为 `0`，表示本条数据结束 |
 
-处理入口为 `src/handler/skills/QiaoZhi.js` 的
+处理入口为 `src/handler/skills/QiaoZhi.ts` 的
 `handleQiaoZhi()`。它将 `cardID` 作为已知身份物化到 `SeatID` 的普通手牌，
 但不再次增加手牌总数；暗取数量已经由前置移动消息记录。
 
@@ -167,7 +167,7 @@ Datas: [2, 2, 132, 0, 0, 0, 0]
 
 前置移动与角色数据的 FIFO 座位不符，或弃牌堆 pending 的实际身份无法精确定位时，不消费 FIFO 并告警。重复收到同一当前快照或只删除旧牌是空操作；缺少待结算记录时，兼容回退只同步当前快照的新增 `CardID`，以兼容牌堆获得和回放缺失前置移动的场景。
 
-处理入口为 `src/handler/skills/GuiFu.js`；结算入口为 `TrackerController.settleTrackerPendingDiscardGain()`，缺少待结算记录时才使用 `TrackerController.revealTrackerCards()` 回退。
+处理入口为 `src/handler/skills/GuiFu.ts`；结算入口为 `TrackerController.settleTrackerPendingDiscardGain()`，缺少待结算记录时才使用 `TrackerController.revealTrackerCards()` 回退。
 
 ## 地图浮窗
 
@@ -182,8 +182,8 @@ Datas: [2, 2, 132, 0, 0, 0, 0]
 ## 代码位置
 
 - 消息路由：`src/logic.js`
-- 3544 处理：`src/handler/skills/QiaoZhi.js`
-- 3709 处理：`src/handler/skills/GuiFu.js`
+- 3544 处理：`src/handler/skills/QiaoZhi.ts`
+- 3709 处理：`src/handler/skills/GuiFu.ts`
 - 协议解析与路线求解：`src/utils/peixiuRouteFeature.js`
 - 地图浮窗：`src/ui/PeiXiuMapWindow.js`
 - 地图配置：`src/config/SpellExtendConfig.js`
