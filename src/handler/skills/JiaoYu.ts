@@ -1,4 +1,6 @@
-export default function handleJiaoYu(context) {
+import type { SkillMoveContext } from './types'
+
+export default function handleJiaoYu(context: SkillMoveContext): void {
   if (
     context.FromZone != 8 ||
     context.ToZone != 5 ||
@@ -8,7 +10,7 @@ export default function handleJiaoYu(context) {
     return
   }
 
-  const colors = context.game.getSpellState(context.SpellID)
+  const colors = context.game.getSpellState<Set<number>>(context.SpellID)
   if (!(colors instanceof Set) || colors.size == 0) return
 
   const markSpellID = Number(context.FromID || context.SpellID)

@@ -1,11 +1,13 @@
 import { tracker } from '@/tracker/runtime/browser'
+import type { CardID, SeatID } from '@/tracker/types'
+import type { RoleDataMessage } from './types'
 
 export { GUI_FU_ROLE_DATA_ID as ROLE_DATA_3709 } from '@/tracker/runtime/protocolRules'
 
 /**
  * 诡伏角色数据格式：首项为获得数量，后面紧跟对应数量的 CardID。
  */
-export function parseGuiFuCardIDs(datas) {
+export function parseGuiFuCardIDs(datas: unknown): CardID[] {
   if (!Array.isArray(datas)) return []
 
   const count = Number(datas[0])
@@ -26,7 +28,10 @@ export function parseGuiFuCardIDs(datas) {
  * 移动消息先登记匿名弃牌获得；角色数据是当前快照，只结算相对上次快照新增的牌。
  * 没有待结算记录时保留普通明牌同步，兼容牌堆获得与回放缺失前置移动的场景。
  */
-export function handleGuiFu(msg = {}, currentSeatID) {
+export function handleGuiFu(
+  msg: RoleDataMessage = {},
+  currentSeatID: SeatID | string | null
+): CardID[] {
   if (msg.SeatID === null || msg.SeatID === undefined) return []
   if (currentSeatID === null || currentSeatID === undefined) return []
 

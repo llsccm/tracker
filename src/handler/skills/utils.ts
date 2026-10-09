@@ -1,5 +1,6 @@
 import { tracker } from '@/tracker/runtime/browser'
+import type { CardID } from '@/tracker/types'
 
-export function getTrackedPileCardIDs() {
+export function getTrackedPileCardIDs(): CardID[] {
   return tracker.getReadyTrackerRoom()?.publicZones.getPileCardIDs() ?? []
 }

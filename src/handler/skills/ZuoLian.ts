@@ -1,4 +1,12 @@
-export default function handleZuoLian(context) {
+import type { CardID, SeatID } from '@/tracker/types'
+import type { SkillMoveContext } from './types'
+
+interface ZuoLianState {
+  [seatID: SeatID]: CardID
+  stack?: CardID
+}
+
+export default function handleZuoLian(context: SkillMoveContext): void {
   const { game } = context
 
   // 在手牌中展示
@@ -6,7 +14,7 @@ export default function handleZuoLian(context) {
     const positiveIDs = context.CardIDs.filter((id) => id > 0)
 
     if (positiveIDs.length === 1) {
-      const spellState = game.ensureSpellState(context.SpellID, () => ({}))
+      const spellState = game.ensureSpellState<ZuoLianState>(context.SpellID, () => ({}))
       spellState[context.FromID] = positiveIDs[0]
     }
 
@@ -15,7 +23,7 @@ export default function handleZuoLian(context) {
 
   // 从手牌中移动到交换区
   if (context.FromZone === 5 && context.ToZone === 10 && context.MoveType === 11) {
-    const spellState = game.ensureSpellState(context.SpellID, () => ({}))
+    const spellState = game.ensureSpellState<ZuoLianState>(context.SpellID, () => ({}))
     const knownCardID = context.CardIDs.find((id) => id > 0)
     const cardID = knownCardID || spellState[context.FromID]
 
@@ -38,7 +46,7 @@ export default function handleZuoLian(context) {
     (context.ToZone === 1 || context.ToZone === 2) &&
     context.MoveType === 11
   ) {
-    const spellState = game.getSpellState(context.SpellID)
+    const spellState = game.getSpellState<ZuoLianState>(context.SpellID)
     const cardID = spellState?.stack
 
     if (!context.CardIDs.some((id) => id > 0) && cardID > 0) context.CardIDs[0] = cardID
