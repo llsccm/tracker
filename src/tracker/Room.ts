@@ -1562,20 +1562,19 @@ export class Room {
     const normalized = normalizeLocationCandidate(candidate)
     if (normalized?.type !== 'container' || normalized.containerType !== 'equipment') return []
 
+    const equipment = this.cardIndex.get(Number(normalized.cardID))
+    // 装备本体离开装备区后标记空间不再存在；旧 muniuMarkSeat 不能继续投影到玩家标记区。
+    if (equipment?.location !== 'player' || equipment.subZone !== 'equip') return []
+
     const container = getEquipmentMarkContainerByMarkSpellID(normalized.spellID)
     const markSeat =
       container?.equipmentCardID === normalized.cardID
         ? this.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.muniuMarkSeat
         : null
-    const equipment = this.cardIndex.get(Number(normalized.cardID))
     // 已观察到 mark700 后，其座位只由标记协议更新，不能随装备提前换位。
     // 尚无标记协议的容器候选保留装备位置兜底。
     const seats =
-      markSeat !== null && markSeat !== undefined
-        ? [markSeat]
-        : equipment?.location === 'player' && equipment.subZone === 'equip'
-          ? Array.from(equipment.seats)
-          : []
+      markSeat !== null && markSeat !== undefined ? [markSeat] : Array.from(equipment.seats)
 
     return seats.map((seatID) => ({
       type: 'player',

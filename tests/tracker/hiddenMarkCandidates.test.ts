@@ -761,6 +761,44 @@ describe('隐藏标记区候选', () => {
     expect(room.locationIndex.markBySeatAndSpell.get(5).get(700)).toContain(knownCard)
   })
 
+  it('木牛流马离开装备区后容器候选不再投影到旧标记座位', () => {
+    const { room } = createTestRoom({ cardIDs: [161, 152, 153], seatIDs: [4, 5] })
+    const knownCard = getCard(room, 152)
+
+    room.moveCards([161], 'player', {
+      seatID: 4,
+      subZone: 'equip',
+      fromZone: 'pile',
+      spellID: 700,
+      cardCount: 1,
+      sourceEvent: { type: 'test:muniu-equip' }
+    })
+    moveKnownCardsToHand(room, [152], 4)
+    room.moveCards([0], 'player', {
+      seatID: 4,
+      subZone: 'hand',
+      fromZone: 'pile',
+      cardCount: 1,
+      sourceEvent: { type: 'test:unknown-hand' }
+    })
+    room.players.get(4).syncObservedHandCount(2)
+    moveHiddenHandToMark(room, { seatID: 4, count: 1, spellID: 700 })
+
+    expect(room.locationIndex.markBySeatAndSpell.get(4).get(700)).toContain(knownCard)
+
+    room.moveCards([161], 'discard', {
+      fromSeatID: 4,
+      fromZone: 6,
+      fromSubZone: 'equip',
+      spellID: 987,
+      cardCount: 1,
+      sourceEvent: { type: 'test:muniu-to-discard' }
+    })
+
+    expect(room.cardIndex.get(161)!.location).toBe('discard')
+    expect(room.locationIndex.markBySeatAndSpell.get(4)?.get(700) ?? []).not.toContain(knownCard)
+  })
+
   it('主视角看到木马内只有其他明牌时将弱候选收敛回手牌', () => {
     // 实战约束：
     // 1) 弱候选建立前，不要把快照明牌预置成已知 mark；
