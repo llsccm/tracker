@@ -457,7 +457,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
     expect(room.counter.cardsByStatus[CARD_INSTANCE_STATUS.APPEARED]).toContain(hiddenMarkCard)
     const recordBefore = room
       .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
-      .records.get('1:1:700')!
+      .records.get('1:muniu:161')!
     expect(recordBefore.placeholderCards.has(hiddenMarkCard)).toBe(true)
     const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
 
@@ -466,7 +466,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
 
       const recordAfter = room
         .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
-        .records.get('1:1:700')!
+        .records.get('1:muniu:161')!
       expect(recordAfter.placeholderCards.has(hiddenMarkCard)).toBe(true)
       expect(hiddenMarkCard).toSatisfy(isAnonymous)
       expect(hiddenMarkCard.location).toBe('player')

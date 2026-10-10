@@ -1,3 +1,5 @@
+import { getEquipmentMarkContainerByMarkSpellID } from './candidate/equipmentMarkContainer'
+import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from './roomMovement/types'
 import { Card, hasRealIdentity, isAnonymous } from './Card'
 import { Player } from './Player'
 import { Zone } from './Zone'
@@ -1551,8 +1553,8 @@ export class Room {
   }
 
   /**
-   * 将装备容器候选按当前装备承载座位投影为玩家标记区候选。
-   * 容器候选本身不绑定 seat，装备移动后读取投影即可自然迁移。
+   * 将装备容器候选按标记协议已观测座位投影为玩家标记区候选。
+   * 容器身份不绑定 seat；装备本体移动不能提前改变内部牌投影。
    */
   resolveEquipmentContainerLocationCandidates(
     candidate: LocationCandidateInput
@@ -1560,18 +1562,27 @@ export class Room {
     const normalized = normalizeLocationCandidate(candidate)
     if (normalized?.type !== 'container' || normalized.containerType !== 'equipment') return []
 
+    const container = getEquipmentMarkContainerByMarkSpellID(normalized.spellID)
+    const markSeat =
+      container?.equipmentCardID === normalized.cardID
+        ? this.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.muniuMarkSeat
+        : null
     const equipment = this.cardIndex.get(Number(normalized.cardID))
-    if (equipment?.location !== 'player' || equipment.subZone !== 'equip') return []
+    // 已观察到 mark700 后，其座位只由标记协议更新，不能随装备提前换位。
+    // 尚无标记协议的容器候选保留装备位置兜底。
+    const seats =
+      markSeat !== null && markSeat !== undefined
+        ? [markSeat]
+        : equipment?.location === 'player' && equipment.subZone === 'equip'
+          ? Array.from(equipment.seats)
+          : []
 
-    return Array.from(equipment.seats)
-      .map((seatID) => Number(seatID))
-      .filter((seatID) => Number.isFinite(seatID))
-      .map((seatID) => ({
-        type: 'player',
-        seatID,
-        subZone: 'mark',
-        spellID: normalized.spellID
-      }))
+    return seats.map((seatID) => ({
+      type: 'player',
+      seatID,
+      subZone: 'mark',
+      spellID: normalized.spellID
+    }))
   }
 
   /** 获取指定玩家手牌中的物理牌 ID

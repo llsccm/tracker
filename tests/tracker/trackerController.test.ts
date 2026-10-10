@@ -845,7 +845,7 @@ describe('TrackerController', () => {
     )
 
     expect(
-      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('4:4:700') ??
+      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('4:muniu:161') ??
         false
     ).toBe(false)
     ;[candidateCard, hiddenCard].forEach((card) => {

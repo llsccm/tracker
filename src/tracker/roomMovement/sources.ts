@@ -12,6 +12,11 @@ import type {
   SubZone
 } from '../types'
 import { RoomMovementHiddenMarkMethods } from './hiddenMarks'
+import {
+  getUnassignedMarkSpaceSpellIDFromProtocolID,
+  takeUnassignedMarkSpaceCards,
+  removeUnassignedMarkSpaceCards
+} from './unassignedMarkSpaces'
 import type {
   RoomMoveContext,
   SourceZoneInput,
@@ -65,7 +70,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       this.room.zones.forEach((zone) => zone.removeCard(card))
     })
     // 显式 sourceCards 可能直接指向无席位 mark 空间里的实体，取走后必须同步摘账本。
-    this.removeUnassignedMarkSpaceCards(uniqueCards)
+    removeUnassignedMarkSpaceCards(this.room, uniqueCards)
 
     if (uniqueCards.length >= count) return uniqueCards
 
@@ -291,10 +296,17 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     const excludedCards = [excludeCard, ...context.knownCards].filter((card): card is Card =>
       Boolean(card)
     )
-    return (
-      this.getUnknownPlayerSourceCards(fromSeat, fromSubZone, sourceSpellID, excludedCards)[0] ??
-      null
+    const sourceCards = this.getUnknownPlayerSourceCards(
+      fromSeat,
+      fromSubZone,
+      sourceSpellID,
+      excludedCards
     )
+    if (fromSubZone === 'mark' && excludeCard) {
+      const placeholder = this.findHiddenMarkSourcePlaceholder(excludeCard, sourceCards)
+      if (placeholder) return placeholder
+    }
+    return sourceCards[0] ?? null
   }
 
   findExactUnknownPlayerSourcePlaceholder(
@@ -679,7 +691,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       if (fromSeat !== null && !Number.isNaN(fromSeat)) {
         const explicitCards = Array.from(new Set(sourceCards)).filter(Boolean).slice(0, count)
         // 显式 sourceCards 也可能指向无席位 mark 空间实体，不能绕过账本清理。
-        this.removeUnassignedMarkSpaceCards(explicitCards)
+        removeUnassignedMarkSpaceCards(this.room, explicitCards)
         // 弃牌获得可能同时携带来源席位，仍需补齐未确定的数量。
         if (isDiscardGain && explicitCards.length < count) {
           explicitCards.push(...this.room.createExternalCards([], count - explicitCards.length))
@@ -723,7 +735,9 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     if (fromSeat !== null && !Number.isNaN(fromSeat)) {
       const sourceSubZone = fromSubZone ?? subZone ?? 'hand'
       const inferredSourceSpellID =
-        sourceSubZone === 'mark' ? this.getUnassignedMarkSpaceSpellIDFromProtocolID(fromSeat) : null
+        sourceSubZone === 'mark'
+          ? getUnassignedMarkSpaceSpellIDFromProtocolID(this.room, fromSeat)
+          : null
       const sourceSpellID =
         sourceSubZone === 'mark' ? (fromSpellID ?? spellID ?? inferredSourceSpellID) : spellID
       const unknownCards = this.takeUnknownCardsFromPlayer(
@@ -737,7 +751,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
       // 先从 spellID 对应的无席位 mark 空间补足，避免误创建匿名 fallback。
       const unassignedUnknownCards =
         sourceSubZone === 'mark' && unknownCards.length < count
-          ? this.takeUnassignedMarkSpaceCards(count - unknownCards.length, sourceSpellID)
+          ? takeUnassignedMarkSpaceCards(this.room, count - unknownCards.length, sourceSpellID)
           : []
 
       if (unassignedUnknownCards.length > 0) {
