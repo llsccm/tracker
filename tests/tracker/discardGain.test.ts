@@ -46,6 +46,23 @@ describe('弃牌堆未知获得', () => {
   it.each([
     { scenario: '4023 空 CardIDs', overrides: {} },
     { scenario: '零 ID 占位', overrides: { CardIDs: [0, 0, 0, 0] } },
+    { scenario: '3434 MoveType=15 空 CardIDs', overrides: { SpellID: 3434, MoveType: 15 } },
+    {
+      scenario: '3434 MoveType=15 零 ID 占位',
+      overrides: { SpellID: 3434, MoveType: 15, CardIDs: [0, 0, 0, 0] }
+    },
+    {
+      scenario: 'MoveType=15 其他技能牌顶位置',
+      overrides: { SpellID: 9999, MoveType: 15, FromPosition: POSITION_TOP }
+    },
+    {
+      scenario: 'MoveType=15 其他技能牌底位置',
+      overrides: { SpellID: 9999, MoveType: 15, FromPosition: POSITION_BOTTOM }
+    },
+    {
+      scenario: 'MoveType=15 附带来源席位',
+      overrides: { SpellID: 3434, MoveType: 15, FromID: 1 }
+    },
     {
       scenario: '其他技能牌顶位置',
       overrides: { SpellID: 9999, FromPosition: POSITION_TOP }
@@ -215,10 +232,10 @@ describe('弃牌堆未知获得', () => {
     expect(room.cards).toHaveLength(entityCountBefore + 2)
   })
 
-  it('缺少弃牌历史时仍按协议张数创建暗牌', () => {
+  it.each([15, 18])('MoveType=%i 缺少弃牌历史时仍按协议张数创建暗牌', (moveType) => {
     const { controller, room, onError } = createRoomWithDiscard([])
 
-    controller.syncTrackerMove(discardGainMove())
+    controller.syncTrackerMove(discardGainMove({ MoveType: moveType }))
 
     const player = room.players.get(3)!
     expect(player.cards.filter(isAnonymous)).toHaveLength(4)
@@ -247,10 +264,10 @@ describe('弃牌堆未知获得', () => {
     expect(onError).not.toHaveBeenCalled()
   })
 
-  it('其他移动类型仍按弃牌端点移动已有实体', () => {
+  it('MoveType=19 仍按弃牌端点移动已有实体', () => {
     const { controller, room, onError } = createRoomWithDiscard()
 
-    controller.syncTrackerMove(discardGainMove({ MoveType: 15 }))
+    controller.syncTrackerMove(discardGainMove({ MoveType: 19 }))
 
     const player = room.players.get(3)!
     expect(player.knownHandCards.map((card) => card.id).sort((a, b) => a - b)).toEqual([3, 4, 5, 6])
@@ -258,5 +275,48 @@ describe('弃牌堆未知获得', () => {
     expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual([1, 2])
     expect(room.cards).toHaveLength(8)
     expect(onError).not.toHaveBeenCalled()
+  })
+})
+
+describe('MoveType=15 弃牌堆明确来源兼容', () => {
+  it('剩墨已回填正 ID 时仍精确移动对应实体', () => {
+    const { controller, room, onError } = createRoomWithDiscard()
+    const sourceCards = [2, 5].map((id) => room.cardIndex.get(id)!)
+
+    controller.syncTrackerMove(
+      discardGainMove({ SpellID: 3434, MoveType: 15, CardIDs: [2, 5], CardCount: 2 })
+    )
+
+    const player = room.players.get(3)!
+    expect(new Set(player.knownHandCards)).toEqual(new Set(sourceCards))
+    expect(player.cards.filter(isAnonymous)).toEqual([])
+    expect(player.observedHandCount).toBe(2)
+    expect(player.unknownCardCount).toBe(0)
+    expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual([1, 3, 4, 6])
+    expect(room.assertPileIdentityLedgerConsistency('test:move15-known-discard')).toEqual([])
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('完整 sourceCards 仍移动指定实体', () => {
+    const { room } = createRoomWithDiscard()
+    const sourceCards = [2, 5].map((id) => room.cardIndex.get(id)!)
+    const entityCountBefore = room.cards.length
+
+    room.moveCards([], 'player', {
+      fromZone: 'discard',
+      fromSeatID: null,
+      seatID: 3,
+      subZone: 'hand',
+      moveType: 15,
+      cardCount: 2,
+      sourceCards
+    })
+
+    const player = room.players.get(3)!
+    expect(new Set(player.knownHandCards)).toEqual(new Set(sourceCards))
+    expect(player.unknownCardCount).toBe(0)
+    expect(player.observedHandCount).toBe(2)
+    expect(room.cards).toHaveLength(entityCountBefore)
+    expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual([1, 3, 4, 6])
   })
 })

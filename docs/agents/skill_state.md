@@ -131,11 +131,11 @@ tracker 状态；所需事实应由后续协议重新建立。
 | `多多益善`      | 战法【多多益善】               | 当前己方回合内摸牌事件次数                          | `GameRuntime.drawCounter()`（`src/runtime/gameAdapter.js`）；`GameState` 读写计数状态，己方回合结束时归零       |
 | `3090`          | 【博图】                       | 当前轮次的发动计数                                  | `src/handler/PubGsCUseSpell.js`；`GameState.setTurn()` 删除                                                   |
 | `2143`          | 国战【乱击】                   | 本阶段已使用牌的花色集合，用于花色提示              | `src/handler/PubGsCUseSpell.js`；进入新的个人回合时删除                                                       |
-| `361`           | 【下书】                       | 展示 CardID、真实目标座位、发动者选择和座位         | `src/handler/skills/XiaShu.js`；配对手牌移动完成后删除                                                        |
+| `361`           | 【下书】                       | 展示 CardID、真实目标座位、发动者选择和座位         | `src/handler/skills/XiaShu.ts`；配对手牌移动完成后删除                                                        |
 | `441` / `3492`  | 【称象】/【界称象】            | 处理区展示的 CardID，供后续目标通知绘制点数组合     | `src/handler/spellEffects.js`、`src/handler/GsCRoleOptTargetNtf.js`；消费后删除                               |
-| `3488`          | 蔡瑁【佐练】                   | 各来源座位展示的 CardID 与 exchange 暂存栈顶 CardID | `src/handler/skills/ZuoLian.js`；字段随交换阶段删除，统一生命周期兜底清空                                     |
+| `3488`          | 蔡瑁【佐练】                   | 各来源座位展示的 CardID 与 exchange 暂存栈顶 CardID | `src/handler/skills/ZuoLian.ts`；字段随交换阶段删除，统一生命周期兜底清空                                     |
 | `3157` / `3511` | 夏侯玄【清议】/李婉【联句】    | 其它视角先看到的完整 CardID，供后续全暗移动回填     | `src/handler/PubGsCUseSpell.js`、`src/handler/spellEffects.js`；匹配移动消费后删除                            |
-| `3571`          | 郭照【椒遇】                   | 用户选择对应的红/黑颜色集合                         | `src/handler/GsCUpdateRoleDataExNtf.js`、`src/handler/skills/JiaoYu.js`；统一生命周期清空                     |
+| `3571`          | 郭照【椒遇】                   | 用户选择对应的红/黑颜色集合                         | `src/handler/GsCUpdateRoleDataExNtf.js`、`src/handler/skills/JiaoYu.ts`；统一生命周期清空                     |
 | `3750`          | 谋许攸【迁附】                 | 控顶阶段的 CardID 顺序，供后续暗牌回堆移动回填      | `src/handler/PubGsCUseSpell.js`、`src/handler/spellEffects.js`；回堆回填后删除，统一生命周期兜底清空          |
 | `4022`          | 裴秀【尽览】及地图/手牌镜像 UI | 地图协议、路线求解、预设路径和手牌花色镜像状态      | `src/handler/GsCUpdateRoleDataExNtf.js`、`src/ui/PeiXiuHandMirror.js`；进入裴秀选技能阶段或统一生命周期时删除 |
 

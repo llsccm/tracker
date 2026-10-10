@@ -9,7 +9,7 @@
 
 | 场景 | 协议或识别条件 | 主要实现 / 回归入口 |
 | --- | --- | --- |
-| 下书明暗选择 | `SpellID=361` | `src/handler/skills/XiaShu.js`、`tests/tracker/xiaShu.test.ts` |
+| 下书明暗选择 | `SpellID=361` | `src/handler/skills/XiaShu.ts`、`tests/tracker/xiaShu.test.ts` |
 | 暗置标记区候选 | `FromZone=5`、`ToZone=4/8`、全暗 `CardIDs` | `RoomMovement.handleHiddenMarkMove()`、`hiddenMarkCandidates` |
 | 观虚目标视角交换 | `SpellID=987/988` | `src/tracker/skill/GuanXu.ts`、`tests/tracker/guanXuExchange.test.ts` |
 | 整手牌交换 | `MoveType=11` + `5<->10` + 整手张数 | `src/tracker/skill/HandExchange.ts` |

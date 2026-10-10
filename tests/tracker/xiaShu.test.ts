@@ -11,8 +11,8 @@ function createGameState() {
   const states = new Map<number, unknown>()
 
   return {
-    getSpellState(spellID: number) {
-      return states.get(spellID)
+    getSpellState<T = unknown>(spellID: number): T | undefined {
+      return states.get(spellID) as T | undefined
     },
     setSpellState(spellID: number, value: unknown) {
       states.set(spellID, value)

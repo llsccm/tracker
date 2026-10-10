@@ -160,8 +160,8 @@ accountedPileCount
   对应身份作为 `knownPileIdentityIDsConsumed` 精确提交给账本。
 - 非标准牌堆获得且 `CardIDs=[]` 时只消费匿名槽，跳过全部已公开牌堆身份；`POSITION_RANDOM` 只表示
   匿名代表和批次边界不确定，不证明某个已知身份离堆。
-- 弃牌堆 `MoveType=18` 获得未公开身份的牌时，创建等量负 ID 暗牌占位，保留无法确定去向的
-  来源实体；规则不绑定 SpellID 或来源位置。显式 `CardIDs` 或技能 `sourceCards` 仍精确移动，
+- 弃牌堆 `MoveType=18` 及移入玩家区的 `MoveType=15` 获得未公开身份的牌时，创建等量负 ID
+  暗牌占位，保留无法确定去向的来源实体；规则不绑定 SpellID 或来源位置。显式 `CardIDs` 或技能 `sourceCards` 仍精确移动，
   其余未确定部分也创建暗牌，不从弃牌端点补足。
 - 其余 `discard`、`process`、`exchange`、`exile` 等非牌堆公共来源的无 ID 移动仍按端点取实际
   实体，不能套用“只取匿名槽”的牌堆特例。
