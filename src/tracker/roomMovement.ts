@@ -6,6 +6,10 @@ import { summarizeMoveContext } from './helper/moveSummary'
 import { MOVE_TYPE } from './MoveEventNormalizer'
 import type { Room } from './Room'
 import { RoomMovementCandidateMethods } from './roomMovement/candidates'
+import {
+  registerUnassignedMarkSpaceCards,
+  removeUnassignedMarkSpaceCards
+} from './roomMovement/unassignedMarkSpaces'
 import type {
   KnownCardCreationReason,
   MoveTargetZone,
@@ -128,8 +132,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       knownCards: [],
       movedUnknownCards: [],
       publicMovedCards: [],
-      skipUnknownMovement: false,
-      hiddenMarkRecord: null
+      skipUnknownMovement: false
     }
 
     trackerLogger.debug(
@@ -455,6 +458,9 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       forceRandomHandTransferCandidates
     } = context
 
+    // 木牛流马内部牌只随 mark700 协议迁移，不随装备本体移动。
+    if (this.handleMuniuMarkMove(context)) return
+
     // 暗置标记区候选会接管默认暗牌移动，避免明牌身份被未知占位吞掉。
     if (this.handleHiddenMarkMove(context)) return
 
@@ -607,7 +613,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       // seatID=255 会被 normalizeSeats 过滤为空；这代表无席位技能空间而非某个玩家。
       // 这里按 spellID 建账本，后续从弹窗 mark 回牌堆时直接取这个空间里的占位。
       if (subZone === 'mark' && targetSeats.length === 0) {
-        this.registerUnassignedMarkSpaceCards(spellID, movedUnknownCards)
+        registerUnassignedMarkSpaceCards(this.room, spellID, movedUnknownCards)
       }
 
       if (movedUnknownCards.length > 0 && targetSeats.length > 0) {
@@ -746,7 +752,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     }
 
     // 已知牌移动可能把原先的无席位暗占位揭示出来，先从空间账本摘除旧引用。
-    this.removeUnassignedMarkSpaceCards(knownCards)
+    removeUnassignedMarkSpaceCards(this.room, knownCards)
 
     const swappedCardIDs: CardID[] = []
     const handledSpellCardIDs: CardID[] = []
@@ -755,7 +761,8 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     const playerSourceSwapAttempts: unknown[] = []
     const registerUnassignedReplacement = (placeholder: Card | null | undefined) => {
       // 置换回补可能把暗占位放回旧的无席位 mark 位置，必须重新入账供后续回牌堆复用。
-      if (placeholder) this.registerUnassignedMarkSpaceCards(placeholder.spellID, [placeholder])
+      if (placeholder)
+        registerUnassignedMarkSpaceCards(this.room, placeholder.spellID, [placeholder])
     }
     const observedEquipmentMarkSnapshot = this.getObservedEquipmentMarkSnapshot(context)
     const playerSourceContext = observedEquipmentMarkSnapshot
@@ -764,8 +771,6 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     const effectiveFromSeat = playerSourceContext.fromSeat
 
     knownCards.forEach((card) => {
-      const previousSpellID = card.spellID
-
       // 如果协议声明该明牌来自玩家区，而本地认为它在别处，用未知占位交换来修正物理身份。
       // 木牛流马完整快照通常只给目标座位；此时把目标座位视为 mark:700 来源座位，
       // 让明牌与木马里的实体暗占位交换，而不是额外残留一张占位牌。
@@ -891,7 +896,6 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       if (toZone === 'player') {
         this.room.clearCardsFromPublicZones([card])
         card.bindCandidates(targetSeats, subZone, spellID, { known: true })
-        this.retargetEquipmentMarkContainer(card, context, previousSpellID)
       }
     })
 

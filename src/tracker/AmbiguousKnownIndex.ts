@@ -92,7 +92,7 @@ export class AmbiguousKnownIndex {
 
     affectedCards.forEach((card) => this.applyCardChange(card, groups))
 
-    // 装备容器候选的描述座位取决于装备当前承载座位；装备移动时候选牌自身可能不脏。
+    // 容器候选的描述座位取决于空间观测；标记协议更新座位时候选牌自身可能不脏。
     if (this.containerDependentCards.size > 0) {
       for (const card of Array.from(this.containerDependentCards)) {
         if (!affectedCards.has(card)) this.applyCardChange(card, groups)

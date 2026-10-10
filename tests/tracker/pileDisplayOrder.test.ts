@@ -571,14 +571,14 @@ describe('牌堆展示顺序', () => {
 
     const record = room
       .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
-      .records.get('1:1:700')!
+      .records.get('1:muniu:161')!
     expect(record.placeholderCards.has(hiddenMarkPlaceholder)).toBe(true)
 
     room.shufflePile({ cardCount: 3 })
 
     const updatedRecord = room
       .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
-      .records.get('1:1:700')!
+      .records.get('1:muniu:161')!
     const placeholderCards = Array.from(updatedRecord.placeholderCards) as Card[]
     const currentPlaceholder = placeholderCards[0]
 

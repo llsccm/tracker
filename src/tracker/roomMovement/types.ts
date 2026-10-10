@@ -2,7 +2,6 @@ import type { Card } from '../Card'
 import type { SpellIDInput } from '../candidate/markSpellID'
 import type {
   CardID,
-  LocationCandidate,
   MoveSourceEvent,
   PostMovePublicCandidate,
   PublicPosition,
@@ -90,18 +89,17 @@ export interface RoomMoveContext {
   movedUnknownCards: Card[]
   publicMovedCards: Card[]
   skipUnknownMovement: boolean
-  hiddenMarkRecord: HiddenMarkRecord | null
 }
 
 export interface HiddenMarkRecord {
-  id: string
-  groupID: string
+  readonly id: string
+  readonly groupID: string
   sourceSeat: SeatID
   targetSeat: SeatID
   spellID: SpellID | null
-  targetLocationCandidate: LocationCandidate
   cards: Set<Card>
   placeholderCards: Set<Card>
+  /** 累计暗置额度；不是随出牌递减的当前标记区容量。 */
   hiddenCount: number
   knownMarkMin: number
   knownMarkMax: number
@@ -112,6 +110,8 @@ export interface HiddenMarkRecord {
 
 export interface HiddenMarkState {
   records: Map<string, HiddenMarkRecord>
+  /** mark700 协议确认的空间座位，与装备本体的位置独立。 */
+  muniuMarkSeat: SeatID | null
 }
 
 export interface UnassignedMarkSpaceState {

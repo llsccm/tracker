@@ -37,6 +37,24 @@ function moveHiddenHandToMark(room, { seatID, count, spellID }) {
   })
 }
 
+function moveMuniuMarks(room, fromSeatID, seatID, count = 1) {
+  const event = normalizeMoveEvent({
+    CardCount: count,
+    CardIDs: [],
+    FromID: fromSeatID,
+    FromPosition: 65282,
+    FromZone: 4,
+    FromZoneParam: 700,
+    MoveType: 19,
+    SpellID: 700,
+    ToID: seatID,
+    ToPosition: 65280,
+    ToZone: 4,
+    ToZoneParam: 700
+  })
+  room.moveCards(event.cardIDs, event.toZone, event.options)
+}
+
 describe('隐藏标记区候选', () => {
   it('归一化标记区回手牌事件时保留来源标记 ID', () => {
     const event = normalizeMoveEvent({
@@ -155,8 +173,7 @@ describe('隐藏标记区候选', () => {
     })
 
     expect(
-      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('6:6:414') ??
-        false
+      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('6:6:414') ?? false
     ).toBe(false)
     expect(knownCard.location).toBe('player')
     expect(knownCard.subZone).toBe('hand')
@@ -406,11 +423,11 @@ describe('隐藏标记区候选', () => {
     })
 
     const state = room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
-    const record = state.records.get('1:1:700')!
+    const record = state.records.get('1:muniu:161')!
 
     expect(record.knownMarkMin).toBe(0)
     expect(record.knownMarkMax).toBe(1)
-    expect(room.constraintGroups.has('hidden_mark_1:1:700')).toBe(false)
+    expect(room.constraintGroups.has('hidden_mark_1:muniu:161')).toBe(false)
     expect(
       knownCard
         .getLocationCandidates()
@@ -444,7 +461,7 @@ describe('隐藏标记区候选', () => {
       spellID: 700
     })
 
-    const group = room.constraintGroups.get('hidden_mark_1:1:700')
+    const group = room.constraintGroups.get('hidden_mark_1:muniu:161')
 
     expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(hand))).toBe(3)
     expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(mark))).toBe(1)
@@ -468,8 +485,15 @@ describe('隐藏标记区候选', () => {
       sourceEvent: { type: 'test:move-muniu-equip-by-other-skill' }
     })
 
-    const movedGroup = room.constraintGroups.get('hidden_mark_1:2:700')
+    expect(room.constraintGroups.get('hidden_mark_1:muniu:161')).toBe(group)
+    expect(group.candidateSeats).toEqual(new Set([1]))
+    moveMuniuMarks(room, 1, 2)
 
+    const movedGroup = room.constraintGroups.get('hidden_mark_1:muniu:161')
+
+    expect(movedGroup.id).toBe(group.id)
+    expect(movedGroup.candidateSeats).toEqual(new Set([1, 2]))
+    expect(room.constraintGroups.has('hidden_mark_1:2:700')).toBe(false)
     expect(movedGroup.expectedSlotsByLocation.get(createLocationCandidateKey(mark))).toBe(1)
     expect(room.locationIndex.markBySeatAndSpell.get(2).get(700)).toEqual(
       expect.arrayContaining(cards)
@@ -631,7 +655,7 @@ describe('隐藏标记区候选', () => {
     expect(knownCard.location).toBe('process')
   })
 
-  it('移动木马装备本体时同步迁移木马标记空间', () => {
+  it('木马装备本体移动后，标记协议才迁移内部占位与账本', () => {
     const { room } = createTestRoom({ cardIDs: [161, 152, 153], seatIDs: [4, 5] })
     const muniu = getCard(room, 161)
     const knownCard = getCard(room, 152)
@@ -669,6 +693,9 @@ describe('隐藏标记区候选', () => {
         .sort()
     ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
     expect(placeholderCard.seats.has(4)).toBe(true)
+    const originalRecord = room
+      .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
+      .records.get('4:muniu:161')!
 
     room.moveCards([161], 'player', {
       seatID: 5,
@@ -681,19 +708,22 @@ describe('隐藏标记区候选', () => {
       sourceEvent: { type: 'test:move-muniu-equip' }
     })
 
+    expect(originalRecord.targetSeat).toBe(4)
+    expect(placeholderCard.seats).toEqual(new Set([4]))
+    moveMuniuMarks(room, 4, 5)
+
     const record = room
       .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
-      .records.get('4:5:700')!
+      .records.get('4:muniu:161')!
 
     expect(muniu.location).toBe('player')
     expect(muniu.subZone).toBe('equip')
     expect(muniu.seats.has(5)).toBe(true)
     expect(record).toBeTruthy()
     expect(record.targetSeat).toBe(5)
-    expect(
-      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('4:4:700') ??
-        false
-    ).toBe(false)
+    expect(record).toBe(originalRecord)
+    expect(record.id).toBe('4:muniu:161')
+    expect(room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!.records.size).toBe(1)
     expect(knownCard.location).toBe('player')
     expect(knownCard.subZone).toBe('hand')
     expect(knownCard.seats.has(4)).toBe(true)
@@ -729,6 +759,44 @@ describe('隐藏标记区候选', () => {
         .sort()
     ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
     expect(room.locationIndex.markBySeatAndSpell.get(5).get(700)).toContain(knownCard)
+  })
+
+  it('木牛流马离开装备区后容器候选不再投影到旧标记座位', () => {
+    const { room } = createTestRoom({ cardIDs: [161, 152, 153], seatIDs: [4, 5] })
+    const knownCard = getCard(room, 152)
+
+    room.moveCards([161], 'player', {
+      seatID: 4,
+      subZone: 'equip',
+      fromZone: 'pile',
+      spellID: 700,
+      cardCount: 1,
+      sourceEvent: { type: 'test:muniu-equip' }
+    })
+    moveKnownCardsToHand(room, [152], 4)
+    room.moveCards([0], 'player', {
+      seatID: 4,
+      subZone: 'hand',
+      fromZone: 'pile',
+      cardCount: 1,
+      sourceEvent: { type: 'test:unknown-hand' }
+    })
+    room.players.get(4).syncObservedHandCount(2)
+    moveHiddenHandToMark(room, { seatID: 4, count: 1, spellID: 700 })
+
+    expect(room.locationIndex.markBySeatAndSpell.get(4).get(700)).toContain(knownCard)
+
+    room.moveCards([161], 'discard', {
+      fromSeatID: 4,
+      fromZone: 6,
+      fromSubZone: 'equip',
+      spellID: 987,
+      cardCount: 1,
+      sourceEvent: { type: 'test:muniu-to-discard' }
+    })
+
+    expect(room.cardIndex.get(161)!.location).toBe('discard')
+    expect(room.locationIndex.markBySeatAndSpell.get(4)?.get(700) ?? []).not.toContain(knownCard)
   })
 
   it('主视角看到木马内只有其他明牌时将弱候选收敛回手牌', () => {
@@ -827,7 +895,7 @@ describe('隐藏标记区候选', () => {
     })
 
     expect(
-      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('6:7:700') ??
+      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('6:muniu:161') ??
         false
     ).toBe(false)
     candidateCards.forEach((card) => {
@@ -948,7 +1016,7 @@ describe('隐藏标记区候选', () => {
     })
 
     expect(
-      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('4:4:700') ??
+      room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('4:muniu:161') ??
         false
     ).toBe(false)
     ;[candidateCard, hiddenCard].forEach((card) => {
@@ -959,5 +1027,102 @@ describe('隐藏标记区候选', () => {
       expect(card.isKnown).toBe(true)
       expect(card.getLocationCandidates()).toEqual([])
     })
+  })
+  it('木牛流马往返迁座后继续暗置时复用账本与约束 ID，不重复累计名额', () => {
+    const { room } = createTestRoom({ cardIDs: [161, 1, 2, 3, 4], seatIDs: [1, 2] })
+    room.moveCards([161], 'player', {
+      seatID: 1,
+      subZone: 'equip',
+      fromZone: 'pile',
+      spellID: 700,
+      cardCount: 1
+    })
+    moveKnownCardsToHand(room, [1, 2, 3, 4], 1)
+    room.players.get(1).syncObservedHandCount(4)
+    moveHiddenHandToMark(room, { seatID: 1, count: 1, spellID: 700 })
+
+    const state = room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
+    const record = state.records.get('1:muniu:161')!
+    const groupID = record.groupID
+    for (const [fromSeatID, seatID] of [
+      [1, 2],
+      [2, 1]
+    ]) {
+      room.moveCards([161], 'player', {
+        seatID,
+        fromSeatID,
+        fromZone: 6,
+        fromSubZone: 'equip',
+        subZone: 'equip',
+        spellID: 987,
+        cardCount: 1
+      })
+      expect(record.targetSeat).toBe(fromSeatID)
+      moveMuniuMarks(room, fromSeatID, seatID)
+      expect(state.records.get(record.id)).toBe(record)
+      expect(state.records.size).toBe(1)
+      expect(record.targetSeat).toBe(seatID)
+      expect(record.hiddenCount).toBe(1)
+      expect(record.knownMarkMin).toBe(1)
+      expect(record.knownMarkMax).toBe(1)
+      expect(room.constraintGroups.get(groupID).candidateSeats).toEqual(new Set([1, seatID]))
+    }
+
+    moveHiddenHandToMark(room, { seatID: 1, count: 1, spellID: 700 })
+
+    expect(state.records.get('1:muniu:161')).toBe(record)
+    expect(record.groupID).toBe(groupID)
+    expect(record.hiddenCount).toBe(2)
+    expect(record.knownMarkMin).toBe(2)
+    expect(record.knownMarkMax).toBe(2)
+    expect(record.cards.size).toBe(4)
+    const group = room.constraintGroups.get(groupID)
+    expect(
+      group.expectedSlotsByLocation.get(createLocationCandidateKey(playerLocation(1, 'hand')))
+    ).toBe(2)
+    expect(
+      group.expectedSlotsByLocation.get(createLocationCandidateKey(equipmentContainer(161, 700)))
+    ).toBe(2)
+    expect(
+      Array.from(room.constraintGroups.keys()).filter(
+        (id) => typeof id === 'string' && id.startsWith('hidden_mark_')
+      )
+    ).toEqual([groupID])
+  })
+
+  it('普通标记继续按玩家座位记账，不随木牛流马迁移', () => {
+    const { room } = createTestRoom({ cardIDs: [161, 1, 2], seatIDs: [1, 2] })
+    room.moveCards([161], 'player', {
+      seatID: 1,
+      subZone: 'equip',
+      fromZone: 'pile',
+      spellID: 700,
+      cardCount: 1
+    })
+    moveKnownCardsToHand(room, [1, 2], 1)
+    room.players.get(1).syncObservedHandCount(2)
+    moveHiddenHandToMark(room, { seatID: 1, count: 1, spellID: 1234 })
+    const state = room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
+    const record = state.records.get('1:1:1234')!
+    const group = room.constraintGroups.get(record.groupID)
+
+    room.moveCards([161], 'player', {
+      seatID: 2,
+      fromSeatID: 1,
+      fromZone: 6,
+      fromSubZone: 'equip',
+      subZone: 'equip',
+      spellID: 987,
+      cardCount: 1
+    })
+
+    expect(state.records.get('1:1:1234')).toBe(record)
+    expect(state.records.size).toBe(1)
+    expect(record.targetSeat).toBe(1)
+    expect(room.constraintGroups.get('hidden_mark_1:1:1234')).toBe(group)
+    expect(
+      group.expectedSlotsByLocation.get(createLocationCandidateKey(playerLocation(1, 'mark', 1234)))
+    ).toBe(1)
+    expect(group.candidateSeats).toEqual(new Set([1]))
   })
 })

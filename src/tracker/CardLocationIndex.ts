@@ -60,7 +60,7 @@ export class CardLocationIndex {
   declare maxOrder: number
   // 已消费到的 dirtyCardEvents 序号；断档（被 DIRTY_CARD_EVENT_LIMIT splice）时回退全量。
   declare lastConsumedSeq: number
-  // 带装备容器候选的牌：其投影座位取决于装备当前承载座位（跨牌依赖）。
+  // 带容器候选的牌：其投影依赖空间观测，尚未观测时回退装备位置。
   // 装备移动时这些牌自身不脏，增量批次需一并重投影。
   declare containerDependentCards: Set<Card>
 
@@ -176,7 +176,7 @@ export class CardLocationIndex {
       }
     })
 
-    // 装备容器候选牌的投影座位随装备承载座位漂移；装备移动时它们自身不脏，需一并重投影。
+    // 容器空间的观测座位变化时，候选牌自身未必变脏，需一并重投影。
     // 容器候选罕见（木马类装备标记空间），通常为空集，对常规移动零开销。
     if (this.containerDependentCards.size > 0) {
       for (const card of Array.from(this.containerDependentCards)) {
@@ -291,7 +291,7 @@ export class CardLocationIndex {
 
       // 完整位置候选需要同时投影到所有可能区域。
       // 例如 A 手牌 / A 标记会同时出现在候选手牌和对应标记区里。
-      // 装备容器候选会先按装备当前承载座位展开，再作为普通 mark 候选投影。
+      // 装备容器候选先按空间已观测座位展开，再作为普通 mark 候选投影。
       const candidates =
         locationCandidates.length > 0 || containerCandidates.length > 0
           ? [...locationCandidates, ...containerCandidates]
