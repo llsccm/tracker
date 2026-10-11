@@ -88,7 +88,7 @@ export function handleUpdateRoleDataExNtf(msg) {
       handleQiaoZhi(msg, Game.myID)
       break
 
-    // 诡伏：非主视角先收到匿名移动，角色数据随后补充实际牌面。
+    // 诡伏：角色数据补齐相邻获得消息的 ID，再提交一次普通移动。
     case GUI_FU_ROLE_DATA_ID:
       handleGuiFu(msg, Game.myID)
       break

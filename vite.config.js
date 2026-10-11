@@ -52,7 +52,7 @@ export default defineConfig(({ mode }) => {
           author: '三国杀小抄',
           license: 'GPL-3.0-or-later',
           'run-at': 'document-start',
-          description: '三国杀小抄',
+          description: '三国杀记牌器',
           icon: 'https://i0.hdslb.com/bfs/new_dyn/17ec41a0ca79633b77399065ab80da3f2138912.png',
           namespace: 'https://greasyfork.org/scripts/448004',
           match: SCRIPT_MATCH,

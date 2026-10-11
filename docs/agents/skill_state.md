@@ -116,6 +116,7 @@ tracker 状态；所需事实应由后续协议重新建立。
 | `guanXuExchange`       | 黄承彦【观虚】`987/988`                                                     | 牌堆侧/手牌侧 exchange 逻辑桶、桶内 `Card` 引用与牌顶范围候选              | `src/tracker/skill/GuanXu.ts`；各 SpellID 桶结算后删除，全部为空时删除总账本          |
 | `handExchangeBatches`  | 通用整手牌交换模式；完整实战样例为 `SpellID=121`，实现不绑定单一技能        | 按 SpellID 和原持有座位保存整手批次、`Card` 引用、候选批次令牌与恢复元数据 | `src/tracker/skill/HandExchange.ts`；单个 SpellID 结算后删分账，全部为空时删除总账本  |
 | `3483`                 | 族钟繇【诫厉】                                                              | 观看上下文、目标/第三方交换批次、协议 ID 到匿名槽映射及目标手牌候选        | `src/tracker/skill/JieLi.ts`；结算完成或协议失配时删除                                |
+| `3709` | 【诡伏】 | 单条待补全获得移动的 `raw` / `patched`，不保存实体或历史快照 | `src/tracker/skill/GuiFu.ts`；相邻角色数据消费、失配或后续移动打断时删除，Controller 重建牌堆与统一生命周期清理 |
 | `qiaozhiSelection`     | 【巧织】`3544`                                                              | 展示 CardID、暗取数量和目标座位，用于最终差集推断                          | `src/tracker/skill/QiaoZhi.ts`；结算、可见结果到达或校验失败时删除                    |
 | `tianHouExchange`      | 周群【天候】`3903`                                                          | 交换批次、原牌顶/原手牌 `Card` 引用、明牌换出范围与约束组 ID               | `src/tracker/skill/TianHou.ts`；结算、展示或异常清理时删除                            |
 | `3776`                 | 【兴作】                                                                    | 原牌底实体、交换区手牌批次、发动者和目标座位                              | `src/tracker/skill/XingZuo.ts`；结算后删除，新批次替换旧记录，统一生命周期兜底清空 |
