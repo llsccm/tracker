@@ -1,45 +1,11 @@
+import handleChengXiang from './skills/ChengXiang'
+import handleQingYiLianJu from './skills/QingYiLianJu'
+import handleQianFu from './skills/QianFu'
 import handleJiaoYu from './skills/JiaoYu'
 import handleShengMo from './skills/ShengMo'
 import handleXiaShu from './skills/XiaShu'
 import handleZeXing from './skills/ZeXing'
 import handleZuoLian from './skills/ZuoLian'
-
-function handleChengXiang(context) {
-  if (context.ToZone != 8 || context.MoveType != 6) return
-  context.game.setSpellState(context.SpellID, [...(context.CardIDs || [])])
-}
-
-function handleQingYiLianJu(context) {
-  const spellCards = context.game.getSpellState(context.SpellID)
-  if (
-    context.FromZone == 2 &&
-    context.ToZone == 5 &&
-    context.CardCount == spellCards?.length &&
-    context.CardIDs.filter((id) => id > 0).length == 0
-  ) {
-    spellCards.forEach((id, i) => {
-      context.CardIDs[i] = id
-    })
-    context.game.deleteSpellState(context.SpellID)
-  }
-}
-
-function handleQianFu(context) {
-  if (
-    context.FromZone == 2 &&
-    context.ToZone == 1 &&
-    context.MoveType == 15 &&
-    context.CardIDs.filter((id) => id > 0).length == 0
-  ) {
-    const spellCards = context.game.getSpellState(context.SpellID)
-
-    if (spellCards?.length) {
-      context.CardIDs.splice(0, Infinity, ...spellCards)
-    }
-
-    context.game.deleteSpellState(context.SpellID)
-  }
-}
 
 export const spellEffectHandlers = new Map([
   [361, handleXiaShu],

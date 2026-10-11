@@ -130,15 +130,11 @@ function syncTargetJieLiExchange(
   pileResultIDs: number[] = [],
   onAfterPileReturn: () => void = () => {}
 ): void {
-  if (
-    !recordJieLiContext(room, {
-      actorSeat,
-      targetSeat,
-      pileCount: pileStageIDs.length
-    })
-  ) {
-    throw new Error('诫厉视角上下文未写入')
-  }
+  recordJieLiContext(room, {
+    actorSeat,
+    targetSeat,
+    pileCount: pileStageIDs.length
+  })
 
   const moves = createJieLiMoves(pileStageIDs, handStageIDs, handResultIDs, pileResultIDs)
   moves.slice(0, 3).forEach((move) => controller.syncTrackerMove(move))
@@ -271,7 +267,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
       [91, 158],
       actorSeat
     )
-    expect(recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })).toBe(true)
+    recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })
     const moves = createJieLiMoves(
       [4, 124, 99, 81],
       [91, 158],
@@ -306,7 +302,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
       observerSeat
     )
     const trackedHandCards = [91, 158].map((cardID) => room.cardIndex.get(cardID)!)
-    expect(recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })).toBe(true)
+    recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })
     const pileBefore = pile.cards.slice()
     const handBefore = getTargetHandIDs(room)
     const moves = createJieLiMoves([4, 124, 99, 81], [91, 158], [124, 4])
@@ -335,7 +331,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     )
     room.resolveConstraints()
 
-    expect(recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })).toBe(true)
+    recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })
     createJieLiMoves([4, 124, 99, 81], [91], [124]).forEach((move) =>
       controller.syncTrackerMove(move)
     )
@@ -350,7 +346,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
   it('其它视角仅收到观看消息且没有发生交换时不扩展候选', () => {
     const { controller, room } = setupView([91, 4, 124, 99, 81, 801, 802, 803], [91], observerSeat)
     const handCard = room.cardIndex.get(91)!
-    expect(recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })).toBe(true)
+    recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })
 
     const [showMove] = createJieLiMoves([4, 124, 99, 81], [91], [124])
     controller.syncTrackerMove(showMove)
@@ -391,7 +387,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
       observerSeat
     )
     const handCard = room.cardIndex.get(91)!
-    expect(recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })).toBe(true)
+    recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })
 
     const firstMoves = createJieLiMoves([4, 124, 99, 81], [91], [124])
     firstMoves.slice(0, 3).forEach((move) => controller.syncTrackerMove(move))
@@ -409,7 +405,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
       })
     )
 
-    expect(recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 3 })).toBe(true)
+    recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 3 })
     expect(room.readSkillState(JIE_LI_SPELL_ID)).toEqual({
       context: { actorSeat, targetSeat, pileCount: 3 }
     })

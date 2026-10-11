@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import {
   isPileSingleCardShow,
+  normalizeMoveCardFields,
   normalizeMoveEvent,
   validateMoveEvent
 } from '@/tracker/MoveEventNormalizer'
@@ -265,5 +266,169 @@ describe('MoveEventNormalizer 当前行为', () => {
         ToZone: 1
       })
     ).toBe(false)
+  })
+
+  it('标准事件各层输出数值字段，来源和目标技能空间分别归一化', () => {
+    const raw = {
+      CardIDs: [96],
+      CardCount: '1',
+      FromZone: '4',
+      FromID: 0,
+      FromZoneParam: '3370',
+      FromPosition: POSITION_TOP,
+      ToZone: '5',
+      ToID: 2,
+      ToZoneParam: '0',
+      ToPosition: 2,
+      MoveType: '8',
+      SpellID: '3389',
+      Label: '标记牌回手'
+    }
+    Object.freeze(raw)
+    Object.freeze(raw.CardIDs)
+
+    const event = normalizeMoveEvent(raw)
+
+    expect(event).toMatchObject({
+      cardIDs: [96],
+      cardCount: 1,
+      moveType: 8,
+      toZone: 'player',
+      options: {
+        fromSeatID: 0,
+        seatID: 2,
+        fromSubZone: 'mark',
+        subZone: 'hand',
+        fromSpellID: 3370,
+        spellID: 3389,
+        cardCount: 1,
+        moveType: 8,
+        fromPosition: POSITION_TOP,
+        position: 2,
+        sourceEvent: { moveType: 8, label: '标记牌回手' }
+      }
+    })
+    expect(event.raw).toBe(raw)
+    expect(event.options.sourceEvent.raw).toBe(raw)
+    expect(event.cardIDs).not.toBe(raw.CardIDs)
+    event.cardIDs[0] = 113
+    expect(raw.CardIDs).toEqual([96])
+    expect(raw.MoveType).toBe('8')
+    expect(event.protocol).toMatchObject({
+      CardCount: 1,
+      FromZone: 4,
+      FromZoneParam: 3370,
+      ToZone: 5,
+      ToZoneParam: 0,
+      MoveType: 8,
+      SpellID: 3389
+    })
+  })
+
+  it.each([
+    [1, 5, 1, 0, 'drawKnown'],
+    [2, 9, 255, 0, 'shuffleDiscardIntoPile'],
+    [1, 1, 21, 3903, 'noop'],
+    [1, 1, 19, 7011, 'noop'],
+    [1, 1, 21, 7011, 'showCards'],
+    [5, 4, 8, 3370, 'moveToMark']
+  ])(
+    '数值和字符串字段的事件分类一致：%s → %s / %s / %s',
+    (FromZone, ToZone, MoveType, SpellID, type) => {
+      const raw = {
+        CardIDs: [96],
+        CardCount: 1,
+        FromID: 255,
+        ToID: 255,
+        FromPosition: POSITION_TOP,
+        ToPosition: POSITION_TOP,
+        FromZone,
+        ToZone,
+        MoveType,
+        SpellID
+      }
+      const event = normalizeMoveEvent(raw)
+      const stringEvent = normalizeMoveEvent({
+        ...raw,
+        CardCount: String(raw.CardCount),
+        FromZone: String(FromZone),
+        ToZone: String(ToZone),
+        MoveType: String(MoveType),
+        SpellID: String(SpellID)
+      })
+
+      expect(stringEvent.type).toBe(type)
+      expect(stringEvent.moveType).toBe(event.moveType)
+      expect(stringEvent.options).toEqual({
+        ...event.options,
+        sourceEvent: { ...event.options.sourceEvent, raw: stringEvent.raw }
+      })
+    }
+  )
+
+  it('共享格式化保留单牌和无技能语义', () => {
+    expect(normalizeMoveCardFields({ CardIDs: 0, CardCount: '1', SpellID: null })).toMatchObject({
+      CardIDs: [0],
+      CardCount: 1,
+      SpellID: 0
+    })
+    expect(normalizeMoveCardFields({ CardIDs: 96, CardCount: '1' })).toMatchObject({
+      CardIDs: [96],
+      CardCount: 1,
+      SpellID: 0
+    })
+    expect(normalizeMoveCardFields({ CardCount: '2' })).toMatchObject({
+      CardIDs: [],
+      CardCount: 2
+    })
+  })
+
+  it.each([undefined, ''])('缺省或空移动类型 %s 保持未指定，不伪造预操作', (MoveType) => {
+    const event = normalizeMoveEvent({
+      CardIDs: [96],
+      CardCount: 1,
+      FromZone: 1,
+      ToZone: 5,
+      ToID: 0,
+      MoveType
+    })
+
+    expect(event.moveType).toBeUndefined()
+    expect(event.options.moveType).toBeUndefined()
+    expect(event.options.sourceEvent.moveType).toBeUndefined()
+  })
+
+  it('缺少端点、位置或标记参数时不因 undefined 相等被当作同区展示', () => {
+    expect(
+      normalizeMoveEvent({
+        CardIDs: [96],
+        CardCount: 1,
+        FromZone: 5,
+        ToZone: 5,
+        MoveType: 19
+      }).type
+    ).toBe('moveKnown')
+    expect(
+      normalizeMoveEvent({
+        CardIDs: [96],
+        CardCount: 1,
+        FromID: 255,
+        ToID: 255,
+        FromZone: 1,
+        ToZone: 1,
+        MoveType: 19
+      }).type
+    ).toBe('moveKnown')
+    expect(
+      normalizeMoveEvent({
+        CardIDs: [96],
+        CardCount: 1,
+        FromID: 0,
+        ToID: 0,
+        FromZone: 4,
+        ToZone: 4,
+        MoveType: 19
+      }).type
+    ).toBe('moveToMark')
   })
 })

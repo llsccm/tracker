@@ -10,7 +10,7 @@ import { POSITION_TOP, insertCardsAtProtocolPosition } from '../candidate/cardPo
 import { createPublicCandidate } from '../candidate/publicCandidate'
 import { MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Room } from '../Room'
-import { getCount, getPositiveIDs, getRaw, type MoveEventDraft, patchEvent } from './moveEventUtils'
+import { getCount, getPositiveIDs, type MoveEventDraft, patchEvent } from './moveEventUtils'
 
 export const GUAN_XU_STATE_KEY = 'guanXuExchange'
 
@@ -189,9 +189,9 @@ function splitProtocolKnownAndUnknown(event: MoveEventDraft, cards: Card[]): Car
 }
 
 function stagePileToExchange(event: MoveEventDraft, room: Room, spellID: number): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   const count = getCount(event)
-  const pileBucketID = Number(raw.ToID)
+  const pileBucketID = move.ToID
   const pileCards = room.zones.get('pile')?.cards ?? []
   // 逻辑桶复用公共 Zone 的底 -> 顶顺序，后续可直接套用通用 ToPosition 插槽语义。
   const selectedCards = pileCards.slice(-count)
@@ -231,10 +231,10 @@ function stagePileToExchange(event: MoveEventDraft, room: Room, spellID: number)
 }
 
 function stageHandToExchange(event: MoveEventDraft, room: Room, spellID: number): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   const batch = getBatch(room, spellID)
-  const fromSeat = Number(raw.FromID)
-  const bucketID = Number(raw.ToID)
+  const fromSeat = move.FromID
+  const bucketID = move.ToID
   if (!batch || !Number.isFinite(fromSeat) || !Number.isFinite(bucketID)) return event
 
   const selection = selectCardsForKnownMove(event, room, getHandCards(room, fromSeat))
@@ -265,10 +265,10 @@ function transferExchangeBucket(
   room: Room,
   spellID: number
 ): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   const batch = getBatch(room, spellID)
-  const fromKey = String(raw.FromID)
-  const toKey = String(raw.ToID)
+  const fromKey = String(move.FromID)
+  const toKey = String(move.ToID)
   const sourceBucket = batch?.buckets[fromKey]
   const targetBucket = batch?.buckets[toKey]
   if (!batch || !sourceBucket || !targetBucket || fromKey === toKey) return event
@@ -285,19 +285,19 @@ function transferExchangeBucket(
 
   const selectedSet = new Set(selectedCards)
   sourceBucket.cards = sourceBucket.cards.filter((card) => !selectedSet.has(card))
-  const targetIsPileBucket = Number(raw.ToID) === batch.pileBucketID
+  const targetIsPileBucket = move.ToID === batch.pileBucketID
   // 目标桶按存活实体过滤后再计算 ToPosition/插入，保证桶索引与 returnBucketToPile 的
   // exchange 存活集合一致，避免残留实体让协议插槽算错落点。
   targetBucket.cards = targetBucket.cards.filter((card) => card.location === 'exchange')
   const cardsToInsert = selectedCards.filter((card) => !targetBucket.cards.includes(card))
   const insertedAtExactPosition = targetIsPileBucket
-    ? insertCardsAtProtocolPosition(targetBucket.cards, cardsToInsert, raw.ToPosition)
+    ? insertCardsAtProtocolPosition(targetBucket.cards, cardsToInsert, move.ToPosition)
     : false
   if (!insertedAtExactPosition) {
     targetBucket.cards.push(...cardsToInsert)
   }
 
-  if (Number(raw.FromID) === batch.pileBucketID) {
+  if (move.FromID === batch.pileBucketID) {
     selectedCards.forEach((card) => batch.pileRangeCards.delete(card))
   }
   if (targetIsPileBucket) {
@@ -319,11 +319,11 @@ function transferExchangeBucket(
 }
 
 function returnBucketToPile(event: MoveEventDraft, room: Room, spellID: number): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   const batch = getBatch(room, spellID)
-  const bucketKey = String(raw.FromID)
+  const bucketKey = String(move.FromID)
   const bucket = batch?.buckets[bucketKey]
-  if (!batch || !bucket || Number(raw.FromID) !== batch.pileBucketID) return event
+  if (!batch || !bucket || move.FromID !== batch.pileBucketID) return event
 
   // 牌堆逻辑桶与 Zone 都按底 -> 顶保存，空 CardIDs 回堆时可直接作为 sourceCards 使用。
   const cardsBottomFirst = bucket.cards.filter((card) => card.location === 'exchange')
@@ -362,12 +362,12 @@ function returnBucketToPile(event: MoveEventDraft, room: Room, spellID: number):
 }
 
 function returnBucketToHand(event: MoveEventDraft, room: Room, spellID: number): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   const batch = getBatch(room, spellID)
-  const bucketKey = String(raw.FromID)
+  const bucketKey = String(move.FromID)
   const bucket = batch?.buckets[bucketKey]
   // 牌堆逻辑桶只能整批回堆；异常协议若把牌堆桶回写玩家手牌，对称拒绝以免污染手牌区。
-  if (!batch || !bucket || Number(raw.FromID) === batch.pileBucketID) return event
+  if (!batch || !bucket || move.FromID === batch.pileBucketID) return event
 
   const cards = bucket.cards.filter((card) => card.location === 'exchange')
   if (cards.length !== getCount(event) || cards.length !== bucket.expectedCount) return event
@@ -390,19 +390,19 @@ function returnBucketToHand(event: MoveEventDraft, room: Room, spellID: number):
 }
 
 export function isGuanXuSpellID(spellID: number): boolean {
-  return GUAN_XU_SPELL_IDS.has(Number(spellID))
+  return GUAN_XU_SPELL_IDS.has(spellID)
 }
 
 export default function decorateGuanXu(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
-  const spellID = Number(raw.SpellID ?? event.options?.spellID)
+  const move = event.protocol
+  const spellID = move.SpellID
   if (!isGuanXuSpellID(spellID)) return event
-  if (Number(raw.MoveType ?? event.moveType ?? event.options?.moveType) !== MOVE_TYPE.EXCHANGE) {
+  if (event.moveType !== MOVE_TYPE.EXCHANGE) {
     return event
   }
 
-  const fromZone = Number(raw.FromZone)
-  const toZone = Number(raw.ToZone)
+  const fromZone = move.FromZone
+  const toZone = move.ToZone
 
   if (fromZone === 1 && toZone === 10) return stagePileToExchange(event, room, spellID)
   if (fromZone === 5 && toZone === 10) return stageHandToExchange(event, room, spellID)

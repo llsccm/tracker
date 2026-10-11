@@ -323,6 +323,32 @@ describe('GsCRoleOptTargetNtf', () => {
     expect(skillState.context).toEqual({ actorSeat: 3, targetSeat: 4, pileCount: 4 })
   })
 
+  it.each([
+    { Params: [4, 2, 81, 99, 124, 4, 91] },
+    { Params: [4, 2, 81, 99, 124, 4, 91, 158, 200] }
+  ])('诫厉拒绝与声明张数不匹配的完整 Params: %j', ({ Params }) => {
+    const deleteSkillState = vi.fn()
+    const ensureSkillState = vi.fn(() => ({}))
+    vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({
+      ensureSkillState,
+      deleteSkillState
+    } as any)
+
+    handleRoleOptTargetNtf({
+      Param: 1,
+      Params,
+      SeatID: 3,
+      SpellID: 3483,
+      SrcSeatID: 3,
+      Type: 28,
+      targetSeatID: 4
+    })
+
+    expect(ensureSkillState).not.toHaveBeenCalled()
+    expect(deleteSkillState).toHaveBeenCalledWith(3483)
+    expect(revealTrackerCards).not.toHaveBeenCalled()
+  })
+
   it('评鉴技能3911按技能数量切割Params并过滤末尾干扰数据', () => {
     Game.bindRoom({ mySeatID: 1, seatIDs: [1, 2], size: 2 } as any)
     const config = SpellExtendConfig.GetInstance()

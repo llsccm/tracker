@@ -1,7 +1,7 @@
 import { CARD_INSTANCE_STATUS } from '../CardCounter'
 import type { Card } from '../Card'
 import type { Room } from '../Room'
-import type { CardID, NormalizedMoveEvent, SubZone } from '../types'
+import type { CardID, NormalizedMoveEvent, SeatID, SubZone } from '../types'
 
 /** 技能移动装饰器消费并返回的完整标准化移动事件。 */
 export type MoveEventDraft = NormalizedMoveEvent
@@ -26,9 +26,9 @@ export function getRaw(event: MoveEventDraft): any {
   return event.raw ?? event.options?.sourceEvent?.raw ?? {}
 }
 
-/** 读取事件声明的牌数，优先使用事件顶层值，并把负数限制为 0。 */
+/** 读取当前标准事件的移动牌数；格式化由入口统一完成。 */
 export function getCount(event: MoveEventDraft): number {
-  return Math.max(0, Number(event.cardCount ?? event.options?.cardCount ?? 0))
+  return event.cardCount
 }
 
 /** 判断协议牌 ID 中是否至少明确提供了一张真实身份牌。 */
@@ -96,12 +96,11 @@ export function getEventSourceCards(event: MoveEventDraft, room: Room): Card[] {
 /** 从明确玩家子区中按现有实体顺序选取指定数量的未公开牌。 */
 function getUnknownPlayerCards(
   room: Room,
-  seatID: unknown,
+  seatID: SeatID | undefined,
   count: number,
   subZone: SubZone = 'hand'
 ): Card[] {
-  const seat = Number(seatID)
-  if (Number.isNaN(seat)) return []
+  if (seatID === undefined) return []
 
   const playerCards: Card[] = []
   if (!(count > 0)) return playerCards
@@ -112,7 +111,7 @@ function getUnknownPlayerCards(
     if (
       card.location === 'player' &&
       card.subZone === subZone &&
-      card.seats.has(seat) &&
+      card.seats.has(seatID) &&
       card.isKnown !== true
     ) {
       playerCards.push(card)

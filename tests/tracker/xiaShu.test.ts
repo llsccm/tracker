@@ -1,27 +1,23 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { applySpellEffect } from '@/handler/spellEffects'
 import handleXiaShuMove, {
   handleXiaShuChoice,
   handleXiaShuTargetNotice
 } from '@/handler/skills/XiaShu'
+import { Game } from '@/tracker'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from './helpers/room'
 
-function createGameState() {
-  const states = new Map<number, unknown>()
+const { revealTrackerCards } = vi.hoisted(() => ({ revealTrackerCards: vi.fn() }))
 
-  return {
-    getSpellState<T = unknown>(spellID: number): T | undefined {
-      return states.get(spellID) as T | undefined
-    },
-    setSpellState(spellID: number, value: unknown) {
-      states.set(spellID, value)
-    },
-    deleteSpellState(spellID: number) {
-      states.delete(spellID)
-    }
-  }
-}
+vi.mock('@/tracker/runtime/browser', () => ({
+  tracker: { revealTrackerCards }
+}))
+
+afterEach(() => {
+  revealTrackerCards.mockReset()
+  Game.deleteSpellState(361)
+})
 
 describe('下书', () => {
   it('选择回复先于移动时由通用转移收敛四张暗牌和一个候选槽', () => {
@@ -30,7 +26,6 @@ describe('下书', () => {
     const candidateCardIDs = [133, 134]
     const allCardIDs = [...shownCardIDs, ...hiddenCardIDs, ...candidateCardIDs]
     const { room } = createTestRoom({ cardIDs: allCardIDs, seatIDs: [3, 6, 7] })
-    const game = createGameState()
 
     try {
       const sourceCards = allCardIDs.map((cardID) => getCard(room, cardID))
@@ -89,15 +84,15 @@ describe('下书', () => {
       room.getPlayer(3).syncObservedHandCount(0)
       room.resolveConstraints()
 
-      const tracker = {
-        revealTrackerCards(
+      revealTrackerCards.mockImplementation(
+        (
           target: {
             seatID?: number
             handMoveCount?: number
             sourceEvent?: { type: string; label?: string }
           },
           cardIDs: number[]
-        ) {
+        ) => {
           room.moveCards(cardIDs, 'player', {
             seatID: Number(target.seatID),
             fromSeatID: Number(target.seatID),
@@ -109,36 +104,29 @@ describe('下书', () => {
             sourceEvent: target.sourceEvent
           })
         }
-      }
+      )
 
-      handleXiaShuTargetNotice(
-        {
-          Param: 0,
-          Params: shownCardIDs,
-          SeatID: 3,
-          SpellID: 361,
-          SrcSeatID: 3,
-          targetSeatID: 7,
-          Type: 29
-        },
-        game
-      )
+      handleXiaShuTargetNotice({
+        Param: 0,
+        Params: shownCardIDs,
+        SeatID: 3,
+        SpellID: 361,
+        SrcSeatID: 3,
+        targetSeatID: 7,
+        Type: 29
+      })
       // 实测 CGsRoleSpellOptRep 先于后续取牌 PubGsCMoveCard 到达。
-      handleXiaShuChoice(
-        {
-          Datas: [2, 1],
-          SeatID: 3,
-          SpellID: 361,
-          Type: 22,
-          data_count: 2
-        },
-        game
-      )
+      handleXiaShuChoice({
+        Datas: [2, 1],
+        SeatID: 3,
+        SpellID: 361,
+        Type: 22,
+        data_count: 2
+      })
 
       const afterMoveCallbacks: (() => void)[] = []
       applySpellEffect({
-        game,
-        tracker,
+        game: Game,
         afterMove(callback: () => void) {
           afterMoveCallbacks.push(callback)
         },
@@ -200,7 +188,7 @@ describe('下书', () => {
       expect(transferGroup?.expectedSlotsBySeat.get(3)).toBe(5)
       expect(transferGroup?.expectedSlotsByLocation.get(targetHandKey)).toBe(0)
       expect(transferGroup?.expectedSlotsByLocation.get(actorHandKey)).toBe(5)
-      expect(game.getSpellState(361)).toBeUndefined()
+      expect(Game.getSpellState(361)).toBeUndefined()
     } finally {
       room.destroy()
     }
@@ -210,13 +198,14 @@ describe('下书', () => {
     ['同区展示', { FromZone: 5, ToZone: 5, FromID: 7, ToID: 7 }],
     ['标记区来源', { FromZone: 4, ToZone: 5, FromID: 7, ToID: 3 }]
   ])('移动位置为%s时不注册下书回调', (_label, move) => {
-    const game = createGameState()
-    game.setSpellState(361, { shownCardIDs: [96], targetSeatID: 7, choice: 2, actorSeatID: 3 })
+    Game.setSpellState(361, { shownCardIDs: [96], targetSeatID: 7, choice: 2, actorSeatID: 3 })
     const callbacks: (() => void)[] = []
 
     handleXiaShuMove({
-      game,
+      game: Game,
       ...move,
+      CardIDs: [0],
+      MoveType: 5,
       fromSeatID: move.FromID,
       toSeatID: move.ToID,
       fromSubZone: move.FromZone === 5 ? 'hand' : 'mark',

@@ -13,7 +13,7 @@ export default function handleJiaoYu(context: SkillMoveContext): void {
   const colors = context.game.getSpellState<Set<number>>(context.SpellID)
   if (!(colors instanceof Set) || colors.size == 0) return
 
-  const markSpellID = Number(context.FromID || context.SpellID)
+  const markSpellID = context.FromID || context.SpellID
   const markCards =
     context.game.room
       ?.refreshPlayerSnapshot()
@@ -21,7 +21,7 @@ export default function handleJiaoYu(context: SkillMoveContext): void {
         (card) =>
           card.location === 'player' &&
           card.subZone === 'mark' &&
-          Number(card.spellID) === markSpellID &&
+          card.spellID === markSpellID &&
           card.isKnown === true &&
           card.id > 0 &&
           colors.has(card.color)

@@ -1,7 +1,7 @@
 import { CardConfig } from '../config'
 import { Game } from '../tracker'
 import { tracker } from '../tracker/runtime/browser'
-import { normalizeMoveEvent } from '../tracker/MoveEventNormalizer'
+import { normalizeMoveCardFields, normalizeMoveEvent } from '../tracker/MoveEventNormalizer'
 import { POSITION_TOP } from '../tracker/candidate/cardPositions'
 import {
   normalizeTrackerMovePosition,
@@ -11,20 +11,30 @@ import { handleGameFlowState } from './gameFlowState'
 import { handleSpecialZones } from './specialZones'
 import { applySpellEffect } from './spellEffects'
 
-function syncMoveToTracker(msg, { CardIDs, FromPosition, ToPosition }) {
-  tracker.syncTrackerMove(msg, {
-    CardIDs: Array.isArray(CardIDs) ? CardIDs.slice() : CardIDs,
-    FromPosition,
-    ToPosition
-  })
+// 只同步协议字段，避免把 context 中的运行时对象和回调带入移动事件。
+const TRACKER_MOVE_FIELDS = [
+  'CardCount',
+  'FromZone',
+  'FromPosition',
+  'ToZone',
+  'ToPosition',
+  'MoveType',
+  'SpellID'
+]
+
+function syncMoveToTracker(context) {
+  const move = { CardIDs: context.CardIDs.slice() }
+  for (const field of TRACKER_MOVE_FIELDS) move[field] = context[field]
+  tracker.syncTrackerMove(context.msg, move)
 }
 
 /**
  * 主卡牌移动处理逻辑
  */
 export function handleMoveCard(msg) {
-  let { CardIDs, FromPosition, ToPosition } = msg
-  const { CardCount, FromID, FromZone, ToID, ToZone, MoveType, SpellID, SrcSeatID } = msg
+  const move = normalizeMoveCardFields(msg)
+  let { CardIDs, FromPosition, ToPosition } = move
+  const { CardCount, FromID, FromZone, ToID, ToZone, MoveType, SpellID, SrcSeatID } = move
   const afterMoveCallbacks = []
 
   // 1. 预处理与过滤
@@ -77,7 +87,7 @@ export function handleMoveCard(msg) {
   ToPosition = normalizedMove.ToPosition
 
   const normalizedEvent = normalizeMoveEvent({
-    ...msg,
+    ...move,
     CardIDs,
     FromPosition,
     ToPosition
@@ -86,7 +96,6 @@ export function handleMoveCard(msg) {
   const context = {
     msg,
     game: Game,
-    tracker,
     CardIDs,
     CardCount,
     FromID,
@@ -107,11 +116,7 @@ export function handleMoveCard(msg) {
       if (typeof callback === 'function') afterMoveCallbacks.push(callback)
     },
     finishMove() {
-      syncMoveToTracker(msg, {
-        CardIDs: context.CardIDs,
-        FromPosition: context.FromPosition,
-        ToPosition: context.ToPosition
-      })
+      syncMoveToTracker(context)
 
       afterMoveCallbacks.splice(0).forEach((callback) => callback())
     }

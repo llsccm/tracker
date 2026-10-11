@@ -3,7 +3,6 @@ import { POSITION_RANDOM } from '../candidate/cardPositions'
 import type { Room } from '../Room'
 
 import {
-  getRaw,
   hasPositiveID,
   getCount,
   patchEvent,
@@ -19,18 +18,18 @@ interface WenGuaState {
 
 // 徐氏【问卦】：追踪当前回合被问卦移动的一张牌，后续他人放回牌堆时复用该实体。
 export default function decorateWenGua(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
-  const fromZone = Number(raw.FromZone)
-  const toZone = Number(raw.ToZone)
+  const move = event.protocol
+  const fromZone = move.FromZone
+  const toZone = move.ToZone
 
-  if (fromZone !== 5 || Number(raw.FromPosition) !== POSITION_RANDOM || getCount(event) !== 1) {
+  if (fromZone !== 5 || move.FromPosition !== POSITION_RANDOM || getCount(event) !== 1) {
     return event
   }
 
   const currentSeatID = room?.game?.currentID
 
   // 当前角色获得问卦牌：记录实体，后续判断是否被其他角色放回牌堆。
-  if (toZone === 5 && Number(raw.FromID) === Number(currentSeatID)) {
+  if (toZone === 5 && move.FromID === currentSeatID) {
     const state = room.ensureSkillState<WenGuaState>(780, () => ({ trackedCard: null }))
     const sourceCards = getEventSourceCards(event, room)
     state.trackedCard = sourceCards[0] ?? null
@@ -47,10 +46,10 @@ export default function decorateWenGua(event: MoveEventDraft, room: Room): MoveE
   const trackedCard = room.readSkillState<WenGuaState>(780)?.trackedCard
   if (
     toZone === 1 &&
-    Number(raw.FromID) !== Number(currentSeatID) &&
+    move.FromID !== currentSeatID &&
     trackedCard &&
     trackedCard.location === 'player' &&
-    trackedCard.seats.has(Number(raw.FromID))
+    trackedCard.seats.has(move.FromID)
   ) {
     room.deleteSkillState(780)
     return patchEvent(event, {

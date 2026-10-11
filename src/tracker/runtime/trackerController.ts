@@ -318,9 +318,8 @@ export class TrackerController {
         patched: this.summarizeProtocolMove(patchedMsg)
       })
 
-      if (deferGuiFuMove(readyRoom, msg, patchedMsg)) return
-
       const rawEvent = normalizeMoveEvent(patchedMsg)
+      if (deferGuiFuMove(readyRoom, msg, rawEvent.protocol)) return
 
       // rawEvent 只代表协议文本；下一步还要根据当前卡牌状态修正来源子区。
       this.controllerLogger.debug(
@@ -329,9 +328,11 @@ export class TrackerController {
       )
 
       const stateEvent = this.normalizeEventWithTrackerState(rawEvent)
+      // 技能处理器
       const event = readyRoom.decorateMoveEvent(stateEvent)
       const pileCountBefore = readyRoom.zones.get('pile')?.cards.length ?? 0
       const knownPileDrawCards = this.collectRegularDrawKnownPileCards(readyRoom, patchedMsg, event)
+
       this.controllerLogger.debug('移动事件装饰完成', {
         before: summarizeMoveEvent(stateEvent, MOVE_EVENT_SUMMARY_OPTIONS),
         after: summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
@@ -368,6 +369,7 @@ export class TrackerController {
           '移动事件分支: shuffleDiscardIntoPile',
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
+
         // 洗牌闭世代依赖账本提交结果，因此把同一条身份事件交给 Room，在物理区重建前提交；
         // 其它移动仍保持“先移动实体、再写账本”的普通后置流程。
         // 注意：createPileIdentityMove 在 readyRoom.shufflePile 之前调用，因此
@@ -379,11 +381,14 @@ export class TrackerController {
           pileCountBefore,
           knownPileDrawCards
         )
+
         readyRoom.shufflePile({
           cardCount: event.cardCount,
           identityMove: pileIdentityMove
         })
+
         this.controllerView.scheduleRender()
+
         return
       } else {
         this.controllerLogger.info(

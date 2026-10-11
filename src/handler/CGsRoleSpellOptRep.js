@@ -85,9 +85,12 @@ export function handleRoleSpellOptRep(msg = {}) {
       // if (Type === 10) Game.getSpellState(SpellID)?.add?.(Datas[0])
       break
 
-    // 下书：Datas[0] 为 1 取展示牌，为 2 取暗牌。
+    // 下书
     case 361:
-      handleXiaShuChoice(msg, Game)
+      if (Type === 22 && Array.isArray(Datas) && msg.data_count === 2) {
+        // Datas[0] 为 1 取展示牌，为 2 取暗牌
+        handleXiaShuChoice(msg)
+      }
       break
 
     // 诫厉

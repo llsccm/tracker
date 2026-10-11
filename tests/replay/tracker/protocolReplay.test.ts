@@ -149,6 +149,54 @@ describe('tracker protocol replay', () => {
     expect(replayer.gameState.getSpellState(361)).toBeUndefined()
   })
 
+  it('下书回放状态分别保存在各自 GameState 中', () => {
+    const first = new TrackerProtocolReplayer()
+    const second = new TrackerProtocolReplayer()
+    const replayState = (
+      replayer: TrackerProtocolReplayer,
+      cardID: number,
+      targetSeatID: number,
+      actorSeatID: number,
+      choice: number
+    ) =>
+      replayer.replay(
+        openingRecords().concat([
+          {
+            seq: 5,
+            className: 'GsCRoleOptTargetNtf',
+            payload: { SpellID: 361, Param: 0, Type: 29, Params: [cardID], targetSeatID }
+          },
+          {
+            seq: 6,
+            className: 'CGsRoleSpellOptRep',
+            payload: { SpellID: 361, Type: 22, Datas: [choice, 1], SeatID: actorSeatID }
+          }
+        ])
+      )
+
+    try {
+      expect(replayState(first, 1, 2, 1, 1).success).toBe(true)
+      expect(replayState(second, 3, 1, 2, 2).success).toBe(true)
+      expect(first.gameState.getSpellState(361)).toEqual({
+        shownCardIDs: [1],
+        targetSeatID: 2,
+        actorSeatID: 1,
+        choice: 1
+      })
+      expect(second.gameState.getSpellState(361)).toEqual({
+        shownCardIDs: [3],
+        targetSeatID: 1,
+        actorSeatID: 2,
+        choice: 2
+      })
+      second.controller.destroyTrackerRoom()
+      expect(first.gameState.getSpellState(361)).toMatchObject({ shownCardIDs: [1], choice: 1 })
+    } finally {
+      first.controller.destroyTrackerRoom()
+      second.controller.destroyTrackerRoom()
+    }
+  })
+
   it('重放看牌协议并保留牌堆顶顺序供逻辑推断检查', () => {
     const records = openingRecords().concat({
       seq: 5,

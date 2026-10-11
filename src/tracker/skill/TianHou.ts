@@ -18,7 +18,7 @@ import { isPileSingleCardShow, MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Room } from '../Room'
 import { recordTraversal } from '../traversalStats'
 import type { PlayerLocationCandidate, SeatID } from '../types'
-import { getCount, getRaw, hasPositiveID, type MoveEventDraft, patchEvent } from './moveEventUtils'
+import { getCount, hasPositiveID, type MoveEventDraft, patchEvent } from './moveEventUtils'
 
 export const TIAN_HOU_SPELL_ID = 3903
 export const TIAN_HOU_STATE_KEY = 'tianHouExchange'
@@ -71,7 +71,7 @@ function clearBatch(room: Room, cleanupTemporaryCandidates = false): void {
 }
 
 function isOtherView(room: Room, actorSeat: SeatID): boolean {
-  return room.mySeatID === undefined || Number(room.mySeatID) !== Number(actorSeat)
+  return room.mySeatID === undefined || room.mySeatID !== actorSeat
 }
 
 function getActorHandCards(room: Room, actorSeat: SeatID): Card[] {
@@ -321,7 +321,7 @@ function isKnownExactPileTopThree(room: Room, cardID: number): boolean {
 }
 
 function decorateFinalReveal(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const cardID = Number(event.cardIDs?.[0])
+  const cardID = event.cardIDs[0]
   if (!(cardID > 0)) return event
 
   const state = getTianHouState(room)
@@ -358,33 +358,33 @@ function decorateFinalReveal(event: MoveEventDraft, room: Room): MoveEventDraft 
 }
 
 export default function decorateTianHou(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
-  if (Number(raw.SpellID ?? event.options?.spellID) !== TIAN_HOU_SPELL_ID) return event
-  if (isPileSingleCardShow(raw)) return decorateFinalReveal(event, room)
-  if (Number(raw.MoveType ?? event.moveType ?? event.options?.moveType) !== MOVE_TYPE.EXCHANGE) {
+  const move = event.protocol
+  if (move.SpellID !== TIAN_HOU_SPELL_ID) return event
+  if (isPileSingleCardShow(move)) return decorateFinalReveal(event, room)
+  if (event.moveType !== MOVE_TYPE.EXCHANGE) {
     return event
   }
 
   // 主视角 CardIDs 明确，默认移动即可精确追踪；候选分支只接管其他视角的全暗协议。
   if (hasPositiveID(event.cardIDs ?? [])) return event
 
-  const fromZone = Number(raw.FromZone)
-  const toZone = Number(raw.ToZone)
+  const fromZone = move.FromZone
+  const toZone = move.ToZone
 
   if (fromZone === 1 && toZone === 10) {
-    return decoratePileStage(event, room, Number(raw.ToID))
+    return decoratePileStage(event, room, move.ToID)
   }
   if (fromZone === 5 && toZone === 10) {
-    return decorateHandStage(event, room, Number(raw.FromID))
+    return decorateHandStage(event, room, move.FromID)
   }
   if (fromZone === 10 && toZone === 10) {
-    return decorateExchangeReorder(event, room, Number(raw.FromID))
+    return decorateExchangeReorder(event, room, move.FromID)
   }
   if (fromZone === 10 && toZone === 5) {
-    return decorateReturnToHand(event, room, Number(raw.ToID))
+    return decorateReturnToHand(event, room, move.ToID)
   }
   if (fromZone === 10 && toZone === 1) {
-    return decorateReturnToPile(event, room, Number(raw.FromID))
+    return decorateReturnToPile(event, room, move.FromID)
   }
 
   return event

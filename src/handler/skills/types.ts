@@ -1,11 +1,18 @@
 import type { GameState } from '@/tracker/Game'
-import type { CardID, RawMoveCardEvent, SeatID, SpellID } from '@/tracker/types'
+import type { NormalizedMoveCardFields, SeatID, SubZone } from '@/tracker/types'
 
-// PubGsCMoveCard 预处理后，CardIDs 已统一为数组；这里不是 Room 的领域 MoveContext。
-export interface SkillMoveContext extends RawMoveCardEvent {
+// PubGsCMoveCard 入口统一数组和数值字段；响应器不再重复转换。
+// 这里不是 Room 的领域 MoveContext。
+export interface SkillMoveContext extends NormalizedMoveCardFields {
   game: GameState
-  CardIDs: CardID[]
-  SpellID: SpellID
+  FromZone: number
+  ToZone: number
+  MoveType: number
+  fromSeatID?: SeatID | null
+  toSeatID?: SeatID | null
+  fromSubZone?: SubZone | null
+  toSubZone?: SubZone | null
+  afterMove?: (callback: () => void) => void
 }
 
 export interface RoleDataMessage {

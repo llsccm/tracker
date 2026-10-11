@@ -1,3 +1,4 @@
+import { normalizeMoveCardFields } from './MoveEventNormalizer'
 import { getEquipmentMarkContainerByMarkSpellID } from './candidate/equipmentMarkContainer'
 import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from './roomMovement/types'
 import { Card, hasRealIdentity, isAnonymous } from './Card'
@@ -622,6 +623,25 @@ export class Room {
   decorateMoveEvent(event: any): any {
     if (!event) return event
 
+    // 领域调用可以只提供 options；在装饰入口补齐一次，技能层不再回读原始协议。
+    if (!event.protocol) {
+      const raw = event.raw ?? event.options?.sourceEvent?.raw ?? {}
+      const protocol = normalizeMoveCardFields({
+        ...raw,
+        CardIDs: event.cardIDs ?? raw.CardIDs,
+        CardCount: event.cardCount ?? event.options?.cardCount ?? raw.CardCount,
+        MoveType: raw.MoveType ?? event.moveType ?? event.options?.moveType,
+        SpellID: raw.SpellID ?? event.options?.spellID
+      })
+      event = {
+        ...event,
+        protocol,
+        cardIDs: event.cardIDs ?? protocol.CardIDs,
+        cardCount: event.cardCount ?? protocol.CardCount,
+        moveType: event.moveType ?? protocol.MoveType
+      }
+    }
+
     const collectSpellIDs = (value: any): any[] => {
       if (value === null || value === undefined) return []
       if (typeof value !== 'string' && typeof value?.[Symbol.iterator] === 'function') {
@@ -633,7 +653,7 @@ export class Room {
 
     const spellIDs = Array.from(
       new Set(
-        [event.raw?.SpellID, event.options?.spellID]
+        [event.protocol.SpellID, event.options?.spellID]
           .flatMap((id) => collectSpellIDs(id))
           .map((id) => Number(id))
           .filter((id) => Number.isFinite(id))

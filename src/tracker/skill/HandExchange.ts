@@ -40,7 +40,6 @@ import { recordTraversal } from '../traversalStats'
 import {
   getCount,
   getPositiveIDs,
-  getRaw,
   type MoveEventDraft,
   nextGroupID,
   patchEvent
@@ -97,8 +96,8 @@ type HandExchangeRoomState = {
 }
 
 function resolveSpellID(event: MoveEventDraft): number {
-  const raw = getRaw(event)
-  const spellID = Number(raw.SpellID ?? event.options?.spellID ?? 0)
+  const move = event.protocol
+  const spellID = move.SpellID
   return Number.isFinite(spellID) ? spellID : 0
 }
 
@@ -484,8 +483,8 @@ function buildExchangePatch(
  * 账本 key 使用 FromID（原持有座位），回手时协议会把同一值放回 FromID。
  */
 function stageHandToExchange(event: MoveEventDraft, room: Room, spellID: number): MoveEventDraft {
-  const raw = getRaw(event)
-  const fromSeat = Number(raw.FromID)
+  const move = event.protocol
+  const fromSeat = move.FromID
   if (!Number.isFinite(fromSeat)) return event
 
   // 同一次进区只扫一次手牌，门槛判断与批次登记复用同一结果。
@@ -544,9 +543,9 @@ function returnExchangeBatchToHand(
   room: Room,
   spellID: number
 ): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   // 回手协议：FromID = 原持有者批次键；ToID = 真正接收座位。
-  const batchKey = String(raw.FromID)
+  const batchKey = String(move.FromID)
   const state = readSpellExchangeState(room, spellID)
   const batchStack = state?.batches[batchKey]
   // 优先弹出内层批次，避免空手回牌事件误消费仍待结算的外层实体批次。
@@ -569,7 +568,7 @@ function returnExchangeBatchToHand(
     room,
     state,
     batch.batchID,
-    Number(raw.ToID),
+    move.ToID,
     protocolKnownIDs,
     revealsWholeBatch
   )
@@ -602,13 +601,13 @@ function returnExchangeBatchToHand(
  * - 交换区 -> 手牌（10 -> 5）：FromID 是原持有者批次键，目标座位看 ToID
  */
 export default function decorateHandExchange(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
-  if (Number(raw.MoveType ?? event.moveType ?? event.options?.moveType) !== MOVE_TYPE.EXCHANGE) {
+  const move = event.protocol
+  if (event.moveType !== MOVE_TYPE.EXCHANGE) {
     return event
   }
 
-  const fromZone = Number(raw.FromZone)
-  const toZone = Number(raw.ToZone)
+  const fromZone = move.FromZone
+  const toZone = move.ToZone
   const spellID = resolveSpellID(event)
 
   if (fromZone === 5 && toZone === 10) {

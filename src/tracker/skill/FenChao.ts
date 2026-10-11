@@ -5,7 +5,6 @@ import { PROTOCOL_ZONE } from '../protocolZones'
 import type { Room } from '../Room'
 import {
   getCount,
-  getRaw,
   hasPositiveID,
   nextGroupID,
   patchEvent,
@@ -17,13 +16,13 @@ const FEN_CHAO_SPELL_ID = 3752
 const FEN_CHAO_CARD_SPELL_IDS = new Set([1, 8, 9, 10, 83])
 
 export default function decorateFenChao(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   if (
     hasPositiveID(event.cardIDs) ||
-    Number(raw.FromZone) !== PROTOCOL_ZONE.DISCARD ||
-    Number(raw.ToZone) !== PROTOCOL_ZONE.HAND ||
-    Number(raw.MoveType) !== MOVE_TYPE.GAIN ||
-    Number(raw.FromPosition) !== POSITION_RANDOM
+    move.FromZone !== PROTOCOL_ZONE.DISCARD ||
+    move.ToZone !== PROTOCOL_ZONE.HAND ||
+    move.MoveType !== MOVE_TYPE.GAIN ||
+    move.FromPosition !== POSITION_RANDOM
   ) {
     return event
   }

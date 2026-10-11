@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
+import { normalizeMoveCardFields } from '@/tracker/MoveEventNormalizer'
 
 import { getPositiveIDs, patchEvent, type MoveEventDraft } from '@/tracker/skill/moveEventUtils'
 
@@ -21,6 +22,14 @@ describe('moveEventUtils', () => {
 
   it('patchEvent 只替换指定字段并浅合并 options', () => {
     const event: MoveEventDraft = {
+      protocol: normalizeMoveCardFields({
+        CardIDs: [1],
+        CardCount: 1,
+        FromZone: 1,
+        ToZone: 2,
+        MoveType: 4,
+        SpellID: 0
+      }),
       type: 'moveKnown',
       cardIDs: [1],
       cardCount: 1,
@@ -42,6 +51,7 @@ describe('moveEventUtils', () => {
 
     expectTypeOf(patched).toEqualTypeOf<MoveEventDraft>()
     expect(patched).not.toBe(event)
+    expect(patched.protocol).toBe(event.protocol)
     expect(patched.cardIDs).toEqual([2])
     expect(patched.options).toEqual({
       fromZone: 'pile',
