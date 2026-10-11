@@ -94,11 +94,13 @@ export interface RawMoveCardEvent {
   FromID?: SeatID
   SrcSeatID?: SeatID
   FromZoneParam?: SpellID | string | null
-  FromPosition?: PublicPosition
+  /** 协议来源位置为数字，不使用内部候选的语义字符串。 */
+  FromPosition?: number
   ToZone?: ZoneID | string
   ToID?: SeatID
   ToZoneParam?: SpellID | string | null
-  ToPosition?: PublicPosition
+  /** 协议目标位置为数字，不使用内部候选的语义字符串。 */
+  ToPosition?: number
   MoveType?: number | string
   SpellID?: SpellID | string | null
   Label?: string
