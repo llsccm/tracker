@@ -9,6 +9,7 @@
 
 | 场景 | 协议或识别条件 | 主要实现 / 回归入口 |
 | --- | --- | --- |
+| 诡伏相邻获得消息补全 | `SpellID=3709` + `DataID=3709` | `src/tracker/skill/GuiFu.ts`、`tests/tracker/roleData3709.test.ts` |
 | 下书明暗选择 | `SpellID=361` | `src/handler/skills/XiaShu.ts`、`tests/tracker/xiaShu.test.ts` |
 | 暗置标记区候选 | `FromZone=5`、`ToZone=4/8`、全暗 `CardIDs` | `RoomMovement.handleHiddenMarkMove()`、`hiddenMarkCandidates` |
 | 观虚目标视角交换 | `SpellID=987/988` | `src/tracker/skill/GuanXu.ts`、`tests/tracker/guanXuExchange.test.ts` |
@@ -17,6 +18,19 @@
 | 诫厉观看与暂存 | `SpellID=3483` | `handleRoleOptTargetNtf`、`tests/tracker/roleOptTargetNtf.test.ts` |
 | 天候私有观看与展示 | `SpellID=3903` | `src/tracker/skill/TianHou.ts`、`tests/tracker/tianHouExchange.test.ts` |
 | 兴作牌底与手牌交换 | `SpellID=3776` | `src/tracker/skill/XingZuo.ts`、`tests/tracker/xingZuo.test.ts` |
+
+## 诡伏相邻获得消息补全（SpellID=3709）
+
+- 协议约定：无 ID 的获得移动与角色数据相邻；当前持有列表将新增 ID 放在前面。
+- `src/tracker/skill/GuiFu.ts` 使用 GameState `tracker` scope 的 `3709` key 暂存一条移动，
+  牌堆与弃牌来源都不提前写入实体或数量。角色数据按前置 `CardCount` 取新增前缀，
+  补齐 ID 后经 Controller 执行一次普通移动；技能不自行修改身份账本。
+- 不维护 FIFO、历史快照或额外匿名手牌；不支持移动积压、跨座位乱序和分批揭示。
+  用牌后、获得技能时等没有前置获得移动的角色数据忽略，不根据状态列表独立移动牌；
+  失配或被下一条移动打断时告警清除暂存。
+- 已携带 ID 的移动立即同步，主视角不重复处理角色数据。
+- 原始移动、相邻角色数据及 `raw` / `patched` 约定见
+  [诡伏协议专页](../protocols/PubGsCMoveCard-3709.md)。
 
 ## 下书明暗选择（SpellID=361）
 

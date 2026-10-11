@@ -11,7 +11,7 @@ import {
   getProtocolPublicZone,
   isProtocolPlayerZone
 } from '../protocolZones'
-import { Room, type PendingDiscardGainSettlement } from '../Room'
+import { Room } from '../Room'
 import type {
   CardID,
   MoveOptions,
@@ -29,6 +29,8 @@ import type {
 } from '../types'
 import { registerDefaultMoveEventHandlers } from './moveEventHandlers'
 import { commitDuoQiMove, observeDuoQiKnownCardIDs } from '../skill/DuoQi'
+import { completeGuiFuMove, deferGuiFuMove } from '../skill/GuiFu'
+import { GUI_FU_ROLE_DATA_ID } from './protocolRules'
 
 interface RevealTarget {
   type?: 'player' | 'public' | string
@@ -170,20 +172,6 @@ export class TrackerController {
     return this.trackerRoom
   }
 
-  /** 取得 3709 当前角色数据相对于最近快照的新增 CardID。 */
-  getTrackerGuiFuRevealDelta(seatID: SeatID, cardIDs: CardID[] | CardID = []): CardID[] {
-    const ids = this.normalizeIDs(cardIDs).filter((id) => id > 0)
-    const readyRoom = this.getReadyTrackerRoom()
-    if (!readyRoom) return ids
-
-    try {
-      return readyRoom.getGuiFuRevealDelta(seatID, ids)
-    } catch (error) {
-      this.controllerLogger.warn('诡伏当前角色数据增量查询失败', { error, seatID, cardIDs: ids })
-      return ids
-    }
-  }
-
   isTrackerReady(): boolean {
     return Boolean(this.trackerRoom?.isDeckReady && !this.getRuntime()?.isDuanXian)
   }
@@ -231,6 +219,7 @@ export class TrackerController {
       return
     }
 
+    this.trackerRoom.deleteSkillState(GUI_FU_ROLE_DATA_ID)
     this.trackerRoom.initDeck(cardIDs)
     this.controllerView.mount(this.trackerRoom)
     this.controllerLogger.info('Room 牌堆初始化完成', { cardIDs })
@@ -328,6 +317,8 @@ export class TrackerController {
         raw: this.summarizeProtocolMove(msg),
         patched: this.summarizeProtocolMove(patchedMsg)
       })
+
+      if (deferGuiFuMove(readyRoom, msg, patchedMsg)) return
 
       const rawEvent = normalizeMoveEvent(patchedMsg)
 
@@ -713,29 +704,13 @@ export class TrackerController {
     }
   }
 
-  /**
-   * 结算“匿名弃牌获得 -> 角色数据给出 CardID”的两阶段协议。
-   * 返回 Room 在推进快照前算出的新增身份，供 `missing` 调用方继续走普通明牌回退。
-   */
-  settleTrackerPendingDiscardGain(
-    seatID: SeatID,
-    cardIDs: CardID[] | CardID = [],
-    sourceEvent?: MoveOptions['sourceEvent']
-  ): PendingDiscardGainSettlement {
-    const ids = this.normalizeIDs(cardIDs).filter((id) => id > 0)
-    if (ids.length === 0) return { result: 'invalid', newCardIDs: [] }
-
+  /** 补齐相邻诡伏移动的身份，再走普通移动管线，数量和身份账本都只提交一次。 */
+  syncTrackerGuiFuRoleData(seatID: SeatID, cardIDs: readonly CardID[]): void {
     const readyRoom = this.getReadyTrackerRoom()
-    if (!readyRoom) return { result: 'missing', newCardIDs: ids }
+    if (!readyRoom) return
 
-    try {
-      const settlement = readyRoom.settlePendingDiscardGain(seatID, ids, sourceEvent)
-      if (settlement.result === 'settled') this.controllerView.scheduleRender()
-      return settlement
-    } catch (error) {
-      this.controllerLogger.warn('弃牌堆待回填身份结算失败', { error, seatID, cardIDs: ids })
-      return { result: 'invalid', newCardIDs: [] }
-    }
+    const move = completeGuiFuMove(readyRoom, seatID, cardIDs)
+    if (move) this.syncTrackerMove(move.raw, move.patched)
   }
 
   /**

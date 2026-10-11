@@ -21,6 +21,7 @@
 | --- | ---: | --- | --- |
 | [木牛流马](PubGsCMoveCard-700.md) | `700` | 手牌暗置、装备本体迁座及附属暗标记通知 | `5 -> 4`、`6 -> 6`、`4 -> 4`；标记空间按 ZoneParam=`700` 识别 |
 | [骋烈（其他视角）](PubGsCMoveCard-3208.md) | `3208` | 牌顶展示、暗中交换、暗标记分配与弃置 | `1/5 -> 10`、两条 `10 -> 10`、`10 -> 5/4`、`4 -> 2`；仅最初展示有 ID |
+| [诡伏](PubGsCMoveCard-3709.md) | `3709` | 牌堆/弃牌堆获得与相邻角色数据配对 | `1/2 -> 5`、获得、无 ID；仅在 `patched` 补齐身份 |
 | [焚巢](PubGsCMoveCard-3752.md) | `3752` | 弃牌堆取目标牌 | `2 -> 5`、获得、随机、无正 ID |
 | [兴作](PubGsCMoveCard-3776.md) | `3776` | 牌底与目标手牌经交换区互换 | `MoveType=11`、`1/5 -> 10 -> 5/1`；牌底明牌随批次保留 |
 
@@ -47,7 +48,7 @@
 | -------------------------------------------------------- | -----: | ---------------- | ---------------------------------------------------- |
 | [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `8` | OPT_DATA_ADD_SPELL_EFFECT | `SeatID` 为目标；`Datas=[3730,技能拥有者座位]` |
 | [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `3544` | 巧织暗取牌       | `Datas=[cardID,0]`；非主视角将牌面物化到目标普通手牌 |
-| [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `3709` | 诡伏弃牌堆随机获得 | `Datas=[count,...cardIDs,...]`；非主视角延迟到角色数据再移动真实弃牌 |
+| [诡伏](PubGsCMoveCard-3709.md) | `3709` | 诡伏当前持有状态 | 获得牌、用牌后或获得技能时同步；仅有待配对获得移动时补入 `patched` |
 | [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `4022` | 裴秀地图状态更新 | `Datas=[mapID,currentCell,historyCount,...]`，仅己方 |
 
 ## 相关代码入口
