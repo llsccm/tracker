@@ -50,7 +50,7 @@ if (!room) return
 `normalizeMoveCardFields()` 只复制完整消息与身份数组，供预处理修改，不补字段或推测牌数。
 测试简写使用 `tests/tracker/helpers/trackerController.ts` 的 `protocolMove()` 构造完整消息；
 覆盖项使用 `Partial<RawMoveCardEvent>`；生产 `finalMove` 使用 `MoveCardPatch`，只允许修正
-身份数组、数量、来源/目标区域及位置、移动类型和技能 ID，不覆盖端点 ID、区域参数或附加信息。
+`CardIDs`、`FromPosition` 和 `ToPosition`，不覆盖数量、区域、端点 ID、区域参数、移动类型、技能 ID 或附加信息。
 
 `NormalizedMoveCardFields` 继承完整原始协议，`Room.decorateMoveEvent()` 只接受完整
 `NormalizedMoveEvent`，不再补造缺失的 `protocol`。领域直调使用已有的
