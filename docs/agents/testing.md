@@ -226,6 +226,7 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
 
 - 新测试放在与主题接近的现有文件；新主题再开 `tests/<area>/*.test.ts`
 - 优先复用 `tests/tracker/helpers/`，避免每个用例重复搭 Room / Controller
+- **不新增或扩展 Room 就绪状态相关回归测试**：实际协议处理链路保证 Room 已就绪，不会遇到 Room 未就绪。不要专门构造 Room 缺失、尚未就绪或 `getReadyTrackerRoom()` 返回空值的场景；测试应聚焦已就绪 Room 下的真实协议与领域行为。
 - 测试名写清场景与期望，例如“洗牌 cardCount 大于本地枚举时保持匿名占位账本”
 - 断言关注**可观察状态**：owner、locationCandidates、手牌额度、公共区顺序、脏集合、遍历计数；少断言实现细节私有字段
 - 不要依赖真实 DOM / Laya；非 UI 业务测试需要隔离视图依赖时使用 helper 中的 noop 或最小 stub，不编写 UI 行为断言

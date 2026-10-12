@@ -102,16 +102,6 @@ export function clearJieLiState(room: Room): void {
   room.deleteSkillState(JIE_LI_SPELL_ID)
 }
 
-function readPositiveInteger(value: unknown): number | null {
-  const number = Number(value)
-  return Number.isInteger(number) && number > 0 ? number : null
-}
-
-function readSeatID(value: unknown): number | null {
-  const number = Number(value)
-  return Number.isInteger(number) && number >= 0 && number < 255 ? number : null
-}
-
 /**
  * 由 GsCRoleOptTargetNtf 记录发动者/目标座位。
  * 这里不保存任何牌 ID，只为后续移动选择正确的视角策略。
@@ -123,49 +113,15 @@ export function recordJieLiContext(room: Room, data: JieLiContextData): void {
   delete state.observerBatch
 }
 
-export function parseJieLiSelectionData(datas: unknown): JieLiSelectionData | null {
-  if (!Array.isArray(datas) || datas.length < 6) return null
-
-  const actorSeat = readSeatID(datas[0])
-  const targetSeat = readSeatID(datas[1])
-  const handCount = readPositiveInteger(datas[2])
-  if (actorSeat === null || targetSeat === null || handCount === null) return null
-
-  const handStart = 3
-  const handEnd = handStart + handCount
-  const pileCount = readPositiveInteger(datas[handEnd])
-  if (pileCount === null || pileCount !== handCount) return null
-
-  const pileStart = handEnd + 1
-  const pileEnd = pileStart + pileCount
-  if (pileEnd !== datas.length) return null
-
-  const handCardIDs = datas.slice(handStart, handEnd).map(readPositiveInteger)
-  const pileCardIDs = datas.slice(pileStart, pileEnd).map(readPositiveInteger)
-  if (handCardIDs.includes(null) || pileCardIDs.includes(null)) return null
-
-  const normalizedHandCardIDs = handCardIDs as number[]
-  const normalizedPileCardIDs = pileCardIDs as number[]
-  const allCardIDs = [...normalizedHandCardIDs, ...normalizedPileCardIDs]
-  if (new Set(allCardIDs).size !== allCardIDs.length) return null
-
-  return {
-    actorSeat,
-    targetSeat,
-    handCardIDs: normalizedHandCardIDs,
-    pileCardIDs: normalizedPileCardIDs
-  }
-}
-
 /**
- * Type=53 的两组 ID 按下标配对。生产目标视角中，pileCardIDs 只查找前一条
- * 牌堆进交换区消息所对应的匿名槽，不把这些 ID 写入卡牌实体。
+ * 接收 CGsRoleSpellOptRep 已完成目标视角筛选与协议解析的选择，按当前批次配对两组 ID。
+ * 生产目标视角中，pileCardIDs 只查找前一条牌堆进交换区消息所对应的匿名槽，
+ * 不把这些 ID 写入卡牌实体。
  */
 export function recordJieLiSelection(room: Room, data: JieLiSelectionData): boolean {
   const batch = getBatch(room)
   if (
     !batch ||
-    room.mySeatID !== data.targetSeat ||
     batch.actorSeat !== data.actorSeat ||
     batch.targetSeat !== data.targetSeat ||
     batch.handCards.length !== data.handCardIDs.length ||

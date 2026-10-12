@@ -2,7 +2,7 @@ import { Game } from '@/tracker'
 import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
 import { tracker } from '@/tracker/runtime/browser'
 import { initializeDuoQiState } from '@/tracker/skill/DuoQi'
-import { parseJieLiSelectionData, recordJieLiSelection } from '@/tracker/skill/JieLi'
+import { recordJieLiSelection } from '@/tracker/skill/JieLi'
 import { handleXiaShuChoice } from './skills/XiaShu'
 import { destroyPingJianWindow } from '@/ui/PingJianWindow'
 
@@ -97,9 +97,19 @@ export function handleRoleSpellOptRep(msg = {}) {
     case 3483:
       if (Type === 53) {
         const room = tracker.getReadyTrackerRoom()
-        if (!room || room.mySeatID !== Number(Datas?.[1])) break
-        const selection = parseJieLiSelectionData(Datas)
-        if (selection) recordJieLiSelection(room, selection)
+        if (!room || room.mySeatID !== Datas[1]) break
+
+        // Datas: [actorSeat, targetSeat, handCount, ...handToPile, pileCount, ...pileToHand]
+        const [actorSeat, targetSeat, handCount] = Datas
+        const handEnd = 3 + handCount
+        const pileStart = handEnd + 1
+        const pileCount = Datas[handEnd]
+        recordJieLiSelection(room, {
+          actorSeat,
+          targetSeat,
+          handCardIDs: Datas.slice(3, handEnd),
+          pileCardIDs: Datas.slice(pileStart, pileStart + pileCount)
+        })
       }
       break
 
