@@ -31,9 +31,11 @@
 ### `Room`
 
 - `Room` 是单局状态权威和稳定门面，持有玩家、公共区、物理实体、身份分区、约束、派生索引、
-  技能/移动处理器与视图脏状态。
-- 构造时挂载 `movement`、`constraints`、`publicZones` 三个行为模块；高频入口保留在 Room，
-  低频阶段细节委托给模块，模块不拥有第二套推断状态。
+  技能/移动处理器与视图脏状态。座位、视角、对局上下文及技能状态访问由单层父类
+  `src/tracker/room/RoomBase.ts` 提供；玩家注册、GameState 绑定和销毁仍由完整 Room 协调。
+- 构造时挂载移动、约束、公共区、身份处理与事件装饰模块，并独立封装玩家快照；高频入口保留在 Room，
+  阶段细节委托给模块，不复制身份或推断状态。DEV 环境另挂载只读 `diagnostics`，
+  集中执行开发断言与告警，生产环境不创建诊断实例。
 - 生命周期主入口是 `registerPlayers()`、`initDeck()`、`moveCards()`、`resolveConstraints()`、
   `shufflePile()` 与 `destroy()`；生产 `initDeck()` 只创建匿名物理槽，真实身份由身份分区和
   `PileIdentityLedger` 管理。
@@ -46,9 +48,14 @@
 
 ### `Room` 行为模块
 
+- `PlayerSnapshot` 位于 `src/tracker/room/playerSnapshot.ts`，独占玩家快照缓存；新实体通过 `Room.registerCardEntity()` 同时登记快照及区域索引顺序。
+- `RoomMoveEvents` 位于 `src/tracker/room/moveEvents.ts`，维护按局隔离的处理器注册表、领域输入补齐及有序装饰链。
+- `RoomIdentity` 位于 `src/tracker/room/identity.ts`，实现物化、匿名化、已有身份接管和外部实体创建，Room 保留稳定入口。
+
 - `RoomMovement` 位于 `src/tracker/roomMovement.ts`，负责 `moveCards()` 的阶段细节：来源取牌、已知牌解析、候选传播、公共区候选位置传播、暗牌占位移动、已知牌落区和公共组合约束创建。
 - `RoomConstraints` 位于 `src/tracker/roomConstraints.ts`，负责约束组维护、实体牌解析、稳定列表同步、基于 `locationIndex` 的视图组同步以及候选席位过广时的暂停追踪。
 - `RoomPublicZones` 位于 `src/tracker/roomPublicZones.ts`，负责公共区一致性检查、公共区牌序读取、玩家手牌 ID 查询以及旧辅助兼容的 zoneID 读面。
+- `RoomDiagnostics` 位于 `src/tracker/room/diagnostics.ts`，负责 DEV 身份/槽位与身份账本守恒、玩家快照和影子索引检查、抽样门控及收敛轮数告警；Room 的公开断言 API 保持不变。
 - `protocolZones.ts` 负责把协议区域编号映射为新版公共区与玩家子区；`MoveEventNormalizer` 只做分类与字段映射，不直接修改 `Room` 状态。`FromID` / `ToID` 的含义依赖具体 `FromZone` / `ToZone`，不能一律当作座位 ID：例如 `FromZone=8` 弹窗标记回牌堆时，`FromID` 可能是技能/标记空间 ID；`FromZone=1` 牌堆来源时，`FromID=255` 可能只是牌堆/无座位占位。
 - `Room.moveCards()`、`Room.resolveConstraints()`、`Room.shufflePile()`、`Room.getPublicZone()` 是高频核心入口，应优先留在 `Room` 中；新增内部辅助方法时优先放入对应行为模块，再由 `Room` 暴露必要的薄入口。
 

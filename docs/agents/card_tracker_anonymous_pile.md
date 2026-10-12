@@ -168,6 +168,10 @@ accountedPileCount
 
 ### 已知身份物化
 
+物化、匿名化及已有身份接管的实现集中在 `src/tracker/room/identity.ts`；对外仍通过 Room 的
+同名原语调用。身份分区、实体池和 `PileIdentityLedger` 的权威来源未改变。新建实体统一经
+`Room.registerCardEntity()` 登记物理创建顺序，位置写入和身份事务仍由原调用流程负责。
+
 `RoomMovement.resolveKnownMoveCards()` 依次尝试：
 
 1. 来源端点中已经存在同 ID 实体时精确复用。

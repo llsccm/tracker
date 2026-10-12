@@ -15,8 +15,9 @@
 - `GameState.updateRecordInfo()` 只更新对局 ID 与模式，不清空统一仓库。座位开局经 Controller
   调用 `beginPlayback()`，即使重新播放同一 `gameId` 也清空本轮状态；初始化信息重复到达不影响它。
   对局 ID 和模式名称独立于 Room 绑定状态，随对局信息切换、显式重置或结束清理。
-- Room 的 `readSkillState()` 等方法只是 `tracker` 命名空间的领域薄入口；tracker 代码不应直接导入
-  全局 `Game`，以保留测试隔离和依赖注入能力。
+- Room 的 `readSkillState()` 等方法继承自 `src/tracker/room/RoomBase.ts`，只是 `tracker` 命名空间的
+  领域薄入口；状态仍由 GameState 唯一保存。tracker 代码不应直接导入全局 `Game`，
+  以保留测试隔离和依赖注入能力。
 
 ## 状态模型
 
@@ -156,7 +157,8 @@ tracker 状态；所需事实应由后续协议重新建立。
 ## 相关入口
 
 - `src/tracker/Game.ts`：统一 `stateStore`、通用 API、兼容 spell API 与生命周期清理。
-- `src/tracker/Room.ts`：tracker scope 的领域薄入口。
+- `src/tracker/room/RoomBase.ts`：Room 继承的 tracker scope 领域薄入口与当前绑定实例检查。
+- `src/tracker/Room.ts`：完整实例的绑定和销毁协调。
 - [`room.md`](room.md)：Room 状态所有权和生命周期。
 - [`card_tracker_skills.md`](card_tracker_skills.md)：技能与协议特例。
 - [`lifecycle.md`](lifecycle.md)：Game、Room 与浏览器运行时的创建/销毁时序。

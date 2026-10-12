@@ -1,3 +1,4 @@
+import type { MoveEventHandler } from '../room/moveEvents'
 import { POSITION_RANDOM } from '../candidate/cardPositions'
 import type { Room } from '../Room'
 import { decorateChengLieMove } from '../skill/ChengLie'
@@ -24,7 +25,7 @@ import {
   decorateDuoQiMove
 } from '../skill/DuoQi'
 
-export type MoveEventHandler = (event: MoveEventDraft, room: Room) => MoveEventDraft
+export type { MoveEventHandler } from '../room/moveEvents'
 
 const HAND_EXCHANGE_EXCLUDED_SPELL_IDS: ReadonlySet<number> = new Set([
   3208, // 骋烈
