@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { trackerLogger } from '@/utils/logger'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { PileIdentityLedger, type PileIdentityLedgerMove } from '@/tracker/PileIdentityLedger'
 
@@ -45,23 +46,54 @@ function createTwoCohortLedger(): PileIdentityLedger {
 }
 
 describe('PileIdentityLedger', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('初始化一致性按归一化身份数校验', () => {
-    const warnings: Record<string, unknown>[] = []
-    const ledger = new PileIdentityLedger({
-      onWarning: (_message, detail) => warnings.push(detail)
-    })
+    const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
+    const ledger = new PileIdentityLedger()
 
     ledger.initialize([1, 1, 2, 0, -1])
 
     expect(ledger.getSnapshot().accountedPileCount).toBe(2)
-    expect(warnings).toEqual([])
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  it('未注入回调时仍通过统一 logger 报告身份揭示异常', () => {
+    const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
+    const ledger = new PileIdentityLedger()
+    ledger.initialize([1, 2])
+
+    ledger.revealIdentity(3, 'pile', 'test:reveal')
+
+    expect(warnSpy).toHaveBeenCalledExactlyOnceWith('牌堆身份账本异常', {
+      reason: 'revealed-pile-identity-without-cohort',
+      cardID: 3
+    })
+  })
+
+  it('一致性告警保留原因、上下文及计数详情', () => {
+    const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
+    const ledger = new PileIdentityLedger()
+    ledger.initialize([1, 2])
+
+    const issues = ledger.assertConsistency(1, 'test:count-mismatch')
+
+    expect(issues).toEqual([
+      {
+        reason: 'pile-count-mismatch',
+        context: 'test:count-mismatch',
+        expected: 1,
+        actual: 2
+      }
+    ])
+    expect(warnSpy).toHaveBeenCalledExactlyOnceWith('牌堆身份账本异常', issues[0])
   })
 
   it('匿名弃牌洗回只降级 cohort，不报告账本异常', () => {
-    const warnings: Record<string, unknown>[] = []
-    const ledger = new PileIdentityLedger({
-      onWarning: (_message, detail) => warnings.push(detail)
-    })
+    const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
+    const ledger = new PileIdentityLedger()
     ledger.initialize([1, 2, 3, 4])
 
     applyMove(ledger, {
@@ -94,7 +126,7 @@ describe('PileIdentityLedger', () => {
     })
 
     expect(ledger.getSnapshot().accountedPileCount).toBe(4)
-    expect(warnings).toEqual([])
+    expect(warnSpy).not.toHaveBeenCalled()
   })
 
   it('开局整副牌暂存弃牌堆时恢复 generation 0 而不滚动世代', () => {
@@ -731,12 +763,8 @@ describe('PileIdentityLedger', () => {
   })
 
   it('B14 单批次保持边界，多批次在范围未知时保守合并', () => {
-    const warnings: Record<string, unknown>[] = []
-    const singleLedger = new PileIdentityLedger({
-      onWarning(_message, detail) {
-        warnings.push(detail)
-      }
-    })
+    const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
+    const singleLedger = new PileIdentityLedger()
     singleLedger.initialize([1, 2, 3])
     singleLedger.applyMove({
       eventType: 'moveUnknown',
@@ -750,7 +778,7 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 2,
       discardCountAfter: 0
     })
-    expect(warnings).toEqual([])
+    expect(warnSpy).not.toHaveBeenCalled()
     expect(singleLedger.getSnapshot().cohort.groups).toHaveLength(1)
     expect(singleLedger.getSnapshot().cohort.groups[0].remainingPileCount).toBe(2)
 

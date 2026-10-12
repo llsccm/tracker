@@ -20,12 +20,7 @@ import { summarizeMoveContext } from './helper/moveSummary'
 import { RoomConstraints } from './roomConstraints'
 import { RoomBase } from './room/RoomBase'
 import { PlayerSnapshot } from './room/playerSnapshot'
-import {
-  RoomMoveEvents,
-  type MoveEventInput,
-  type MoveEventHandler,
-  type SkillHandler
-} from './room/moveEvents'
+import { RoomMoveEvents, type MoveEventHandler, type SkillHandler } from './room/moveEvents'
 import { RoomIdentity, type AnonymizeLocatedIdentityOptions } from './room/identity'
 import { RoomDiagnostics } from './room/diagnostics'
 import { RoomMovement } from './roomMovement'
@@ -74,7 +69,6 @@ export interface DirtyCardEvent {
 const DIRTY_CARD_EVENT_LIMIT = 500
 
 /**
- * 重构版房间类
  * 充当单局游戏的状态隔离生命周期容器与顶层事件分发协调者
  */
 export class Room extends RoomBase {
@@ -178,11 +172,7 @@ export class Room extends RoomBase {
     this.publicZones = new RoomPublicZones(this)
     this.constraints = new RoomConstraints(this)
     this.movement = new RoomMovement(this)
-    this.pileIdentityLedger = new PileIdentityLedger({
-      onWarning(message, detail) {
-        trackerLogger.warn(message, detail)
-      }
-    })
+    this.pileIdentityLedger = new PileIdentityLedger()
 
     // 8. 绑定当前房间的对局状态；浏览器入口会注入真实 Game，测试可注入纯状态对象。
     this.game?.bindRoom?.(this)
@@ -191,6 +181,7 @@ export class Room extends RoomBase {
   initDeck(cardIDs: CardID[]): void {
     this.isDeckReady = false
     if (import.meta.env.DEV) this.diagnostics.reset()
+
     this.cards.length = 0
     this.playerSnapshot.reset()
     this.cardIndex.clear()
@@ -203,7 +194,7 @@ export class Room extends RoomBase {
     this.zones.forEach((zone) => zone.clear())
 
     const deckCards: Card[] = []
-    for (let index = 0; index < cardIDs.length; index += 1) {
+    for (let i = 0; i < cardIDs.length; i += 1) {
       const card = new Card(0, this)
       this.registerCardEntity(card)
       deckCards.push(card)
@@ -232,20 +223,18 @@ export class Room extends RoomBase {
   ): void {
     try {
       const context = `move:${move.eventType}`
+
       this.pileIdentityLedger.applyMove({
         ...move,
         pileCountAfter: this.zones.get('pile')?.cards.length ?? 0,
         discardCountAfter: this.zones.get('discard')?.cards.length ?? 0
       })
+
       this.anonymizePileCohortIdentityEntities(context)
       this.assertPileIdentityLedgerConsistency(context)
     } catch (error) {
       trackerLogger.warn('牌堆身份账本移动更新失败', { error, move })
     }
-  }
-
-  registerAmbiguousOutsideIdentityGroup(cardIDs: readonly CardID[]): boolean {
-    return this.pileIdentityLedger.registerAmbiguousOutsideGroup(cardIDs)
   }
 
   /**
@@ -266,6 +255,7 @@ export class Room extends RoomBase {
     if (cohortIdentityIDs.size === 0) return []
 
     const anonymizedIdentityIDs: CardID[] = []
+
     pile.cards.slice().forEach((card) => {
       const cardID = card.id
       if (!(cardID > 0) || !cohortIdentityIDs.has(cardID)) return
@@ -274,6 +264,7 @@ export class Room extends RoomBase {
         card,
         `${context}:cohortPileProjection`
       )
+
       if (releasedIdentityID === null) {
         trackerLogger.warn('牌堆 cohort 身份投影匿名化失败', {
           context,
@@ -315,6 +306,7 @@ export class Room extends RoomBase {
         ['outside', []]
       ]
       const groupByLocation = new Map(revealGroups)
+
       normalizedCardIDs.forEach((cardID) => {
         const actualLocation = this.cardIndex.get(cardID)?.location
         // 协议目标只是“在哪里展示”，不一定触发物理搬运；同步完成后的 Card.location
@@ -327,21 +319,23 @@ export class Room extends RoomBase {
               : actualLocation
                 ? 'outside'
                 : location
-        if (!revealLocation) {
-          // 没有实体也没有调用方位置证据时，跳过比猜成 outside 更安全；解析入口已有缺失诊断。
-          return
-        }
+
+        // 没有实体也没有调用方位置证据时，跳过比猜成 outside 更安全；解析入口已有缺失诊断。
+        if (!revealLocation) return
+
         groupByLocation.get(revealLocation)!.push(cardID)
       })
 
       for (const [revealLocation, groupedCardIDs] of revealGroups) {
         if (groupedCardIDs.length === 0) continue
+
         this.pileIdentityLedger.applyReveal({
           cardIDs: groupedCardIDs,
           location: revealLocation,
           pileCountAfter: this.zones.get('pile')?.cards.length ?? 0,
           discardCountAfter: this.zones.get('discard')?.cards.length ?? 0
         })
+
         this.assertPileIdentityLedgerConsistency(`reveal:${revealLocation}`)
       }
     } catch (error) {
@@ -442,7 +436,7 @@ export class Room extends RoomBase {
   /**
    * 在实际移动前，让技能处理器有机会修正 cardIDs/来源牌/组合约束。
    */
-  decorateMoveEvent(event: MoveEventInput): NormalizedMoveEvent {
+  decorateMoveEvent(event: NormalizedMoveEvent): NormalizedMoveEvent {
     return this.moveEvents.decorateMoveEvent(event)
   }
 
@@ -583,9 +577,6 @@ export class Room extends RoomBase {
     return this.identity.materializeAtPublicEndpoint(cardIDs, zoneID, position)
   }
 
-  /**
-   * 为游戏外新出现的牌创建实体；用于回收区、临时区缺失等兜底场景。
-   */
   /** 所有新实体统一追加并登记顺序；不触发脏事件或改变牌的位置。 */
   registerCardEntity(card: Card): void {
     this.cards.push(card)
@@ -599,20 +590,6 @@ export class Room extends RoomBase {
 
   /**
    * 从游戏外补建实体：正 ID 身份牌和/或匿名占位。
-   *
-   * 调用场景（节选）：
-   * - known 路径物化失败后的缺口补齐（process/pile 等公共区端点没有可 materialize 的匿名槽，
-   *   且 cardIndex 尚无该正 ID 时，resolveKnownMoveCards 会 createExternalCards(missingIDs)）
-   * - outside/exile 来源的新出现正 ID
-   * - 匿名手牌对账、来源占位、洗牌替身等数量守恒兜底
-   *
-   * 重要语义：
-   * - 新建 Card 默认 isKnown=false。正 ID 只表示“牌面身份实体已存在”，不等于“已对玩家公开”。
-   * - 若协议路径是 knownIDs / discardKnown，调用方必须在落区前 confirmKnown()；
-   *   RoomMovement.resolveKnownMoveCards 尾部已对 knownCards 统一确认，避免正 ID 暗实体进弃牌/处理区；
-   *   其中 outside/exile 来源的新正 ID 初始暗状态属于正常过渡；
-   *   其它来源的缺口补建虽复用本方法，仍需由 known-fallback 语义单独诊断。
-   * - 匿名占位（id/entityID 为负）本就应保持 isKnown=false。
    */
   createExternalCards(cardIDs: CardID[] = [], count = cardIDs.length): Card[] {
     return this.identity.createExternalCards(cardIDs, count)
@@ -703,8 +680,8 @@ export class Room extends RoomBase {
   }
 
   // 公共区主入口与兼容查询；低频查询辅助位于 roomPublicZones.js。
-  clearCardsFromPublicZones(...args) {
-    return (this.publicZones.clearCardsFromPublicZones as any)(...args)
+  clearCardsFromPublicZones(cards: Card[] = []) {
+    return this.publicZones.clearCardsFromPublicZones(cards)
   }
 
   /**
@@ -726,7 +703,7 @@ export class Room extends RoomBase {
     const normalized = normalizeLocationCandidate(candidate)
     if (normalized?.type !== 'container' || normalized.containerType !== 'equipment') return []
 
-    const equipment = this.cardIndex.get(Number(normalized.cardID))
+    const equipment = this.cardIndex.get(normalized.cardID)
     // 装备本体离开装备区后标记空间不再存在；旧 muniuMarkSeat 不能继续投影到玩家标记区。
     if (equipment?.location !== 'player' || equipment.subZone !== 'equip') return []
 
@@ -757,8 +734,8 @@ export class Room extends RoomBase {
   }
 
   // 约束收敛主入口与辅助方法；低频约束辅助位于 roomConstraints.js。
-  removeCardsFromConstraintGroups(...args) {
-    return (this.constraints.removeCardsFromConstraintGroups as any)(...args)
+  removeCardsFromConstraintGroups(cards: Card[] = []) {
+    return this.constraints.removeCardsFromConstraintGroups(cards)
   }
 
   notifyCardChanged(card: Card | null, event: Record<string, unknown> = {}): void {
@@ -1428,6 +1405,7 @@ export class Room extends RoomBase {
       const invalidAnonymizeCards = context.anonymizeCards.filter(
         (card) => !hasRealIdentity(card) || card.id <= 0 || this.cardIndex.get(card.id) !== card
       )
+
       if (invalidAnonymizeCards.length > 0) {
         invalidAnonymizeCards.forEach((card) => {
           trackerLogger.warn('模糊来源实体匿名化失败，身份仍被视为已定位', {
@@ -1446,6 +1424,7 @@ export class Room extends RoomBase {
       const releasedIdentityID = this.anonymizeLocatedIdentity(card, 'moveCards:ambiguousSource', {
         preservePlacement: true
       })
+
       if (releasedIdentityID !== null) continue
 
       trackerLogger.warn('模糊来源实体匿名化失败，身份仍被视为已定位', {
@@ -1455,6 +1434,7 @@ export class Room extends RoomBase {
         location: card.location,
         isKnown: card.isKnown
       })
+
       if (context.requireAnonymizeSuccess) return false
     }
 
@@ -1475,10 +1455,12 @@ export class Room extends RoomBase {
     this.movement.applyMoveCandidatePropagation(context)
     this.movement.moveUnknownCardsForContext(context)
     this.movement.moveKnownCardsForContext(context)
+
     context.postMovePublicCandidates?.forEach(({ card, candidate }) => {
       if (!context.publicMovedCards.includes(card) || card.location !== candidate.zone) return
       card.addPublicCandidate(candidate)
     })
+
     this.movement.createPublicMoveConstraintGroup(context)
 
     // 执行状态收敛
@@ -1491,6 +1473,7 @@ export class Room extends RoomBase {
       dirtyCardCount: this.dirtyCards.size,
       constraintGroupCount: this.constraintGroups.size
     })
+
     return true
   }
 

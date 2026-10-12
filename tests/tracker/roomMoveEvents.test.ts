@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Room } from '@/tracker/Room'
+import type { NormalizedMoveEvent } from '@/tracker/types'
+import { protocolMove } from './helpers/trackerController'
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
-import type { MoveEventInput } from '@/tracker/room/moveEvents'
 import { trackerLogger } from '@/utils/logger'
 import { createTestRoom } from './helpers/room'
 
@@ -9,19 +11,25 @@ function createRoom() {
 }
 
 function createEvent() {
-  return normalizeMoveEvent({
-    FromZone: 1,
-    ToZone: 5,
-    ToID: 1,
-    CardIDs: [1],
-    CardCount: 1,
-    SpellID: 42
-  })
+  return normalizeMoveEvent(
+    protocolMove({
+      FromZone: 1,
+      ToZone: 5,
+      ToID: 1,
+      CardIDs: [1],
+      CardCount: 1,
+      SpellID: 42
+    })
+  )
 }
 
 afterEach(() => vi.restoreAllMocks())
 
 describe('Room 移动事件装饰', () => {
+  it('装饰入口只接收完整归一化事件', () => {
+    expectTypeOf<Parameters<Room['decorateMoveEvent']>[0]>().toEqualTypeOf<NormalizedMoveEvent>()
+  })
+
   it('先执行通配处理器，再按技能顺序执行，同技能入口去重', () => {
     const room = createRoom()
     const calls: string[] = []
@@ -43,7 +51,7 @@ describe('Room 移动事件装饰', () => {
     })
 
     const event = createEvent()
-    event.options.spellID = '42'
+    event.options.spellID = 42
     const decorated = room.decorateMoveEvent(event)
     expect(calls).toEqual(['*', '42:first', '42:second'])
     expect(decorated.options.combinationID).toBe('wildcard')
@@ -54,15 +62,19 @@ describe('Room 移动事件装饰', () => {
     expect(calls).toEqual(['*', '42:first', '42:second', '99'])
   })
 
-  it('领域输入补齐协议字段，显式数量与身份覆盖 raw，不修改原输入', () => {
+  it('完整协议与领域修正分离，装饰时不重写原始协议字段', () => {
     const room = createRoom()
-    const event: MoveEventInput = {
-      toZone: 'player',
-      cardIDs: [2],
-      cardCount: 3,
-      raw: { CardIDs: [1], CardCount: 1, SpellID: 42, MoveType: 7 },
-      options: { spellID: 99, seatID: 1 }
-    }
+    const event = normalizeMoveEvent(
+      protocolMove({
+        CardIDs: [1],
+        CardCount: 1,
+        SpellID: 42,
+        MoveType: 7
+      })
+    )
+    event.cardIDs = [2]
+    event.cardCount = 3
+    event.options.spellID = 99
     const calls: number[] = []
     room.registerMoveEventHandler(42, () => {
       calls.push(42)
@@ -72,15 +84,17 @@ describe('Room 移动事件装饰', () => {
     })
 
     const decorated = room.decorateMoveEvent(event)
+    expect(decorated.protocol).toBe(event.protocol)
     expect(decorated.protocol).toMatchObject({
-      CardIDs: [2],
-      CardCount: 3,
+      CardIDs: [1],
+      CardCount: 1,
       SpellID: 42,
       MoveType: 7
     })
-    expect(decorated).toMatchObject({ type: 'moveCards', cardIDs: [2], cardCount: 3, moveType: 7 })
+    expect(decorated.cardIDs).toEqual([2])
+    expect(decorated.cardCount).toBe(3)
     expect(decorated.options).toBe(event.options)
-    expect(event.protocol).toBeUndefined()
+    expect(decorated.raw).toBe(event.raw)
     expect(calls).toEqual([42, 99])
   })
 

@@ -164,11 +164,10 @@ export class RoomIdentity {
    */
   materialize(cardID: CardID, target: Card | null = null): Card | null {
     const room = this.room
-    const normalizedCardID = Number(cardID)
-    const probedCard = room.probeMaterialize(normalizedCardID, target)
+    const probedCard = room.probeMaterialize(cardID, target)
     if (!probedCard) return null
 
-    const existing = room.cardIndex.get(normalizedCardID)
+    const existing = room.cardIndex.get(cardID)
     if (existing) {
       // target 只有在匿名时才可承接已有身份。若 target 是其它正 ID，即使其牌面未公开，
       // 也不能用本次揭示覆盖该身份；调用方应保留原端点并走诊断/兜底路径。
@@ -185,22 +184,22 @@ export class RoomIdentity {
 
     // 未定位身份只能物化到没有真实身份的物理槽。正 ID 暗公共实体已不再是牌堆身份权威，
     // 但也不能被另一个身份覆盖；这条门槛把 Phase 4 的匿名洗牌结果固化为通用 known 契约。
-    const wasDeckIdentity = room.deckIdentities.has(normalizedCardID)
+    const wasDeckIdentity = room.deckIdentities.has(cardID)
     // 游戏外首次出现的合法正 ID 不在初始牌组中，发现时扩展身份全集。
     if (!wasDeckIdentity) {
-      room.deckIdentities.add(normalizedCardID)
-      room.unlocatedIdentities.add(normalizedCardID)
+      room.deckIdentities.add(cardID)
+      room.unlocatedIdentities.add(cardID)
     }
 
-    probedCard.materializeIdentity(normalizedCardID)
+    probedCard.materializeIdentity(cardID)
     probedCard.confirmKnown()
-    room.cardIndex.set(normalizedCardID, probedCard)
-    room.unlocatedIdentities.delete(normalizedCardID)
+    room.cardIndex.set(cardID, probedCard)
+    room.unlocatedIdentities.delete(cardID)
     room.counter?.addCard(probedCard)
 
     room.notifyCardChanged(probedCard, {
       type: 'card-identity-materialized',
-      cardID: normalizedCardID
+      cardID: cardID
     })
 
     return probedCard

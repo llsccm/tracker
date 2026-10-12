@@ -1,3 +1,4 @@
+import { trackerLogger } from '@/utils/logger'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from './candidate/cardPositions'
 import { getPositiveIDs } from './helper/cardIDs'
 import type { CardID, PublicPosition } from './types'
@@ -56,8 +57,8 @@ export interface PileIdentityLedgerMove {
   visiblePileIdentityIDsAfter?: readonly CardID[]
   fromPosition?: PublicPosition
   toPosition?: PublicPosition
-  moveType?: number | string | null
-  spellID?: number | string | null
+  moveType?: number | null
+  spellID?: number | null
   /** 协议校准后的有效回收张数；未提供时兼容读取上一条账本观测。 */
   discardCountBefore?: number
   /** Room 在洗牌前核对的回堆候选身份；提供时优先于账本的旧弃牌快照。 */
@@ -120,15 +121,6 @@ export interface PileIdentityRoomPartition {
   deckIdentityIDs: ReadonlySet<CardID>
   unlocatedIdentityIDs: ReadonlySet<CardID>
   suspendedIdentityIDs: ReadonlySet<CardID>
-}
-
-export type PileIdentityLedgerWarningHandler = (
-  message: string,
-  detail: Record<string, unknown>
-) => void
-
-export interface PileIdentityLedgerOptions {
-  onWarning?: PileIdentityLedgerWarningHandler
 }
 
 /** commit() 的回滚快照；所有可变集合必须深拷贝。 */
@@ -199,11 +191,6 @@ export class PileIdentityLedger {
   private previousDiscardCount = 0
   // 数组顺序为牌底到牌顶；只有边界仍可证明时该顺序才有消费意义。
   private cohorts: PileIdentityCohort[] = []
-  private readonly onWarning: PileIdentityLedgerWarningHandler
-
-  constructor({ onWarning = () => undefined }: PileIdentityLedgerOptions = {}) {
-    this.onWarning = onWarning
-  }
 
   initialize(cardIDs: readonly CardID[]): void {
     const identities = normalizeIDs(cardIDs)
@@ -296,14 +283,14 @@ export class PileIdentityLedger {
         knownPileIdentityIDsConsumed.forEach((cardID) =>
           this.revealIdentityFromPileInternal(cardID)
         )
+
         if (anonymousPileConsumptionCount > 0) {
           const isTopRangeGain =
-            Number(move.moveType) === 18 &&
-            Number(move.spellID) === 7011 &&
-            move.fromPosition !== POSITION_RANDOM
+            move.moveType === 18 && move.spellID === 7011 && move.fromPosition !== POSITION_RANDOM
+
           if (isTopRangeGain) {
             this.consumeAnonymousTopRangeInternal(anonymousPileConsumptionCount)
-          } else if (Number(move.moveType) === 18) {
+          } else if (move.moveType === 18) {
             // 无 CardIDs 的“获得”只消费匿名物理槽。牌堆中已经公开的身份无论位于顶、底
             // 或中间都继续保持 knownPileIdentityIDs；若其中某张之后在牌堆外明确展示，
             // 再由那条携带 CardID 的协议移出已知牌堆集合并对账暗槽基数。
@@ -317,7 +304,7 @@ export class PileIdentityLedger {
           // RANDOM 入堆会落入未知批次内部；即使本地 Zone 暂时追加到一端，也不能沿用该顺序。
           const randomInsertion =
             move.toPosition === POSITION_RANDOM ||
-            (move.fromZone === 0 && Number(move.spellID) === 3694) ||
+            (move.fromZone === 0 && move.spellID === 3694) ||
             cardIDs.some((cardID) => cardID === 4400 || cardID === 4401)
 
           this.insertKnownInternal(
@@ -629,66 +616,63 @@ export class PileIdentityLedger {
   }
 
   private revealIdentityFromPileInternal(cardID: CardID): void {
-    const normalizedCardID = Number(cardID)
-    if (!(normalizedCardID > 0)) return
+    if (!(cardID > 0)) return
 
-    this.identityUniverse.add(normalizedCardID)
-    this.locatedIdentityIDs.add(normalizedCardID)
+    this.identityUniverse.add(cardID)
+    this.locatedIdentityIDs.add(cardID)
 
-    if (this.knownPileIdentityIDs.delete(normalizedCardID)) return
-    const cohort = this.findIdentityCohort(normalizedCardID)
+    if (this.knownPileIdentityIDs.delete(cardID)) return
+    const cohort = this.findIdentityCohort(cardID)
     if (!cohort) {
-      this.warn('revealed-pile-identity-without-cohort', { cardID: normalizedCardID })
+      this.warn('revealed-pile-identity-without-cohort', { cardID: cardID })
       return
     }
 
     // 身份明确从牌堆离开：候选集合与“仍在牌堆数量”必须同时减少。
     if (cohort.remainingPileCount <= 0) {
-      this.warn('revealed-pile-identity-from-empty-cohort', { cardID: normalizedCardID })
+      this.warn('revealed-pile-identity-from-empty-cohort', { cardID: cardID })
     } else {
       cohort.remainingPileCount -= 1
     }
-    cohort.candidateIdentityIDs.delete(normalizedCardID)
+    cohort.candidateIdentityIDs.delete(cardID)
     this.removeEmptyCohorts()
   }
 
   private revealIdentityOutsidePileInternal(cardID: CardID): void {
-    const normalizedCardID = Number(cardID)
-    if (!(normalizedCardID > 0)) return
+    if (!(cardID > 0)) return
 
-    this.identityUniverse.add(normalizedCardID)
-    this.locatedIdentityIDs.add(normalizedCardID)
+    this.identityUniverse.add(cardID)
+    this.locatedIdentityIDs.add(cardID)
 
-    if (this.knownPileIdentityIDs.delete(normalizedCardID)) return
-    const cohort = this.findIdentityCohort(normalizedCardID)
+    if (this.knownPileIdentityIDs.delete(cardID)) return
+    const cohort = this.findIdentityCohort(cardID)
     if (!cohort) return
 
     // partial cohort 中某个身份在牌堆外现身，只能删除该候选，不能断言在堆名额减少。
     // 只有 all-in-pile 陈述被证伪时，才同步修正 remainingPileCount 并发出诊断。
     if (cohort.candidateIdentityIDs.size <= cohort.remainingPileCount) {
       cohort.remainingPileCount = Math.max(0, cohort.remainingPileCount - 1)
-      this.warn('outside-reveal-from-all-in-cohort', { cardID: normalizedCardID })
+      this.warn('outside-reveal-from-all-in-cohort', { cardID: cardID })
     }
-    cohort.candidateIdentityIDs.delete(normalizedCardID)
+    cohort.candidateIdentityIDs.delete(cardID)
     this.removeEmptyCohorts()
   }
 
   private revealIdentityInPileInternal(cardID: CardID): void {
-    const normalizedCardID = Number(cardID)
-    if (!(normalizedCardID > 0) || this.knownPileIdentityIDs.has(normalizedCardID)) return
+    if (!(cardID > 0) || this.knownPileIdentityIDs.has(cardID)) return
 
-    this.identityUniverse.add(normalizedCardID)
-    this.locatedIdentityIDs.add(normalizedCardID)
+    this.identityUniverse.add(cardID)
+    this.locatedIdentityIDs.add(cardID)
 
-    const cohort = this.findIdentityCohort(normalizedCardID)
+    const cohort = this.findIdentityCohort(cardID)
     if (cohort) {
       // 从集合级暗身份提升为精确牌堆身份，总牌堆计数不变：cohort 基数减一，known 加一。
       if (cohort.remainingPileCount > 0) cohort.remainingPileCount -= 1
-      else this.warn('pile-reveal-from-empty-cohort', { cardID: normalizedCardID })
-      cohort.candidateIdentityIDs.delete(normalizedCardID)
+      else this.warn('pile-reveal-from-empty-cohort', { cardID: cardID })
+      cohort.candidateIdentityIDs.delete(cardID)
       this.removeEmptyCohorts()
     }
-    this.knownPileIdentityIDs.add(normalizedCardID)
+    this.knownPileIdentityIDs.add(cardID)
   }
 
   private confirmVisiblePileIdentitiesInternal(cardIDs: readonly CardID[] | undefined): void {
@@ -1017,6 +1001,6 @@ export class PileIdentityLedger {
   }
 
   private warn(reason: string, detail: Record<string, unknown>): void {
-    this.onWarning('牌堆身份账本异常', { reason, ...detail })
+    trackerLogger.warn('牌堆身份账本异常', { reason, ...detail })
   }
 }

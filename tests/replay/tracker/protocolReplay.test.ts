@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { getDuoQiState } from '@/tracker/skill/DuoQi'
 // import { normalizeTrackerMovePosition } from '@/tracker/runtime/protocolRules'
@@ -11,6 +11,10 @@ import {
 import { assertTrackerReplayConsistency } from './helpers/protocolReplay/snapshot'
 
 describe('tracker protocol replay', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('解析严格 JSONL 且拒绝时间等录制 schema 外字段', () => {
     const source = [
       JSON.stringify({ seq: 1, className: 'MsgGameRoundNtf', payload: { isPassed: false } }),
@@ -323,16 +327,24 @@ describe('tracker protocol replay', () => {
   //   expect(normalized.ToPosition).toBe(POSITION_RANDOM)
   // })
 
-  it('一致性检查读取玩家快照而不推进快照游标', () => {
+  it('一致性检查只读取玩家快照，不刷新或重建缓存', () => {
     const replayer = new TrackerProtocolReplayer({ currentUserID: 101 })
     const report = replayer.replay(openingRecords())
     expect(report.success).toBe(true)
 
     const room = replayer.controller.getReadyTrackerRoom()
     if (!room) throw new Error('测试预期 Room 已完成重建')
-    const snapshotSeq = room.playerSnapshotSeq
+    const snapshot = room.playerCardsSnapshot
+    const snapshotCards = [...snapshot]
+    const refreshSpy = vi.spyOn(room, 'refreshPlayerSnapshot')
+    const rebuildSpy = vi.spyOn(room, 'rebuildPlayerSnapshot')
+
     assertTrackerReplayConsistency(room, 'readonly-player-snapshot', { checkIndexes: false })
-    expect(room.playerSnapshotSeq).toBe(snapshotSeq)
+
+    expect(refreshSpy).not.toHaveBeenCalled()
+    expect(rebuildSpy).not.toHaveBeenCalled()
+    expect(room.playerCardsSnapshot).toBe(snapshot)
+    expect(room.playerCardsSnapshot).toEqual(snapshotCards)
   })
 
   it('保留 isSend 后与生产处理器一致跳过发送侧移动', () => {

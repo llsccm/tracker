@@ -53,7 +53,7 @@ function createRoomWithDiscard(
   return { controller, room }
 }
 
-function createFenChaoMove(overrides: RawMoveCardEvent = {}) {
+function createFenChaoMove(overrides: Partial<RawMoveCardEvent> = {}) {
   return protocolMove({
     CardCount: 2,
     CardIDs: [],

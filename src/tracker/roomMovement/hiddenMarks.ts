@@ -11,7 +11,6 @@ import {
   getPlayerLocationCandidates,
   toSubZoneCandidate
 } from '../candidate/locationCandidate'
-import type { SpellIDInput } from '../candidate/markSpellID'
 import { createSubZoneCandidateKey } from '../candidate/subZoneCandidate'
 import type { Card } from '../Card'
 import type { Room } from '../Room'
@@ -43,7 +42,7 @@ export abstract class RoomMovementHiddenMarkMethods {
     seatID: SeatID,
     count: number,
     subZone?: SubZone,
-    spellIDs?: SpellIDInput | SpellIDInput[]
+    spellIDs?: SpellID | SpellID[]
   ): Card[]
 
   createHiddenMarkTargetLocationCandidate(

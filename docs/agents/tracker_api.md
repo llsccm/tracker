@@ -23,11 +23,41 @@ if (!room) return
 
 | 目标 | 首选入口 | 说明 |
 | --- | --- | --- |
-| 消费真实协议移动 | `tracker.syncTrackerMove(msg, finalMove)` | 负责补字段、归一化并交给 `Room`；不要在 handler 中直接改牌。 |
+| 消费真实协议移动 | `tracker.syncTrackerMove(msg, finalMove)` | 接收完整消息并合并预处理补丁，再交给 `Room`；不要在 handler 中直接改牌。 |
 | 读取当前局 | `tracker.getReadyTrackerRoom()` | 未开局、已销毁、断线状态或牌堆未就绪时返回 `null`。 |
 | 写入技能确认的明牌 | `tracker.revealTrackerCards(target, cardIDs)` | 统一处理玩家区/公共区、物化和索引。 |
 | 按旧协议 Zone 写入明牌 | `tracker.revealTrackerCardsInZone(protocolZone, cardIDs)` | 先做 Zone 映射，再复用上面的明牌路径。 |
 | 直接编排测试或已归一化移动 | `room.moveCards(cardIDs, toZone, options)` | 所有普通移动的 Room 级主入口。 |
+
+## PubGsCMoveCard 完整输入契约
+
+`RawMoveCardEvent` 的 12 个核心字段全部必填：
+
+- `CardCount`、`CardIDs`。
+- `FromID`、`FromPosition`、`FromZone`、`FromZoneParam`。
+- `ToID`、`ToPosition`、`ToZone`、`ToZoneParam`。
+- `MoveType`、`SpellID`。
+
+除 `CardIDs` 是只读数字数组外，其余核心字段都是数字；不接受数字字符串、单个 CardID 或
+`null` 参数。无技能和无区域参数用 `0` 表示。`CardCount` 是实际移动张数，不能由数组长度回推：
+暗牌移动可以是 `CardCount: 2`、`CardIDs: []`。公开数组顺序必须保留。
+
+`FromID/ToID` 的含义取决于区域，`255` 可表示公共区或无座位；不要把它们限制为玩家座位。
+位置保留数字语义，例如牌顶 `65280`、随机 `65282`、牌底 `0` 和具体索引；不能把区域、位置或
+移动类型限制成少量样例值。
+`SrcSeatID`、`Label`、`isSend` 是可选附加信息。
+
+`normalizeMoveCardFields()` 只复制完整消息与身份数组，供预处理修改，不补字段或推测牌数。
+测试简写使用 `tests/tracker/helpers/trackerController.ts` 的 `protocolMove()` 构造完整消息；
+覆盖项使用 `Partial<RawMoveCardEvent>`；生产 `finalMove` 使用 `MoveCardPatch`，只允许修正
+身份数组、数量、来源/目标区域及位置、移动类型和技能 ID，不覆盖端点 ID、区域参数或附加信息。
+
+`NormalizedMoveCardFields` 继承完整原始协议，`Room.decorateMoveEvent()` 只接受完整
+`NormalizedMoveEvent`，不再补造缺失的 `protocol`。领域直调使用已有的
+`room.moveCards(cardIDs, toZone, options)`；导入记录的检查留在导入边界。
+`validateMoveEvent()` 也只接收完整协议，负责未知区域和数量一致性诊断，不承担缺字段补全。
+技能 `MoveEventPatch` 只修改 `type`、`cardIDs`、`cardCount` 和 `options`，不覆盖
+`protocol` 或 `raw`。
 
 ## 协议 CardID 输入约定
 
@@ -39,7 +69,8 @@ if (!room) return
 - `getPositiveIDs()` 过滤 `0`，得到去重后的真实身份列表，并保留每个 ID 首次出现的顺序。
 - 结果不保证按数值排序；需要按数值排序的调用方应在返回结果上显式排序。
 - 不要对 CardID 逐项执行 `Number()`、`Number.isFinite()` 或 `Number.isInteger()`；协议中的
-  单值/数组形态只在入口统一为数组。若真实协议样例推翻该契约，应更新入口类型与解析测试，不在
+  单值/数组形态仅在确实支持该形态的其他协议入口统一；移动消息的 `CardIDs` 固定为数组。
+  若真实协议样例推翻该契约，应更新入口类型与解析测试，不在
   各消费路径添加假设性兼容。
 - `0` 仅表示匿名占位、不是稳定身份（见“只有数量、没有 CardID 的暗牌”），
   不要把 `0` 写入 `Card.id`。

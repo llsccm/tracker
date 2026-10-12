@@ -1,5 +1,4 @@
 import type { Card } from '../Card'
-import type { SpellIDInput } from '../candidate/markSpellID'
 import type {
   CardID,
   MoveSourceEvent,
@@ -28,16 +27,16 @@ export type KnownCardCreationReason = 'external-source' | 'known-fallback'
 export interface RoomMovementOptions {
   seatID?: SeatInput
   subZone?: SubZone
-  spellID?: SpellIDInput
+  spellID?: SpellID
   combinationID?: string | number | null
   fromZone?: SourceZoneInput
   fromSeatID?: SeatID
   fromSubZone?: SubZone
-  fromSpellID?: SpellIDInput
+  fromSpellID?: SpellID
   cardCount?: number
   /** 协议手牌总数变化量；省略时沿用实际移动实体数 cardCount。 */
   handMoveCount?: number
-  moveType?: number | string
+  moveType?: number
   position?: PublicPosition
   fromPosition?: PublicPosition
   expectedSlotsBySeat?: ExpectedSlotsBySeatInput
@@ -64,7 +63,7 @@ export interface RoomMoveContext {
   fromSubZone: SubZone
   fromSpellID?: SpellID | null
   cardCount: number
-  moveType?: number | string
+  moveType?: number
   position: PublicPosition
   fromPosition: PublicPosition
   expectedSlotsBySeat?: ExpectedSlotsBySeatInput
@@ -115,7 +114,7 @@ export interface HiddenMarkState {
 }
 
 export interface UnassignedMarkSpaceState {
-  spaces: Map<SpellID | string, Card[]>
+  spaces: Map<SpellID, Card[]>
 }
 
 export interface TakeSpecificSourceFallback {
@@ -136,7 +135,7 @@ export interface TakeSourceCardsOptions {
   fromSpellID?: SpellID | null
   sourceCards?: Card[]
   sourceEvent?: MoveSourceEvent
-  moveType?: number | string
+  moveType?: number
 }
 
 export interface RandomHandTransferCheckOptions {

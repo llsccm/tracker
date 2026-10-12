@@ -1,7 +1,7 @@
 import type { Card } from '../Card'
 import type { Room } from '../Room'
 import type { SeatID, SpellID } from '../types'
-import { getCompatibleMarkSpellIDs, type SpellIDInput } from '../candidate/markSpellID'
+import { getCompatibleMarkSpellIDs } from '../candidate/markSpellID'
 import { UNASSIGNED_MARK_SPACE_STATE_KEY, type UnassignedMarkSpaceState } from './types'
 
 /**
@@ -10,7 +10,7 @@ import { UNASSIGNED_MARK_SPACE_STATE_KEY, type UnassignedMarkSpaceState } from '
  */
 function getUnassignedMarkSpaceState(room: Room): UnassignedMarkSpaceState {
   return room.ensureSkillState(UNASSIGNED_MARK_SPACE_STATE_KEY, () => {
-    return { spaces: new Map<SpellID | string, Card[]>() }
+    return { spaces: new Map<SpellID, Card[]>() }
   })
 }
 
@@ -18,7 +18,7 @@ function getUnassignedMarkSpaceState(room: Room): UnassignedMarkSpaceState {
  * 判断账本引用是否仍是可用的无席位 mark 暗占位。
  * 取牌和清理都会走这里，避免陈旧引用被再次移动。
  */
-function isLiveUnassignedMarkSpaceCard(card: Card, spellIDs: (SpellID | string)[] = []): boolean {
+function isLiveUnassignedMarkSpaceCard(card: Card, spellIDs: SpellID[] = []): boolean {
   if (
     card.location !== 'player' ||
     card.subZone !== 'mark' ||
@@ -81,11 +81,7 @@ export function registerUnassignedMarkSpaceCards(
  * 回牌堆时 FromID 可能是技能空间 ID 而不是座位，优先按 spellID 取账本实体。
  * 如果无法确定 spellID，则不从任何空间兜底取牌，避免串用其它技能空间。
  */
-export function takeUnassignedMarkSpaceCards(
-  room: Room,
-  count: number,
-  spellID: SpellIDInput
-): Card[] {
+export function takeUnassignedMarkSpaceCards(room: Room, count: number, spellID: SpellID): Card[] {
   if (!(count > 0)) return []
 
   const state = room.readSkillState<UnassignedMarkSpaceState>(UNASSIGNED_MARK_SPACE_STATE_KEY)

@@ -186,8 +186,9 @@ handler 中直接修改 `Card`、`Zone` 或玩家投影；`TrackerController` / 
 `CardLocationIndex` 登记创建顺序；该原语不移动牌、不发脏事件，也不写身份分区。
 初始化牌堆、外部实体创建及 detached suspended 实体均使用此入口，避免首次入手时扫描全牌池找顺序。
 
-`RoomMoveEvents` 接受完整 `NormalizedMoveEvent` 或缺少 `protocol` 的领域输入。后者补齐协议字段、
-数量、选项和普通 `moveCards` 类型，完整事件不重新分类；处理器签名只接收规范化事件。
+`RoomMoveEvents` 只接受完整 `NormalizedMoveEvent`，不补造协议、数量或选项，也不重新分类。
+生产协议先经 `normalizeMoveEvent()`；领域直调使用 `Room.moveCards()`，不要伪造不完整协议调用装饰器。
+测试用 `protocolMove()` 构造完整消息后再归一化；处理器签名始终接收完整事件。
 通配处理器先执行，随后按去重后的技能顺序执行；空返回或异常保留上一事件继续处理。
 两类注册表随 Room 销毁统一清理，对外 getter 仅提供只读读面。
 

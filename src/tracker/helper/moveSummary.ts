@@ -1,6 +1,5 @@
-import type { Card } from '../Card'
 import type { RoomMoveContext } from '../roomMovement/types'
-import type { CardID, MoveOptions, NormalizedMoveEvent } from '../types'
+import type { NormalizedMoveEvent } from '../types'
 
 interface MoveSummaryOptions {
   normalizeCardIDs?: boolean
@@ -10,32 +9,14 @@ interface MoveSummaryOptions {
   includeSourceCardIDs?: boolean
 }
 
-type SummarizableMoveEvent = Partial<NormalizedMoveEvent> & {
-  options?: Partial<MoveOptions> & {
-    sourceCards?: Card[]
-  }
-}
-
-type SummarizableMoveContext = Partial<RoomMoveContext> & {
-  sourceCards?: Card[]
-  knownCards?: Card[]
-}
-
-function normalizeIDs(cardIDs: CardID[] | CardID = []): CardID[] {
-  return Array.isArray(cardIDs) ? [...cardIDs] : [cardIDs]
-}
-
-export function summarizeMoveEvent(
-  event: SummarizableMoveEvent = {},
-  options: MoveSummaryOptions = {}
-) {
-  const eventOptions = event.options ?? {}
+export function summarizeMoveEvent(event: NormalizedMoveEvent, options: MoveSummaryOptions = {}) {
+  const eventOptions = event.options
   const moveType = event.moveType ?? eventOptions.moveType
   const label = eventOptions.sourceEvent?.label
 
   return {
     type: event.type,
-    cardIDs: options.normalizeCardIDs ? normalizeIDs(event.cardIDs) : event.cardIDs,
+    cardIDs: options.normalizeCardIDs ? [...event.cardIDs] : event.cardIDs,
     ...(moveType !== undefined ? { moveType } : {}),
     ...(label ? { label } : {}),
     toZone: event.toZone,
@@ -61,10 +42,7 @@ export function summarizeMoveEvent(
   }
 }
 
-export function summarizeMoveContext(
-  context: SummarizableMoveContext = {},
-  options: MoveSummaryOptions = {}
-) {
+export function summarizeMoveContext(context: RoomMoveContext, options: MoveSummaryOptions = {}) {
   return {
     cardIDs: context.cardIDs,
     toZone: context.toZone,

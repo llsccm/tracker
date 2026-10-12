@@ -1,4 +1,4 @@
-import type { PublicZoneName, SpellID } from './types'
+import type { PublicZoneName, SpellID, ZoneID } from './types'
 
 export type ProtocolPlayerSubZone = 'hand' | 'equip' | 'judge' | 'mark'
 
@@ -30,10 +30,10 @@ export const PROTOCOL_ZONE = Object.freeze({
 })
 
 interface ProtocolMarkSpellParams {
-  param?: unknown
-  toZoneParam?: unknown
-  fromZoneParam?: unknown
-  spellID?: unknown
+  param?: SpellID | null
+  toZoneParam?: SpellID | null
+  fromZoneParam?: SpellID | null
+  spellID?: SpellID | null
 }
 
 const PROTOCOL_PUBLIC_ZONE_MAP = new Map<number, PublicZoneName>([
@@ -55,62 +55,41 @@ const PROTOCOL_PLAYER_SUB_ZONE_MAP = new Map<number, ProtocolPlayerSubZone>([
   [PROTOCOL_ZONE.POPUP_MARK, 'mark']
 ])
 
-function normalizeProtocolID(value: unknown, fallback: number | null = null): number | null {
-  if (value === null || value === undefined || value === '') return fallback
-  const normalized = Number(value)
-  return Number.isFinite(normalized) ? normalized : fallback
-}
-
-function normalizeNonZeroProtocolID(value: unknown): number | null {
-  const normalized = normalizeProtocolID(value)
-  return normalized ? normalized : null
-}
-
 export function getProtocolPublicZone(
-  zone: unknown,
+  zone: ZoneID | null | undefined,
   fallback: PublicZoneName | null = null
 ): PublicZoneName | null {
-  const zoneNum = normalizeProtocolID(zone)
-  return zoneNum === null ? fallback : (PROTOCOL_PUBLIC_ZONE_MAP.get(zoneNum) ?? fallback)
+  return zone == null ? fallback : (PROTOCOL_PUBLIC_ZONE_MAP.get(zone) ?? fallback)
 }
 
 export function getProtocolPlayerSubZone(
-  zone: unknown,
+  zone: ZoneID | null | undefined,
   fallback: ProtocolPlayerSubZone | null = 'hand'
 ): ProtocolPlayerSubZone | null {
-  const zoneNum = normalizeProtocolID(zone)
-  return zoneNum === null ? fallback : (PROTOCOL_PLAYER_SUB_ZONE_MAP.get(zoneNum) ?? fallback)
+  return zone == null ? fallback : (PROTOCOL_PLAYER_SUB_ZONE_MAP.get(zone) ?? fallback)
 }
 
 export function getProtocolMarkSpellID(
-  zone: unknown,
+  zone: ZoneID | null | undefined,
   params: ProtocolMarkSpellParams = {},
-  fallback: SpellID | string | null = null
+  fallback: SpellID | null = null
 ): SpellID | null {
-  const zoneNum = normalizeProtocolID(zone)
-  const fallbackID = normalizeProtocolID(fallback, null)
-  const paramID =
-    normalizeNonZeroProtocolID(params.param) ??
-    normalizeNonZeroProtocolID(params.toZoneParam) ??
-    normalizeNonZeroProtocolID(params.fromZoneParam)
-  const spellID = normalizeNonZeroProtocolID(params.spellID)
+  const paramID = params.param || params.toZoneParam || params.fromZoneParam || null
+  const spellID = params.spellID || null
 
   // 旧 Zone 的标记区分桶规则：zone 4 使用 ZoneParam 优先，zone 8 使用 SpellID 优先。
-  if (zoneNum === PROTOCOL_ZONE.MARK) return paramID ?? spellID ?? fallbackID
-  if (zoneNum === PROTOCOL_ZONE.POPUP_MARK) return spellID ?? paramID ?? fallbackID
+  if (zone === PROTOCOL_ZONE.MARK) return paramID ?? spellID ?? fallback
+  if (zone === PROTOCOL_ZONE.POPUP_MARK) return spellID ?? paramID ?? fallback
 
-  return normalizeProtocolID(params.spellID, fallbackID)
+  return params.spellID ?? fallback
 }
 
-export function isProtocolPlayerZone(zone: unknown): boolean {
-  const zoneNum = normalizeProtocolID(zone)
-  return zoneNum !== null && PROTOCOL_PLAYER_SUB_ZONE_MAP.has(zoneNum)
+export function isProtocolPlayerZone(zone: ZoneID | null | undefined): boolean {
+  return zone != null && PROTOCOL_PLAYER_SUB_ZONE_MAP.has(zone)
 }
 
-export function isKnownProtocolZone(zone: unknown): boolean {
-  const zoneNum = normalizeProtocolID(zone)
+export function isKnownProtocolZone(zone: ZoneID | null | undefined): boolean {
   return (
-    zoneNum !== null &&
-    (PROTOCOL_PUBLIC_ZONE_MAP.has(zoneNum) || PROTOCOL_PLAYER_SUB_ZONE_MAP.has(zoneNum))
+    zone != null && (PROTOCOL_PUBLIC_ZONE_MAP.has(zone) || PROTOCOL_PLAYER_SUB_ZONE_MAP.has(zone))
   )
 }
