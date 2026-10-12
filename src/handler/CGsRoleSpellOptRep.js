@@ -95,15 +95,28 @@ export function handleRoleSpellOptRep(msg = {}) {
 
     // 诫厉
     case 3483:
+      // 目标视角能知道换牌结果
       if (Type === 53) {
         const room = tracker.getReadyTrackerRoom()
-        if (!room || room.mySeatID !== Datas[1]) break
+        if (!room || !Array.isArray(Datas) || room.mySeatID !== Datas[1]) break
 
         // Datas: [actorSeat, targetSeat, handCount, ...handToPile, pileCount, ...pileToHand]
         const [actorSeat, targetSeat, handCount] = Datas
         const handEnd = 3 + handCount
         const pileStart = handEnd + 1
         const pileCount = Datas[handEnd]
+
+        if (
+          !Number.isInteger(handCount) ||
+          !Number.isInteger(pileCount) ||
+          handCount <= 0 ||
+          pileCount <= 0 ||
+          handCount !== pileCount ||
+          Datas.length !== pileStart + pileCount
+        ) {
+          break
+        }
+
         recordJieLiSelection(room, {
           actorSeat,
           targetSeat,
