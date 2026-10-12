@@ -9,7 +9,7 @@ import {
   PARTIAL_HAND_ROLE_OPT_SPELL_IDS,
   shouldRevealAsFullHand
 } from '../tracker/runtime/protocolRules'
-import { recordJieLiContext } from '../tracker/skill/JieLi'
+import { clearJieLiState, recordJieLiContext } from '../tracker/skill/JieLi'
 import { laya } from '@/runtime/gameAdapter'
 import { wait } from '@/utils'
 import { handleXiaShuTargetNotice } from './skills/XiaShu'
@@ -57,6 +57,36 @@ function getCardNumbers(ids) {
   return ids.map((id) => config.getCardNumber(id))
 }
 
+function parseJieLiNotice(msg) {
+  const { Params, SeatID, SrcSeatID, targetSeatID } = msg
+  if (!Array.isArray(Params) || Params.length === 0) return null
+
+  const actorSeat = SrcSeatID ?? SeatID
+  const targetSeat = targetSeatID
+  const [pileCount, handCount] = Params
+  if (!Number.isInteger(pileCount) || pileCount <= 0) return null
+
+  if (Params.length === 1) {
+    return { actorSeat, targetSeat, pileCount, pileCardIDs: null, handCardIDs: null }
+  }
+
+  if (
+    !Number.isInteger(handCount) ||
+    handCount < 0 ||
+    Params.length !== 2 + pileCount + handCount
+  ) {
+    return null
+  }
+
+  return {
+    actorSeat,
+    targetSeat,
+    pileCount,
+    pileCardIDs: Params.slice(2, 2 + pileCount),
+    handCardIDs: Params.slice(2 + pileCount)
+  }
+}
+
 // GsCRoleOptTargetNtf
 export function handleRoleOptTargetNtf(msg) {
   const { SpellID, Param, Params, SeatID, SrcSeatID, targetSeatID, Type } = msg
@@ -76,7 +106,9 @@ export function handleRoleOptTargetNtf(msg) {
   switch (SpellID) {
     // 下书
     case 361:
-      handleXiaShuTargetNotice(msg, Game)
+      if (Param == 0 && Params?.length > 0 && Type == 29) {
+        handleXiaShuTargetNotice(msg)
+      }
       break
 
     // 张菖蒲 严教
@@ -202,28 +234,33 @@ export function handleRoleOptTargetNtf(msg) {
       if (targetSeatID === undefined) break
       // Params: [pileCount, handCount, ...pileTopCardIDs, ...handCardIDs]
       if (Param == 1 && Params?.length > 0) {
-        const pileCount = Number(Params[0]) || 0
-        const handCount = Number(Params[1]) || 0
+        const notice = parseJieLiNotice(msg)
         const trackerRoom = tracker.getReadyTrackerRoom()
-        const actorSeat = Number(SrcSeatID ?? SeatID)
-        const targetSeat = Number(targetSeatID)
-        if (trackerRoom) {
-          recordJieLiContext(trackerRoom, { actorSeat, targetSeat, pileCount })
+        if (!notice) {
+          if (trackerRoom) clearJieLiState(trackerRoom)
+          break
         }
 
-        // 协议已经做好视角隔离：只有发动者会收到后续牌 ID，
-        // 目标与其它座位只收到 Params=[pileCount]，因此这里无需再判断展示权限。
-        if (Params.length > 2) {
-          if (pileCount > 0) revealPileCards(Params.slice(2, 2 + pileCount))
+        if (trackerRoom) {
+          recordJieLiContext(trackerRoom, {
+            actorSeat: notice.actorSeat,
+            targetSeat: notice.targetSeat,
+            pileCount: notice.pileCount
+          })
+        }
 
-          if (handCount > 0 && targetSeatID !== 255) {
-            const handCardIDs = Params.slice(2 + pileCount, 2 + pileCount + handCount)
-            revealPlayerHandCards(
-              targetSeatID,
-              handCardIDs,
-              shouldRevealTrackedHandAsFullHand(targetSeatID, handCount) ? { fullHand: true } : {}
-            )
-          }
+        // 协议已按视角隔离：完整载荷只同步其明确声明的牌面，计数-only 不伪造牌面。
+        if (!notice.pileCardIDs) break
+        revealPileCards(notice.pileCardIDs)
+
+        if (notice.handCardIDs.length > 0 && notice.targetSeat !== 255) {
+          revealPlayerHandCards(
+            notice.targetSeat,
+            notice.handCardIDs,
+            shouldRevealTrackedHandAsFullHand(notice.targetSeat, notice.handCardIDs.length)
+              ? { fullHand: true }
+              : {}
+          )
         }
       }
 

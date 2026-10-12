@@ -1,3 +1,4 @@
+import type { NormalizedMoveCardFields } from '../types'
 import { trackerLogger } from '@/utils/logger'
 import type { Room } from '../Room'
 import { getCount, getPositiveIDs, getRaw, type MoveEventDraft } from './moveEventUtils'
@@ -45,12 +46,12 @@ function recordDisplayedCards(event: MoveEventDraft, room: Room): void {
   })
 }
 
-function recordHiddenGain(event: MoveEventDraft, room: Room, raw: any): void {
+function recordHiddenGain(event: MoveEventDraft, room: Room, move: NormalizedMoveCardFields): void {
   const state = room.readSkillState<QiaoZhiSelectionState>(QIAO_ZHI_SELECTION_STATE_KEY)
   if (!state?.displayedCardIDs.length) return
 
   const selectedCount = getCount(event)
-  const [targetSeatID] = room.normalizeSeats(Number(raw.ToID))
+  const [targetSeatID] = room.normalizeSeats(move.ToID)
   const visibleSelectedIDs = getPositiveIDs(event.cardIDs)
 
   // 主视角（或其它能看到选取结果的视角）：协议直接给出正 CardIDs。
@@ -197,32 +198,22 @@ function settleHiddenGain(event: MoveEventDraft, room: Room): void {
 }
 
 export default function decorateQiaoZhi(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
-  const fromZone = Number(raw.FromZone)
-  const toZone = Number(raw.ToZone)
-  const moveType = Number(raw.MoveType)
+  const move = event.protocol
+  const fromZone = move.FromZone
+  const toZone = move.ToZone
+  const moveType = move.MoveType
 
   if (fromZone === 1 && toZone === 8 && moveType === 6) {
     recordDisplayedCards(event, room)
     return event
   }
 
-  if (
-    fromZone === 8 &&
-    toZone === 5 &&
-    moveType === 18 &&
-    Number(raw.FromID) === QIAO_ZHI_SPELL_ID
-  ) {
-    recordHiddenGain(event, room, raw)
+  if (fromZone === 8 && toZone === 5 && moveType === 18 && move.FromID === QIAO_ZHI_SPELL_ID) {
+    recordHiddenGain(event, room, move)
     return event
   }
 
-  if (
-    fromZone === 8 &&
-    toZone === 2 &&
-    moveType === 4 &&
-    Number(raw.FromID) === QIAO_ZHI_SPELL_ID
-  ) {
+  if (fromZone === 8 && toZone === 2 && moveType === 4 && move.FromID === QIAO_ZHI_SPELL_ID) {
     settleHiddenGain(event, room)
   }
 

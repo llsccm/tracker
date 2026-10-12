@@ -8,6 +8,8 @@
 - 回放器只在 Node/Vitest 中运行，不提供浏览器按钮，也不会把历史协议注入真实对局。
 - 每次回放创建隔离的 `GameState`、`TrackerController` 和 `Room`，按 `seq` 重建座位、牌堆、移动、看牌及
   关键技能状态。
+- 下书等浏览器处理器直接使用 `Game` / `tracker` 单例，不在回放中直接调用；回放层使用当前实例的状态和
+  Controller 重建对应副作用，并保持“先同步移动、再结算技能”的顺序。
 - 回放入口与普通 tracker 回归分离：`pnpm test:tracker` 不包含 `tests/replay/`；除非用户明确要求，
   不运行 `pnpm test:replay`、`pnpm typecheck:replay` 或 `pnpm replay:tracker`。
 - 本地录制放在 Git 忽略目录 `replays/`，不要把真实录制提交到仓库。

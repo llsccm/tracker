@@ -22,7 +22,6 @@ import {
   getCount,
   getEventSourceCards,
   getPositiveIDs,
-  getRaw,
   patchEvent,
   type MoveEventDraft
 } from './moveEventUtils'
@@ -99,83 +98,30 @@ function getBatch(room: Room): JieLiBatch | undefined {
   return getJieLiState(room)?.batch
 }
 
-function clearJieLiState(room: Room): void {
+export function clearJieLiState(room: Room): void {
   room.deleteSkillState(JIE_LI_SPELL_ID)
-}
-
-function readPositiveInteger(value: unknown): number | null {
-  const number = Number(value)
-  return Number.isInteger(number) && number > 0 ? number : null
-}
-
-function readSeatID(value: unknown): number | null {
-  const number = Number(value)
-  return Number.isInteger(number) && number >= 0 && number < 255 ? number : null
 }
 
 /**
  * 由 GsCRoleOptTargetNtf 记录发动者/目标座位。
  * 这里不保存任何牌 ID，只为后续移动选择正确的视角策略。
  */
-export function recordJieLiContext(room: Room, data: JieLiContextData): boolean {
-  const actorSeat = readSeatID(data.actorSeat)
-  const targetSeat = readSeatID(data.targetSeat)
-  const pileCount = readPositiveInteger(data.pileCount)
-  if (actorSeat === null || targetSeat === null || pileCount === null) {
-    clearJieLiState(room)
-    return false
-  }
-
+export function recordJieLiContext(room: Room, data: JieLiContextData): void {
   const state = ensureJieLiState(room)
-  state.context = { actorSeat, targetSeat, pileCount }
+  state.context = data
   delete state.batch
   delete state.observerBatch
-  return true
-}
-
-export function parseJieLiSelectionData(datas: unknown): JieLiSelectionData | null {
-  if (!Array.isArray(datas) || datas.length < 6) return null
-
-  const actorSeat = readSeatID(datas[0])
-  const targetSeat = readSeatID(datas[1])
-  const handCount = readPositiveInteger(datas[2])
-  if (actorSeat === null || targetSeat === null || handCount === null) return null
-
-  const handStart = 3
-  const handEnd = handStart + handCount
-  const pileCount = readPositiveInteger(datas[handEnd])
-  if (pileCount === null || pileCount !== handCount) return null
-
-  const pileStart = handEnd + 1
-  const pileEnd = pileStart + pileCount
-  if (pileEnd !== datas.length) return null
-
-  const handCardIDs = datas.slice(handStart, handEnd).map(readPositiveInteger)
-  const pileCardIDs = datas.slice(pileStart, pileEnd).map(readPositiveInteger)
-  if (handCardIDs.includes(null) || pileCardIDs.includes(null)) return null
-
-  const normalizedHandCardIDs = handCardIDs as number[]
-  const normalizedPileCardIDs = pileCardIDs as number[]
-  const allCardIDs = [...normalizedHandCardIDs, ...normalizedPileCardIDs]
-  if (new Set(allCardIDs).size !== allCardIDs.length) return null
-
-  return {
-    actorSeat,
-    targetSeat,
-    handCardIDs: normalizedHandCardIDs,
-    pileCardIDs: normalizedPileCardIDs
-  }
 }
 
 /**
- * Type=53 的两组 ID 按下标配对。生产目标视角中，pileCardIDs 只查找前一条
- * 牌堆进交换区消息所对应的匿名槽，不把这些 ID 写入卡牌实体。
+ * 接收 CGsRoleSpellOptRep 已完成目标视角筛选与协议解析的选择，按当前批次配对两组 ID。
+ * 生产目标视角中，pileCardIDs 只查找前一条牌堆进交换区消息所对应的匿名槽，
+ * 不把这些 ID 写入卡牌实体。
  */
 export function recordJieLiSelection(room: Room, data: JieLiSelectionData): boolean {
   const batch = getBatch(room)
   if (
     !batch ||
-    room.mySeatID !== data.targetSeat ||
     batch.actorSeat !== data.actorSeat ||
     batch.targetSeat !== data.targetSeat ||
     batch.handCards.length !== data.handCardIDs.length ||
@@ -212,9 +158,10 @@ export function recordJieLiSelection(room: Room, data: JieLiSelectionData): bool
   return true
 }
 
-function resolveViewMode(room: Room, eventActorSeat?: unknown): JieLiViewMode {
+function resolveViewMode(room: Room, eventActorSeat?: number): JieLiViewMode {
   const context = getJieLiState(room)?.context
-  const actorSeat = readSeatID(eventActorSeat) ?? context?.actorSeat ?? null
+  const actorSeat =
+    eventActorSeat != null && eventActorSeat !== 255 ? eventActorSeat : (context?.actorSeat ?? null)
 
   // 发动者有自身完整信息，不需要任何 JieLi 推断。
   if (actorSeat !== null && room.mySeatID === actorSeat) return 'default'
@@ -300,10 +247,10 @@ function hasTargetHandBranch(card: Card, targetSeat: number): boolean {
  * 即使消息意外携带正 CardIDs，也不会读取、物化或移动这些身份。
  */
 function stageObserverPile(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   const context = getJieLiState(room)?.context
   const count = getCount(event)
-  const actorSeat = Number(raw.ToID)
+  const actorSeat = move.ToID
 
   if (!context || context.actorSeat !== actorSeat || context.pileCount !== count || !(count > 0)) {
     return failObserverInference(event, room)
@@ -325,14 +272,14 @@ function stageObserverPile(event: MoveEventDraft, room: Room): MoveEventDraft {
  * 因而可以安全快照目标手牌的确定明牌与候选明牌。
  */
 function stageObserverTargetHand(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   const batch = getJieLiState(room)?.observerBatch
   const count = getCount(event)
   if (
     !batch ||
     batch.phase !== 'pile-staged' ||
-    Number(raw.ToID) !== batch.actorSeat ||
-    Number(raw.FromID) !== batch.targetSeat ||
+    move.ToID !== batch.actorSeat ||
+    move.FromID !== batch.targetSeat ||
     !(count > 0) ||
     count > batch.pileCount
   ) {
@@ -350,13 +297,13 @@ function stageObserverTargetHand(event: MoveEventDraft, room: Room): MoveEventDr
  * 绑定匿名槽或消费消息中的 CardIDs。
  */
 function returnObserverCardsToPile(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   const batch = getJieLiState(room)?.observerBatch
   if (
     !batch ||
     batch.phase !== 'hand-staged' ||
-    Number(raw.FromID) !== batch.actorSeat ||
-    Number(raw.ToID) !== 255 ||
+    move.FromID !== batch.actorSeat ||
+    move.ToID !== 255 ||
     getCount(event) !== batch.pileCount
   ) {
     return failObserverInference(event, room)
@@ -373,13 +320,13 @@ function returnObserverCardsToPile(event: MoveEventDraft, room: Room): MoveEvent
  * 所以这里刻意不创建 ConstraintGroup 的精确数量约束。
  */
 function returnObserverCardsToTargetHand(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   const batch = getJieLiState(room)?.observerBatch
   if (
     !batch ||
     batch.phase !== 'pile-returned' ||
-    Number(raw.FromID) !== batch.actorSeat ||
-    Number(raw.ToID) !== batch.targetSeat ||
+    move.FromID !== batch.actorSeat ||
+    move.ToID !== batch.targetSeat ||
     getCount(event) !== batch.exchangeCount
   ) {
     return failObserverInference(event, room)
@@ -420,12 +367,12 @@ function stagePileToExchange(
   room: Room,
   informationMode: JieLiInformationMode
 ): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   const state = getJieLiState(room)
   const context = state?.context
   const count = getCount(event)
   const pileProtocolCardIDs = getPositiveIDs(event.cardIDs ?? [])
-  const actorSeat = Number(raw.ToID)
+  const actorSeat = move.ToID
   // 牌堆内部是底 -> 顶；3483 进交换区的 ID 正好按这段的底 -> 顶排列。
   const pileZoneCards = room.zones.get('pile')?.cards ?? []
   const physicalPileSlots = pileZoneCards.slice(-count)
@@ -498,12 +445,12 @@ function stageTargetHandToExchange(
   room: Room,
   informationMode: JieLiInformationMode
 ): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   const batch = getBatch(room)
   const count = getCount(event)
   const cardIDs = getPositiveIDs(event.cardIDs ?? [])
-  const actorSeat = Number(raw.ToID)
-  const targetSeat = Number(raw.FromID)
+  const actorSeat = move.ToID
+  const targetSeat = move.FromID
   const handCards = getEventSourceCards(event, room)
 
   if (
@@ -539,13 +486,9 @@ function returnTargetViewCardsToPile(
   room: Room,
   informationMode: JieLiInformationMode
 ): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   const batch = getBatch(room)
-  if (
-    !batch ||
-    batch.informationMode !== informationMode ||
-    Number(raw.FromID) !== batch.actorSeat
-  ) {
+  if (!batch || batch.informationMode !== informationMode || move.FromID !== batch.actorSeat) {
     return failTargetInference(event, room, informationMode)
   }
 
@@ -588,7 +531,7 @@ function returnCardsToTargetHand(
   room: Room,
   informationMode: JieLiInformationMode
 ): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   const batch = getBatch(room)
   const selection = batch?.selection
   if (
@@ -596,8 +539,8 @@ function returnCardsToTargetHand(
     !selection ||
     batch.informationMode !== informationMode ||
     !batch.returnedToPile ||
-    Number(raw.FromID) !== batch.actorSeat ||
-    Number(raw.ToID) !== batch.targetSeat
+    move.FromID !== batch.actorSeat ||
+    move.ToID !== batch.targetSeat
   ) {
     return failTargetInference(event, room, informationMode)
   }
@@ -630,14 +573,14 @@ function returnCardsToTargetHand(
 }
 
 export default function decorateJieLi(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
-  const spellID = Number(raw.SpellID ?? event.options?.spellID)
+  const move = event.protocol
+  const spellID = move.SpellID
   if (spellID !== JIE_LI_SPELL_ID) return event
 
-  const moveType = Number(raw.MoveType ?? event.moveType ?? event.options?.moveType)
-  const fromZone = Number(raw.FromZone)
-  const toZone = Number(raw.ToZone)
-  const eventActorSeat = fromZone === 1 || fromZone === 5 ? raw.ToID : raw.FromID
+  const moveType = event.moveType
+  const fromZone = move.FromZone
+  const toZone = move.ToZone
+  const eventActorSeat = fromZone === 1 || fromZone === 5 ? move.ToID : move.FromID
   const viewMode = resolveViewMode(room, eventActorSeat)
 
   if (moveType === MOVE_TYPE.SHOW) {

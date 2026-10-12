@@ -10,7 +10,6 @@ import decorateSiQi from '../skill/SiQi'
 import decorateTianHou from '../skill/TianHou'
 import decorateZuoLian from '../skill/ZuoLian'
 import {
-  getRaw,
   getCount,
   hasPositiveID,
   nextGroupID,
@@ -37,16 +36,11 @@ const HAND_EXCHANGE_EXCLUDED_SPELL_IDS: ReadonlySet<number> = new Set([
 ])
 
 export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
-  const spellID = Number(raw.SpellID ?? event.options?.spellID)
+  const move = event.protocol
+  const spellID = move.SpellID
 
   // 浑天仪：协议上是外部牌随机压入牌堆，显式标记来源为 outside。
-  if (
-    spellID === 3694 &&
-    Number(raw.FromZone) === 0 &&
-    Number(raw.ToZone) === 1 &&
-    Number(raw.MoveType) === 19
-  ) {
+  if (spellID === 3694 && move.FromZone === 0 && move.ToZone === 1 && move.MoveType === 19) {
     return patchEvent(event, {
       options: {
         fromZone: 'outside',
@@ -58,12 +52,7 @@ export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEven
   }
 
   // 手气卡：手牌放回牌堆时，用 ConstraintGroup 保留同次返回关系，替代旧 pack(to.cards)。
-  if (
-    Number(raw.FromZone) === 5 &&
-    Number(raw.ToZone) === 1 &&
-    spellID === 0 &&
-    Number(raw.MoveType) === 19
-  ) {
+  if (move.FromZone === 5 && move.ToZone === 1 && spellID === 0 && move.MoveType === 19) {
     return patchEvent(event, {
       options: {
         // 实测会重新混入牌堆；本地匿名槽顺序只是代表顺序，不是牌顶事实。
@@ -90,13 +79,13 @@ function createFilteredPublicMoveHandler(
   predicate: (card: any) => boolean
 ): MoveEventHandler {
   return (event, room) => {
-    const raw = getRaw(event)
-    const fromZone = Number(raw.FromZone)
+    const move = event.protocol
+    const fromZone = move.FromZone
 
     if (
       hasPositiveID(event.cardIDs) ||
       ![1, 2].includes(fromZone) ||
-      Number(raw.FromPosition) !== POSITION_RANDOM
+      move.FromPosition !== POSITION_RANDOM
     ) {
       return event
     }

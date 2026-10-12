@@ -6,7 +6,13 @@ import {
   isKnownProtocolZone,
   isProtocolPlayerZone
 } from './protocolZones'
-import type { CardID, NormalizedMoveEvent, RawMoveCardEvent, RawMoveEventType } from './types'
+import type {
+  CardID,
+  NormalizedMoveCardFields,
+  NormalizedMoveEvent,
+  RawMoveCardEvent,
+  RawMoveEventType
+} from './types'
 
 // moveType
 //   二元组表示：（已观测到的具体场景标签, MOVE_TYPE_LABELS 归一展示标签）。
@@ -108,6 +114,27 @@ export function getMoveTypeLabel(moveType: RawMoveCardEvent['MoveType']): string
  */
 function normalizeIDs(cardIDs: CardID[] | CardID = []): CardID[] {
   return Array.isArray(cardIDs) ? [...cardIDs] : [cardIDs]
+}
+
+/** 统一协议容器与数值形式，供 handler 预处理及标准事件归一化复用。 */
+export function normalizeMoveCardFields(event: RawMoveCardEvent = {}): NormalizedMoveCardFields {
+  const CardIDs = normalizeIDs(event.CardIDs ?? [])
+  return {
+    ...event,
+    CardIDs,
+    CardCount: normalizeOptionalNumber(event.CardCount) ?? CardIDs.length,
+    FromZone: normalizeOptionalNumber(event.FromZone),
+    FromZoneParam: normalizeOptionalNumber(event.FromZoneParam),
+    ToZone: normalizeOptionalNumber(event.ToZone),
+    ToZoneParam: normalizeOptionalNumber(event.ToZoneParam),
+    MoveType: normalizeOptionalNumber(event.MoveType),
+    SpellID: normalizeOptionalNumber(event.SpellID) ?? 0
+  }
+}
+
+function normalizeOptionalNumber(value: number | string | null | undefined): number | undefined {
+  // 缺省/空字段不能被 Number() 转成合法的 0 号区域或移动类型。
+  return value == null || value === '' ? undefined : Number(value)
 }
 
 /**
@@ -225,15 +252,17 @@ function hasKnownCards(cardIDs: CardID[] = []): boolean {
  * 判断来源和目标是否指向同一个协议区域。
  * 这类事件通常是“展示/刷新”而非实际移动，需要再结合 MoveType 与牌可见性分类。
  */
-function isSameZoneShowEvent(event: RawMoveCardEvent): boolean {
-  const fromZone = Number(event.FromZone)
-  const toZone = Number(event.ToZone)
+function isSameZoneShowEvent(event: NormalizedMoveCardFields): boolean {
+  const { FromZone: fromZone, ToZone: toZone } = event
 
   return (
-    Number(event.FromID) === Number(event.ToID) &&
+    event.FromID != null &&
+    event.FromID === event.ToID &&
+    fromZone !== undefined &&
     fromZone === toZone &&
-    (Number(event.FromPosition) === Number(event.ToPosition) || toZone !== 1) &&
-    (Number(event.FromZoneParam) === Number(event.ToZoneParam) || toZone !== 4)
+    (toZone !== 1 || (event.FromPosition != null && event.FromPosition === event.ToPosition)) &&
+    (toZone !== 4 ||
+      (event.FromZoneParam !== undefined && event.FromZoneParam === event.ToZoneParam))
   )
 }
 
@@ -252,21 +281,18 @@ export function isPileSingleCardShow(event: RawMoveCardEvent): boolean {
   )
 }
 
-function isTianhouAmbiguousPileShow(event: RawMoveCardEvent): boolean {
-  return Number(event.SpellID) === 3903 && isPileSingleCardShow(event)
+function isTianhouAmbiguousPileShow(event: NormalizedMoveCardFields): boolean {
+  return event.SpellID === 3903 && isPileSingleCardShow(event)
 }
 
 /**
  * 过滤已知的同区域展示噪声。
  * 这些协议消息不会改变牌所在位置，若继续下发会导致 Room 重复处理同一张牌。
  */
-function shouldIgnoreSameZoneShow(event: RawMoveCardEvent): boolean {
-  const spellID = Number(event.SpellID)
-  const moveType = Number(event.MoveType)
-
+function shouldIgnoreSameZoneShow(event: NormalizedMoveCardFields): boolean {
   return (
-    (spellID === 7011 && moveType === MOVE_TYPE.GENERAL_MOVE) ||
-    (spellID === 3744 && moveType === MOVE_TYPE.SHOW)
+    (event.SpellID === 7011 && event.MoveType === MOVE_TYPE.GENERAL_MOVE) ||
+    (event.SpellID === 3744 && event.MoveType === MOVE_TYPE.SHOW)
   )
 }
 
@@ -274,11 +300,8 @@ function shouldIgnoreSameZoneShow(event: RawMoveCardEvent): boolean {
  * 根据协议 Zone、MoveType 与牌可见性推断 Room 可消费的标准移动类型。
  * 分支顺序体现优先级：特殊公共区移动优先，其次同区域展示，最后按目标区域归类。
  */
-function inferEventType(event: RawMoveCardEvent, cardIDs: CardID[]): RawMoveEventType {
-  const { FromZone, ToZone, MoveType } = event
-  const fromZone = Number(FromZone)
-  const toZone = Number(ToZone)
-  const moveType = Number(MoveType)
+function inferEventType(event: NormalizedMoveCardFields, cardIDs: CardID[]): RawMoveEventType {
+  const { FromZone: fromZone, ToZone: toZone, MoveType: moveType } = event
   const known = hasKnownCards(cardIDs)
 
   // 弃牌堆洗回牌堆会重置公共牌堆状态，必须优先从普通回牌堆事件中识别出来。
@@ -329,36 +352,38 @@ export function getProtocolMoveSpecialLabel(event: RawMoveCardEvent = {}): strin
  *
  */
 export function normalizeMoveEvent(event: RawMoveCardEvent = {}): NormalizedMoveEvent {
-  const cardIDs = normalizeIDs(event.CardIDs)
+  const move = normalizeMoveCardFields(event)
+  const cardIDs = move.CardIDs
   // 协议异常只记录并降级处理，避免记牌器阻断宿主消息链。
   logMoveEventValidationWarnings(validateMoveEvent(event, cardIDs), event)
-  const cardCount = Number(event.CardCount) || cardIDs.length
-  const type = inferEventType(event, cardIDs)
-  const fromPublicZone = getProtocolPublicZone(event.FromZone)
-  const toPublicZoneName = getProtocolPublicZone(event.ToZone)
-  const targetIsPlayerZone = isProtocolPlayerZone(event.ToZone)
-  const sourceIsPlayerZone = isProtocolPlayerZone(event.FromZone)
+  // 保留既有兼容行为：声明为 0 但携带身份时，按实际身份数量处理。
+  const cardCount = move.CardCount || cardIDs.length
+  const type = inferEventType(move, cardIDs)
+  const fromPublicZone = getProtocolPublicZone(move.FromZone)
+  const toPublicZoneName = getProtocolPublicZone(move.ToZone)
+  const targetIsPlayerZone = isProtocolPlayerZone(move.ToZone)
+  const sourceIsPlayerZone = isProtocolPlayerZone(move.FromZone)
   // 标记区回手牌时，目标区可能带返回技能 ID（如 3389），不能覆盖来源标记空间 ID。
   const targetSpellID = targetIsPlayerZone
     ? getProtocolMarkSpellID(
-        event.ToZone,
+        move.ToZone,
         {
-          param: event.ToZoneParam,
-          toZoneParam: event.ToZoneParam,
-          spellID: event.SpellID
+          param: move.ToZoneParam,
+          toZoneParam: move.ToZoneParam,
+          spellID: move.SpellID
         },
-        event.SpellID ?? null
+        move.SpellID
       )
     : undefined
   const fromSpellID = sourceIsPlayerZone
     ? getProtocolMarkSpellID(
-        event.FromZone,
+        move.FromZone,
         {
-          param: event.FromZoneParam,
-          fromZoneParam: event.FromZoneParam,
-          spellID: event.SpellID
+          param: move.FromZoneParam,
+          fromZoneParam: move.FromZoneParam,
+          spellID: move.SpellID
         },
-        event.SpellID ?? null
+        move.SpellID
       )
     : undefined
   const spellID = targetIsPlayerZone ? targetSpellID : fromSpellID
@@ -374,28 +399,29 @@ export function normalizeMoveEvent(event: RawMoveCardEvent = {}): NormalizedMove
     type,
     cardIDs,
     cardCount,
-    moveType: event.MoveType,
+    protocol: move,
+    moveType: move.MoveType,
     toZone: targetIsPlayerZone ? 'player' : (toPublicZoneName ?? 'process'),
     options: {
-      seatID: targetIsPlayerZone ? event.ToID : undefined,
-      fromSeatID: sourceIsPlayerZone ? event.FromID : undefined,
+      seatID: targetIsPlayerZone ? move.ToID : undefined,
+      fromSeatID: sourceIsPlayerZone ? move.FromID : undefined,
       fromZone: fromPublicZone,
       subZone: targetIsPlayerZone
-        ? getProtocolPlayerSubZone(event.ToZone)
+        ? getProtocolPlayerSubZone(move.ToZone)
         : sourceIsPlayerZone
-          ? getProtocolPlayerSubZone(event.FromZone)
+          ? getProtocolPlayerSubZone(move.FromZone)
           : undefined,
-      fromSubZone: sourceIsPlayerZone ? getProtocolPlayerSubZone(event.FromZone) : undefined,
+      fromSubZone: sourceIsPlayerZone ? getProtocolPlayerSubZone(move.FromZone) : undefined,
       fromSpellID,
       spellID,
       cardCount,
-      moveType: event.MoveType,
-      position: event.ToPosition,
-      fromPosition: event.FromPosition,
+      moveType: move.MoveType,
+      position: move.ToPosition,
+      fromPosition: move.FromPosition,
       sourceEvent: {
         type,
-        label: getProtocolMoveSpecialLabel(event) ?? event.Label,
-        moveType: event.MoveType,
+        label: getProtocolMoveSpecialLabel(move) ?? move.Label,
+        moveType: move.MoveType,
         raw: event
       }
     },

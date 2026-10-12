@@ -92,22 +92,37 @@ export interface RawMoveCardEvent {
   CardCount?: number | string
   FromZone?: ZoneID | string
   FromID?: SeatID
+  SrcSeatID?: SeatID
   FromZoneParam?: SpellID | string | null
-  FromPosition?: PublicPosition
+  /** 协议来源位置为数字，不使用内部候选的语义字符串。 */
+  FromPosition?: number
   ToZone?: ZoneID | string
   ToID?: SeatID
   ToZoneParam?: SpellID | string | null
-  ToPosition?: PublicPosition
+  /** 协议目标位置为数字，不使用内部候选的语义字符串。 */
+  ToPosition?: number
   MoveType?: number | string
   SpellID?: SpellID | string | null
   Label?: string
   [key: string]: unknown
 }
 
+/** 移动入口共用的字段格式；原始协议由调用方另行保留。 */
+export interface NormalizedMoveCardFields extends RawMoveCardEvent {
+  CardIDs: CardID[]
+  CardCount: number
+  FromZone?: ZoneID
+  FromZoneParam?: SpellID
+  ToZone?: ZoneID
+  ToZoneParam?: SpellID
+  MoveType?: number
+  SpellID: SpellID
+}
+
 export interface MoveSourceEvent {
   type?: RawMoveEventType
   label?: string
-  moveType?: RawMoveCardEvent['MoveType']
+  moveType?: number
   raw?: RawMoveCardEvent | Record<string, unknown>
   [key: string]: unknown
 }
@@ -124,7 +139,8 @@ export interface MoveOptions {
   cardCount?: number
   /** 协议手牌总数变化量；候选身份不移动实体时可与 cardCount 不同。 */
   handMoveCount?: number
-  moveType?: RawMoveCardEvent['MoveType']
+  duoQiRandomHandGroupSequence?: number
+  moveType?: number
   position?: PublicPosition
   fromPosition?: PublicPosition
   resetKnownToUnknown?: boolean
@@ -142,10 +158,12 @@ export interface MoveOptions {
 }
 
 export interface NormalizedMoveEvent {
+  /** 入口格式化后的协议字段；技能读取这里，raw 仅用于原始数据追溯。 */
+  protocol: NormalizedMoveCardFields
   type: RawMoveEventType
   cardIDs: CardID[]
   cardCount: number
-  moveType?: RawMoveCardEvent['MoveType']
+  moveType?: number
   toZone: PublicZoneName | 'player'
   options: MoveOptions
   raw?: RawMoveCardEvent | Record<string, unknown>

@@ -2,7 +2,7 @@ import { Game } from '@/tracker'
 import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
 import { tracker } from '@/tracker/runtime/browser'
 import { initializeDuoQiState } from '@/tracker/skill/DuoQi'
-import { parseJieLiSelectionData, recordJieLiSelection } from '@/tracker/skill/JieLi'
+import { recordJieLiSelection } from '@/tracker/skill/JieLi'
 import { handleXiaShuChoice } from './skills/XiaShu'
 import { destroyPingJianWindow } from '@/ui/PingJianWindow'
 
@@ -85,18 +85,44 @@ export function handleRoleSpellOptRep(msg = {}) {
       // if (Type === 10) Game.getSpellState(SpellID)?.add?.(Datas[0])
       break
 
-    // 下书：Datas[0] 为 1 取展示牌，为 2 取暗牌。
+    // 下书
     case 361:
-      handleXiaShuChoice(msg, Game)
+      if (Type === 22 && Array.isArray(Datas) && msg.data_count === 2) {
+        // Datas[0] 为 1 取展示牌，为 2 取暗牌
+        handleXiaShuChoice(msg)
+      }
       break
 
     // 诫厉
     case 3483:
+      // 目标视角能知道换牌结果
       if (Type === 53) {
         const room = tracker.getReadyTrackerRoom()
-        if (!room || room.mySeatID !== Number(Datas?.[1])) break
-        const selection = parseJieLiSelectionData(Datas)
-        if (selection) recordJieLiSelection(room, selection)
+        if (!room || !Array.isArray(Datas) || room.mySeatID !== Datas[1]) break
+
+        // Datas: [actorSeat, targetSeat, handCount, ...handToPile, pileCount, ...pileToHand]
+        const [actorSeat, targetSeat, handCount] = Datas
+        const handEnd = 3 + handCount
+        const pileStart = handEnd + 1
+        const pileCount = Datas[handEnd]
+
+        if (
+          !Number.isInteger(handCount) ||
+          !Number.isInteger(pileCount) ||
+          handCount <= 0 ||
+          pileCount <= 0 ||
+          handCount !== pileCount ||
+          Datas.length !== pileStart + pileCount
+        ) {
+          break
+        }
+
+        recordJieLiSelection(room, {
+          actorSeat,
+          targetSeat,
+          handCardIDs: Datas.slice(3, handEnd),
+          pileCardIDs: Datas.slice(pileStart, pileStart + pileCount)
+        })
       }
       break
 

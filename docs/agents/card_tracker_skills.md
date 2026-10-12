@@ -5,6 +5,16 @@
 > [`docs/protocols/README.md`](../protocols/README.md)。新增技能临时状态前先查
 > [`skill_state.md`](skill_state.md)，确认统一状态仓库中的 key 与访问入口。
 
+## 移动装饰器输入契约
+
+- `MoveEventDraft.protocol` 保存 `normalizeMoveCardFields()` 统一格式化后的协议字段；技能分支直接读取数值，
+  不再从 `getRaw(event)` 取字段并重复 `Number()` 转换。
+- 当前移动牌与数量以 `event.cardIDs` / `event.cardCount` 为准；`protocol` 保留装饰前的协议字段，
+  `patchEvent()` 不因来源实体或候选推断而改写它。
+- `event.raw` 与 `options.sourceEvent.raw` 保留原始输入，只用于诊断与来源追溯。
+- `Room.decorateMoveEvent()` 对仅提供 `options` 的领域调用在入口补齐一次协议字段。
+  独立技能通知、角色数据或选择回复仍在各自解析入口处理原始字段，不套用移动协议契约。
+
 ## 快速索引
 
 | 场景 | 协议或识别条件 | 主要实现 / 回归入口 |

@@ -314,7 +314,7 @@ Type 53 的两组卡牌 ID 按下标逐项配对，而不是两个无序集合�
 
 1. `handleRoleOptTargetNtf` 从完整或纯计数 `Params` 统一记录 `actorSeat / targetSeat / pileCount`；只有协议实际携带 ID 时才同步牌面。
 2. 发动者不建立 JieLi 推断批次，直接走默认已知移动。
-3. `handleRoleSpellOptRep` 只在当前 `mySeatID` 等于 Type 53 的 `targetSeat` 时解析选择结果；发动者和其它座位直接忽略。
+3. `handleRoleSpellOptRep` 在前置 `CGsRoleSpellOptRep` 层判断当前 `mySeatID` 是否等于 Type 53 的 `targetSeat`，并按两段计数拆出 `handCardIDs / pileCardIDs`；发动者和其它座位直接忽略。`recordJieLiSelection` 只接收解析后的选择，负责当前批次校验和匿名槽配对，不再读取原始 `Datas`。
 4. 生产目标视角将 `1 -> 10` 泄露的牌堆 ID 改成匿名 `sourceCards`，Type 53 只把目标手牌替换到匹配槽位。`pileIdentityCardIDs` 只写目标原手牌与技能前已合法公开的身份。
 5. 后续 `10 -> 5` 只校验其明牌与 Type 53 的 `pileToHandCardIDs` 一致，再执行正常入手移动并清理批次。
 6. 开发模式的目标视角允许物化完整牌堆槽，用于调试隐藏回堆结果。
@@ -326,7 +326,7 @@ Type 53 的两组卡牌 ID 按下标逐项配对，而不是两个无序集合�
 - 目标通知与部分手牌明牌：`src/handler/GsCRoleOptTargetNtf.js`（`SpellID = 3483`）
 - 牌堆同区展示端点归一化：`src/handler/PubGsCMoveCard.js` 的 `normalizeMovePosition` / `PILE_SAME_ZONE_SHOW_SPELL_IDS`
 - 同区展示识别：`src/tracker/MoveEventNormalizer.ts` 的 `isSameZoneShowEvent`
-- Type 53 目标视角分发：`src/handler/CGsRoleSpellOptRep.js`
+- Type 53 目标视角判断与选择数据解析：`src/handler/CGsRoleSpellOptRep.js`
 - 目标视角交换装饰：`src/tracker/skill/JieLi.ts`
 - 移动装饰注册：`src/tracker/runtime/moveEventHandlers.ts` 的 `registerDefaultMoveEventHandlers`
 - 相关排除说明：`docs/protocols/hand-exchange.md`（诫厉不走整手交换账本）

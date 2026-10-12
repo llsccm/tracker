@@ -1,16 +1,20 @@
 import type { Room } from '../Room'
 import { MOVE_TYPE } from '../MoveEventNormalizer'
 import { GUI_FU_ROLE_DATA_ID } from '../runtime/protocolRules'
-import type { CardID, RawMoveCardEvent, SeatID } from '../types'
+import type { CardID, NormalizedMoveCardFields, RawMoveCardEvent, SeatID } from '../types'
 import { trackerLogger } from '@/utils/logger'
 
 /** 无 ID 的获得与角色数据相邻；只暂存一条原始移动，不提前改动任何牌实体。 */
 interface GuiFuMove {
   raw: RawMoveCardEvent
-  patched: RawMoveCardEvent
+  patched: NormalizedMoveCardFields
 }
 
-export function deferGuiFuMove(room: Room, raw: RawMoveCardEvent, move: RawMoveCardEvent): boolean {
+export function deferGuiFuMove(
+  room: Room,
+  raw: RawMoveCardEvent,
+  move: NormalizedMoveCardFields
+): boolean {
   const previous = room.readSkillState<GuiFuMove>(GUI_FU_ROLE_DATA_ID)
   if (previous) {
     room.deleteSkillState(GUI_FU_ROLE_DATA_ID)
@@ -20,16 +24,16 @@ export function deferGuiFuMove(room: Room, raw: RawMoveCardEvent, move: RawMoveC
     })
   }
 
-  const fromZone = Number(move.FromZone)
-  const cardIDs = Array.isArray(move.CardIDs) ? move.CardIDs : [move.CardIDs ?? 0]
+  const fromZone = move.FromZone
+  const cardIDs = move.CardIDs
   if (
-    Number(move.SpellID) !== GUI_FU_ROLE_DATA_ID ||
-    Number(move.MoveType) !== MOVE_TYPE.GAIN ||
+    move.SpellID !== GUI_FU_ROLE_DATA_ID ||
+    move.MoveType !== MOVE_TYPE.GAIN ||
     (fromZone !== 1 && fromZone !== 2) ||
-    Number(move.ToZone) !== 5 ||
+    move.ToZone !== 5 ||
     move.ToID == null ||
     move.ToID === 255 ||
-    Number(move.CardCount ?? 0) <= 0 ||
+    move.CardCount <= 0 ||
     cardIDs.some((cardID) => cardID > 0)
   ) {
     return false
@@ -52,13 +56,13 @@ export function completeGuiFuMove(
   // 一条角色数据只配对一次；失配也释放状态，不积压或尝试跨消息恢复。
   room.deleteSkillState(GUI_FU_ROLE_DATA_ID)
   const { raw, patched } = pending
-  const count = Number(patched.CardCount)
+  const count = patched.CardCount
   const gainedIDs = cardIDs.slice(0, count)
   if (
     patched.ToID !== seatID ||
     gainedIDs.length !== count ||
     new Set(gainedIDs).size !== count ||
-    (Number(patched.FromZone) === 2 && !hasDiscardSourceCards(room, gainedIDs))
+    (patched.FromZone === 2 && !hasDiscardSourceCards(room, gainedIDs))
   ) {
     trackerLogger.warn('诡伏相邻角色数据与待补全移动不匹配，已取消移动', {
       pending,

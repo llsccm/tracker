@@ -3,7 +3,6 @@ import { trackerLogger } from '@/utils/logger'
 import type { Room } from '../Room'
 import {
   getCount,
-  getRaw,
   getSourceZoneCards,
   hasPositiveID,
   nextGroupID,
@@ -14,12 +13,12 @@ import {
 const SI_QI_SPELL_ID = 3543
 
 export default function decorateSiQi(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
   if (
-    Number(raw.FromZone) !== 2 ||
-    Number(raw.ToZone) !== 1 ||
-    Number(raw.MoveType) !== 15 ||
-    Number(raw.FromPosition) !== POSITION_RANDOM ||
+    move.FromZone !== 2 ||
+    move.ToZone !== 1 ||
+    move.MoveType !== 15 ||
+    move.FromPosition !== POSITION_RANDOM ||
     hasPositiveID(event.cardIDs)
   ) {
     return event

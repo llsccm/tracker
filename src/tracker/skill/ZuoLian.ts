@@ -17,7 +17,6 @@ import { PROTOCOL_ZONE } from '../protocolZones'
 import type { Room } from '../Room'
 import {
   getCount,
-  getRaw,
   hasPositiveID,
   nextGroupID,
   patchEvent,
@@ -27,14 +26,14 @@ import {
 const ZUO_LIAN_SPELL_ID = 3488
 
 export default function decorateZuoLian(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
+  const move = event.protocol
 
   if (
     hasPositiveID(event.cardIDs) ||
-    Number(raw.FromZone) !== PROTOCOL_ZONE.DISCARD ||
-    Number(raw.ToZone) !== PROTOCOL_ZONE.EXCHANGE ||
-    Number(raw.MoveType) !== MOVE_TYPE.EXCHANGE ||
-    Number(raw.FromPosition) !== POSITION_RANDOM ||
+    move.FromZone !== PROTOCOL_ZONE.DISCARD ||
+    move.ToZone !== PROTOCOL_ZONE.EXCHANGE ||
+    move.MoveType !== MOVE_TYPE.EXCHANGE ||
+    move.FromPosition !== POSITION_RANDOM ||
     getCount(event) !== 1
   ) {
     return event
