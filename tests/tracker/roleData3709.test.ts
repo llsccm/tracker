@@ -48,7 +48,7 @@ function createGuiFuHarness(options: TrackerControllerOptions = {}) {
   return {
     controller,
     room,
-    gain(overrides: RawMoveCardEvent = {}) {
+    gain(overrides: Partial<RawMoveCardEvent> = {}) {
       controller.syncTrackerMove(
         protocolMove({
           CardIDs: [],

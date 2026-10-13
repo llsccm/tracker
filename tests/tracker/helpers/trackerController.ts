@@ -52,13 +52,12 @@ export function createTrackerControllerHarness(options: TrackerControllerOptions
   }
 }
 
-export function protocolMove(overrides: RawMoveCardEvent = {}): RawMoveCardEvent {
+export function protocolMove(overrides: Partial<RawMoveCardEvent> = {}): RawMoveCardEvent {
   const cardIDs = overrides.CardIDs ?? [1]
-  const normalizedCardIDs = Array.isArray(cardIDs) ? cardIDs : [cardIDs]
 
   return {
     CardIDs: cardIDs,
-    CardCount: normalizedCardIDs.length,
+    CardCount: cardIDs.length,
     FromZone: 1,
     FromID: 255,
     FromZoneParam: 0,
@@ -73,7 +72,7 @@ export function protocolMove(overrides: RawMoveCardEvent = {}): RawMoveCardEvent
   }
 }
 
-export function returnToPileMove(overrides: RawMoveCardEvent = {}): RawMoveCardEvent {
+export function returnToPileMove(overrides: Partial<RawMoveCardEvent> = {}): RawMoveCardEvent {
   return protocolMove({
     FromZone: 5,
     ToZone: 1,

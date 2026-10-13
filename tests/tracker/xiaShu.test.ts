@@ -1,3 +1,4 @@
+import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { applySpellEffect } from '@/handler/spellEffects'
 import handleXiaShuMove, {
@@ -202,6 +203,10 @@ describe('下书', () => {
     const callbacks: (() => void)[] = []
 
     handleXiaShuMove({
+      FromPosition: POSITION_RANDOM,
+      ToPosition: POSITION_TOP,
+      FromZoneParam: 0,
+      ToZoneParam: 0,
       game: Game,
       ...move,
       CardIDs: [0],

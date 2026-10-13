@@ -1,3 +1,4 @@
+import { protocolMove } from './helpers/trackerController'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SkillMoveContext } from '@/handler/skills/types'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
@@ -45,7 +46,7 @@ describe('PubGsCMoveCard', () => {
     ['其他视角', []],
     ['主视角', [51, 146, 138, 4]]
   ])('手气卡回堆在%s均归一为 RANDOM', (_view, cardIDs) => {
-    const msg = {
+    const msg = protocolMove({
       CardCount: 4,
       CardIDs: cardIDs,
       FromID: 6,
@@ -58,7 +59,7 @@ describe('PubGsCMoveCard', () => {
       ToPosition: POSITION_TOP,
       ToZone: 1,
       ToZoneParam: 0
-    }
+    })
 
     handleMoveCard(msg)
 
@@ -79,7 +80,7 @@ describe('PubGsCMoveCard', () => {
   })
 
   it('权变的牌堆同区展示将来源和目标都归一为牌顶', () => {
-    const msg = {
+    const msg = protocolMove({
       CardCount: 4,
       CardIDs: [158, 2, 63, 125],
       FromID: 255,
@@ -92,7 +93,7 @@ describe('PubGsCMoveCard', () => {
       ToPosition: POSITION_RANDOM,
       ToZone: 1,
       ToZoneParam: 0
-    }
+    })
 
     handleMoveCard(msg)
 
@@ -109,8 +110,8 @@ describe('PubGsCMoveCard', () => {
     })
   })
 
-  it('权变同区展示缺少位置字段时仍补为牌顶', () => {
-    const msg = {
+  it('权变同区展示保留明确的牌顶位置', () => {
+    const msg = protocolMove({
       CardCount: 4,
       CardIDs: [158, 2, 63, 125],
       FromID: 255,
@@ -121,7 +122,7 @@ describe('PubGsCMoveCard', () => {
       ToID: 255,
       ToZone: 1,
       ToZoneParam: 0
-    }
+    })
 
     handleMoveCard(msg)
 
@@ -139,7 +140,7 @@ describe('PubGsCMoveCard', () => {
   })
 
   it('观虚的牌堆同区展示将来源和目标都归一为牌顶', () => {
-    const msg = {
+    const msg = protocolMove({
       CardCount: 5,
       CardIDs: [62, 67, 37, 53, 142],
       FromID: 255,
@@ -152,7 +153,7 @@ describe('PubGsCMoveCard', () => {
       ToPosition: POSITION_RANDOM,
       ToZone: 1,
       ToZoneParam: 0
-    }
+    })
 
     handleMoveCard(msg)
 
@@ -170,7 +171,7 @@ describe('PubGsCMoveCard', () => {
   })
 
   it('天候同区展示不把 RANDOM 来源强行归一为牌顶', () => {
-    const msg = {
+    const msg = protocolMove({
       CardCount: 1,
       CardIDs: [18],
       FromID: 255,
@@ -183,7 +184,7 @@ describe('PubGsCMoveCard', () => {
       ToPosition: POSITION_RANDOM,
       ToZone: 1,
       ToZoneParam: 0
-    }
+    })
 
     handleMoveCard(msg)
 
@@ -209,20 +210,22 @@ describe('PubGsCMoveCard', () => {
     )
     syncTrackerMove.mockImplementationOnce(() => order.push('syncTrackerMove'))
 
-    handleMoveCard({
-      CardCount: 1,
-      CardIDs: [0],
-      FromID: 7,
-      FromPosition: POSITION_TOP,
-      FromZone: 5,
-      FromZoneParam: 0,
-      MoveType: 5,
-      SpellID: 361,
-      ToID: 3,
-      ToPosition: POSITION_TOP,
-      ToZone: 5,
-      ToZoneParam: 0
-    })
+    handleMoveCard(
+      protocolMove({
+        CardCount: 1,
+        CardIDs: [0],
+        FromID: 7,
+        FromPosition: POSITION_TOP,
+        FromZone: 5,
+        FromZoneParam: 0,
+        MoveType: 5,
+        SpellID: 361,
+        ToID: 3,
+        ToPosition: POSITION_TOP,
+        ToZone: 5,
+        ToZoneParam: 0
+      })
+    )
 
     expect(order).toEqual(['syncTrackerMove', 'afterMove'])
   })
@@ -233,20 +236,22 @@ describe('PubGsCMoveCard', () => {
       effectContext = context
     })
 
-    handleMoveCard({
-      CardCount: 1,
-      CardIDs: [0],
-      FromID: 7,
-      FromPosition: POSITION_TOP,
-      FromZone: 5,
-      FromZoneParam: 0,
-      MoveType: 5,
-      SpellID: 361,
-      ToID: 3,
-      ToPosition: POSITION_TOP,
-      ToZone: 5,
-      ToZoneParam: 0
-    })
+    handleMoveCard(
+      protocolMove({
+        CardCount: 1,
+        CardIDs: [0],
+        FromID: 7,
+        FromPosition: POSITION_TOP,
+        FromZone: 5,
+        FromZoneParam: 0,
+        MoveType: 5,
+        SpellID: 361,
+        ToID: 3,
+        ToPosition: POSITION_TOP,
+        ToZone: 5,
+        ToZoneParam: 0
+      })
+    )
 
     expect(effectContext).toMatchObject({
       fromSeatID: 7,
@@ -256,20 +261,22 @@ describe('PubGsCMoveCard', () => {
     })
   })
 
-  it('入口统一数值字段，所有响应器与 tracker 使用同一份格式化结果', () => {
-    const msg = Object.freeze({
-      CardCount: '1',
-      CardIDs: Object.freeze([96]),
-      FromID: 0,
-      FromZone: '5',
-      FromPosition: POSITION_RANDOM,
-      ToID: 3,
-      ToZone: '5',
-      ToPosition: POSITION_TOP,
-      MoveType: '5',
-      SpellID: '361',
-      SrcSeatID: 0
-    })
+  it('入口复制协议字段，所有响应器与 tracker 使用同一份格式化结果', () => {
+    const msg = Object.freeze(
+      protocolMove({
+        CardCount: 1,
+        CardIDs: Object.freeze([96]),
+        FromID: 0,
+        FromZone: 5,
+        FromPosition: POSITION_RANDOM,
+        ToID: 3,
+        ToZone: 5,
+        ToPosition: POSITION_TOP,
+        MoveType: 5,
+        SpellID: 361,
+        SrcSeatID: 0
+      })
+    )
 
     handleMoveCard(msg)
 
@@ -309,19 +316,21 @@ describe('PubGsCMoveCard', () => {
   })
 
   it.each([
-    ['单张明牌', 96, 1, [96], 1],
-    ['单张暗牌', 0, 1, [0], 1],
-    ['暗牌省略身份', undefined, 2, [], 2]
-  ])('统一%s的数组与牌数，技能缺省为 0', (_label, CardIDs, CardCount, ids, count) => {
-    handleMoveCard({
-      CardIDs,
-      CardCount,
-      FromZone: 5,
-      ToZone: 2,
-      FromID: 0,
-      ToID: 255,
-      MoveType: 4
-    })
+    ['单张明牌', [96], 1, [96], 1],
+    ['单张暗牌', [0], 1, [0], 1],
+    ['暗牌不公开身份', [], 2, [], 2]
+  ])('保留%s的数组与牌数，技能 0 表示无技能', (_label, CardIDs, CardCount, ids, count) => {
+    handleMoveCard(
+      protocolMove({
+        CardIDs,
+        CardCount,
+        FromZone: 5,
+        ToZone: 2,
+        FromID: 0,
+        ToID: 255,
+        MoveType: 4
+      })
+    )
 
     expect(applySpellEffect).toHaveBeenCalledOnce()
     expect(applySpellEffect.mock.calls[0][0]).toMatchObject({
@@ -334,18 +343,20 @@ describe('PubGsCMoveCard', () => {
   })
 
   it.each([
-    ['预操作', { MoveType: '0' }],
-    ['过滤区', { ToZone: '11' }]
-  ])('数值格式化先于%s过滤', (_label, fields) => {
-    handleMoveCard({
-      CardIDs: [0],
-      CardCount: 1,
-      FromZone: 5,
-      ToZone: 5,
-      MoveType: 5,
-      SpellID: 361,
-      ...fields
-    })
+    ['预操作', { MoveType: 0 }],
+    ['过滤区', { ToZone: 11 }]
+  ])('%s在响应器分发前过滤', (_label, fields) => {
+    handleMoveCard(
+      protocolMove({
+        CardIDs: [0],
+        CardCount: 1,
+        FromZone: 5,
+        ToZone: 5,
+        MoveType: 5,
+        SpellID: 361,
+        ...fields
+      })
+    )
 
     expect(handleSpecialZones).not.toHaveBeenCalled()
     expect(handleGameFlowState).not.toHaveBeenCalled()
@@ -353,17 +364,17 @@ describe('PubGsCMoveCard', () => {
     expect(syncTrackerMove).not.toHaveBeenCalled()
   })
 
-  it('字符串技能和牌数在牌 ID 特例预处理前归一化', () => {
-    const msg = {
+  it('技能和牌数驱动牌 ID 特例预处理', () => {
+    const msg = protocolMove({
       CardIDs: [0, 96, 113],
-      CardCount: '1',
-      FromZone: '5',
+      CardCount: 1,
+      FromZone: 5,
       FromID: 0,
-      ToZone: '5',
+      ToZone: 5,
       ToID: 0,
-      MoveType: '21',
-      SpellID: '713'
-    }
+      MoveType: 21,
+      SpellID: 713
+    })
 
     handleMoveCard(msg)
 
@@ -375,19 +386,21 @@ describe('PubGsCMoveCard', () => {
     expect(msg.CardIDs).toEqual([0, 96, 113])
   })
 
-  it('字符串字段在位置特例前归一化，公共区哨兵不作为座位', () => {
-    handleMoveCard({
-      CardIDs: [96],
-      CardCount: '1',
-      FromZone: '1',
-      FromID: 255,
-      FromPosition: POSITION_RANDOM,
-      ToZone: '1',
-      ToID: 255,
-      ToPosition: POSITION_RANDOM,
-      MoveType: '21',
-      SpellID: '7011'
-    })
+  it('位置特例使用数值协议字段，公共区哨兵不作为座位', () => {
+    handleMoveCard(
+      protocolMove({
+        CardIDs: [96],
+        CardCount: 1,
+        FromZone: 1,
+        FromID: 255,
+        FromPosition: POSITION_RANDOM,
+        ToZone: 1,
+        ToID: 255,
+        ToPosition: POSITION_RANDOM,
+        MoveType: 21,
+        SpellID: 7011
+      })
+    )
 
     expect(applySpellEffect.mock.calls[0][0]).toMatchObject({
       FromPosition: POSITION_TOP,
@@ -398,7 +411,7 @@ describe('PubGsCMoveCard', () => {
   })
 
   it('响应器修正牌与位置后同步最新值，不修改原始消息', () => {
-    const msg = {
+    const msg = protocolMove({
       CardIDs: [0],
       CardCount: 1,
       FromZone: 5,
@@ -409,7 +422,7 @@ describe('PubGsCMoveCard', () => {
       ToPosition: POSITION_TOP,
       MoveType: 10,
       SpellID: 1
-    }
+    })
     handleSpecialZones.mockImplementationOnce((context) => {
       context.CardIDs[0] = 96
       context.ToPosition = POSITION_RANDOM

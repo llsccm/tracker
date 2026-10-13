@@ -58,6 +58,7 @@ function moveMuniuMarks(room, fromSeatID, seatID, count = 1) {
 describe('隐藏标记区候选', () => {
   it('归一化标记区回手牌事件时保留来源标记 ID', () => {
     const event = normalizeMoveEvent({
+      MoveType: 19,
       CardIDs: [],
       CardCount: 4,
       FromZone: 4,

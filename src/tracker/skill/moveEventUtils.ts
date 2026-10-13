@@ -9,11 +9,11 @@ export type MoveEventDraft = NormalizedMoveEvent
 /**
  * `patchEvent` 接受的浅补丁。
  *
- * 事件顶层字段可以按需替换；`options` 单独声明为可选字段集合，表示补丁会与原
- * `options` 合并，而不是要求调用方重新提供完整配置。
+ * 只允许修改领域分支、身份和数量；不覆盖原始协议或追溯数据。
+ * `options` 本身已定义可选字段，补丁只与原选项浅合并。
  */
-export type MoveEventPatch = Omit<Partial<MoveEventDraft>, 'options'> & {
-  options?: Partial<MoveEventDraft['options']>
+export type MoveEventPatch = Partial<Pick<MoveEventDraft, 'type' | 'cardIDs' | 'cardCount'>> & {
+  options?: MoveEventDraft['options']
 }
 
 /**
@@ -54,8 +54,9 @@ export function nextGroupID(room: Room, spellID: number | string, label: string)
 export function patchEvent(event: MoveEventDraft, patch: MoveEventPatch = {}): MoveEventDraft {
   return {
     ...event,
-    ...patch,
+    type: patch.type ?? event.type,
     cardIDs: patch.cardIDs ?? event.cardIDs,
+    cardCount: patch.cardCount ?? event.cardCount,
     options: {
       ...event.options,
       ...(patch.options ?? {})

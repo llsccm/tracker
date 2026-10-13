@@ -238,7 +238,7 @@ export class CardLocationIndex {
         Number(seat),
         Array.from(spellMap.entries())
           .sort((a, b) => Number(a[0]) - Number(b[0]))
-          .map(([spellID, cards]) => [Number(spellID), cards.map(token)])
+          .map(([spellID, cards]) => [spellID, cards.map(token)])
       ])
 
     const publicByZone = Array.from(this.publicByZone.entries())

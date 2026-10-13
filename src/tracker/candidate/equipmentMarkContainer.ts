@@ -16,16 +16,13 @@ const EQUIPMENT_MARK_CONTAINER_BY_MARK_SPELL_ID = new Map(
 )
 
 export function getEquipmentMarkContainerByMarkSpellID(
-  spellID: unknown
+  spellID: number
 ): EquipmentMarkContainer | null {
-  const markID = Number(spellID)
-  if (!Number.isFinite(markID)) return null
-
-  return EQUIPMENT_MARK_CONTAINER_BY_MARK_SPELL_ID.get(markID) ?? null
+  return EQUIPMENT_MARK_CONTAINER_BY_MARK_SPELL_ID.get(spellID) ?? null
 }
 
 export function createEquipmentContainerLocationCandidate(
-  spellID: unknown
+  spellID: number
 ): ContainerLocationCandidate | null {
   // container 候选固定在装备物理牌上，mark 空间迁座不改变候选 key。
   const container = getEquipmentMarkContainerByMarkSpellID(spellID)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { POSITION_RANDOM } from '@/tracker/candidate/cardPositions'
+import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import {
   MOVE_TYPE,
   getMoveTypeLabel,
@@ -16,11 +16,13 @@ const pileGainMove: RawMoveCardEvent = {
   CardCount: 2,
   FromZone: 1,
   FromID: 255,
+  FromPosition: POSITION_RANDOM,
   FromZoneParam: 0,
   MoveType: MOVE_TYPE.GAIN,
   SpellID: 3644,
   ToZone: 5,
   ToID: 1,
+  ToPosition: POSITION_TOP,
   ToZoneParam: 0
 }
 

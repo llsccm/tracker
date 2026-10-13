@@ -19,6 +19,7 @@ import type {
   PublicPosition,
   PublicZoneName,
   RawMoveCardEvent,
+  MoveCardPatch,
   SeatID,
   SeatInfo,
   SpellID,
@@ -39,9 +40,9 @@ interface RevealTarget {
   fromZone?: PublicZoneName | null
   fromSubZone?: string
   subZone?: string
-  spellID?: SpellID | string | null
+  spellID?: SpellID | null
   fullHand?: boolean
-  handCount?: number | string
+  handCount?: number
   // 协议已经通过其它消息同步过手牌数量时，只补充已知身份，不重复增加手牌总数。
   handMoveCount?: number
   zoneName?: PublicZoneName
@@ -302,15 +303,16 @@ export class TrackerController {
    * 流程分四步：协议字段补丁、标准化、结合当前 Room 状态修正、交给 Room 执行。
    * 这层不直接改卡牌状态，状态变更统一收口在 Room.moveCards()/shufflePile()/showCards。
    */
-  syncTrackerMove(msg: RawMoveCardEvent, finalMove: Partial<RawMoveCardEvent> = {}): void {
+  syncTrackerMove(msg: RawMoveCardEvent, finalMove: MoveCardPatch = {}): void {
     const readyRoom = this.getReadyTrackerRoom()
     if (!readyRoom) return
 
     try {
-      const patchedMsg = {
+      const patchedMsg: RawMoveCardEvent = {
         ...msg,
-        ...finalMove,
-        CardIDs: finalMove.CardIDs ?? msg.CardIDs
+        CardIDs: finalMove.CardIDs ?? msg.CardIDs,
+        FromPosition: finalMove.FromPosition ?? msg.FromPosition,
+        ToPosition: finalMove.ToPosition ?? msg.ToPosition
       }
 
       this.controllerLogger.info(getProtocolMoveSpecialLabel(patchedMsg) ?? '移动协议输入', {
@@ -566,20 +568,21 @@ export class TrackerController {
     if (ids.length === 0) return
 
     const raw = event.raw ?? event.options?.sourceEvent?.raw ?? {}
-    const zone = Number(raw.ToZone ?? raw.FromZone)
-    const seatID = Number(raw.ToID ?? raw.FromID)
+    const move = event.protocol
+    const zone = move.ToZone ?? move.FromZone
+    const seatID = move.ToID ?? move.FromID
     const subZone = getProtocolPlayerSubZone(zone, null)
     const spellID = getProtocolMarkSpellID(
       zone,
       {
-        toZoneParam: raw.ToZoneParam,
-        fromZoneParam: raw.FromZoneParam,
-        spellID: raw.SpellID
+        toZoneParam: move.ToZoneParam,
+        fromZoneParam: move.FromZoneParam,
+        spellID: move.SpellID
       },
-      (raw.SpellID as SpellID | string | null | undefined) ?? null
+      move.SpellID
     )
 
-    if (subZone && !Number.isNaN(seatID) && seatID !== 255) {
+    if (subZone && seatID != null && seatID !== 255) {
       this.controllerLogger.info('展示明牌进入玩家区', {
         ids,
         seatID,
@@ -606,7 +609,7 @@ export class TrackerController {
 
     const zoneName = getProtocolPublicZone(zone, event.toZone ?? 'process')
     const position = event.options?.position ?? event.options?.fromPosition ?? POSITION_TOP
-    const sourceZoneName = getProtocolPublicZone(raw.FromZone)
+    const sourceZoneName = getProtocolPublicZone(move.FromZone)
     const materializationZone =
       sourceZoneName && sourceZoneName !== zoneName ? sourceZoneName : zoneName
     const knownCards = this.resolveKnownCards(ids, {
@@ -884,14 +887,14 @@ export class TrackerController {
     }
   }
 
-  private normalizeIDs(cardIDs: CardID[] | CardID = []): CardID[] {
-    return Array.isArray(cardIDs) ? [...cardIDs] : [cardIDs]
+  private normalizeIDs(cardIDs: readonly CardID[] | CardID = []): CardID[] {
+    return typeof cardIDs === 'number' ? [cardIDs] : [...cardIDs]
   }
 
   /**
    * 移动日志摘要只保留协议定位字段，避免日志里展开完整原始对象。
    */
-  private summarizeProtocolMove(msg: RawMoveCardEvent = {}) {
+  private summarizeProtocolMove(msg: RawMoveCardEvent) {
     return {
       CardIDs: this.normalizeIDs(msg.CardIDs),
       CardCount: msg.CardCount,

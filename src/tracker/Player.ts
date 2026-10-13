@@ -211,8 +211,8 @@ export class Player {
   /**
    * 根据具体技能获取该技能对应的标记牌实体列表
    */
-  getMarkCardsBySpell(spellID: number | string): Card[] {
-    return this.markCards.get(Number(spellID)) ?? []
+  getMarkCardsBySpell(spellID: number): Card[] {
+    return this.markCards.get(spellID) ?? []
   }
 
   /**

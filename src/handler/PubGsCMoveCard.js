@@ -23,6 +23,7 @@ const TRACKER_MOVE_FIELDS = [
 ]
 
 function syncMoveToTracker(context) {
+  /** @type {import('../tracker/types').MoveCardPatch} */
   const move = { CardIDs: context.CardIDs.slice() }
   for (const field of TRACKER_MOVE_FIELDS) move[field] = context[field]
   tracker.syncTrackerMove(context.msg, move)
@@ -30,6 +31,7 @@ function syncMoveToTracker(context) {
 
 /**
  * 主卡牌移动处理逻辑
+ * @param {import('../tracker/types').RawMoveCardEvent} msg
  */
 export function handleMoveCard(msg) {
   const move = normalizeMoveCardFields(msg)
@@ -94,6 +96,8 @@ export function handleMoveCard(msg) {
   })
 
   const context = {
+    FromZoneParam: move.FromZoneParam,
+    ToZoneParam: move.ToZoneParam,
     msg,
     game: Game,
     CardIDs,

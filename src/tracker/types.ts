@@ -87,36 +87,39 @@ export type RawMoveEventType =
   | 'moveUnknown'
   | string
 
+/** PubGsCMoveCard 的 12 个核心字段固定存在；0 表示无技能，255 等端点 ID 按区域解释。 */
 export interface RawMoveCardEvent {
-  CardIDs?: CardID[] | CardID
-  CardCount?: number | string
-  FromZone?: ZoneID | string
-  FromID?: SeatID
+  CardIDs: readonly CardID[]
+  readonly CardCount: number
+  /** 公共区可使用 255，标记区也可能使用技能 ID；不能无条件当作座位。 */
+  FromID: number
+  FromPosition: number
+  FromZone: ZoneID
+  FromZoneParam: SpellID
+  ToID: number
+  ToPosition: number
+  ToZone: ZoneID
+  ToZoneParam: SpellID
+  MoveType: number
+  SpellID: SpellID
   SrcSeatID?: SeatID
-  FromZoneParam?: SpellID | string | null
-  /** 协议来源位置为数字，不使用内部候选的语义字符串。 */
-  FromPosition?: number
-  ToZone?: ZoneID | string
-  ToID?: SeatID
-  ToZoneParam?: SpellID | string | null
-  /** 协议目标位置为数字，不使用内部候选的语义字符串。 */
-  ToPosition?: number
-  MoveType?: number | string
-  SpellID?: SpellID | string | null
   Label?: string
-  [key: string]: unknown
+  isSend?: boolean
 }
 
-/** 移动入口共用的字段格式；原始协议由调用方另行保留。 */
+/** handler 预处理允许修正的字段；不允许覆盖端点 ID、区域参数或原始附加信息。 */
+export type MoveCardPatch = Partial<
+  Pick<
+    RawMoveCardEvent,
+    | 'CardIDs'
+    | 'FromPosition'
+    | 'ToPosition'
+  >
+>
+
+/** 完整协议的可修改副本；只将身份数组改为可写，不放宽必填字段。 */
 export interface NormalizedMoveCardFields extends RawMoveCardEvent {
   CardIDs: CardID[]
-  CardCount: number
-  FromZone?: ZoneID
-  FromZoneParam?: SpellID
-  ToZone?: ZoneID
-  ToZoneParam?: SpellID
-  MoveType?: number
-  SpellID: SpellID
 }
 
 export interface MoveSourceEvent {
@@ -130,12 +133,12 @@ export interface MoveSourceEvent {
 export interface MoveOptions {
   seatID?: SeatID
   subZone?: SubZone
-  spellID?: SpellID | string | null
+  spellID?: SpellID
   combinationID?: number | string | null
   fromZone?: PublicZoneName | number | null
   fromSeatID?: SeatID
   fromSubZone?: SubZone
-  fromSpellID?: SpellID | string | null
+  fromSpellID?: SpellID
   cardCount?: number
   /** 协议手牌总数变化量；候选身份不移动实体时可与 cardCount 不同。 */
   handMoveCount?: number

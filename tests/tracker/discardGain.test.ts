@@ -26,7 +26,7 @@ function createRoomWithDiscard(discardIDs = [1, 2, 3, 4, 5, 6]) {
   return { controller, room, onError }
 }
 
-function discardGainMove(overrides: RawMoveCardEvent = {}) {
+function discardGainMove(overrides: Partial<RawMoveCardEvent> = {}) {
   return protocolMove({
     CardCount: 4,
     CardIDs: [],

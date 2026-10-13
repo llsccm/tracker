@@ -5,9 +5,6 @@ import type { NormalizedMoveCardFields, SeatID, SubZone } from '@/tracker/types'
 // 这里不是 Room 的领域 MoveContext。
 export interface SkillMoveContext extends NormalizedMoveCardFields {
   game: GameState
-  FromZone: number
-  ToZone: number
-  MoveType: number
   fromSeatID?: SeatID | null
   toSeatID?: SeatID | null
   fromSubZone?: SubZone | null

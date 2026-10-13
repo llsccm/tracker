@@ -10,7 +10,6 @@ import {
   prepareTrackerMoveCardIDs,
   shouldRevealAsFullHand
 } from '@/tracker/runtime/protocolRules'
-import type { RawMoveCardEvent } from '@/tracker/types'
 import { parseGuiFuCardIDs } from '@/handler/skills/GuiFu'
 import {
   initializeDuoQiState,
@@ -802,11 +801,14 @@ function applyMoveCard(
     notes.push('特殊装备牌随机位置归一化依赖浏览器 CardConfig，本次保留原协议位置')
   }
 
-  context.controller.syncTrackerMove(record.payload as RawMoveCardEvent, {
-    CardIDs: moveContext.CardIDs,
-    FromPosition: moveContext.FromPosition,
-    ToPosition: moveContext.ToPosition
-  })
+  context.controller.syncTrackerMove(
+    { ...record.payload, ...move },
+    {
+      CardIDs: moveContext.CardIDs,
+      FromPosition: moveContext.FromPosition,
+      ToPosition: moveContext.ToPosition
+    }
+  )
   // 下书需要先看到通用随机转移建立的数量约束，不能在 syncTrackerMove 之前执行。
   afterMove?.()
 

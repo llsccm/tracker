@@ -1,6 +1,6 @@
 import { trackerLogger } from '@/utils/logger'
 import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
-import { getCompatibleMarkSpellIDs, type SpellIDInput } from '../candidate/markSpellID'
+import { getCompatibleMarkSpellIDs } from '../candidate/markSpellID'
 import { isAnonymous, type Card } from '../Card'
 import { MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Zone } from '../Zone'
@@ -9,6 +9,7 @@ import type {
   PublicPosition,
   PublicZoneName,
   SeatID,
+  SpellID,
   SubZone
 } from '../types'
 import { RoomMovementHiddenMarkMethods } from './hiddenMarks'
@@ -94,7 +95,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
   getUnknownPlayerSourceCards(
     seatID: SeatID,
     subZone: SubZone = 'hand',
-    spellIDs: SpellIDInput | SpellIDInput[] = [],
+    spellIDs: SpellID | SpellID[] = [],
     excludedCards: Iterable<Card> = []
   ): Card[] {
     const exactCards: Card[] = []
@@ -158,7 +159,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     seatID: SeatID,
     count: number,
     subZone: SubZone = 'hand',
-    spellIDs: SpellIDInput | SpellIDInput[] = []
+    spellIDs: SpellID | SpellID[] = []
   ): Card[] {
     if (!(count > 0)) return []
     return this.getUnknownPlayerSourceCards(seatID, subZone, spellIDs).slice(0, count)
@@ -172,7 +173,7 @@ export class RoomMovementSourceMethods extends RoomMovementHiddenMarkMethods {
     seatID: SeatID,
     count: number,
     subZone: SubZone = 'hand',
-    spellID: SpellIDInput = null
+    spellID: SpellID
   ): Card[] {
     const playerCards: Card[] = []
     if (!(count > 0)) return playerCards

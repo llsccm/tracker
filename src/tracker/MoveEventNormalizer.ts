@@ -106,45 +106,19 @@ export const MOVE_TYPE_LABELS = {
  * 返回 MoveType 对应的可读标签；未知枚举保持 undefined，交由调用方决定展示降级。
  */
 export function getMoveTypeLabel(moveType: RawMoveCardEvent['MoveType']): string | undefined {
-  return MOVE_TYPE_LABELS[Number(moveType) as keyof typeof MOVE_TYPE_LABELS]
+  return MOVE_TYPE_LABELS[moveType as keyof typeof MOVE_TYPE_LABELS]
 }
 
-/**
- * 协议可能传入单张牌、数组或缺省值；这里只统一容器形态，CardID 数值遵循宿主契约。
- */
-function normalizeIDs(cardIDs: CardID[] | CardID = []): CardID[] {
-  return Array.isArray(cardIDs) ? [...cardIDs] : [cardIDs]
-}
-
-/** 统一协议容器与数值形式，供 handler 预处理及标准事件归一化复用。 */
-export function normalizeMoveCardFields(event: RawMoveCardEvent = {}): NormalizedMoveCardFields {
-  const CardIDs = normalizeIDs(event.CardIDs ?? [])
-  return {
-    ...event,
-    CardIDs,
-    CardCount: normalizeOptionalNumber(event.CardCount) ?? CardIDs.length,
-    FromZone: normalizeOptionalNumber(event.FromZone),
-    FromZoneParam: normalizeOptionalNumber(event.FromZoneParam),
-    ToZone: normalizeOptionalNumber(event.ToZone),
-    ToZoneParam: normalizeOptionalNumber(event.ToZoneParam),
-    MoveType: normalizeOptionalNumber(event.MoveType),
-    SpellID: normalizeOptionalNumber(event.SpellID) ?? 0
-  }
-}
-
-function normalizeOptionalNumber(value: number | string | null | undefined): number | undefined {
-  // 缺省/空字段不能被 Number() 转成合法的 0 号区域或移动类型。
-  return value == null || value === '' ? undefined : Number(value)
+/** 复制完整协议供预处理修改；不修补缺字段，也不推测牌数或身份形态。 */
+export function normalizeMoveCardFields(event: RawMoveCardEvent): NormalizedMoveCardFields {
+  return { ...event, CardIDs: [...event.CardIDs] }
 }
 
 /**
  * 移动协议字段校验的告警类型。
- * 这些告警不阻断消息处理，只用于记录协议缺字段、未知区域或牌数不一致。
+ * 这些告警不阻断消息处理，只用于记录未知区域或牌数不一致。
  */
-export type MoveEventValidationWarningCode =
-  | 'MISSING_FIELD'
-  | 'UNKNOWN_PROTOCOL_ZONE'
-  | 'CARD_COUNT_MISMATCH'
+export type MoveEventValidationWarningCode = 'UNKNOWN_PROTOCOL_ZONE' | 'CARD_COUNT_MISMATCH'
 
 /**
  * 单条移动协议校验告警。
@@ -152,57 +126,26 @@ export type MoveEventValidationWarningCode =
  */
 export interface MoveEventValidationWarning {
   code: MoveEventValidationWarningCode
-  field: keyof RawMoveCardEvent | 'CardIDs'
+  field: 'FromZone' | 'ToZone' | 'CardIDs'
   value?: unknown
   expected?: unknown
   actual?: unknown
 }
 
-/**
- * 判断协议字段是否携带了有效值。
- * 空字符串在宿主协议里等价于未提供，不能直接参与 Zone 或牌数判断。
- */
-function hasProtocolField(event: RawMoveCardEvent, field: keyof RawMoveCardEvent): boolean {
-  return event[field] !== undefined && event[field] !== null && event[field] !== ''
-}
-
-/**
- * 读取协议声明的牌数。
- * 空字符串视为缺省；非数字值返回 null，避免把异常输入误判为 0 张牌。
- */
-function getDeclaredCardCount(value: unknown): number | null {
-  if (value === '') return null
-  const count = Number(value)
-  return Number.isFinite(count) ? count : null
-}
-
 const ZONE_FIELD = ['FromZone', 'ToZone'] as const
-const REQUIRED_FIELD = ['FromZone', 'ToZone', 'CardCount'] as const
 
 /**
  * 对原始移动事件做轻量协议校验。
  * 校验结果只产生告警，不改变事件内容，确保后续归一化仍可走降级路径。
  */
 export function validateMoveEvent(
-  event: RawMoveCardEvent = {},
-  cardIDs: CardID[] = normalizeIDs(event.CardIDs)
+  event: RawMoveCardEvent,
+  cardIDs: readonly CardID[] = event.CardIDs
 ): MoveEventValidationWarning[] {
   const warnings: MoveEventValidationWarning[] = []
 
-  // 必须字段
-  REQUIRED_FIELD.forEach((field) => {
-    if (!hasProtocolField(event, field)) {
-      warnings.push({
-        code: 'MISSING_FIELD',
-        field,
-        value: event[field]
-      })
-    }
-  })
-
-  //空间字段
   ZONE_FIELD.forEach((field) => {
-    if (hasProtocolField(event, field) && !isKnownProtocolZone(event[field])) {
+    if (!isKnownProtocolZone(event[field])) {
       warnings.push({
         code: 'UNKNOWN_PROTOCOL_ZONE',
         field,
@@ -211,12 +154,11 @@ export function validateMoveEvent(
     }
   })
 
-  const declaredCardCount = getDeclaredCardCount(event.CardCount)
-  if (declaredCardCount !== null && cardIDs.length > 0 && declaredCardCount !== cardIDs.length) {
+  if (cardIDs.length > 0 && event.CardCount !== cardIDs.length) {
     warnings.push({
       code: 'CARD_COUNT_MISMATCH',
       field: 'CardIDs',
-      expected: declaredCardCount,
+      expected: event.CardCount,
       actual: cardIDs.length
     })
   }
@@ -241,28 +183,17 @@ function logMoveEventValidationWarnings(
 }
 
 /**
- * 判断本次移动是否至少包含一张明确可识别的牌。
- * 协议中 0 表示未知牌，不能用于精确记牌，只能进入未知移动分支。
- */
-function hasKnownCards(cardIDs: CardID[] = []): boolean {
-  return cardIDs.some((id) => id > 0)
-}
-
-/**
  * 判断来源和目标是否指向同一个协议区域。
  * 这类事件通常是“展示/刷新”而非实际移动，需要再结合 MoveType 与牌可见性分类。
  */
-function isSameZoneShowEvent(event: NormalizedMoveCardFields): boolean {
+function isSameZoneShowEvent(event: RawMoveCardEvent): boolean {
   const { FromZone: fromZone, ToZone: toZone } = event
 
   return (
-    event.FromID != null &&
     event.FromID === event.ToID &&
-    fromZone !== undefined &&
     fromZone === toZone &&
-    (toZone !== 1 || (event.FromPosition != null && event.FromPosition === event.ToPosition)) &&
-    (toZone !== 4 ||
-      (event.FromZoneParam !== undefined && event.FromZoneParam === event.ToZoneParam))
+    (toZone !== 1 || event.FromPosition === event.ToPosition) &&
+    (toZone !== 4 || event.FromZoneParam === event.ToZoneParam)
   )
 }
 
@@ -270,18 +201,24 @@ function isSameZoneShowEvent(event: NormalizedMoveCardFields): boolean {
  * 判断是否为牌堆两端均为 255 的单牌同区展示。
  * 这类消息只公开一张牌面，不携带它在牌堆中的序号，具体语义由 SpellID 决定。
  */
-export function isPileSingleCardShow(event: RawMoveCardEvent): boolean {
+export function isPileSingleCardShow(
+  event: Pick<
+    NormalizedMoveCardFields,
+    'MoveType' | 'CardCount' | 'FromID' | 'FromZone' | 'ToID' | 'ToZone'
+  >
+): boolean {
   return (
-    Number(event.MoveType) === MOVE_TYPE.SHOW &&
-    Number(event.CardCount) === 1 &&
-    Number(event.FromID) === 255 &&
-    Number(event.FromZone) === 1 &&
-    Number(event.ToID) === 255 &&
-    Number(event.ToZone) === 1
+    event.MoveType === MOVE_TYPE.SHOW &&
+    event.CardCount === 1 &&
+    event.FromID === 255 &&
+    event.FromZone === 1 &&
+    event.ToID === 255 &&
+    event.ToZone === 1
   )
 }
 
-function isTianhouAmbiguousPileShow(event: NormalizedMoveCardFields): boolean {
+// 天候
+function isTianhouAmbiguousPileShow(event: RawMoveCardEvent): boolean {
   return event.SpellID === 3903 && isPileSingleCardShow(event)
 }
 
@@ -289,7 +226,8 @@ function isTianhouAmbiguousPileShow(event: NormalizedMoveCardFields): boolean {
  * 过滤已知的同区域展示噪声。
  * 这些协议消息不会改变牌所在位置，若继续下发会导致 Room 重复处理同一张牌。
  */
-function shouldIgnoreSameZoneShow(event: NormalizedMoveCardFields): boolean {
+function shouldIgnoreSameZoneShow(event: RawMoveCardEvent): boolean {
+  // 知天
   return (
     (event.SpellID === 7011 && event.MoveType === MOVE_TYPE.GENERAL_MOVE) ||
     (event.SpellID === 3744 && event.MoveType === MOVE_TYPE.SHOW)
@@ -300,9 +238,9 @@ function shouldIgnoreSameZoneShow(event: NormalizedMoveCardFields): boolean {
  * 根据协议 Zone、MoveType 与牌可见性推断 Room 可消费的标准移动类型。
  * 分支顺序体现优先级：特殊公共区移动优先，其次同区域展示，最后按目标区域归类。
  */
-function inferEventType(event: NormalizedMoveCardFields, cardIDs: CardID[]): RawMoveEventType {
+function inferEventType(event: RawMoveCardEvent, cardIDs: CardID[]): RawMoveEventType {
   const { FromZone: fromZone, ToZone: toZone, MoveType: moveType } = event
-  const known = hasKnownCards(cardIDs)
+  const known = cardIDs.some((id) => id > 0)
 
   // 弃牌堆洗回牌堆会重置公共牌堆状态，必须优先从普通回牌堆事件中识别出来。
   if (fromZone === 2 && toZone === 9) return 'shuffleDiscardIntoPile'
@@ -336,8 +274,10 @@ function inferEventType(event: NormalizedMoveCardFields, cardIDs: CardID[]): Raw
  * 为特定协议移动补充更精确的业务标签。
  * 按牌堆或弃牌堆来源标记获取事件，供日志或调试界面使用。
  */
-export function getProtocolMoveSpecialLabel(event: RawMoveCardEvent = {}): string | undefined {
-  if (Number(event.MoveType) !== MOVE_TYPE.GAIN) return undefined
+export function getProtocolMoveSpecialLabel(
+  event: Pick<RawMoveCardEvent, 'MoveType' | 'FromZone'>
+): string | undefined {
+  if (event.MoveType !== MOVE_TYPE.GAIN) return undefined
 
   const fromZone = getProtocolPublicZone(event.FromZone)
   if (fromZone === 'pile') return '从牌堆获取牌'
@@ -351,13 +291,13 @@ export function getProtocolMoveSpecialLabel(event: RawMoveCardEvent = {}): strin
  * 该模块只做分类与字段映射，不直接修改 Room 状态。
  *
  */
-export function normalizeMoveEvent(event: RawMoveCardEvent = {}): NormalizedMoveEvent {
+export function normalizeMoveEvent(event: RawMoveCardEvent): NormalizedMoveEvent {
   const move = normalizeMoveCardFields(event)
   const cardIDs = move.CardIDs
   // 协议异常只记录并降级处理，避免记牌器阻断宿主消息链。
   logMoveEventValidationWarnings(validateMoveEvent(event, cardIDs), event)
-  // 保留既有兼容行为：声明为 0 但携带身份时，按实际身份数量处理。
-  const cardCount = move.CardCount || cardIDs.length
+  // 暗牌移动的 CardIDs 可以为空，移动张数以协议 CardCount 为准。
+  const cardCount = move.CardCount
   const type = inferEventType(move, cardIDs)
   const fromPublicZone = getProtocolPublicZone(move.FromZone)
   const toPublicZoneName = getProtocolPublicZone(move.ToZone)

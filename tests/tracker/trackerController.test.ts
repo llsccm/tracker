@@ -11,6 +11,37 @@ import {
 import { getCard as getCardFixture } from './helpers/room'
 
 describe('TrackerController', () => {
+  it('协议补丁只合并允许字段，不覆盖端点、参数或原始附加信息', () => {
+    const { controller } = createTrackerControllerHarness()
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }], 100)
+    controller.initTrackerDeck([1, 2, 3])
+    controller.setTrackerFirstHand(0)
+    const room = controller.getTrackerRoom()!
+    const decorateSpy = vi.spyOn(room, 'decorateMoveEvent')
+    const raw = Object.freeze(protocolMove({ CardIDs: Object.freeze([1]), ToID: 1 }))
+    // 结构类型允许传入字段更多的对象，合并过程仍只采用 MoveCardPatch 声明的字段。
+    const patch = {
+      ...raw,
+      CardIDs: [2],
+      FromID: 1,
+      ToID: 0,
+      FromZoneParam: 99,
+      ToZoneParam: 99,
+      SrcSeatID: 0,
+      Label: '不应进入协议的补丁附加信息',
+      isSend: true
+    }
+
+    controller.syncTrackerMove(raw, patch)
+
+    expect(decorateSpy).toHaveBeenCalledOnce()
+    expect(decorateSpy.mock.calls[0][0].protocol).toEqual({ ...raw, CardIDs: [2] })
+    expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([2])
+    expect(controller.getTrackedPlayerHandCardIDs(0)).toEqual([])
+    expect(raw.CardIDs).toEqual([1])
+  })
+
   it('临时隐藏和恢复座位保留手牌事实，重复状态不产生卡牌变更', () => {
     const { controller } = createTrackerControllerHarness()
     controller.initTrackerRoom()

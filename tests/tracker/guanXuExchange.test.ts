@@ -8,7 +8,7 @@ import { createTrackerControllerHarness, protocolMove } from './helpers/trackerC
 
 type RawMoveOverrides = NonNullable<Parameters<typeof protocolMove>[0]>
 
-function guanXuMove(overrides: RawMoveOverrides): RawMoveOverrides {
+function guanXuMove(overrides: RawMoveOverrides): ReturnType<typeof protocolMove> {
   return protocolMove({
     CardIDs: [],
     CardCount: 0,

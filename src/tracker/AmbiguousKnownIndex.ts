@@ -128,7 +128,7 @@ export class AmbiguousKnownIndex {
     return Array.from(this.items.entries())
       .sort((a, b) => Number(a[0]) - Number(b[0]))
       .map(([cardID, item]) => [
-        Number(cardID),
+        cardID,
         token(item.card),
         item.candidateSeats.map(Number),
         item.groups.map((group) => String(group.id)).sort(),
@@ -136,11 +136,11 @@ export class AmbiguousKnownIndex {
       ])
   }
 
-  get(cardID: CardID | string): AmbiguousKnownItem | null {
-    return this.items.get(Number(cardID)) ?? null
+  get(cardID: CardID): AmbiguousKnownItem | null {
+    return this.items.get(cardID) ?? null
   }
 
-  describe(cardID: CardID | string): string {
+  describe(cardID: CardID): string {
     return this.get(cardID)?.description ?? ''
   }
 

@@ -1,7 +1,6 @@
 import { trackerLogger } from '@/utils/logger'
 import { isAnonymous, type Card } from './Card'
 import { POSITION_TOP } from './candidate/cardPositions'
-import { normalizeSpellID } from './candidate/markSpellID'
 import { summarizeMoveContext } from './helper/moveSummary'
 import type { Room } from './Room'
 import { RoomMovementCandidateMethods } from './roomMovement/candidates'
@@ -62,9 +61,6 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       sourceEvent
     } = opt
 
-    const normalizedSpellID = normalizeSpellID(spellID)
-    const normalizedFromSpellID =
-      fromSpellID === undefined ? undefined : normalizeSpellID(fromSpellID)
     const targetSeats = this.room.normalizeSeats(seatID ?? [])
     // 显式 fromSeatID 表示玩家区来源（与 MoveEventNormalizer 一致 fromZone=null）；
     // 不能默认 pile，否则会抢先走公共区 known 解析，跳过手牌/mark 匿名物化。
@@ -99,12 +95,12 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       toZone,
       seatID,
       subZone,
-      spellID: normalizedSpellID,
+      spellID: spellID,
       combinationID,
       fromZone,
       fromSeat,
       fromSubZone,
-      fromSpellID: normalizedFromSpellID,
+      fromSpellID: fromSpellID,
       cardCount: Number(cardCount),
       moveType,
       position,
