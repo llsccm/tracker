@@ -6,7 +6,6 @@ import { createTestRoom, getCard } from './helpers/room'
 // ⑤ 长链路端到端回归：随机转移 → 局部展示 → 打明牌 → 完整展示 → 收敛。
 // 目的：在拆分 unknownCardCount / 收口身份置换之前，先锁定当前跨阶段行为，
 // 防止后续重构在“单步测试都过、串起来却错”的组合路径上回归。
-// 参见 plans/random-hand-transfer-and-anonymous-entity-implementation-report.md §6.2。
 describe('随机手牌转移完整生命周期', () => {
   const knownIDs = [42, 46, 47, 59, 94, 118, 137]
   const hiddenIDs = [130, 131]
@@ -118,7 +117,9 @@ describe('随机手牌转移完整生命周期', () => {
         sourceEvent: { type: 'e2e:full-reveal' }
       })
 
-      // 5. 收敛后：seat3 手牌固定为 [42,46,47]，seat2 剩余明牌回到 seat2；暗牌仍未公开。[42, 46, 47].forEach((id) => expect(Array.from(getCard(room, id).seats)).toEqual([3]))
+      // 5. 收敛后：seat3 手牌固定为 [42,46,47]，seat2 剩余明牌回到 seat2；暗牌仍未公开。
+      //
+      ;[42, 46, 47].forEach((id) => expect(Array.from(getCard(room, id).seats)).toEqual([3]))
       ;[59, 94, 118].forEach((id) => expect(Array.from(getCard(room, id).seats)).toEqual([2]))
       hiddenIDs.forEach((id) => expect(getCard(room, id).isKnown).toBe(false))
 
