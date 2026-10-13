@@ -291,23 +291,6 @@ describe('tracker protocol replay', () => {
     expect(report.failure?.stateAfter.room?.deckReady).toBe(true)
   })
 
-  it('SpellID=713 的剔除下标越界时停止回放', () => {
-    const records = openingRecords().concat({
-      seq: 5,
-      className: 'PubGsCMoveCard',
-      payload: movePayload({
-        CardIDs: [99, 0, 0],
-        CardCount: 1,
-        MoveType: 21,
-        SpellID: 713
-      })
-    })
-    const report = new TrackerProtocolReplayer({ currentUserID: 101 }).replay(records)
-
-    expect(report.success).toBe(false)
-    expect(report.failure?.message).toContain('SpellID=713 移动协议剔除下标 99 越界')
-  })
-
   // it('回魂牌回牌堆时按原始牌顶位置过滤牌面', () => {
   //   const normalized = normalizeTrackerMovePosition({
   //     CardIDs: [4400, 7],

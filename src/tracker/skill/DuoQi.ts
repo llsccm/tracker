@@ -240,7 +240,7 @@ function activationMatchesMove(activation: DuoQiActivation, event: MoveEventDraf
   if (
     event.toZone !== 'player' ||
     event.options.subZone !== 'hand' ||
-    event.options.seatID !== activation.ownerSeatID
+    event.options.toSeatID !== activation.ownerSeatID
   ) {
     return false
   }

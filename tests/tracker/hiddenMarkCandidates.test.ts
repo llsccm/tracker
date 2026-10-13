@@ -16,7 +16,7 @@ import {
 
 function moveKnownCardsToHand(room, cardIDs, seatID) {
   room.moveCards(cardIDs, 'player', {
-    seatID,
+    toSeatID: seatID,
     subZone: 'hand',
     fromZone: 'pile',
     cardCount: cardIDs.length,
@@ -26,7 +26,7 @@ function moveKnownCardsToHand(room, cardIDs, seatID) {
 
 function moveHiddenHandToMark(room, { seatID, count, spellID }) {
   room.moveCards(Array(count).fill(0), 'player', {
-    seatID,
+    toSeatID: seatID,
     fromSeatID: seatID,
     fromZone: 5,
     fromSubZone: 'hand',
@@ -83,14 +83,14 @@ describe('隐藏标记区候选', () => {
     const hiddenCards = [137, 138, 139].map((id) => getCard(room, id))
 
     room.moveCards([136], 'player', {
-      seatID: 6,
+      toSeatID: 6,
       subZone: 'equip',
       fromZone: 'pile',
       cardCount: 1,
       sourceEvent: { type: 'test:known-equip' }
     })
     room.moveCards([136], 'player', {
-      seatID: 6,
+      toSeatID: 6,
       fromSeatID: 6,
       fromZone: null,
       fromSubZone: 'equip',
@@ -100,7 +100,7 @@ describe('隐藏标记区候选', () => {
       sourceEvent: { type: 'test:known-equip-to-mark' }
     })
     room.moveCards([0, 0, 0], 'player', {
-      seatID: 6,
+      toSeatID: 6,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 3,
@@ -108,7 +108,7 @@ describe('隐藏标记区候选', () => {
     })
     room.players.get(6).syncObservedHandCount(3)
     room.moveCards([], 'player', {
-      seatID: 6,
+      toSeatID: 6,
       fromSeatID: 6,
       fromZone: null,
       fromSubZone: 'hand',
@@ -121,7 +121,7 @@ describe('隐藏标记区候选', () => {
     expect(room.locationIndex.markBySeatAndSpell.get(6).get(414)).toContain(knownCard)
 
     room.moveCards([], 'player', {
-      seatID: 6,
+      toSeatID: 6,
       fromSeatID: 6,
       fromZone: null,
       fromSubZone: 'mark',
@@ -160,7 +160,7 @@ describe('隐藏标记区候选', () => {
     ).toBe(true)
 
     room.moveCards([136], 'player', {
-      seatID: 6,
+      toSeatID: 6,
       fromSeatID: 6,
       fromZone: null,
       fromSubZone: 'mark',
@@ -401,7 +401,7 @@ describe('隐藏标记区候选', () => {
     const mark = equipmentContainer(161, 700)
 
     room.moveCards([161], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       subZone: 'equip',
       fromZone: 'pile',
       spellID: 700,
@@ -410,7 +410,7 @@ describe('隐藏标记区候选', () => {
     })
     moveKnownCardsToHand(room, [1], 1)
     room.moveCards([0], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 1,
@@ -447,7 +447,7 @@ describe('隐藏标记区候选', () => {
     const mark = equipmentContainer(161, 700)
 
     room.moveCards([161], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       subZone: 'equip',
       fromZone: 'pile',
       spellID: 700,
@@ -476,7 +476,7 @@ describe('隐藏标记区候选', () => {
     })
 
     room.moveCards([161], 'player', {
-      seatID: 2,
+      toSeatID: 2,
       fromSeatID: 1,
       fromZone: 6,
       fromSubZone: 'equip',
@@ -568,7 +568,7 @@ describe('隐藏标记区候选', () => {
     const mark = equipmentContainer(161, 700)
 
     room.moveCards([161], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       subZone: 'equip',
       fromZone: 'pile',
       spellID: 700,
@@ -577,7 +577,7 @@ describe('隐藏标记区候选', () => {
     })
     moveKnownCardsToHand(room, [152], 4)
     room.moveCards([0], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 1,
@@ -623,7 +623,7 @@ describe('隐藏标记区候选', () => {
     const placeholderCard = getCard(room, 153)
 
     room.moveCards([0], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 1,
@@ -665,7 +665,7 @@ describe('隐藏标记区候选', () => {
     const mark = equipmentContainer(161, 700)
 
     room.moveCards([161], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       subZone: 'equip',
       fromZone: 'pile',
       spellID: 700,
@@ -674,7 +674,7 @@ describe('隐藏标记区候选', () => {
     })
     moveKnownCardsToHand(room, [152], 4)
     room.moveCards([0], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 1,
@@ -699,7 +699,7 @@ describe('隐藏标记区候选', () => {
       .records.get('4:muniu:161')!
 
     room.moveCards([161], 'player', {
-      seatID: 5,
+      toSeatID: 5,
       fromSeatID: 4,
       fromZone: 6,
       fromSubZone: 'equip',
@@ -741,7 +741,7 @@ describe('隐藏标记区候选', () => {
     expect(room.locationIndex.markBySeatAndSpell.get(5).get(700)).toContain(knownCard)
 
     room.moveCards([], 'player', {
-      seatID: 5,
+      toSeatID: 5,
       fromSeatID: 4,
       fromZone: null,
       fromSubZone: 'mark',
@@ -767,7 +767,7 @@ describe('隐藏标记区候选', () => {
     const knownCard = getCard(room, 152)
 
     room.moveCards([161], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       subZone: 'equip',
       fromZone: 'pile',
       spellID: 700,
@@ -776,7 +776,7 @@ describe('隐藏标记区候选', () => {
     })
     moveKnownCardsToHand(room, [152], 4)
     room.moveCards([0], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 1,
@@ -821,7 +821,7 @@ describe('隐藏标记区候选', () => {
     const mark = equipmentContainer(161, 700)
 
     room.moveCards([161], 'player', {
-      seatID: 6,
+      toSeatID: 6,
       subZone: 'equip',
       fromZone: 'pile',
       spellID: 700,
@@ -831,7 +831,7 @@ describe('隐藏标记区候选', () => {
     // 不预置 24/70 到 mark；只建立弱候选 + 与快照张数一致的暗占位。
     moveKnownCardsToHand(room, [85, 119, 43], 6)
     room.moveCards([0, 0], 'player', {
-      seatID: 6,
+      toSeatID: 6,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 2,
@@ -856,7 +856,7 @@ describe('隐藏标记区候选', () => {
     })
 
     room.moveCards([161], 'player', {
-      seatID: 7,
+      toSeatID: 7,
       fromSeatID: 6,
       fromZone: 6,
       fromSubZone: 'equip',
@@ -868,7 +868,7 @@ describe('隐藏标记区候选', () => {
 
     // 协议：FromZone=4/FromID=6 → ToZone=4/ToID=7，CardIDs 为首次揭示的明牌。
     room.moveCards(visibleIDs, 'player', {
-      seatID: 7,
+      toSeatID: 7,
       fromSeatID: 6,
       fromZone: null,
       fromSubZone: 'mark',
@@ -929,7 +929,7 @@ describe('隐藏标记区候选', () => {
     const mark = equipmentContainer(161, 700)
 
     room.moveCards([161], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       subZone: 'equip',
       fromZone: 'pile',
       spellID: 700,
@@ -938,7 +938,7 @@ describe('隐藏标记区候选', () => {
     })
     moveKnownCardsToHand(room, [117], 4)
     room.moveCards([0], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 1,
@@ -974,7 +974,7 @@ describe('隐藏标记区候选', () => {
     const mark = equipmentContainer(161, 700)
 
     room.moveCards([161], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       subZone: 'equip',
       fromZone: 'pile',
       spellID: 700,
@@ -983,7 +983,7 @@ describe('隐藏标记区候选', () => {
     })
     moveKnownCardsToHand(room, [152], 4)
     room.moveCards([0], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 1,
@@ -1006,7 +1006,7 @@ describe('隐藏标记区候选', () => {
     expect(hiddenCard.subZone).toBe('mark')
 
     room.moveCards([152, 153], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       fromSeatID: 4,
       fromZone: null,
       fromSubZone: 'mark',
@@ -1032,7 +1032,7 @@ describe('隐藏标记区候选', () => {
   it('木牛流马往返迁座后继续暗置时复用账本与约束 ID，不重复累计名额', () => {
     const { room } = createTestRoom({ cardIDs: [161, 1, 2, 3, 4], seatIDs: [1, 2] })
     room.moveCards([161], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       subZone: 'equip',
       fromZone: 'pile',
       spellID: 700,
@@ -1050,7 +1050,7 @@ describe('隐藏标记区候选', () => {
       [2, 1]
     ]) {
       room.moveCards([161], 'player', {
-        seatID,
+        toSeatID: seatID,
         fromSeatID,
         fromZone: 6,
         fromSubZone: 'equip',
@@ -1094,7 +1094,7 @@ describe('隐藏标记区候选', () => {
   it('普通标记继续按玩家座位记账，不随木牛流马迁移', () => {
     const { room } = createTestRoom({ cardIDs: [161, 1, 2], seatIDs: [1, 2] })
     room.moveCards([161], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       subZone: 'equip',
       fromZone: 'pile',
       spellID: 700,
@@ -1108,7 +1108,7 @@ describe('隐藏标记区候选', () => {
     const group = room.constraintGroups.get(record.groupID)
 
     room.moveCards([161], 'player', {
-      seatID: 2,
+      toSeatID: 2,
       fromSeatID: 1,
       fromZone: 6,
       fromSubZone: 'equip',

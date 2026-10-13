@@ -1,4 +1,4 @@
-# `GsCRoleOptTargetNtf` / `PubGsCMoveCard`：权变观看牌堆顶
+# `GsCRoleOptTargetNtf` / `PubGsCMoveCard`：权变观看牌堆顶与获得已展示牌
 
 ## 消息用途
 
@@ -6,6 +6,7 @@
 
 1. `GsCRoleOptTargetNtf` 提供本次看到的牌堆顶卡牌 ID。
 2. `PubGsCMoveCard` 描述这些牌在牌堆内的同区展示，不代表真实移动或随机洗入牌堆。
+3. 若随后获得其中一张，另一条 `PubGsCMoveCard` 记录该牌从牌堆进入角色手牌。
 
 ## 目标通知
 
@@ -31,8 +32,7 @@ Timeout: 30
 
 `Params` 按牌堆顶向内排列，第一项是最顶牌；本例中 `158` 位于牌堆顶。
 
-当 `SrcSeatID` 是己方座位时，记牌器将 `Params` 同步为牌堆明牌。
-同步时会将对应实体定位到牌堆顶；相同牌组已在顶部时不会重复重排。
+`Params` 描述通知中公开的牌面；配对的同区展示移动提供 `CardIDs`，由移动协议同步牌面与牌堆展示状态。不要把通知和移动消息重复解释成两次实体移动。
 
 ## 同区展示
 
@@ -40,11 +40,13 @@ Timeout: 30
 CardCount: 4
 CardIDs: [158, 2, 63, 125]
 FromID: 255
+FromPosition: 65280
 FromZone: 1
 FromZoneParam: 0
 MoveType: 21
 SpellID: 7011
 ToID: 255
+ToPosition: 65280
 ToZone: 1
 ToZoneParam: 0
 ```
@@ -54,7 +56,26 @@ ToZoneParam: 0
 
 - `CardIDs` 不应被当作随机位置的卡牌。
 - 不应把卡牌从牌堆移出后再随机放回。
-- 预处理会把 `FromPosition` 和 `ToPosition` 都归一为牌顶，使后续归一化识别为同区展示并跳过实体重排。
+- 本例的 `FromPosition` 和 `ToPosition` 明确为 `65280`（牌顶）；该消息表示展示牌堆顶牌，不表示实体被重新排序。
+
+## 随后获得已展示牌
+
+```text
+CardCount: 1
+CardIDs: [158]
+FromID: 255
+FromPosition: 65282
+FromZone: 1
+FromZoneParam: 0
+MoveType: 18
+SpellID: 7011
+ToID: 2
+ToPosition: 65280
+ToZone: 5
+ToZoneParam: 0
+```
+
+该消息将明确的牌 `158` 从公共牌堆移入 2 号角色的手牌，`MoveType = 18` 表示获得。结合前面的展示消息，`158` 是本次已公开的牌堆顶牌，随后被 2 号获得。来源 `FromPosition = 65282` 是随机/无序位置哨兵；牌的身份由 `CardIDs` 明确给出，不应因该位置值抹去已知身份，也不应由此推断其它展示牌的位置变化。
 
 ## 相关技能
 
@@ -64,5 +85,5 @@ ToZoneParam: 0
 ## 代码位置
 
 - 目标通知与牌堆明牌：`src/handler/GsCRoleOptTargetNtf.js`
-- 权变端点归一化：`src/handler/PubGsCMoveCard.js` 的 `normalizeMovePosition`
+- 移动位置预处理：`src/tracker/runtime/protocolRules.ts` 的 `normalizeTrackerMovePosition`
 - 同区展示识别：`src/tracker/MoveEventNormalizer.ts` 的 `isSameZoneShowEvent`

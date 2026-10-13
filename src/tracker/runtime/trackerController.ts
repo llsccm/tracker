@@ -19,7 +19,6 @@ import type {
   PublicPosition,
   PublicZoneName,
   RawMoveCardEvent,
-  MoveCardPatch,
   SeatID,
   SeatInfo,
   SpellID,
@@ -300,50 +299,47 @@ export class TrackerController {
   /**
    * 同步底层 PubGsCMoveCard 协议到 Room。
    *
-   * 流程分四步：协议字段补丁、标准化、结合当前 Room 状态修正、交给 Room 执行。
+   * 直接接收完整 patched：标准化、结合当前 Room 状态修正、交给 Room 执行；不再拼接协议。
    * 这层不直接改卡牌状态，状态变更统一收口在 Room.moveCards()/shufflePile()/showCards。
    */
-  syncTrackerMove(msg: RawMoveCardEvent, finalMove: MoveCardPatch = {}): void {
+  syncTrackerMove(
+    patched: Readonly<RawMoveCardEvent>,
+    raw: Readonly<RawMoveCardEvent> = patched
+  ): void {
     const readyRoom = this.getReadyTrackerRoom()
     if (!readyRoom) return
 
     try {
-      const patchedMsg: RawMoveCardEvent = {
-        ...msg,
-        CardIDs: finalMove.CardIDs ?? msg.CardIDs,
-        FromPosition: finalMove.FromPosition ?? msg.FromPosition,
-        ToPosition: finalMove.ToPosition ?? msg.ToPosition
-      }
-
-      this.controllerLogger.info(getProtocolMoveSpecialLabel(patchedMsg) ?? '移动协议输入', {
-        raw: this.summarizeProtocolMove(msg),
-        patched: this.summarizeProtocolMove(patchedMsg)
+      this.controllerLogger.info(getProtocolMoveSpecialLabel(patched) ?? '移动协议输入', {
+        raw: this.summarizeProtocolMove(raw),
+        patched: this.summarizeProtocolMove(patched)
       })
 
-      const rawEvent = normalizeMoveEvent(patchedMsg)
-      if (deferGuiFuMove(readyRoom, msg, rawEvent.protocol)) return
+      // 诡伏配对只依赖协议字段；暂存时无需构造尚不能执行的标准事件。
+      if (deferGuiFuMove(readyRoom, raw, patched)) return
+      const normalizedEvent = normalizeMoveEvent(patched, raw)
 
-      // rawEvent 只代表协议文本；下一步还要根据当前卡牌状态修正来源子区。
+      // normalizedEvent 只代表协议文本；下一步还要根据当前卡牌状态修正来源子区。
       this.controllerLogger.debug(
         '移动事件归一化',
-        summarizeMoveEvent(rawEvent, MOVE_EVENT_SUMMARY_OPTIONS)
+        summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS)
       )
 
-      const stateEvent = this.normalizeEventWithTrackerState(rawEvent)
+      const stateEvent = this.normalizeEventWithTrackerState(normalizedEvent)
       // 技能处理器
       const event = readyRoom.decorateMoveEvent(stateEvent)
       const pileCountBefore = readyRoom.zones.get('pile')?.cards.length ?? 0
-      const knownPileDrawCards = this.collectRegularDrawKnownPileCards(readyRoom, patchedMsg, event)
+      const knownPileDrawCards = this.collectRegularDrawKnownPileCards(readyRoom, patched, event)
 
       this.controllerLogger.debug('移动事件装饰完成', {
         before: summarizeMoveEvent(stateEvent, MOVE_EVENT_SUMMARY_OPTIONS),
         after: summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
       })
 
-      if (rawEvent.options.fromSubZone !== event.options.fromSubZone) {
+      if (normalizedEvent.options.fromSubZone !== event.options.fromSubZone) {
         this.controllerLogger.info('移动事件来源修正', {
           cardIDs: event.cardIDs,
-          fromSubZone: rawEvent.options.fromSubZone,
+          fromSubZone: normalizedEvent.options.fromSubZone,
           correctedFromSubZone: event.options.fromSubZone
         })
       }
@@ -377,7 +373,7 @@ export class TrackerController {
         // 注意：createPileIdentityMove 在 readyRoom.shufflePile 之前调用，因此
         // visiblePileIdentityIDsAfter 及依赖 pileCountAfter 的取值都是事务开始、洗牌前的可见状态。
         const pileIdentityMove = this.createPileIdentityMove(
-          patchedMsg,
+          patched,
           event,
           readyRoom,
           pileCountBefore,
@@ -408,7 +404,7 @@ export class TrackerController {
       }
 
       const pileIdentityMove = this.createPileIdentityMove(
-        patchedMsg,
+        patched,
         event,
         readyRoom,
         pileCountBefore,
@@ -420,9 +416,9 @@ export class TrackerController {
     } catch (e) {
       this.controllerLogger.warn('移动同步异常，已跳过本次 tracker 更新', {
         error: e,
-        raw: this.summarizeProtocolMove(msg)
+        raw: this.summarizeProtocolMove(raw)
       })
-      this.onError('[Refactor] 移动同步失败:', e, msg)
+      this.onError('[Refactor] 移动同步失败:', e, raw)
     }
   }
 
@@ -591,7 +587,7 @@ export class TrackerController {
       })
 
       readyRoom.moveCards(ids, 'player', {
-        seatID,
+        toSeatID: seatID,
         fromSeatID: seatID,
         fromZone: null,
         fromSubZone: subZone,
@@ -676,7 +672,7 @@ export class TrackerController {
         }
 
         readyRoom.moveCards(ids, 'player', {
-          seatID,
+          toSeatID: seatID,
           fromSeatID: target.fromSeatID ?? (target.fromZone == null ? seatID : undefined),
           fromZone: target.fromZone ?? null,
           fromSubZone: target.fromSubZone ?? subZone,
@@ -718,7 +714,7 @@ export class TrackerController {
     if (!readyRoom) return
 
     const move = completeGuiFuMove(readyRoom, seatID, cardIDs)
-    if (move) this.syncTrackerMove(move.raw, move.patched)
+    if (move) this.syncTrackerMove(move.patched, move.raw)
   }
 
   /**

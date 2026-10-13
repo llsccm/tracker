@@ -35,7 +35,7 @@ function createShuffleBaselineRoom(materializeDeckIdentities: boolean) {
     materializeDeckIdentities
   })
   room.moveCards([10, 11, 12], 'player', {
-    seatID: 1,
+    toSeatID: 1,
     subZone: 'hand',
     fromZone: 'pile',
     cardCount: 3,
@@ -61,7 +61,7 @@ describe('Room.cards 遍历基线', () => {
 
     const { stats } = collectTraversalStats(() => {
       room.moveCards([1], 'player', {
-        seatID: 1,
+        toSeatID: 1,
         subZone: 'hand',
         fromZone: 'pile',
         cardCount: 1,
@@ -90,7 +90,7 @@ describe('Room.cards 遍历基线', () => {
 
     const { stats } = collectTraversalStats(() => {
       room.moveCards([], 'player', {
-        seatID: 2,
+        toSeatID: 2,
         subZone: 'hand',
         fromZone: 'pile',
         cardCount: 2,

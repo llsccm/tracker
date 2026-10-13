@@ -7,12 +7,13 @@
 
 ## 移动装饰器输入契约
 
-- `MoveEventDraft.protocol` 保存 `normalizeMoveCardFields()` 统一格式化后的协议字段；技能分支直接读取数值，
+- `MoveEventDraft.protocol` 直接引用最终 `patched` 的只读协议；`cardIDs` 初始复用其只读数组，技能分支直接读取数值，
   不再从 `getRaw(event)` 取字段并重复 `Number()` 转换。
+- 响应器只读取 `patched`，下书按手牌区协议判断并读取 `FromID/ToID`；端点仅在最终事件归一化时解析。
 - 当前移动牌与数量以 `event.cardIDs` / `event.cardCount` 为准；`protocol` 保留装饰前的协议字段，
   `patchEvent()` 不因来源实体或候选推断而改写它。
-- `event.raw` 与 `options.sourceEvent.raw` 保留原始输入，只用于诊断与来源追溯。
-- `Room.decorateMoveEvent()` 对仅提供 `options` 的领域调用在入口补齐一次协议字段。
+- `event.raw` 与 `options.sourceEvent.raw` 引用同一份原始输入；后者随 `MoveOptions` 进入 Room，保留来源追溯。
+- `Room.decorateMoveEvent()` 接收完整标准事件；领域直调仍使用 `Room.moveCards()`。
   独立技能通知、角色数据或选择回复仍在各自解析入口处理原始字段，不套用移动协议契约。
 
 ## 快速索引
@@ -21,6 +22,8 @@
 | --- | --- | --- |
 | 诡伏相邻获得消息补全 | `SpellID=3709` + `DataID=3709` | `src/tracker/skill/GuiFu.ts`、`tests/tracker/roleData3709.test.ts` |
 | 下书明暗选择 | `SpellID=361` | `src/handler/skills/XiaShu.ts`、`tests/tracker/xiaShu.test.ts` |
+| 反间展示与手牌移交 | `SpellID=713`、`MoveType=27` | `docs/protocols/PubGsCMoveCard-713.md`；现有列表解码条件不匹配该样例 |
+| 权变牌堆顶观看与获得 | `SpellID=7011`、`MoveType=21/18` | `docs/protocols/GsCRoleOptTargetNtf-7011.md` |
 | 暗置标记区候选 | `FromZone=5`、`ToZone=4/8`、全暗 `CardIDs` | `RoomMovement.handleHiddenMarkMove()`、`hiddenMarkCandidates` |
 | 观虚目标视角交换 | `SpellID=987/988` | `src/tracker/skill/GuanXu.ts`、`tests/tracker/guanXuExchange.test.ts` |
 | 整手牌交换 | `MoveType=11` + `5<->10` + 整手张数 | `src/tracker/skill/HandExchange.ts` |
@@ -57,6 +60,13 @@
 - 实测 `CGsRoleSpellOptRep` 选择回复固定早于后续取牌 `PubGsCMoveCard`。选择处理器只记录
   `choice/actorSeatID`；移动完成回调是唯一结算点，负责确认展示牌并清理技能状态。
 - 协议样例：`docs/protocols/GsCRoleOptTargetNtf-361.md`。
+
+## 反间展示与手牌移交（SpellID=713）
+
+- 三条原始消息及可确认的字段含义见 `docs/protocols/PubGsCMoveCard-713.md`。
+- 样例先由 5 号同区展示 `119`，再以 `MoveType=27` 移交给 1 号，最后由 1 号同区展示五张牌；展示列表包含 `119`。
+- 样例中的 `MoveType=21` 都是 `5 -> 5` 同区展示；`MoveType=27` 是 `5 -> 5` 的跨座位移交，不应仅凭 Zone 相同视作无操作。
+- `src/handler/skills/Spell713.ts` 的首项下标解码要求 `CardCount === CardIDs.length - 2`，与本样例的等长列表不符；技能处理器在 `src/handler/spellEffects.js` 中当前未注册。
 
 ## 暗置标记区候选流程
 

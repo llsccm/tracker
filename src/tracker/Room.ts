@@ -481,7 +481,7 @@ export class Room extends RoomBase {
   /**
    * 按物理 ID 查找当前房间内已有的实体牌。
    */
-  findCardsByIDs(cardIDs: CardID[] = []): Card[] {
+  findCardsByIDs(cardIDs: readonly CardID[] = []): Card[] {
     return cardIDs
       .filter((id) => id > 0)
       .map((id) => this.cardIndex.get(id))
@@ -1390,11 +1390,11 @@ export class Room extends RoomBase {
   }
 
   /**
-   * 移动卡牌事件的房间级主流程。
+   * 移动卡牌事件的房间级主流程。只接收只读 ID 数组，单张牌使用 [cardID]。
    * Room 保留阶段编排，具体阶段逻辑委托给 RoomMovement，便于快速查看协议同步的全貌。
    */
   moveCards(
-    cardIDs: CardID[] | CardID,
+    cardIDs: readonly CardID[],
     toZone: PublicZoneName | 'player',
     opt: MoveOptions = {}
   ): boolean {

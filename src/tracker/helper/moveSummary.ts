@@ -22,7 +22,7 @@ export function summarizeMoveEvent(event: NormalizedMoveEvent, options: MoveSumm
     toZone: event.toZone,
     ...(options.includeEventCardCount ? { cardCount: event.cardCount } : {}),
     options: {
-      seatID: eventOptions.seatID,
+      toSeatID: eventOptions.toSeatID,
       subZone: eventOptions.subZone,
       spellID: eventOptions.spellID,
       combinationID: eventOptions.combinationID,
@@ -46,7 +46,7 @@ export function summarizeMoveContext(context: RoomMoveContext, options: MoveSumm
   return {
     cardIDs: context.cardIDs,
     toZone: context.toZone,
-    seatID: context.seatID,
+    toSeatID: context.toSeatID,
     subZone: context.subZone,
     spellID: context.spellID,
     combinationID: context.combinationID,

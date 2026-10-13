@@ -26,7 +26,7 @@ describe('二次随机手牌转移时的候选传播', () => {
       fromZone: null,
       fromSeatID: 0,
       fromSubZone: 'hand',
-      seatID: 7,
+      toSeatID: 7,
       subZone: 'hand',
       cardCount: 2,
       sourceEvent: { type: 'seed:random-partial-transfer' }
@@ -88,7 +88,7 @@ describe('二次随机手牌转移时的候选传播', () => {
         fromZone: null,
         fromSeatID: 7,
         fromSubZone: 'hand',
-        seatID: 2,
+        toSeatID: 2,
         subZone: 'hand',
         cardCount: transferCount,
         sourceEvent: {
@@ -131,7 +131,7 @@ describe('二次随机手牌转移时的候选传播', () => {
       fromZone: null,
       fromSeatID: 7,
       fromSubZone: 'hand',
-      seatID: 2,
+      toSeatID: 2,
       subZone: 'hand',
       cardCount: allIDs.length,
       sourceEvent: { type: 'case:first-transfer' }
@@ -151,7 +151,7 @@ describe('二次随机手牌转移时的候选传播', () => {
       fromZone: null,
       fromSeatID: 2,
       fromSubZone: 'hand',
-      seatID: 7,
+      toSeatID: 7,
       subZone: 'hand',
       cardCount: 3,
       sourceEvent: { type: 'case:second-transfer' }

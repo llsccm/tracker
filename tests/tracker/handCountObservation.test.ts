@@ -80,7 +80,7 @@ describe('玩家手牌数观测', () => {
       fromZone: null,
       fromSeatID: 2,
       fromSubZone: 'hand',
-      seatID: 3,
+      toSeatID: 3,
       subZone: 'hand',
       cardCount: 3,
       sourceEvent: { type: 'test:all-entity-random-hand-transfer' }
@@ -112,7 +112,7 @@ describe('玩家手牌数观测', () => {
 
     try {
       room.moveCards([], 'player', {
-        seatID: 1,
+        toSeatID: 1,
         subZone: 'hand',
         fromZone: 'pile',
         cardCount: 4,
@@ -127,7 +127,7 @@ describe('玩家手牌数观测', () => {
         fromZone: null,
         fromSeatID: 1,
         fromSubZone: 'hand',
-        seatID: 0,
+        toSeatID: 0,
         subZone: 'hand',
         cardCount: 1,
         sourceEvent: { type: 'test:all-hidden-random-gain' }
@@ -179,7 +179,7 @@ describe('玩家手牌数观测', () => {
       fromZone: null,
       fromSeatID: 2,
       fromSubZone: 'hand',
-      seatID: 1,
+      toSeatID: 1,
       subZone: 'hand',
       cardCount: 1,
       sourceEvent: { type: 'test:random-transfer-with-hidden-coverage' }
@@ -202,14 +202,14 @@ describe('玩家手牌数观测', () => {
       // seats.has(1) 实体数 = 4，唯一归属实体 = 3，对应 sourceTotal=3。
       // 至少 1 张明牌才会触发候选传播门槛。
       room.moveCards([11], 'player', {
-        seatID: 1,
+        toSeatID: 1,
         subZone: 'hand',
         fromZone: 'pile',
         cardCount: 1,
         sourceEvent: { type: 'test:draw-one-known' }
       })
       room.moveCards([], 'player', {
-        seatID: 1,
+        toSeatID: 1,
         subZone: 'hand',
         fromZone: 'pile',
         cardCount: 2,
@@ -231,7 +231,7 @@ describe('玩家手牌数观测', () => {
         fromZone: null,
         fromSeatID: 1,
         fromSubZone: 'hand',
-        seatID: 5,
+        toSeatID: 5,
         subZone: 'hand',
         cardCount: 1,
         sourceEvent: { type: 'test:random-transfer-after-residual-candidate' }

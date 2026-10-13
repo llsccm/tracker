@@ -2,10 +2,10 @@
 
 ## 字段流转
 
-`RawMoveCardEvent.FromPosition` 与 `RawMoveCardEvent.ToPosition` 均为可选数字字段。
+`RawMoveCardEvent.FromPosition` 与 `RawMoveCardEvent.ToPosition` 均为必填数字字段。
 原始协议使用数值哨兵或槽位；内部公共区 API 与候选模型使用的 `top` / `bottom` / `random` /
 `any` 等语义字符串不属于协议契约，不能复用 `PublicPosition` 声明原始位置字段。
-`normalizeMoveCardFields()` 原样保留位置值，不做字符串转换，也不把缺失位置补成牌底 `0`。
+入口 `raw` 快照原样保留位置值，不做字符串转换，也不把缺失位置补成牌底 `0`；已知特例只修改 `patched`。
 
 `RawMoveCardEvent.ToPosition` 是移动协议的通用目标位置字段，不绑定任何技能：
 

@@ -13,7 +13,7 @@ export type MoveEventHandler = (
 export type SkillHandler = (
   card: Card,
   context: Pick<MoveOptions, 'subZone' | 'sourceEvent'> & {
-    seatID: SeatInput | null
+    toSeatID: SeatInput | null
     toZone: NormalizedMoveEvent['toZone']
   }
 ) => unknown
@@ -45,6 +45,7 @@ export class RoomMoveEvents {
     else this.handlers.set(key, [handler])
   }
 
+  /** 技能处理器 */
   decorateMoveEvent(event: NormalizedMoveEvent): NormalizedMoveEvent {
     const spellIDs = Array.from(new Set([event.protocol.SpellID, event.options.spellID])).filter(
       (spellID) => spellID != null

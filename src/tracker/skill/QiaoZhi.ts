@@ -162,7 +162,7 @@ function settleHiddenGain(event: MoveEventDraft, room: Room): void {
       cardsToMove.map((card) => card.id),
       'player',
       {
-        seatID: state.targetSeatID,
+        toSeatID: state.targetSeatID,
         subZone: 'hand',
         spellID: null,
         fromZone: null,

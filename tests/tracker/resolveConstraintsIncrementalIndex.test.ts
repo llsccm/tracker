@@ -15,7 +15,7 @@ describe('resolveConstraints 接入 locationIndex 增量（阶段 3）', () => {
     const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [1, 2, 3] })
 
     room.moveCards([1], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 1,
@@ -30,7 +30,7 @@ describe('resolveConstraints 接入 locationIndex 增量（阶段 3）', () => {
 
   it('确定明牌弃置：手牌明牌进入弃牌堆', () => {
     const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [1, 2, 3] })
-    room.moveCards([1], 'player', { seatID: 1, subZone: 'hand', fromZone: 'pile', cardCount: 1 })
+    room.moveCards([1], 'player', { toSeatID: 1, subZone: 'hand', fromZone: 'pile', cardCount: 1 })
 
     room.moveCards([1], 'discard', { fromSeatID: 1, fromSubZone: 'hand', cardCount: 1 })
 
@@ -42,7 +42,7 @@ describe('resolveConstraints 接入 locationIndex 增量（阶段 3）', () => {
   it('暗牌分配：纯计数暗牌进入手牌', () => {
     const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [1, 2, 3] })
 
-    room.moveCards([], 'player', { seatID: 2, subZone: 'hand', fromZone: 'pile', cardCount: 2 })
+    room.moveCards([], 'player', { toSeatID: 2, subZone: 'hand', fromZone: 'pile', cardCount: 2 })
 
     expectLocationIndexMatchesRebuild(room)
   })
@@ -61,11 +61,11 @@ describe('resolveConstraints 接入 locationIndex 增量（阶段 3）', () => {
   it('装备与判定区确定移动', () => {
     const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [1, 2, 3] })
 
-    room.moveCards([1], 'player', { seatID: 1, subZone: 'equip', fromZone: 'pile', cardCount: 1 })
+    room.moveCards([1], 'player', { toSeatID: 1, subZone: 'equip', fromZone: 'pile', cardCount: 1 })
     expect(room.locationIndex.equipBySeat.get(1)).toEqual([getCard(room, 1)])
     expectLocationIndexMatchesRebuild(room)
 
-    room.moveCards([2], 'player', { seatID: 2, subZone: 'judge', fromZone: 'pile', cardCount: 1 })
+    room.moveCards([2], 'player', { toSeatID: 2, subZone: 'judge', fromZone: 'pile', cardCount: 1 })
     expect(room.locationIndex.judgeBySeat.get(2)).toEqual([getCard(room, 2)])
     expectLocationIndexMatchesRebuild(room)
   })
@@ -74,10 +74,10 @@ describe('resolveConstraints 接入 locationIndex 增量（阶段 3）', () => {
     const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [1, 2, 3] })
 
     const steps: (() => void)[] = [
-      () => room.moveCards([1, 2], 'player', { seatID: 1, subZone: 'hand', cardCount: 2 }),
-      () => room.moveCards([], 'player', { seatID: 2, subZone: 'hand', cardCount: 3 }),
+      () => room.moveCards([1, 2], 'player', { toSeatID: 1, subZone: 'hand', cardCount: 2 }),
+      () => room.moveCards([], 'player', { toSeatID: 2, subZone: 'hand', cardCount: 3 }),
       () => room.moveCards([1], 'discard', { fromSeatID: 1, fromSubZone: 'hand', cardCount: 1 }),
-      () => room.moveCards([3], 'player', { seatID: 3, subZone: 'hand', cardCount: 1 }),
+      () => room.moveCards([3], 'player', { toSeatID: 3, subZone: 'hand', cardCount: 1 }),
       () => room.moveCards([], 'discard', { fromZone: 'pile', cardCount: 2 })
     ]
 
@@ -91,7 +91,12 @@ describe('resolveConstraints 接入 locationIndex 增量（阶段 3）', () => {
     const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [1, 2, 3] })
 
     const { stats } = collectTraversalStats(() => {
-      room.moveCards([1], 'player', { seatID: 1, subZone: 'hand', fromZone: 'pile', cardCount: 1 })
+      room.moveCards([1], 'player', {
+        toSeatID: 1,
+        subZone: 'hand',
+        fromZone: 'pile',
+        cardCount: 1
+      })
     })
 
     expect(stats.sites.get('locationIndex:rebuild')).toBeUndefined()
@@ -160,7 +165,7 @@ describe('resolveConstraints 接入 locationIndex 增量（阶段 3）', () => {
       seatIDs: [1, 2],
       materializeDeckIdentities: false
     })
-    room.moveCards([10, 11, 12], 'player', { seatID: 1, subZone: 'hand', cardCount: 3 })
+    room.moveCards([10, 11, 12], 'player', { toSeatID: 1, subZone: 'hand', cardCount: 3 })
     room.moveCards([10, 11, 12], 'discard', { fromSeatID: 1, fromSubZone: 'hand', cardCount: 3 })
     const pileCount = room.zones.get('pile').cards.length
     const discardCount = room.zones.get('discard').cards.length

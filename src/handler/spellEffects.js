@@ -6,8 +6,10 @@ import handleShengMo from './skills/ShengMo'
 import handleXiaShu from './skills/XiaShu'
 import handleZeXing from './skills/ZeXing'
 import handleZuoLian from './skills/ZuoLian'
+// import handleFanJian from './skills/Spell713'
 
 export const spellEffectHandlers = new Map([
+  // [713, handleFanJian],
   [361, handleXiaShu],
   [441, handleChengXiang],
   [3492, handleChengXiang],
@@ -24,7 +26,7 @@ export const spellEffectHandlers = new Map([
 
 // 使用已有信息修改 cardIDs 简单不用处理 真是一个好方法吗?
 export function applySpellEffect(context) {
-  const handler = spellEffectHandlers.get(context.SpellID)
+  const handler = spellEffectHandlers.get(context.patched.SpellID)
   if (!handler) return false
 
   handler(context)

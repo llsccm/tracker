@@ -61,7 +61,7 @@ function createMuniuRoom(knownHandCount: number) {
     materializeDeckIdentities: false
   })
   room.moveCards([161], 'player', {
-    seatID: 0,
+    toSeatID: 0,
     fromZone: 'pile',
     subZone: 'equip',
     spellID: 700,
@@ -69,7 +69,7 @@ function createMuniuRoom(knownHandCount: number) {
   })
   if (knownHandCount > 0) {
     room.moveCards([1, 2].slice(0, knownHandCount), 'player', {
-      seatID: 0,
+      toSeatID: 0,
       fromZone: 'pile',
       subZone: 'hand',
       cardCount: knownHandCount
@@ -77,7 +77,7 @@ function createMuniuRoom(knownHandCount: number) {
   }
   if (knownHandCount < 2) {
     room.moveCards([], 'player', {
-      seatID: 0,
+      toSeatID: 0,
       fromZone: 'pile',
       subZone: 'hand',
       cardCount: 2 - knownHandCount
@@ -105,7 +105,7 @@ describe('木牛流马原始协议迁座通知', () => {
     const put = normalizeMoveEvent({ ...putIntoMuniu, SpellID: 987 })
     expect(put.options.spellID).toBe(700)
     expect(put.options.fromSubZone).toBe('hand')
-    expect(put.options.seatID).toBe(0)
+    expect(put.options.toSeatID).toBe(0)
     expect(put.cardCount).toBe(1)
     expect(put.cardIDs).toEqual([])
     const sync = normalizeMoveEvent({ ...syncMuniuMarks, SpellID: 987 })
@@ -113,7 +113,7 @@ describe('木牛流马原始协议迁座通知', () => {
     expect(sync.options.fromSpellID).toBe(700)
     expect(sync.options.spellID).toBe(700)
     expect(sync.options.fromSeatID).toBe(0)
-    expect(sync.options.seatID).toBe(6)
+    expect(sync.options.toSeatID).toBe(6)
   })
 
   it.each([0, 2])('来源有 %s 张明牌时，仅 mark700 协议迁移内部牌及账本', (knownHandCount) => {

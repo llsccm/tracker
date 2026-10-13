@@ -12,7 +12,7 @@ const FOREIGN_SPELL_ID = 999
 
 function dealKnownHand(room, cardIDs, seatID) {
   room.moveCards(cardIDs, 'player', {
-    seatID,
+    toSeatID: seatID,
     subZone: 'hand',
     fromZone: 'pile',
     cardCount: cardIDs.length,
@@ -22,7 +22,7 @@ function dealKnownHand(room, cardIDs, seatID) {
 
 function dealHiddenHand(room, count, seatID) {
   room.moveCards(Array(count).fill(0), 'player', {
-    seatID,
+    toSeatID: seatID,
     subZone: 'hand',
     fromZone: 'pile',
     cardCount: count,
@@ -32,7 +32,7 @@ function dealHiddenHand(room, count, seatID) {
 
 function hiddenHandToMark(room, { seatID, count, spellID }) {
   room.moveCards(Array(count).fill(0), 'player', {
-    seatID,
+    toSeatID: seatID,
     fromSeatID: seatID,
     fromZone: 5,
     fromSubZone: 'hand',

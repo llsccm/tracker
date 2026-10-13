@@ -33,20 +33,19 @@ export class RoomMovement extends RoomMovementCandidateMethods {
    * 这里集中处理来源席位、目标席位、暗牌数量和协议位置，避免各阶段重复解析 options。
    */
   createMoveContext(
-    cardIDs: CardID[] | CardID,
+    cardIDs: readonly CardID[],
     toZone: MoveTargetZone,
     opt: RoomMovementOptions = {}
   ): RoomMoveContext {
-    const normalizedCardIDs = Array.isArray(cardIDs) ? cardIDs : [cardIDs]
     const {
-      seatID,
+      toSeatID,
       subZone = 'hand',
       spellID,
       combinationID,
       fromZone: requestedFromZone,
       fromSeatID,
       fromSpellID,
-      cardCount = normalizedCardIDs.length,
+      cardCount = cardIDs.length,
       handMoveCount: requestedHandMoveCount,
       moveType,
       position = POSITION_TOP,
@@ -61,7 +60,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       sourceEvent
     } = opt
 
-    const targetSeats = this.room.normalizeSeats(seatID ?? [])
+    const targetSeats = this.room.normalizeSeats(toSeatID ?? [])
     // 显式 fromSeatID 表示玩家区来源（与 MoveEventNormalizer 一致 fromZone=null）；
     // 不能默认 pile，否则会抢先走公共区 known 解析，跳过手牌/mark 匿名物化。
     const hasExplicitFromSeat = fromSeatID !== undefined && fromSeatID !== null
@@ -78,22 +77,19 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         : null
     const fromSubZone = opt.fromSubZone ?? subZone ?? 'hand'
     // 候选身份可由逻辑账本迁移而不移动实体；此时手牌总数变化量与实体移动数不同。
-    const handMoveCount = Math.max(
-      0,
-      Number(requestedHandMoveCount ?? cardCount ?? normalizedCardIDs.length)
-    )
+    const handMoveCount = Math.max(0, Number(requestedHandMoveCount ?? cardCount ?? cardIDs.length))
     const sourceHandSeat =
       fromSeat !== null && !Number.isNaN(fromSeat) && fromSubZone === 'hand' ? fromSeat : null
     const targetHandSeat =
       toZone === 'player' && subZone === 'hand' && targetSeats.length === 1 ? targetSeats[0] : null
-    const knownIDs = normalizedCardIDs.filter((id) => id > 0)
+    const knownIDs = cardIDs.filter((id) => id > 0)
     const sourcePlayer =
       fromSeat !== null && !Number.isNaN(fromSeat) ? this.room.getPlayer(fromSeat) : null
 
     const context: RoomMoveContext = {
-      cardIDs: normalizedCardIDs,
+      cardIDs,
       toZone,
-      seatID,
+      toSeatID,
       subZone,
       spellID: spellID,
       combinationID,
@@ -122,7 +118,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       sourceHandUnknownCount: sourcePlayer?.unknownCardCount ?? 0,
       knownIDs,
       sourceIsOutside: fromZone === 'outside',
-      unknownCount: Math.max(0, Number(cardCount) || 0, normalizedCardIDs.length) - knownIDs.length,
+      unknownCount: Math.max(0, Number(cardCount) || 0, cardIDs.length) - knownIDs.length,
       knownCards: [],
       movedUnknownCards: [],
       publicMovedCards: [],
@@ -134,7 +130,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       summarizeMoveContext(
         {
           ...context,
-          seatID: targetSeats.length === 1 ? targetSeats[0] : null
+          toSeatID: targetSeats.length === 1 ? targetSeats[0] : null
         },
         { includeSourceCardIDs: true }
       )
@@ -588,7 +584,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         card.bindCandidates(targetSeats, subZone, spellID, { known: false })
       })
 
-      // seatID=255 会被 normalizeSeats 过滤为空；这代表无席位技能空间而非某个玩家。
+      // toSeatID=255 会被 normalizeSeats 过滤为空；这代表无席位技能空间而非某个玩家。
       // 这里按 spellID 建账本，后续从弹窗 mark 回牌堆时直接取这个空间里的占位。
       if (subZone === 'mark' && targetSeats.length === 0) {
         registerUnassignedMarkSpaceCards(this.room, spellID, movedUnknownCards)
@@ -714,7 +710,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       knownCards,
       position,
       resetKnownToUnknown,
-      seatID,
+      toSeatID,
       sourceEvent,
       spellID,
       subZone,
@@ -864,7 +860,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         const handler = this.room.skillHandlers.get(spellID)
         handler?.(card, {
           toZone,
-          seatID,
+          toSeatID,
           subZone,
           sourceEvent
         })
