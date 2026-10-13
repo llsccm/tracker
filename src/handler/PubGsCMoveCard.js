@@ -55,7 +55,6 @@ export function handleMoveCard(msg) {
     patched,
     normalizeTrackerMovePosition({
       ...patched,
-      isGuoZhan: Game.isGuoZhan,
       specialEquipmentCards
     })
   )

@@ -53,7 +53,6 @@ export function normalizeTrackerMovePosition({
   ToPosition,
   MoveType,
   SpellID,
-  isGuoZhan,
   specialEquipmentCards = false
 }: NormalizeTrackerMovePositionInput) {
   let fromPosition = FromPosition
@@ -106,16 +105,17 @@ export function normalizeTrackerMovePosition({
   }
 
   // 王元姬 宴戏 拿牌
-  if (
-    FromZone === 1 &&
-    fromPosition === POSITION_RANDOM &&
-    ToZone === 5 &&
-    !isGuoZhan &&
-    YANXI_DRAW_SPELL_IDS.has(SpellID) &&
-    CardCount === 1
-  ) {
-    fromPosition = POSITION_TOP
-  }
+  // 目前废弃
+  // if (
+  //   FromZone === 1 &&
+  //   fromPosition === POSITION_RANDOM &&
+  //   ToZone === 5 &&
+  //   !isGuoZhan &&
+  //   YANXI_DRAW_SPELL_IDS.has(SpellID) &&
+  //   CardCount === 1
+  // ) {
+  //   fromPosition = POSITION_TOP
+  // }
 
   // 游戏开始后特殊装备牌
   if (
