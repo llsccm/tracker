@@ -8,6 +8,7 @@ import {
 } from './protocolZones'
 import type {
   CardID,
+  MoveOptions,
   NormalizedMoveCardFields,
   NormalizedMoveEvent,
   RawMoveCardEvent,
@@ -68,6 +69,7 @@ export const MOVE_TYPE = {
   CRAFT: 20,
   SHOW: 21,
   REPLACE_EQUIP: 22,
+  FANJIAN: 27,
   SYSTEM: 255
 } as const
 
@@ -107,11 +109,6 @@ export const MOVE_TYPE_LABELS = {
  */
 export function getMoveTypeLabel(moveType: RawMoveCardEvent['MoveType']): string | undefined {
   return MOVE_TYPE_LABELS[moveType as keyof typeof MOVE_TYPE_LABELS]
-}
-
-/** 复制完整协议供预处理修改；不修补缺字段，也不推测牌数或身份形态。 */
-export function normalizeMoveCardFields(event: RawMoveCardEvent): NormalizedMoveCardFields {
-  return { ...event, CardIDs: [...event.CardIDs] }
 }
 
 /**
@@ -172,7 +169,7 @@ export function validateMoveEvent(
  */
 function logMoveEventValidationWarnings(
   warnings: MoveEventValidationWarning[],
-  event: RawMoveCardEvent
+  event: Readonly<RawMoveCardEvent>
 ): void {
   warnings.forEach((warning) => {
     trackerLogger.warn('移动协议字段异常，已按降级路径继续', {
@@ -238,7 +235,7 @@ function shouldIgnoreSameZoneShow(event: RawMoveCardEvent): boolean {
  * 根据协议 Zone、MoveType 与牌可见性推断 Room 可消费的标准移动类型。
  * 分支顺序体现优先级：特殊公共区移动优先，其次同区域展示，最后按目标区域归类。
  */
-function inferEventType(event: RawMoveCardEvent, cardIDs: CardID[]): RawMoveEventType {
+function inferEventType(event: RawMoveCardEvent, cardIDs: readonly CardID[]): RawMoveEventType {
   const { FromZone: fromZone, ToZone: toZone, MoveType: moveType } = event
   const known = cardIDs.some((id) => id > 0)
 
@@ -286,21 +283,14 @@ export function getProtocolMoveSpecialLabel(
   return undefined
 }
 
-/**
- * 将原始 PubGsCMoveCard 字段归一为 refactor Room 可消费的标准移动事件。
- * 该模块只做分类与字段映射，不直接修改 Room 状态。
- *
- */
-export function normalizeMoveEvent(event: RawMoveCardEvent): NormalizedMoveEvent {
-  const move = normalizeMoveCardFields(event)
-  const cardIDs = move.CardIDs
-  // 协议异常只记录并降级处理，避免记牌器阻断宿主消息链。
-  logMoveEventValidationWarnings(validateMoveEvent(event, cardIDs), event)
-  // 暗牌移动的 CardIDs 可以为空，移动张数以协议 CardCount 为准。
-  const cardCount = move.CardCount
-  const type = inferEventType(move, cardIDs)
+/** 仅在最终事件构造时解析区域、座位和标记空间。 */
+function normalizeMoveEndpoints(
+  move: RawMoveCardEvent
+): Pick<
+  MoveOptions,
+  'toSeatID' | 'fromSeatID' | 'fromZone' | 'subZone' | 'fromSubZone' | 'fromSpellID' | 'spellID'
+> {
   const fromPublicZone = getProtocolPublicZone(move.FromZone)
-  const toPublicZoneName = getProtocolPublicZone(move.ToZone)
   const targetIsPlayerZone = isProtocolPlayerZone(move.ToZone)
   const sourceIsPlayerZone = isProtocolPlayerZone(move.FromZone)
   // 标记区回手牌时，目标区可能带返回技能 ID（如 3389），不能覆盖来源标记空间 ID。
@@ -326,45 +316,65 @@ export function normalizeMoveEvent(event: RawMoveCardEvent): NormalizedMoveEvent
         move.SpellID
       )
     : undefined
-  const spellID = targetIsPlayerZone ? targetSpellID : fromSpellID
+  // 纯公共区移动没有标记端点，仍需保留触发移动的协议技能 ID。
+  const spellID = targetIsPlayerZone ? targetSpellID : (fromSpellID ?? move.SpellID)
 
   // FromID/ToID 的含义依赖具体 Zone，不能一律解释成玩家座位。
   // 例如 FromZone=8 弹窗标记回牌堆时，FromID 可能是技能/标记空间 ID；
   // FromZone=1 牌堆来源时，FromID=255 也只是牌堆/无座位占位。
-  // 这里的 fromSeatID/seatID 是兼容 Room.moveCards() 旧 options 名称，
+  // fromSeatID/toSeatID 分别描述来源和目标玩家区端点，
   // 后续移动逻辑必须结合 fromZone/fromSubZone/spellID 判断它是否真是座位。
 
   // 观看公共区时不应默认把 subZone 推导为 hand；公共区来源的 subZone 置为 undefined。
   return {
+    toSeatID: targetIsPlayerZone ? move.ToID : undefined,
+    fromSeatID: sourceIsPlayerZone ? move.FromID : undefined,
+    fromZone: fromPublicZone,
+    subZone: targetIsPlayerZone
+      ? getProtocolPlayerSubZone(move.ToZone)
+      : sourceIsPlayerZone
+        ? getProtocolPlayerSubZone(move.FromZone)
+        : undefined,
+    fromSubZone: sourceIsPlayerZone ? getProtocolPlayerSubZone(move.FromZone) : undefined,
+    fromSpellID,
+    spellID
+  }
+}
+
+/** 直接映射最终只读 patched，不再复制协议对象或身份数组。 */
+export function normalizeMoveEvent(
+  patched: NormalizedMoveCardFields,
+  raw: Readonly<RawMoveCardEvent> = patched
+): NormalizedMoveEvent {
+  const cardIDs = patched.CardIDs
+  // 协议异常只记录并降级处理，避免记牌器阻断宿主消息链。
+  logMoveEventValidationWarnings(validateMoveEvent(patched, cardIDs), raw)
+  // 暗牌移动的 CardIDs 可以为空，移动张数以协议 CardCount 为准。
+  const cardCount = patched.CardCount
+  const type = inferEventType(patched, cardIDs)
+  const toPublicZoneName = getProtocolPublicZone(patched.ToZone)
+  const targetIsPlayerZone = isProtocolPlayerZone(patched.ToZone)
+
+  return {
     type,
     cardIDs,
     cardCount,
-    protocol: move,
-    moveType: move.MoveType,
+    protocol: patched,
+    moveType: patched.MoveType,
     toZone: targetIsPlayerZone ? 'player' : (toPublicZoneName ?? 'process'),
     options: {
-      seatID: targetIsPlayerZone ? move.ToID : undefined,
-      fromSeatID: sourceIsPlayerZone ? move.FromID : undefined,
-      fromZone: fromPublicZone,
-      subZone: targetIsPlayerZone
-        ? getProtocolPlayerSubZone(move.ToZone)
-        : sourceIsPlayerZone
-          ? getProtocolPlayerSubZone(move.FromZone)
-          : undefined,
-      fromSubZone: sourceIsPlayerZone ? getProtocolPlayerSubZone(move.FromZone) : undefined,
-      fromSpellID,
-      spellID,
+      ...normalizeMoveEndpoints(patched),
       cardCount,
-      moveType: move.MoveType,
-      position: move.ToPosition,
-      fromPosition: move.FromPosition,
+      moveType: patched.MoveType,
+      position: patched.ToPosition,
+      fromPosition: patched.FromPosition,
       sourceEvent: {
         type,
-        label: getProtocolMoveSpecialLabel(move) ?? move.Label,
-        moveType: move.MoveType,
-        raw: event
+        label: getProtocolMoveSpecialLabel(patched) ?? patched.Label,
+        moveType: patched.MoveType,
+        raw
       }
     },
-    raw: event
+    raw
   }
 }

@@ -103,18 +103,17 @@ export function handleXiaShuChoice(msg: XiaShuChoiceMessage): boolean {
 }
 
 export default function handleXiaShuMove(context: SkillMoveContext): void {
+  const { patched } = context
   const isHandTransfer =
-    context.SpellID === XIA_SHU_SPELL_ID &&
-    context.FromZone === 5 &&
-    context.ToZone === 5 &&
-    context.fromSubZone === 'hand' &&
-    context.toSubZone === 'hand' &&
-    context.CardCount > 0
+    patched.SpellID === XIA_SHU_SPELL_ID &&
+    patched.FromZone === 5 &&
+    patched.ToZone === 5 &&
+    patched.CardCount > 0
   if (!isHandTransfer) return
 
   const state = getXiaShuState()
-  const targetSeatID = context.fromSeatID
-  const transferSeatID = context.toSeatID
+  const targetSeatID = patched.FromID
+  const transferSeatID = patched.ToID
   if (!state || state.targetSeatID !== targetSeatID) return
   if (!isValidSeatID(targetSeatID) || !isValidSeatID(transferSeatID)) return
   if (Number.isInteger(state.actorSeatID) && state.actorSeatID !== transferSeatID) return

@@ -14,12 +14,12 @@ function updateResult(html) {
 }
 
 function updateQuanDaoDisplay(context) {
-  const { game } = context
+  const { game, patched } = context
 
   if (
     !(
-      (context.FromZone == 5 || context.ToZone == 5) &&
-      (context.ToID == game.myID || context.FromID == game.myID)
+      (patched.FromZone == 5 || patched.ToZone == 5) &&
+      (patched.ToID == game.myID || patched.FromID == game.myID)
     )
   ) {
     return
@@ -27,10 +27,10 @@ function updateQuanDaoDisplay(context) {
 
   let cards = tracker.getTrackedPlayerHandCardIDs(game.myID).slice()
 
-  if (context.ToZone == 5) {
-    cards.push(...context.CardIDs)
-  } else if (context.FromZone == 5) {
-    cards = cards.filter((card) => !context.CardIDs.includes(card))
+  if (patched.ToZone == 5) {
+    cards.push(...patched.CardIDs)
+  } else if (patched.FromZone == 5) {
+    cards = cards.filter((card) => !patched.CardIDs.includes(card))
   }
 
   cards = cards
@@ -64,13 +64,13 @@ function updateQuanDaoDisplay(context) {
 }
 
 export function handleGameFlowState(context) {
-  const { game } = context
+  const { game, patched } = context
 
   // 初始发牌阶段：明牌发牌不应按牌堆固定位置处理。
   if (
-    context.FromZone == 1 &&
-    context.MoveType == 19 &&
-    context.SpellID == 0 &&
+    patched.FromZone == 1 &&
+    patched.MoveType == 19 &&
+    patched.SpellID == 0 &&
     !game.isGameStart &&
     !game.isPassed
   ) {
@@ -78,19 +78,19 @@ export function handleGameFlowState(context) {
       game.isPassed = null
     }
 
-    if (game.isGameStart !== null && context.FromZone == 1) {
-      context.FromPosition = POSITION_RANDOM
+    if (game.isGameStart !== null && patched.FromZone == 1) {
+      patched.FromPosition = POSITION_RANDOM
     }
   }
 
   // 牌堆摸牌阶段：处理录像主视角识别、开局状态兼容和正常对局战法计数。
-  if (context.FromZone == 1 && context.ToZone == 5 && context.MoveType == 1) {
-    const isFaceUpDraw = context.CardIDs.filter((id) => id > 0).length == context.CardCount
+  if (patched.FromZone == 1 && patched.ToZone == 5 && patched.MoveType == 1) {
+    const isFaceUpDraw = patched.CardIDs.filter((id) => id > 0).length == patched.CardCount
 
     // 录像无法依赖用户 UUID 确定主视角；首次摸到明牌的座位即为录像主视角。
     // 22 使用其他方式确认主视角
     if (game.isRecord && game.myID === undefined && isFaceUpDraw) {
-      tracker.setTrackerMySeatID(context.ToID)
+      tracker.setTrackerMySeatID(patched.ToID)
     }
 
     // 兼容开局状态尚未稳定时收到的摸牌协议。
@@ -100,13 +100,13 @@ export function handleGameFlowState(context) {
       }
 
       if (isFaceUpDraw) {
-        context.FromPosition = POSITION_RANDOM
+        patched.FromPosition = POSITION_RANDOM
       }
     }
 
     // 正常摸牌时，仅累计主视角的战法摸牌计数。
-    if (game.myID !== undefined && context.ToID === game.myID && game.turn > 0) {
-      game.drawCounter(context.CardCount)
+    if (game.myID !== undefined && patched.ToID === game.myID && game.turn > 0) {
+      game.drawCounter(patched.CardCount)
       laya.drawCounter()
     }
   }
@@ -114,21 +114,21 @@ export function handleGameFlowState(context) {
   // 卡牌标记（小抄标签，当前停用）。
   // if (
   //   globalConfig.cardLabelSwitch &&
-  //   context.ToZone == 5 &&
-  //   context.FromZone != 12 &&
-  //   context.ToID == game.myID &&
-  //   context.SpellID &&
-  //   context.MoveType > 1 &&
-  //   context.MoveType < 255
+  //   patched.ToZone == 5 &&
+  //   patched.FromZone != 12 &&
+  //   patched.ToID == game.myID &&
+  //   patched.SpellID &&
+  //   patched.MoveType > 1 &&
+  //   patched.MoveType < 255
   // ) {
-  //   let name = SkillsConfig.GetInstance().getSpellName(context.SpellID)
+  //   let name = SkillsConfig.GetInstance().getSpellName(patched.SpellID)
   //   name = name ? `[${shortName[name] || name.slice(0, 2)}]` : ''
   //   const fromSeatID =
-  //     context.FromZone == 5 && context.FromID != 255 && context.FromID != game.myID
-  //       ? context.FromID
+  //     patched.FromZone == 5 && patched.FromID != 255 && patched.FromID != game.myID
+  //       ? patched.FromID
   //       : null
   //   const fromSeatName = fromSeatID !== null ? game.name(fromSeatID, false) : ''
-  //   laya.mark(context.CardIDs, `\u200B${name}${fromSeatName || ''}`, (t) =>
+  //   laya.mark(patched.CardIDs, `\u200B${name}${fromSeatName || ''}`, (t) =>
   //     t.startsWith('\u200B')
   //   )
   // }

@@ -142,7 +142,7 @@ describe('弃牌堆未知获得', () => {
       fromZone: 'discard',
       fromSeatID: 1,
       fromSubZone: 'mark',
-      seatID: 3,
+      toSeatID: 3,
       subZone: 'mark',
       spellID: 4023,
       moveType: 18,
@@ -194,7 +194,7 @@ describe('弃牌堆未知获得', () => {
     const { room } = createRoomWithDiscard()
     const playerSourceCards = [...room.zones.get('pile')!.cards]
     room.moveCards([], 'player', {
-      seatID: testCase.seatID,
+      toSeatID: testCase.seatID,
       subZone: testCase.subZone,
       spellID: 35,
       fromZone: 'pile',
@@ -305,7 +305,7 @@ describe('MoveType=15 弃牌堆明确来源兼容', () => {
     room.moveCards([], 'player', {
       fromZone: 'discard',
       fromSeatID: null,
-      seatID: 3,
+      toSeatID: 3,
       subZone: 'hand',
       moveType: 15,
       cardCount: 2,

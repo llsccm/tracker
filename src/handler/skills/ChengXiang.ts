@@ -1,6 +1,7 @@
 import type { SkillMoveContext } from './types'
 
 export default function handleChengXiang(context: SkillMoveContext): void {
-  if (context.ToZone != 8 || context.MoveType != 6) return
-  context.game.setSpellState(context.SpellID, [...(context.CardIDs || [])])
+  const { patched } = context
+  if (patched.ToZone != 8 || patched.MoveType != 6) return
+  context.game.setSpellState(patched.SpellID, [...(patched.CardIDs || [])])
 }

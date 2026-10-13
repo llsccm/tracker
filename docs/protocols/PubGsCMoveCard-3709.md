@@ -101,7 +101,8 @@ Datas: [2, 2, 132, 0, 0, 0, 0]
    此时不增加手牌数、不创建匿名手牌，也不改变来源区、约束或身份账本。
 2. 相邻角色数据到达后，核对目标座位及获得张数；弃牌来源还需精确命中对应已知弃牌实体。
 3. 按前置 `CardCount` 取新增 ID 前缀，只补入 `patched.CardIDs`，保持 `raw` 不变。
-4. 清除暂存，通过 `TrackerController.syncTrackerMove(raw, patched)` 提交一次普通明牌移动。
+4. 清除暂存，通过 `TrackerController.syncTrackerMove(patched, raw)` 提交一次普通明牌移动。
+   配对判断直接读取 `patched`，放在标准事件归一化之前；暂存阶段不构造移动事件。
    来源区、手牌数、约束、索引和身份账本均由通用管线更新。
 
 无需 FIFO、历史快照差量、额外匿名手牌、占位退役或 `handMoveCount: 0` 补偿。
@@ -110,7 +111,7 @@ Datas: [2, 2, 132, 0, 0, 0, 0]
 
 - `raw` 始终表示最初收到的 `PubGsCMoveCard`，不能含有角色数据随后补出的身份。
 - `patched` 表示真正交给移动管线的输入，合并已有位置等预处理结果以及诡伏补充的 ID。
-- 不能把补全后的消息作为 `syncTrackerMove()` 的原始参数重新传入，否则日志会错误地显示
+- 不能省略 `syncTrackerMove(patched, raw)` 的原始 `raw` 参数，否则默认值会使日志错误地显示
   `raw.CardIDs` 与 `patched.CardIDs` 都是补出的 ID，丢失协议原本未公开身份的事实。
 
 以上牌堆样例若随后确认获得的是 `2`，补全提交时的日志应当呈现以下区别（仅摘录关键字段）：

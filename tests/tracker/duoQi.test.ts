@@ -35,7 +35,7 @@ function bindHand(room: Room, cardIDs: number[], seatID: number, known = true): 
 function dealAnonymousHand(room: Room, seatID: number, count: number): void {
   room.moveCards([], 'player', {
     fromZone: 'pile',
-    seatID,
+    toSeatID: seatID,
     subZone: 'hand',
     cardCount: count
   })
@@ -249,7 +249,7 @@ describe('夺炁初始牌身份', () => {
     )![0]
 
     room.moveCards([0, 0, 0, 0], 'player', {
-      seatID: 2,
+      toSeatID: 2,
       fromSeatID: 1,
       fromSubZone: 'hand',
       fromZone: null,

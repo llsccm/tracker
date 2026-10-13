@@ -1,10 +1,14 @@
-import type { MoveCardPatch, NormalizedMoveCardFields, RawMoveCardEvent } from '@/tracker/types'
+import type {
+  PatchedMoveCardFields,
+  NormalizedMoveCardFields,
+  NormalizedMoveEvent,
+  RawMoveCardEvent
+} from '@/tracker/types'
 import { protocolMove } from './helpers/trackerController'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import {
   isPileSingleCardShow,
-  normalizeMoveCardFields,
   normalizeMoveEvent,
   validateMoveEvent
 } from '@/tracker/MoveEventNormalizer'
@@ -143,14 +147,14 @@ describe('MoveEventNormalizer 当前行为', () => {
       const event = normalizeMoveEvent(raw)
       expect(event.protocol).toEqual(raw)
       expect(event.cardIDs).toEqual(raw.CardIDs)
-      expect(event.cardIDs).not.toBe(raw.CardIDs)
+      expect(event.cardIDs).toBe(raw.CardIDs)
       expect(event.cardCount).toBe(raw.CardCount)
       expect(validateMoveEvent(raw)).toEqual([])
     }
     const hiddenGain = normalizeMoveEvent(messages[3])
     expect(hiddenGain.cardIDs).toEqual([])
     expect(hiddenGain.cardCount).toBe(2)
-    expect(hiddenGain.options.seatID).toBe(0)
+    expect(hiddenGain.options.toSeatID).toBe(0)
   })
 
   it('原始消息核心字段必填，牌 ID 只允许数组', () => {
@@ -178,7 +182,7 @@ describe('MoveEventNormalizer 当前行为', () => {
     expect(event.cardIDs).toEqual([1, 2])
     expect(event.cardCount).toBe(2)
     expect(event.toZone).toBe('player')
-    expect(event.options.seatID).toBe(3)
+    expect(event.options.toSeatID).toBe(3)
     expect(event.options.fromZone).toBe('pile')
     expect(event.options.subZone).toBe('hand')
     expect(event.options.cardCount).toBe(2)
@@ -253,7 +257,7 @@ describe('MoveEventNormalizer 当前行为', () => {
     expect(event.type).toBe('moveUnknown')
     expect(event.toZone).toBe('exchange')
     expect(event.options.fromZone).toBe('pile')
-    expect(event.options.seatID).toBeUndefined()
+    expect(event.options.toSeatID).toBeUndefined()
     expect(event.options.fromSeatID).toBeUndefined()
     expect(event.options.subZone).toBeUndefined()
     expect(event.options.fromSubZone).toBeUndefined()
@@ -324,8 +328,9 @@ describe('MoveEventNormalizer 当前行为', () => {
     type CoreFields = Omit<NormalizedMoveCardFields, 'SrcSeatID' | 'Label' | 'isSend'>
     expectTypeOf<CoreFields>().toEqualTypeOf<Required<CoreFields>>()
     expectTypeOf(validateMoveEvent).parameter(0).toEqualTypeOf<RawMoveCardEvent>()
-    expectTypeOf(normalizeMoveCardFields).returns.toEqualTypeOf<NormalizedMoveCardFields>()
-    expectTypeOf<keyof MoveCardPatch>().toEqualTypeOf<'CardIDs' | 'FromPosition' | 'ToPosition'>()
+    expectTypeOf<NormalizedMoveEvent['protocol']>().toEqualTypeOf<NormalizedMoveCardFields>()
+    expectTypeOf<PatchedMoveCardFields['CardIDs']>().toEqualTypeOf<number[]>()
+    expectTypeOf<NormalizedMoveEvent['cardIDs']>().toEqualTypeOf<readonly number[]>()
   })
 
   it('CardIDs 与 CardCount 不一致时记录校验警告但保留声明数量', () => {
@@ -402,7 +407,7 @@ describe('MoveEventNormalizer 当前行为', () => {
       toZone: 'player',
       options: {
         fromSeatID: 0,
-        seatID: 2,
+        toSeatID: 2,
         fromSubZone: 'mark',
         subZone: 'hand',
         fromSpellID: 3370,
@@ -416,8 +421,8 @@ describe('MoveEventNormalizer 当前行为', () => {
     })
     expect(event.raw).toBe(raw)
     expect(event.options.sourceEvent.raw).toBe(raw)
-    expect(event.cardIDs).not.toBe(raw.CardIDs)
-    event.cardIDs[0] = 113
+    expect(event.protocol).toBe(raw)
+    expect(event.cardIDs).toBe(raw.CardIDs)
     expect(raw.CardIDs).toEqual([96])
     expect(raw.MoveType).toBe(8)
     expect(event.protocol).toMatchObject({
@@ -458,26 +463,28 @@ describe('MoveEventNormalizer 当前行为', () => {
     expect(event.options.sourceEvent.raw).toBe(raw)
   })
 
-  it('共享格式化保留单张数组、匿名数组和无技能语义', () => {
+  it('标准事件直接引用协议，保留单张数组、匿名数组和无技能语义', () => {
     expect(
-      normalizeMoveCardFields(protocolMove({ CardIDs: [0], CardCount: 1, SpellID: 0 }))
+      normalizeMoveEvent(protocolMove({ CardIDs: [0], CardCount: 1, SpellID: 0 })).protocol
     ).toMatchObject({
       CardIDs: [0],
       CardCount: 1,
       SpellID: 0
     })
-    expect(normalizeMoveCardFields(protocolMove({ CardIDs: [96], CardCount: 1 }))).toMatchObject({
+    expect(
+      normalizeMoveEvent(protocolMove({ CardIDs: [96], CardCount: 1 })).protocol
+    ).toMatchObject({
       CardIDs: [96],
       CardCount: 1,
       SpellID: 0
     })
-    expect(normalizeMoveCardFields(protocolMove({ CardIDs: [], CardCount: 2 }))).toMatchObject({
+    expect(normalizeMoveEvent(protocolMove({ CardIDs: [], CardCount: 2 })).protocol).toMatchObject({
       CardIDs: [],
       CardCount: 2
     })
   })
 
-  it('格式化保留协议零值，只复制消息和身份数组', () => {
+  it('标准事件直接引用只读协议及牌数组，保留零值', () => {
     const raw = Object.freeze(
       protocolMove({
         CardIDs: Object.freeze([]),
@@ -490,10 +497,10 @@ describe('MoveEventNormalizer 当前行为', () => {
         SpellID: 0
       })
     )
-    const fields = normalizeMoveCardFields(raw)
+    const fields = normalizeMoveEvent(raw).protocol
     expect(fields).toEqual(raw)
-    expect(fields).not.toBe(raw)
-    expect(fields.CardIDs).not.toBe(raw.CardIDs)
+    expect(fields).toBe(raw)
+    expect(fields.CardIDs).toBe(raw.CardIDs)
     expect(validateMoveEvent(fields)).toEqual([])
   })
 

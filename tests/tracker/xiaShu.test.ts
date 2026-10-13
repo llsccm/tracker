@@ -1,3 +1,4 @@
+import { moveContext } from './helpers/moveContext'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { applySpellEffect } from '@/handler/spellEffects'
@@ -95,7 +96,7 @@ describe('下书', () => {
           cardIDs: number[]
         ) => {
           room.moveCards(cardIDs, 'player', {
-            seatID: Number(target.seatID),
+            toSeatID: Number(target.seatID),
             fromSeatID: Number(target.seatID),
             fromZone: null,
             fromSubZone: 'hand',
@@ -131,25 +132,23 @@ describe('下书', () => {
         afterMove(callback: () => void) {
           afterMoveCallbacks.push(callback)
         },
-        SpellID: 361,
-        fromSeatID: 7,
-        toSeatID: 3,
-        fromSubZone: 'hand',
-        toSubZone: 'hand',
-        CardIDs: [0, 0, 0, 0, 0],
-        CardCount: 5,
-        FromID: 7,
-        ToID: 3,
-        FromZone: 5,
-        ToZone: 5,
-        MoveType: 5
+        ...moveContext({
+          SpellID: 361,
+          CardIDs: [0, 0, 0, 0, 0],
+          CardCount: 5,
+          FromID: 7,
+          ToID: 3,
+          FromZone: 5,
+          ToZone: 5,
+          MoveType: 5
+        })
       })
 
       room.moveCards([], 'player', {
         fromZone: null,
         fromSeatID: 7,
         fromSubZone: 'hand',
-        seatID: 3,
+        toSeatID: 3,
         subZone: 'hand',
         cardCount: 5,
         sourceEvent: { type: 'test:xiaShu-hidden-transfer' }
@@ -203,20 +202,18 @@ describe('下书', () => {
     const callbacks: (() => void)[] = []
 
     handleXiaShuMove({
-      FromPosition: POSITION_RANDOM,
-      ToPosition: POSITION_TOP,
-      FromZoneParam: 0,
-      ToZoneParam: 0,
+      ...moveContext({
+        FromPosition: POSITION_RANDOM,
+        ToPosition: POSITION_TOP,
+        FromZoneParam: 0,
+        ToZoneParam: 0,
+        ...move,
+        CardIDs: [0],
+        MoveType: 5,
+        SpellID: 361,
+        CardCount: 1
+      }),
       game: Game,
-      ...move,
-      CardIDs: [0],
-      MoveType: 5,
-      fromSeatID: move.FromID,
-      toSeatID: move.ToID,
-      fromSubZone: move.FromZone === 5 ? 'hand' : 'mark',
-      toSubZone: 'hand',
-      SpellID: 361,
-      CardCount: 1,
       afterMove(callback: () => void) {
         callbacks.push(callback)
       }

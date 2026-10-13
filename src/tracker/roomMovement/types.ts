@@ -25,7 +25,7 @@ export type MoveTargetZone = PublicZoneName | 'player'
 export type KnownCardCreationReason = 'external-source' | 'known-fallback'
 
 export interface RoomMovementOptions {
-  seatID?: SeatInput
+  toSeatID?: SeatInput
   subZone?: SubZone
   spellID?: SpellID
   combinationID?: string | number | null
@@ -52,9 +52,9 @@ export interface RoomMovementOptions {
 }
 
 export interface RoomMoveContext {
-  cardIDs: CardID[]
+  cardIDs: readonly CardID[]
   toZone: MoveTargetZone
-  seatID?: SeatInput
+  toSeatID?: SeatInput
   subZone: SubZone
   spellID: SpellID | null
   combinationID?: string | number | null
@@ -193,5 +193,5 @@ export interface PublicCandidatesToHandOptions {
 export const PAIDUI_POSITIONS = ['top', 'bottom']
 // GameState tracker 命名空间中的通用账本 key：记录“手牌暗置到标记区”的明牌候选关系。
 export const HIDDEN_MARK_STATE_KEY = 'hiddenMarkCandidates'
-// GameState tracker 命名空间中的通用账本 key：记录 seatID=255 等无席位标记空间里的暗占位实体。
+// GameState tracker 命名空间中的通用账本 key：记录 toSeatID=255 等无席位标记空间里的暗占位实体。
 export const UNASSIGNED_MARK_SPACE_STATE_KEY = 'unassignedMarkSpaces'

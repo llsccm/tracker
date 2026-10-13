@@ -23,7 +23,7 @@ if (!room) return
 
 | 目标 | 首选入口 | 说明 |
 | --- | --- | --- |
-| 消费真实协议移动 | `tracker.syncTrackerMove(msg, finalMove)` | 接收完整消息并合并预处理补丁，再交给 `Room`；不要在 handler 中直接改牌。 |
+| 消费真实协议移动 | `tracker.syncTrackerMove(patched, raw)` | 直接消费完整 `patched`，`raw` 只作追溯；不再合并局部补丁，不要在 handler 中直接改牌。 |
 | 读取当前局 | `tracker.getReadyTrackerRoom()` | 未开局、已销毁、断线状态或牌堆未就绪时返回 `null`。 |
 | 写入技能确认的明牌 | `tracker.revealTrackerCards(target, cardIDs)` | 统一处理玩家区/公共区、物化和索引。 |
 | 按旧协议 Zone 写入明牌 | `tracker.revealTrackerCardsInZone(protocolZone, cardIDs)` | 先做 Zone 映射，再复用上面的明牌路径。 |
@@ -47,15 +47,31 @@ if (!room) return
 移动类型限制成少量样例值。
 `SrcSeatID`、`Label`、`isSend` 是可选附加信息。
 
-`normalizeMoveCardFields()` 只复制完整消息与身份数组，供预处理修改，不补字段或推测牌数。
+移动入口只提取上述核心字段及 `SrcSeatID`、`Label`、`isSend` 组成只读 `raw`；不携带
+`className`、`id`、`DataCount`、`isResume` 等消息信封字段。身份数组独立复制并冻结，再创建
+独立的 `patched`。入口过滤不解释技能编码的牌列表；位置归一化只修改两个 Position。
+特殊区域、局流及技能处理共享同一份 `patched`，不另存可写的顶层协议字段。所有补丁完成后才检查明暗与数量，沿用异常牌列表清空、协议张数保留的降级策略。
+响应器直接读取 `patched`，不预先派生端点字段。最终提交时 Controller 才调用
+`normalizeMoveEvent(patched, raw)`；其私有 `normalizeMoveEndpoints()` 只解析一次座位、区域和标记空间。
+标准事件的 `protocol` 和 `cardIDs` 直接引用最终 `patched` 及其数组，不再复制或拼接协议。
+提交后协议及事件牌列表只读；技能装饰需要变更牌列表时，通过 `patchEvent()` 提供新数组。
+未经过补丁的完整消息可单参数调用 `syncTrackerMove(message)`，此时 `raw` 默认就是该消息。
 测试简写使用 `tests/tracker/helpers/trackerController.ts` 的 `protocolMove()` 构造完整消息；
-覆盖项使用 `Partial<RawMoveCardEvent>`；生产 `finalMove` 使用 `MoveCardPatch`，只允许修正
-`CardIDs`、`FromPosition` 和 `ToPosition`，不覆盖数量、区域、端点 ID、区域参数、移动类型、技能 ID 或附加信息。
+覆盖项使用 `Partial<RawMoveCardEvent>`；生产 `PatchedMoveCardFields` 是完整协议，仅 `CardIDs`、
+`FromPosition` 和 `ToPosition` 可写，不覆盖数量、区域、端点 ID、区域参数、移动类型、技能 ID 或附加信息。
 
-`NormalizedMoveCardFields` 继承完整原始协议，`Room.decorateMoveEvent()` 只接受完整
+`NormalizedMoveCardFields` 是完整原始协议的只读视图，`Room.decorateMoveEvent()` 只接受完整
 `NormalizedMoveEvent`，不再补造缺失的 `protocol`。领域直调使用已有的
 `room.moveCards(cardIDs, toZone, options)`；导入记录的检查留在导入边界。
+`moveCards()` 只接收 `readonly CardID[]`，单张牌也传 `[cardID]`；匿名移动传 `[]`，
+实际移动张数由 `options.cardCount` 指定，不支持单个数字 ID。Room 不修改传入数组。
+移动事件与 `Room.moveCards()` 的目标座位统一使用 `toSeatID`，与 `fromSeatID` 对称；
+公共区目标不设置 `toSeatID`，不把协议占位 `255` 当成玩家。移动参数不兼容旧 `seatID` 名称。
+玩家查询、注册、位置候选以及 `revealTrackerCards()` 等非移动 API 的 `seatID` 保持不变。
 `validateMoveEvent()` 也只接收完整协议，负责未知区域和数量一致性诊断，不承担缺字段补全。
+`options.spellID` 在玩家/标记端点按区域规则映射；纯公共区移动保留协议 `SpellID`（包括无技能的 `0`），
+不会因没有玩家端点而丢成 `undefined`。原始触发技能始终可从 `event.protocol.SpellID` 读取，
+来源标记空间仍由 `options.fromSpellID` 单独表示。
 技能 `MoveEventPatch` 只修改 `type`、`cardIDs`、`cardCount` 和 `options`，不覆盖
 `protocol` 或 `raw`。
 
@@ -111,7 +127,7 @@ if (!room) return
 tracker.revealTrackerCards(
   {
     type: 'player',
-    seatID,
+    toSeatID: seatID,
     subZone: 'hand',
     fromZone: 'pile',
     handMoveCount: ids.length
@@ -126,7 +142,7 @@ tracker.revealTrackerCards(
 tracker.revealTrackerCards(
   {
     type: 'player',
-    seatID,
+    toSeatID: seatID,
     subZone: 'hand',
     fullHand: true,
     handCount,
@@ -137,14 +153,14 @@ tracker.revealTrackerCards(
 ```
 
 普通协议消息不应手工拼上面这段语义，而应把原始消息交给
-`tracker.syncTrackerMove(msg, finalMove)`；Controller 会根据来源区、`CardIDs`、`cardCount` 和
+`tracker.syncTrackerMove(patched, raw)`；Controller 会根据来源区、`CardIDs`、`cardCount` 和
 `handMoveCount` 选择已知牌与匿名牌路径。
 
 ### 直接编排 Room 移动（测试或已经归一化的内部路径）
 
 ```ts
 room.moveCards(ids, 'player', {
-  seatID,
+  toSeatID: seatID,
   subZone: 'hand',
   fromZone: 'pile',
   cardCount: ids.length,
@@ -162,7 +178,7 @@ room.moveCards(ids, 'player', {
 
 ```ts
 room.moveCards(Array.from({ length: count }, () => 0), 'player', {
-  seatID,
+  toSeatID: seatID,
   subZone: 'hand',
   fromZone: 'pile',
   cardCount: count,

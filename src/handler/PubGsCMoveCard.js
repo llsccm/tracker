@@ -1,137 +1,96 @@
 import { CardConfig } from '../config'
 import { Game } from '../tracker'
 import { tracker } from '../tracker/runtime/browser'
-import { normalizeMoveCardFields, normalizeMoveEvent } from '../tracker/MoveEventNormalizer'
 import { POSITION_TOP } from '../tracker/candidate/cardPositions'
 import {
+  hasMixedTrackerMoveVisibility,
   normalizeTrackerMovePosition,
-  prepareTrackerMoveCardIDs
+  shouldIgnoreTrackerMove
 } from '../tracker/runtime/protocolRules'
 import { handleGameFlowState } from './gameFlowState'
 import { handleSpecialZones } from './specialZones'
 import { applySpellEffect } from './spellEffects'
-
-// 只同步协议字段，避免把 context 中的运行时对象和回调带入移动事件。
-const TRACKER_MOVE_FIELDS = [
-  'CardCount',
-  'FromZone',
-  'FromPosition',
-  'ToZone',
-  'ToPosition',
-  'MoveType',
-  'SpellID'
-]
-
-function syncMoveToTracker(context) {
-  /** @type {import('../tracker/types').MoveCardPatch} */
-  const move = { CardIDs: context.CardIDs.slice() }
-  for (const field of TRACKER_MOVE_FIELDS) move[field] = context[field]
-  tracker.syncTrackerMove(context.msg, move)
-}
 
 /**
  * 主卡牌移动处理逻辑
  * @param {import('../tracker/types').RawMoveCardEvent} msg
  */
 export function handleMoveCard(msg) {
-  const move = normalizeMoveCardFields(msg)
-  let { CardIDs, FromPosition, ToPosition } = move
-  const { CardCount, FromID, FromZone, ToID, ToZone, MoveType, SpellID, SrcSeatID } = move
-  const afterMoveCallbacks = []
-
-  // 1. 预处理与过滤
-  const preparedMove = prepareTrackerMoveCardIDs({
-    CardIDs,
-    CardCount,
-    MoveType,
-    ToZone,
-    SpellID,
+  // 独立冻结原始快照；所有后续修正只写 patched，不污染宿主消息。
+  const raw = Object.freeze({
+    CardCount: msg.CardCount,
+    CardIDs: Object.freeze([...msg.CardIDs]),
+    FromID: msg.FromID,
+    FromZone: msg.FromZone,
+    FromZoneParam: msg.FromZoneParam,
+    FromPosition: msg.FromPosition,
+    ToID: msg.ToID,
+    ToZone: msg.ToZone,
+    ToZoneParam: msg.ToZoneParam,
+    ToPosition: msg.ToPosition,
+    MoveType: msg.MoveType,
+    SpellID: msg.SpellID,
+    SrcSeatID: msg.SrcSeatID,
+    Label: msg.Label,
     isSend: msg.isSend
   })
+  /** @type {import('../tracker/types').PatchedMoveCardFields} */
+  const patched = { ...raw, CardIDs: raw.CardIDs.slice() }
 
-  CardIDs = preparedMove.CardIDs
+  // 1. 入口过滤不解释技能编码的 CardIDs。
+  if (shouldIgnoreTrackerMove(raw)) return
 
-  if (preparedMove.shouldReturn) return
-
-  if (preparedMove.mixedVisibility) {
-    console.error('PubGsCMoveCard error: 明暗牌混合：[' + msg.CardIDs + ']')
-    console.error(msg)
-  }
-
+  // 2. 位置规则只修正端点，允许读取牌 ID 作为判据。
   const specialEquipmentCards =
-    CardCount === 4 &&
-    FromZone === 1 &&
-    FromPosition === POSITION_TOP + 1 &&
-    ToZone === 5 &&
-    SpellID === 0 &&
-    MoveType === 1 &&
-    CardIDs.length === CardCount &&
-    CardIDs.every((id) => CardConfig.GetInstance().getCard(id)?.type == 8)
+    raw.CardCount === 4 &&
+    raw.FromZone === 1 &&
+    raw.FromPosition === POSITION_TOP + 1 &&
+    raw.ToZone === 5 &&
+    raw.SpellID === 0 &&
+    raw.MoveType === 1 &&
+    raw.CardIDs.length === raw.CardCount &&
+    raw.CardIDs.every((id) => CardConfig.GetInstance().getCard(id)?.type == 8)
 
-  // 2. 位置归一化
-  const normalizedMove = normalizeTrackerMovePosition({
-    CardIDs,
-    CardCount,
-    FromID,
-    FromZone,
-    FromPosition,
-    ToID,
-    ToZone,
-    ToPosition,
-    MoveType,
-    SpellID,
-    isGuoZhan: Game.isGuoZhan,
-    specialEquipmentCards
-  })
+  Object.assign(
+    patched,
+    normalizeTrackerMovePosition({
+      ...patched,
+      isGuoZhan: Game.isGuoZhan,
+      specialEquipmentCards
+    })
+  )
 
-  CardIDs = normalizedMove.CardIDs
-  FromPosition = normalizedMove.FromPosition
-  ToPosition = normalizedMove.ToPosition
-
-  const normalizedEvent = normalizeMoveEvent({
-    ...move,
-    CardIDs,
-    FromPosition,
-    ToPosition
-  })
-
+  // 3. 响应器直接使用协议字段；端点与事件类型统一留到最终提交时解析。
+  const afterMoveCallbacks = []
   const context = {
-    FromZoneParam: move.FromZoneParam,
-    ToZoneParam: move.ToZoneParam,
-    msg,
+    raw,
+    patched,
     game: Game,
-    CardIDs,
-    CardCount,
-    FromID,
-    FromZone,
-    FromPosition,
-    ToID,
-    ToZone,
-    ToPosition,
-    MoveType,
-    SpellID,
-    SrcSeatID,
-    fromSeatID: normalizedEvent.options.fromSeatID,
-    toSeatID: normalizedEvent.options.seatID,
-    fromSubZone: normalizedEvent.options.fromSubZone,
-    toSubZone: normalizedEvent.options.subZone,
-    fromSpellID: normalizedEvent.options.fromSpellID,
     afterMove(callback) {
       if (typeof callback === 'function') afterMoveCallbacks.push(callback)
     },
     finishMove() {
       syncMoveToTracker(context)
-
       afterMoveCallbacks.splice(0).forEach((callback) => callback())
     }
   }
 
   if (handleSpecialZones(context).handled) return
-
+  // 初始发牌 摸牌计数
   handleGameFlowState(context)
-
-  // 3. 对部分技能特殊处理
+  // 对部分技能特殊处理
   applySpellEffect(context)
-
   context.finishMove()
+}
+
+function syncMoveToTracker({ raw, patched }) {
+  // 检查牌列表；异常仍按原有策略降级成暗牌。
+  if (hasMixedTrackerMoveVisibility(patched)) {
+    console.error('PubGsCMoveCard error: 明暗牌混合：[' + patched.CardIDs + ']')
+    console.error(raw)
+    patched.CardIDs = []
+  }
+
+  // Controller 在这里接收最终补丁，只生成一次 Room 标准事件。
+  tracker.syncTrackerMove(patched, raw)
 }

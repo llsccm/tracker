@@ -313,14 +313,17 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
         MoveType: 18,
         SpellID: GUI_FU_ROLE_DATA_ID
       })
-      const finalMove = { CardIDs: [...cardIDs], FromPosition: 65282 }
+      const patched = { ...raw, CardIDs: [...cardIDs], FromPosition: 65282 }
       Object.freeze(raw.CardIDs)
       Object.freeze(raw)
-      Object.freeze(finalMove.CardIDs)
-      Object.freeze(finalMove)
+      Object.freeze(patched.CardIDs)
+      Object.freeze(patched)
       info.mockClear()
 
-      controller.syncTrackerMove(raw, finalMove)
+      controller.syncTrackerMove(patched, raw)
+      const pending = room.readSkillState<{ raw: unknown; patched: unknown }>(GUI_FU_ROLE_DATA_ID)
+      expect(pending?.raw).toBe(raw)
+      expect(pending?.patched).toBe(patched)
       receive([40])
 
       expectHand(room, [40])
@@ -333,7 +336,7 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
       )
       expect(raw.CardIDs).toEqual(cardIDs)
       expect(raw.FromPosition).toBe(65280)
-      expect(finalMove).toEqual({ CardIDs: cardIDs, FromPosition: 65282 })
+      expect(patched).toEqual({ ...raw, CardIDs: cardIDs, FromPosition: 65282 })
     }
   )
 
@@ -411,5 +414,21 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
     expect(getHandIDs(nextRoom)).toEqual([])
     expect(nextRoom.zones.get('pile')!.cards).toHaveLength(2)
     expect(nextRoom.hasSkillState(GUI_FU_ROLE_DATA_ID)).toBe(false)
+  })
+  it('诡伏暂存不构造标准事件，配对成功后才归一化一次', async () => {
+    const { room, gain, receive } = createGuiFuHarness()
+    const normalize = vi.spyOn(await import('@/tracker/MoveEventNormalizer'), 'normalizeMoveEvent')
+    try {
+      gain()
+      expect(room.readSkillState(GUI_FU_ROLE_DATA_ID)).toBeDefined()
+      expect(normalize).not.toHaveBeenCalled()
+
+      receive([10])
+
+      expect(normalize).toHaveBeenCalledOnce()
+      expectHand(room, [10])
+    } finally {
+      normalize.mockRestore()
+    }
   })
 })

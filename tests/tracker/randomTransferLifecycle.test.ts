@@ -62,7 +62,7 @@ describe('随机手牌转移完整生命周期', () => {
         fromZone: null,
         fromSeatID: 2,
         fromSubZone: 'hand',
-        seatID: 3,
+        toSeatID: 3,
         subZone: 'hand',
         cardCount: 3,
         sourceEvent: { type: 'e2e:random-transfer' }
@@ -86,7 +86,7 @@ describe('随机手牌转移完整生命周期', () => {
 
       // 2. 局部展示：seat3 亮出其中一张明牌 42（完整展示前的部分收敛）。
       room.moveCards([42], 'player', {
-        seatID: 3,
+        toSeatID: 3,
         fromSeatID: 3,
         fromZone: null,
         fromSubZone: 'hand',
@@ -109,7 +109,7 @@ describe('随机手牌转移完整生命周期', () => {
       // 4. 完整展示：seat3 完整手牌 [42, 46, 47]，触发跨座位候选完全收敛。
       room.syncObservedPlayerHandCount(3, 3, { resolve: false })
       room.moveCards([42, 46, 47], 'player', {
-        seatID: 3,
+        toSeatID: 3,
         fromSeatID: 3,
         fromZone: null,
         fromSubZone: 'hand',
@@ -118,8 +118,7 @@ describe('随机手牌转移完整生命周期', () => {
         sourceEvent: { type: 'e2e:full-reveal' }
       })
 
-      // 5. 收敛后：seat3 手牌固定为 [42,46,47]，seat2 剩余明牌回到 seat2；暗牌仍未公开。
-      ;[42, 46, 47].forEach((id) => expect(Array.from(getCard(room, id).seats)).toEqual([3]))
+      // 5. 收敛后：seat3 手牌固定为 [42,46,47]，seat2 剩余明牌回到 seat2；暗牌仍未公开。[42, 46, 47].forEach((id) => expect(Array.from(getCard(room, id).seats)).toEqual([3]))
       ;[59, 94, 118].forEach((id) => expect(Array.from(getCard(room, id).seats)).toEqual([2]))
       hiddenIDs.forEach((id) => expect(getCard(room, id).isKnown).toBe(false))
 
@@ -249,7 +248,7 @@ describe('随机手牌转移完整生命周期', () => {
       fromZone: null,
       fromSeatID: 2,
       fromSubZone: 'hand',
-      seatID: 3,
+      toSeatID: 3,
       subZone: 'hand',
       cardCount: 3,
       sourceEvent: { type: 'regression:random-transfer' }
@@ -295,7 +294,7 @@ describe('随机手牌转移完整生命周期', () => {
     // 130 酒是组外新摸到的确定明牌，此时 2 号位总手牌数为 3。
     room.moveCards([130], 'player', {
       fromZone: 'pile',
-      seatID: 2,
+      toSeatID: 2,
       subZone: 'hand',
       cardCount: 1,
       sourceEvent: { type: 'regression:source-draws-130' }
@@ -306,7 +305,7 @@ describe('随机手牌转移完整生命周期', () => {
     // 3 号位补到 9 张后弃 6 张，其中 137、42 来自最初的随机转移。
     room.moveCards(targetDrawIDs, 'player', {
       fromZone: 'pile',
-      seatID: 3,
+      toSeatID: 3,
       subZone: 'hand',
       cardCount: targetDrawIDs.length,
       sourceEvent: { type: 'regression:target-draws' }
@@ -331,7 +330,7 @@ describe('随机手牌转移完整生命周期', () => {
       fromZone: null,
       fromSeatID: 3,
       fromSubZone: 'hand',
-      seatID: 3,
+      toSeatID: 3,
       subZone: 'hand',
       cardCount: 3,
       sourceEvent: { type: 'regression:target-full-hand' }

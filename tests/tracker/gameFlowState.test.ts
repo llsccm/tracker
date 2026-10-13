@@ -1,3 +1,4 @@
+import { moveContext } from './helpers/moveContext'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { drawCounter, getTrackedPlayerHandCardIDs, setTrackerMySeatID } = vi.hoisted(() => ({
@@ -51,16 +52,18 @@ function createRecordGame() {
 function createDrawContext(game, overrides = {}) {
   return {
     game,
-    CardIDs: [101, 102, 103, 104],
-    CardCount: 4,
-    FromID: 255,
-    FromZone: 1,
-    FromPosition: 0,
-    ToID: 3,
-    ToZone: 5,
-    MoveType: 1,
-    SpellID: 0,
-    ...overrides
+    ...moveContext({
+      CardIDs: [101, 102, 103, 104],
+      CardCount: 4,
+      FromID: 255,
+      FromZone: 1,
+      FromPosition: 0,
+      ToID: 3,
+      ToZone: 5,
+      MoveType: 1,
+      SpellID: 0,
+      ...overrides
+    })
   }
 }
 

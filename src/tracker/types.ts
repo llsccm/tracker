@@ -107,19 +107,17 @@ export interface RawMoveCardEvent {
   isSend?: boolean
 }
 
-/** handler 预处理允许修正的字段；不允许覆盖端点 ID、区域参数或原始附加信息。 */
-export type MoveCardPatch = Partial<
-  Pick<
-    RawMoveCardEvent,
-    | 'CardIDs'
-    | 'FromPosition'
-    | 'ToPosition'
-  >
->
+/** 最终完整协议的只读视图；不复制对象，也不放宽必填字段。 */
+export type NormalizedMoveCardFields = Readonly<RawMoveCardEvent>
 
-/** 完整协议的可修改副本；只将身份数组改为可写，不放宽必填字段。 */
-export interface NormalizedMoveCardFields extends RawMoveCardEvent {
+/** 协议修正只允许改牌 ID 与端点位置，其余字段仍以原始协议为准。 */
+export type PatchedMoveCardFields = Omit<
+  NormalizedMoveCardFields,
+  'CardIDs' | 'FromPosition' | 'ToPosition'
+> & {
   CardIDs: CardID[]
+  FromPosition: number
+  ToPosition: number
 }
 
 export interface MoveSourceEvent {
@@ -131,8 +129,9 @@ export interface MoveSourceEvent {
 }
 
 export interface MoveOptions {
-  seatID?: SeatID
+  toSeatID?: SeatID
   subZone?: SubZone
+  /** 按端点映射的技能 ID；纯公共区移动保留协议 SpellID。 */
   spellID?: SpellID
   combinationID?: number | string | null
   fromZone?: PublicZoneName | number | null
@@ -161,10 +160,10 @@ export interface MoveOptions {
 }
 
 export interface NormalizedMoveEvent {
-  /** 入口格式化后的协议字段；技能读取这里，raw 仅用于原始数据追溯。 */
-  protocol: NormalizedMoveCardFields
+  /** 直接引用最终 patched，后续只读；raw 仅用于原始数据追溯。 */
+  readonly protocol: NormalizedMoveCardFields
   type: RawMoveEventType
-  cardIDs: CardID[]
+  cardIDs: readonly CardID[]
   cardCount: number
   moveType?: number
   toZone: PublicZoneName | 'player'
@@ -175,7 +174,7 @@ export interface NormalizedMoveEvent {
 export interface MoveContext extends MoveOptions {
   cardIDs: CardID[]
   toZone: PublicZoneName | 'player'
-  seatID: SeatID | null
+  toSeatID: SeatID | null
   spellID: SpellID | null
   fromSeat?: SeatID | null
   targetSeats?: SeatID[]

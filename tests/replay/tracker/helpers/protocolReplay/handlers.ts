@@ -5,9 +5,10 @@ import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 import {
   FULL_HAND_ROLE_OPT_SPELL_IDS,
+  hasMixedTrackerMoveVisibility,
   normalizeTrackerMovePosition,
   PARTIAL_HAND_ROLE_OPT_SPELL_IDS,
-  prepareTrackerMoveCardIDs,
+  shouldIgnoreTrackerMove,
   shouldRevealAsFullHand
 } from '@/tracker/runtime/protocolRules'
 import { parseGuiFuCardIDs } from '@/handler/skills/GuiFu'
@@ -734,43 +735,27 @@ function applyMoveCard(
   requireReadyRoom(context, record, '同步移动协议')
   const move = readMove(record)
   const notes: string[] = []
-  const prepared = prepareTrackerMoveCardIDs({
-    CardIDs: move.CardIDs,
-    CardCount: move.CardCount,
-    MoveType: move.MoveType,
-    ToZone: move.ToZone,
-    SpellID: move.SpellID,
-    isSend: isTruthyProtocol(record.payload.isSend)
-  })
-  if (prepared.shouldReturn) {
+  const rawMove = { ...move, isSend: isTruthyProtocol(record.payload.isSend) }
+  if (shouldIgnoreTrackerMove(rawMove)) {
     return ignored('与生产处理器一致跳过空移动、无效区或发送侧消息')
   }
 
-  if (prepared.mixedVisibility) {
-    notes.push('明暗牌混合已按生产逻辑降级为全暗移动')
-  }
-
-  const normalized = normalizeTrackerMovePosition({
+  const normalizedMove = {
     ...move,
-    CardIDs: prepared.CardIDs,
     isGuoZhan: context.gameState.isGuoZhan
-  })
-  const normalizedEvent = normalizeMoveEvent({
-    ...move,
-    CardIDs: normalized.CardIDs,
-    FromPosition: normalized.FromPosition,
-    ToPosition: normalized.ToPosition
-  })
+  }
+  Object.assign(normalizedMove, normalizeTrackerMovePosition(normalizedMove))
+  const normalizedEvent = normalizeMoveEvent(normalizedMove, rawMove)
   const moveContext: ReplayMoveContext = {
     game: context.gameState,
-    CardIDs: normalized.CardIDs,
+    CardIDs: [...normalizedMove.CardIDs],
     CardCount: move.CardCount,
     FromID: move.FromID,
     FromZone: move.FromZone,
-    FromPosition: normalized.FromPosition,
+    FromPosition: normalizedMove.FromPosition,
     ToID: move.ToID,
     ToZone: move.ToZone,
-    ToPosition: normalized.ToPosition,
+    ToPosition: normalizedMove.ToPosition,
     MoveType: move.MoveType,
     SpellID: move.SpellID,
     SrcSeatID: readNumber(record.payload.SrcSeatID),
@@ -779,7 +764,9 @@ function applyMoveCard(
         ? undefined
         : Number(normalizedEvent.options.fromSeatID),
     toSeatID:
-      normalizedEvent.options.seatID == null ? undefined : Number(normalizedEvent.options.seatID),
+      normalizedEvent.options.toSeatID == null
+        ? undefined
+        : Number(normalizedEvent.options.toSeatID),
     fromSubZone: normalizedEvent.options.fromSubZone ?? undefined,
     toSubZone: normalizedEvent.options.subZone ?? undefined,
     fromSpellID:
@@ -801,14 +788,18 @@ function applyMoveCard(
     notes.push('特殊装备牌随机位置归一化依赖浏览器 CardConfig，本次保留原协议位置')
   }
 
-  context.controller.syncTrackerMove(
-    { ...record.payload, ...move },
-    {
-      CardIDs: moveContext.CardIDs,
-      FromPosition: moveContext.FromPosition,
-      ToPosition: moveContext.ToPosition
-    }
-  )
+  const syncCardIDs = hasMixedTrackerMoveVisibility(moveContext) ? [] : moveContext.CardIDs
+  if (syncCardIDs.length === 0 && moveContext.CardIDs.length > 0) {
+    notes.push('明暗牌混合已按生产逻辑降级为全暗移动')
+  }
+
+  const patchedMove = {
+    ...rawMove,
+    CardIDs: syncCardIDs,
+    FromPosition: moveContext.FromPosition,
+    ToPosition: moveContext.ToPosition
+  }
+  context.controller.syncTrackerMove(patchedMove, rawMove)
   // 下书需要先看到通用随机转移建立的数量约束，不能在 syncTrackerMove 之前执行。
   afterMove?.()
 

@@ -2,16 +2,17 @@ import type { CardID } from '@/tracker/types'
 import type { SkillMoveContext } from './types'
 
 export default function handleQingYiLianJu(context: SkillMoveContext): void {
-  const spellCards = context.game.getSpellState<CardID[]>(context.SpellID)
+  const { patched } = context
+  const spellCards = context.game.getSpellState<CardID[]>(patched.SpellID)
   if (
-    context.FromZone == 2 &&
-    context.ToZone == 5 &&
-    context.CardCount == spellCards?.length &&
-    context.CardIDs.filter((id) => id > 0).length == 0
+    patched.FromZone == 2 &&
+    patched.ToZone == 5 &&
+    patched.CardCount == spellCards?.length &&
+    patched.CardIDs.filter((id) => id > 0).length == 0
   ) {
     spellCards.forEach((id, i) => {
-      context.CardIDs[i] = id
+      patched.CardIDs[i] = id
     })
-    context.game.deleteSpellState(context.SpellID)
+    context.game.deleteSpellState(patched.SpellID)
   }
 }

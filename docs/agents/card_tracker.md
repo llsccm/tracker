@@ -21,7 +21,7 @@
 
 - `src/tracker/` 是当前主动运行的记牌器与运行时状态核心；`Room` 是单局状态源，`src/tracker/view/` 直接渲染主面板节点，并通过 `CardLocationIndex` 读取公共区与玩家区域投影。
 - `src/handler/legacyMoveCard.js` 仍保留指向旧链表模型的历史代码，但**没有**经 `src/handler/index.js` 主动导出；不要把它视为可用运行路径。
-- `src/handler/PubGsCMoveCard.js` 仍承担协议预处理、位置归一化、`CardIDs` 修正、技能辅助结果、战法计数、卡牌标签等副作用；真正的卡牌状态移动通过 `src/tracker/runtime/browser.ts`（再导出 `bridge.ts`）提供的 `tracker`（实现位于 `runtime/trackerController.ts`）同步到当前 `Room`。
+- `src/handler/PubGsCMoveCard.js` 以只读 `raw` 与独立 `patched` 分离原始协议和修正；入口过滤、位置归一化、局流及技能补丁完成后统一提交，仅允许修正 `CardIDs`、`FromPosition`、`ToPosition`。最终事件归一化留在 Controller；真正的卡牌状态移动通过 `src/tracker/runtime/browser.ts`（再导出 `bridge.ts`）提供的 `tracker`（实现位于 `runtime/trackerController.ts`）同步到当前 `Room`。
 - `src/tracker/index.ts` 仅导出共享运行时状态（`globalConfig`、`globalState`、`rogueMap`、`UI`）、`user` 与 `Game`；底层核心对象从各自子模块直接导入。
 
 ---
@@ -119,6 +119,10 @@
 - 暗置标记区候选（包括普通标记与木牛流马装备容器）。
 - 观虚目标视角交换（`SpellID=987/988`）。
 - 整手牌交换、诫厉观看与交换区暂存（`SpellID=3483`）。
+- 反间（`SpellID=713`）展示、手牌移交与目标手牌展示，样例见
+  [`../protocols/PubGsCMoveCard-713.md`](../protocols/PubGsCMoveCard-713.md)。
+- 权变（`SpellID=7011`）观看牌堆顶及随后获得已展示牌，样例见
+  [`../protocols/GsCRoleOptTargetNtf-7011.md`](../protocols/GsCRoleOptTargetNtf-7011.md)。
 - 天候私有观看与单牌展示（`SpellID=3903`）。
 - 骋烈其他视角的牌顶展示、暗中互换、暗标记分配与近似弃置（`SpellID=3208`，完整样例见
   [`../protocols/PubGsCMoveCard-3208.md`](../protocols/PubGsCMoveCard-3208.md)）。

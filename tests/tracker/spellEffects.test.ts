@@ -1,3 +1,4 @@
+import { moveContext } from './helpers/moveContext'
 import { describe, expect, it, vi } from 'vitest'
 
 const { drawChengXiang } = vi.hoisted(() => ({ drawChengXiang: vi.fn() }))
@@ -32,17 +33,20 @@ function createGameState(initialState = {}) {
 }
 
 function createContext(overrides = {}) {
+  const { game, ...fields } = { game: createGameState(), ...overrides }
   return {
-    game: createGameState(),
-    CardIDs: [],
-    CardCount: 0,
-    FromID: 1,
-    FromZone: 0,
-    ToZone: 0,
-    MoveType: 0,
-    SpellID: 0,
-    SrcSeatID: 1,
-    ...overrides
+    game,
+    ...moveContext({
+      CardIDs: [],
+      CardCount: 0,
+      FromID: 1,
+      FromZone: 0,
+      ToZone: 0,
+      MoveType: 0,
+      SpellID: 0,
+      SrcSeatID: 1,
+      ...fields
+    })
   }
 }
 
@@ -54,7 +58,7 @@ describe('技能副作用注册表', () => {
     })
 
     expect(applySpellEffect(context)).toBe(false)
-    expect(context.CardIDs).toEqual([1])
+    expect(context.patched.CardIDs).toEqual([1])
   })
 
   it.each([441, 3492])('称象 %s 暂存展示牌，等待目标通知结算', (SpellID) => {
@@ -103,7 +107,7 @@ describe('技能副作用注册表', () => {
 
     applySpellEffect(toStack)
 
-    expect(toStack.CardIDs).toEqual([42])
+    expect(toStack.patched.CardIDs).toEqual([42])
     expect((game.getSpellState(3488) as { stack?: number }).stack).toBe(42)
     expect((game.getSpellState(3488) as Record<number, number>)[3]).toBeUndefined()
 
@@ -118,7 +122,7 @@ describe('技能副作用注册表', () => {
 
     applySpellEffect(fromStack)
 
-    expect(fromStack.CardIDs).toEqual([42])
+    expect(fromStack.patched.CardIDs).toEqual([42])
     expect((game.getSpellState(3488) as { stack?: number }).stack).toBeUndefined()
   })
 
@@ -164,7 +168,7 @@ describe('技能副作用注册表', () => {
 
     applySpellEffect(fromStack)
 
-    expect(fromStack.CardIDs).toEqual([42])
+    expect(fromStack.patched.CardIDs).toEqual([42])
     expect(spellState.stack).toBeUndefined()
   })
 
@@ -182,7 +186,7 @@ describe('技能副作用注册表', () => {
 
     applySpellEffect(toStack)
 
-    expect(toStack.CardIDs).toEqual([])
+    expect(toStack.patched.CardIDs).toEqual([])
     expect(game.getSpellState(3488)).toEqual({})
 
     const fromStack = createContext({
@@ -196,7 +200,7 @@ describe('技能副作用注册表', () => {
 
     applySpellEffect(fromStack)
 
-    expect(fromStack.CardIDs).toEqual([])
+    expect(fromStack.patched.CardIDs).toEqual([])
     expect((game.getSpellState(3488) as { stack?: number }).stack).toBeUndefined()
   })
 
@@ -213,7 +217,7 @@ describe('技能副作用注册表', () => {
 
     applySpellEffect(fromStack)
 
-    expect(fromStack.CardIDs).toEqual([84])
+    expect(fromStack.patched.CardIDs).toEqual([84])
     expect((game.getSpellState(3488) as { stack?: number }).stack).toBeUndefined()
   })
 
@@ -230,7 +234,7 @@ describe('技能副作用注册表', () => {
 
     applySpellEffect(context)
 
-    expect(context.CardIDs).toEqual([11, 12])
+    expect(context.patched.CardIDs).toEqual([11, 12])
     expect(game.getSpellState(3157)).toBeUndefined()
   })
 
@@ -248,7 +252,7 @@ describe('技能副作用注册表', () => {
 
     applySpellEffect(context)
 
-    expect(context.CardIDs).toEqual([11, 12])
+    expect(context.patched.CardIDs).toEqual([11, 12])
     expect(game.getSpellState(3750)).toBeUndefined()
   })
 
@@ -307,21 +311,9 @@ describe('技能副作用注册表', () => {
 
     applySpellEffect(context)
 
-    expect([...context.CardIDs].sort((a, b) => a - b)).toEqual(selectedCardIDs)
+    expect([...context.patched.CardIDs].sort((a, b) => a - b)).toEqual(selectedCardIDs)
 
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [],
-        CardCount: 5,
-        FromID: 3571,
-        FromZone: 8,
-        ToID: 5,
-        ToZone: 5,
-        MoveType: 8,
-        SpellID: 3571
-      }),
-      { CardIDs: context.CardIDs }
-    )
+    controller.syncTrackerMove(context.patched, context.raw)
 
     selectedCardIDs.forEach((cardID) => {
       const card = room.cardIndex.get(cardID)
@@ -365,7 +357,7 @@ describe('技能副作用注册表', () => {
 
     applySpellEffect(context)
 
-    expect(context.CardIDs).toEqual([])
+    expect(context.patched.CardIDs).toEqual([])
   })
 
   it('清议回填后经 tracker 同步，弃牌堆明牌进入目标手牌', () => {
@@ -405,8 +397,8 @@ describe('技能副作用注册表', () => {
 
     controller.syncTrackerMove(
       protocolMove({
-        CardIDs: context.CardIDs,
-        CardCount: context.CardCount,
+        CardIDs: context.patched.CardIDs,
+        CardCount: context.patched.CardCount,
         FromZone: 2,
         FromID: 255,
         ToZone: 5,
@@ -420,7 +412,7 @@ describe('技能副作用注册表', () => {
       (card) => card.location === 'player' && card.subZone === 'hand' && card.seats.has(1)
     )
 
-    expect(context.CardIDs).toEqual(cardIDs)
+    expect(context.patched.CardIDs).toEqual(cardIDs)
     expect(game.getSpellState(3157)).toBeUndefined()
     expect(room.zones.get('discard')?.cards.map((card) => card.id)).toEqual([])
     expect(handCards.map((card) => card.id).sort((a, b) => a - b)).toEqual(cardIDs)
@@ -429,4 +421,35 @@ describe('技能副作用注册表', () => {
       expect(card.seats.has(1)).toBe(true)
     })
   })
+
+  // it.each([
+  //   { CardIDs: [0, 96, 113], expected: [113] },
+  //   { CardIDs: [1, 96, 113], expected: [96] }
+  // ])('713 从注册表解码剔除下标，仅改 patched 的牌列表', ({ CardIDs, expected }) => {
+  //   const context = createContext({ SpellID: 713, MoveType: 21, CardCount: 1, CardIDs })
+
+  //   expect(applySpellEffect(context)).toBe(true)
+
+  //   expect(context.patched.CardIDs).toEqual(expected)
+  //   expect(context.patched.CardCount).toBe(1)
+  //   expect(context.raw.CardIDs).toEqual(CardIDs)
+  // })
+
+  // it.each([-1, 2, 0.5])('713 下标 %s 越界时不部分修改原始或补丁数据', (index) => {
+  //   const CardIDs = [index, 96, 113]
+  //   const context = createContext({ SpellID: 713, MoveType: 21, CardCount: 1, CardIDs })
+
+  //   expect(() => applySpellEffect(context)).toThrow('越界')
+  //   expect(context.raw.CardIDs).toEqual(CardIDs)
+  //   expect(context.patched.CardIDs).toEqual(CardIDs)
+  // })
+
+  // it.each([
+  //   { CardIDs: [96], CardCount: 1, MoveType: 21 },
+  //   { CardIDs: [0, 96, 113], CardCount: 1, MoveType: 5 }
+  // ])('713 非编码展示保持协议牌列表', (fields) => {
+  //   const context = createContext({ SpellID: 713, ...fields })
+  //   applySpellEffect(context)
+  //   expect(context.patched.CardIDs).toEqual(fields.CardIDs)
+  // })
 })

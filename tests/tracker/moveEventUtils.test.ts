@@ -1,6 +1,6 @@
 import { protocolMove } from './helpers/trackerController'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { normalizeMoveCardFields, normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 
 import { getPositiveIDs, patchEvent, type MoveEventDraft } from '@/tracker/skill/moveEventUtils'
 
@@ -41,7 +41,7 @@ describe('moveEventUtils', () => {
 
   it('patchEvent 只替换指定字段并浅合并 options', () => {
     const event: MoveEventDraft = {
-      protocol: normalizeMoveCardFields(
+      protocol: normalizeMoveEvent(
         protocolMove({
           CardIDs: [1],
           CardCount: 1,
@@ -50,8 +50,9 @@ describe('moveEventUtils', () => {
           MoveType: 4,
           SpellID: 0
         })
-      ),
+      ).protocol,
       type: 'moveKnown',
+      moveType: 4,
       cardIDs: [1],
       cardCount: 1,
       toZone: 'discard',

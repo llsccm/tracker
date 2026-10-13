@@ -6,13 +6,13 @@ import { trackerLogger } from '@/utils/logger'
 
 /** 无 ID 的获得与角色数据相邻；只暂存一条原始移动，不提前改动任何牌实体。 */
 interface GuiFuMove {
-  raw: RawMoveCardEvent
-  patched: NormalizedMoveCardFields
+  readonly raw: Readonly<RawMoveCardEvent>
+  readonly patched: NormalizedMoveCardFields
 }
 
 export function deferGuiFuMove(
   room: Room,
-  raw: RawMoveCardEvent,
+  raw: Readonly<RawMoveCardEvent>,
   move: NormalizedMoveCardFields
 ): boolean {
   const previous = room.readSkillState<GuiFuMove>(GUI_FU_ROLE_DATA_ID)

@@ -11,7 +11,7 @@ import {
 import { getCard as getCardFixture } from './helpers/room'
 
 describe('TrackerController', () => {
-  it('协议补丁只合并允许字段，不覆盖端点、参数或原始附加信息', () => {
+  it('直接消费完整 patched，并保留独立 raw 引用，不重新拼接协议', () => {
     const { controller } = createTrackerControllerHarness()
     controller.initTrackerRoom()
     controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }], 100)
@@ -20,26 +20,20 @@ describe('TrackerController', () => {
     const room = controller.getTrackerRoom()!
     const decorateSpy = vi.spyOn(room, 'decorateMoveEvent')
     const raw = Object.freeze(protocolMove({ CardIDs: Object.freeze([1]), ToID: 1 }))
-    // 结构类型允许传入字段更多的对象，合并过程仍只采用 MoveCardPatch 声明的字段。
-    const patch = {
-      ...raw,
-      CardIDs: [2],
-      FromID: 1,
-      ToID: 0,
-      FromZoneParam: 99,
-      ToZoneParam: 99,
-      SrcSeatID: 0,
-      Label: '不应进入协议的补丁附加信息',
-      isSend: true
-    }
+    const patched = Object.freeze({ ...raw, CardIDs: Object.freeze([2]) })
 
-    controller.syncTrackerMove(raw, patch)
+    controller.syncTrackerMove(patched, raw)
 
     expect(decorateSpy).toHaveBeenCalledOnce()
-    expect(decorateSpy.mock.calls[0][0].protocol).toEqual({ ...raw, CardIDs: [2] })
+    const event = decorateSpy.mock.calls[0][0]
+    expect(event.protocol).toBe(patched)
+    expect(event.cardIDs).toBe(patched.CardIDs)
+    expect(event.raw).toBe(raw)
+    expect(event.options.sourceEvent?.raw).toBe(raw)
     expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([2])
     expect(controller.getTrackedPlayerHandCardIDs(0)).toEqual([])
     expect(raw.CardIDs).toEqual([1])
+    expect(patched.CardIDs).toEqual([2])
   })
 
   it('临时隐藏和恢复座位保留手牌事实，重复状态不产生卡牌变更', () => {
@@ -838,14 +832,14 @@ describe('TrackerController', () => {
     hiddenCard.isKnown = false
 
     room.moveCards([152], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 1,
       sourceEvent: { type: 'test:known-hand' }
     })
     room.moveCards([0], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 1,
@@ -853,7 +847,7 @@ describe('TrackerController', () => {
     })
     room.getPlayer(4).syncObservedHandCount(2)
     room.moveCards([0], 'player', {
-      seatID: 4,
+      toSeatID: 4,
       fromSeatID: 4,
       fromZone: 5,
       fromSubZone: 'hand',

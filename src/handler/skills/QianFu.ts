@@ -2,16 +2,17 @@ import type { CardID } from '@/tracker/types'
 import type { SkillMoveContext } from './types'
 
 export default function handleQianFu(context: SkillMoveContext): void {
-  const spellCards = context.game.getSpellState<CardID[]>(context.SpellID)
+  const { patched } = context
+  const spellCards = context.game.getSpellState<CardID[]>(patched.SpellID)
 
   if (
-    context.FromZone == 2 &&
-    context.ToZone == 1 &&
-    context.MoveType == 15 &&
-    context.CardCount == spellCards?.length &&
-    context.CardIDs.filter((id) => id > 0).length == 0
+    patched.FromZone == 2 &&
+    patched.ToZone == 1 &&
+    patched.MoveType == 15 &&
+    patched.CardCount == spellCards?.length &&
+    patched.CardIDs.filter((id) => id > 0).length == 0
   ) {
-    context.CardIDs = spellCards
-    context.game.deleteSpellState(context.SpellID)
+    patched.CardIDs = spellCards
+    context.game.deleteSpellState(patched.SpellID)
   }
 }

@@ -324,7 +324,7 @@ Type 53 的两组卡牌 ID 按下标逐项配对，而不是两个无序集合�
 ## 代码位置
 
 - 目标通知与部分手牌明牌：`src/handler/GsCRoleOptTargetNtf.js`（`SpellID = 3483`）
-- 牌堆同区展示端点归一化：`src/handler/PubGsCMoveCard.js` 的 `normalizeMovePosition` / `PILE_SAME_ZONE_SHOW_SPELL_IDS`
+- 牌堆同区展示端点归一化：`src/tracker/runtime/protocolRules.ts` 的 `normalizeTrackerMovePosition` / `PILE_SAME_ZONE_SHOW_SPELL_IDS`
 - 同区展示识别：`src/tracker/MoveEventNormalizer.ts` 的 `isSameZoneShowEvent`
 - Type 53 目标视角判断与选择数据解析：`src/handler/CGsRoleSpellOptRep.js`
 - 目标视角交换装饰：`src/tracker/skill/JieLi.ts`
