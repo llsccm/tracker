@@ -128,18 +128,5 @@ export function getTopFirstCards<T>(cards: readonly T[] = []): T[] {
   return cards.slice().reverse()
 }
 
-/**
- * 为全暗协议补充已推断的来源实体。
- *
- * 协议已携带正 ID 时必须继续让精确身份路径处理，不能用 `sourceCards` 覆盖它。
- */
-export function createSourcePatch(
-  event: MoveEventDraft,
-  cards: Card[]
-): Pick<MoveEventDraft['options'], 'sourceCards'> {
-  if (hasPositiveID(event.cardIDs)) return {}
-  return cards.length > 0 ? { sourceCards: cards } : {}
-}
-
 /** 兼容既有技能导入；通用实现位于 tracker helper，避免核心模块反向依赖 skill。 */
 export { getPositiveIDs } from '../helper/cardIDs'

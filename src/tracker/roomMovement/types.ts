@@ -3,6 +3,7 @@ import type {
   CardID,
   MoveSourceEvent,
   PostMovePublicCandidate,
+  PublicCandidateSource,
   PublicPosition,
   PublicZoneName,
   SeatID,
@@ -43,6 +44,7 @@ export interface RoomMovementOptions {
   anonymizeCards?: Card[]
   requireAnonymizeSuccess?: boolean
   sourceCards?: Card[]
+  publicCandidateSource?: PublicCandidateSource
   /** 技能需要保留全暗手牌的 N 选 K 身份事实时，强制建立随机转移候选。 */
   forceRandomHandTransferCandidates?: boolean
   postMovePublicCandidates?: PostMovePublicCandidate[]
@@ -69,6 +71,7 @@ export interface RoomMoveContext {
   anonymizeCards: Card[]
   requireAnonymizeSuccess: boolean
   sourceCards?: Card[]
+  publicCandidateSource?: PublicCandidateSource
   forceRandomHandTransferCandidates: boolean
   postMovePublicCandidates?: PostMovePublicCandidate[]
   sourceEvent?: MoveSourceEvent
@@ -170,6 +173,7 @@ export interface RandomHandToPublicOptions {
   toZone: PublicZoneName
   position: PublicPosition
   unknownCount: number
+  candidateSource?: PublicCandidateSource
 }
 
 export interface UnknownPileReturnOptions {

@@ -11,6 +11,7 @@ import decorateSiQi from '../skill/SiQi'
 import decorateTianHou from '../skill/TianHou'
 import decorateZuoLian from '../skill/ZuoLian'
 import decorateYanXi from '../skill/YanXi'
+import { decorateWenGuaCandidateSource } from '../skill/WenGua'
 import {
   getCount,
   hasPositiveID,
@@ -19,7 +20,6 @@ import {
   type MoveEventDraft,
   getSourceZoneCards
 } from '../skill/moveEventUtils'
-import decorateWenGua from '../skill/WenGua'
 import {
   decorateDuoQiEntitySafety,
   decorateDuoQiKnownMove,
@@ -122,8 +122,8 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
   // 族钟繇【诫厉】：目标视角定位换出槽位，第三方视角保留手牌/牌顶范围弱候选。
   room.registerMoveEventHandler(3483, decorateJieLi)
 
-  // 徐氏【问卦】
-  room.registerMoveEventHandler(780, decorateWenGua)
+  // 徐氏【问卦】：相邻的主动交牌/回堆消息只筛选候选来源，不追踪单个实体。
+  room.registerMoveEventHandler(780, decorateWenGuaCandidateSource)
 
   // 蒲元【奇思】：优先筛选装备牌候选。
   // room.registerMoveEventHandler(

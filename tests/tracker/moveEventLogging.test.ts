@@ -27,6 +27,41 @@ const pileGainMove: RawMoveCardEvent = {
 }
 
 describe('移动事件日志', () => {
+  it.each([
+    { cardIDs: [29], expectedType: 'moveKnown' },
+    { cardIDs: [], expectedType: 'moveUnknown' }
+  ])('类型 27 表示主动交给，按实际 ID 可见性归一为 $expectedType', ({ cardIDs, expectedType }) => {
+    const move: RawMoveCardEvent = {
+      ...pileGainMove,
+      CardIDs: cardIDs,
+      CardCount: 1,
+      FromZone: 5,
+      FromID: 1,
+      ToID: 4,
+      MoveType: MOVE_TYPE.GIVE,
+      SpellID: 0
+    }
+    const event = normalizeMoveEvent(move)
+
+    expect(MOVE_TYPE.GIVE).toBe(27)
+    expect(getMoveTypeLabel(move.MoveType)).toBe('主动交给')
+    expect(event.type).toBe(expectedType)
+    expect(event.cardIDs).toBe(cardIDs)
+    expect(event.options).toMatchObject({
+      fromSeatID: 1,
+      toSeatID: 4,
+      moveType: MOVE_TYPE.GIVE,
+      fromPosition: POSITION_RANDOM,
+      position: POSITION_TOP
+    })
+    expect(summarizeMoveEvent(event, { includeEventCardCount: true })).toMatchObject({
+      type: expectedType,
+      cardIDs,
+      cardCount: 1,
+      moveType: MOVE_TYPE.GIVE
+    })
+  })
+
   it('记录 MoveType 并标记从牌堆获取牌', () => {
     const event = normalizeMoveEvent(pileGainMove)
     const summary = summarizeMoveEvent(event, {

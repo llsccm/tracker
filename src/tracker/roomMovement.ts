@@ -54,6 +54,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       anonymizeCards = [],
       requireAnonymizeSuccess = false,
       sourceCards,
+      publicCandidateSource,
       forceRandomHandTransferCandidates = false,
       postMovePublicCandidates,
       sourceEvent
@@ -104,6 +105,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       anonymizeCards: Array.from(new Set(anonymizeCards)).filter(Boolean),
       requireAnonymizeSuccess,
       sourceCards,
+      publicCandidateSource,
       forceRandomHandTransferCandidates,
       postMovePublicCandidates,
       sourceEvent,
@@ -500,7 +502,8 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         fromSeat: sourceHandSeat,
         toZone,
         position,
-        unknownCount
+        unknownCount,
+        candidateSource: context.publicCandidateSource
       })
     }
 

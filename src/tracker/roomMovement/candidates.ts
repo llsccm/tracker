@@ -272,11 +272,30 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
     fromSeat,
     toZone,
     position,
-    unknownCount
+    unknownCount,
+    candidateSource
   }: RandomHandToPublicOptions): Card[] {
     if (fromSeat === null) return []
 
-    const sourceCandidateCards = this.getKnownHandCardsBySeat(fromSeat)
+    const sourceCandidateCards = candidateSource
+      ? candidateSource.cards.filter(
+          (card) =>
+            card.isKnown === true &&
+            card.location === 'player' &&
+            card.subZone === 'hand' &&
+            card.seats.has(fromSeat)
+        )
+      : this.getKnownHandCardsBySeat(fromSeat)
+
+    if (candidateSource) {
+      // 原转移的 A/B 名额不再适用于回堆后的代表实体，保守失效而不新建精确公共区约束。
+      // 用原始集合查找受影响的旧组，避免候选已收敛后遗漏仍残留的数量条件。
+      this.invalidateHandTransferConstraintsForCards(
+        candidateSource.cards,
+        candidateSource.fromSeat,
+        fromSeat
+      )
+    }
     if (sourceCandidateCards.length === 0) return []
 
     const candidate = this.createPublicCandidate(toZone, position, unknownCount)

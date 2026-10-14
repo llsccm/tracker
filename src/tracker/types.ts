@@ -128,6 +128,12 @@ export interface MoveSourceEvent {
   [key: string]: unknown
 }
 
+/** 原样转移时的候选来源；只筛选公共候选，不指定物理来源或真实身份。 */
+export interface PublicCandidateSource {
+  fromSeat: SeatID
+  cards: Card[]
+}
+
 export interface MoveOptions {
   toSeatID?: SeatID
   subZone?: SubZone
@@ -152,6 +158,8 @@ export interface MoveOptions {
   /** 协议未公开 CardIDs，但技能已可靠确定的身份账本移动。 */
   pileIdentityCardIDs?: CardID[]
   sourceCards?: Card[]
+  /** 空集合表示不传播已知牌候选；省略时沿用当前来源手牌集合。 */
+  publicCandidateSource?: PublicCandidateSource
   publicCandidateReveal?: PublicCandidateReveal
   postMovePublicCandidates?: PostMovePublicCandidate[]
   sourceEvent?: MoveSourceEvent
