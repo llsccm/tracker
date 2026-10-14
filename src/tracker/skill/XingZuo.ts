@@ -12,7 +12,7 @@ import {
   patchEvent
 } from './moveEventUtils'
 
-export const XING_ZUO_SPELL_ID = 3776
+const XING_ZUO_SPELL_ID = 3776
 
 interface XingZuoBatch {
   actorSeat: SeatID

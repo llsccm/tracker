@@ -73,6 +73,55 @@ describe('PubGsCMoveCard', () => {
     expect(applySpellEffect).toHaveBeenCalledOnce()
   })
 
+  it('浑天仪特殊位置在响应器前归一为 RANDOM，并沿通用流水线提交一次', () => {
+    const msg = protocolMove({
+      CardIDs: [51],
+      FromZone: 0,
+      ToID: 255,
+      ToZone: 1,
+      ToPosition: POSITION_TOP + 1,
+      MoveType: 19,
+      SpellID: 3694
+    })
+
+    handleMoveCard(msg)
+
+    expect(handleSpecialZones).toHaveBeenCalledOnce()
+    const context = handleSpecialZones.mock.calls[0][0]
+    expect(context.raw.ToPosition).toBe(POSITION_TOP + 1)
+    expect(context.patched.ToPosition).toBe(POSITION_RANDOM)
+    expect(handleGameFlowState).toHaveBeenCalledExactlyOnceWith(context)
+    expect(applySpellEffect).toHaveBeenCalledExactlyOnceWith(context)
+    expect(syncTrackerMove).toHaveBeenCalledExactlyOnceWith(
+      { ...msg, ToPosition: POSITION_RANDOM },
+      msg
+    )
+    expect(msg.ToPosition).toBe(POSITION_TOP + 1)
+  })
+
+  it.each([
+    ['其他技能', { SpellID: 0 }],
+    ['非外部来源', { FromZone: 1 }],
+    ['非牌堆目标', { ToZone: 5 }],
+    ['牌顶位置', { ToPosition: POSITION_TOP }],
+    ['其他移动类型', { MoveType: 18 }]
+  ])('浑天仪位置修正不影响%s', (_scenario, fields) => {
+    const msg = protocolMove({
+      CardIDs: [51],
+      FromZone: 0,
+      ToID: 255,
+      ToZone: 1,
+      ToPosition: POSITION_TOP + 1,
+      MoveType: 19,
+      SpellID: 3694,
+      ...fields
+    })
+
+    handleMoveCard(msg)
+
+    expect(syncTrackerMove).toHaveBeenCalledExactlyOnceWith(msg, msg)
+  })
+
   it('天候同区展示不把 RANDOM 来源强行归一为牌顶', () => {
     const msg = protocolMove({
       CardCount: 1,

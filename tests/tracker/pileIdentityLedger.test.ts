@@ -50,6 +50,35 @@ describe('PileIdentityLedger', () => {
     vi.restoreAllMocks()
   })
 
+  it('牌堆明牌匿名化只放弃指定身份定位，保留总数与其它明牌', () => {
+    const ledger = new PileIdentityLedger()
+    ledger.initialize([1, 2, 3, 4, 5])
+    for (const cardID of [1, 2, 3]) ledger.revealIdentity(cardID, 'pile', 'test:known-top', true)
+
+    // 4 已在匿名批次中，不得重复增加它的暗槽数量。
+    ledger.anonymizeKnownPileIdentities([1, 2, 4], 'test:ambiguous-source')
+
+    expect(ledger.getSnapshot()).toMatchObject({
+      identityUniverseIDs: [1, 2, 3, 4, 5],
+      locatedIdentityIDs: [3],
+      knownPileIdentityIDs: [3],
+      hiddenPileSlotCount: 4,
+      accountedPileCount: 5
+    })
+    expect(ledger.assertConsistency(5, 'test:anonymized')).toEqual([])
+    const snapshot = ledger.getSnapshot()
+    ledger.anonymizeKnownPileIdentities([1, 2], 'test:repeat')
+    expect(ledger.getSnapshot()).toEqual(snapshot)
+
+    ledger.consumeAnonymous(1, POSITION_RANDOM, 'test:gain')
+    expect(ledger.getSnapshot()).toMatchObject({
+      knownPileIdentityIDs: [3],
+      hiddenPileSlotCount: 3,
+      accountedPileCount: 4
+    })
+    expect(ledger.assertConsistency(4, 'test:after-gain')).toEqual([])
+  })
+
   it('初始化一致性按归一化身份数校验', () => {
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
     const ledger = new PileIdentityLedger()

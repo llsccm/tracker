@@ -123,7 +123,7 @@
   [`../protocols/PubGsCMoveCard-713.md`](../protocols/PubGsCMoveCard-713.md)。
 - 权变（`SpellID=7011`）观看牌堆顶及随后获得已展示牌，样例见
   [`../protocols/GsCRoleOptTargetNtf-7011.md`](../protocols/GsCRoleOptTargetNtf-7011.md)。
-- 宴戏（`SpellID=7017`）连续获得牌堆顶牌及单张获得的前两张范围，样例见
+- 宴戏（`SpellID=7017`）成功批次、国战随机来源及失败暗牌的局部匿名化取舍，样例见
   [`../protocols/PubGsCMoveCard-7017.md`](../protocols/PubGsCMoveCard-7017.md)。
 - 天候私有观看与单牌展示（`SpellID=3903`）。
 - 骋烈其他视角的牌顶展示、暗中互换、暗标记分配与近似弃置（`SpellID=3208`，完整样例见

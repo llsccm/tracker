@@ -6,10 +6,11 @@ import decorateFenChao from '../skill/FenChao'
 import decorateGuanXu from '../skill/GuanXu'
 import decorateHandExchange from '../skill/HandExchange'
 import decorateJieLi from '../skill/JieLi'
-import decorateXingZuo, { XING_ZUO_SPELL_ID } from '../skill/XingZuo'
+import decorateXingZuo from '../skill/XingZuo'
 import decorateSiQi from '../skill/SiQi'
 import decorateTianHou from '../skill/TianHou'
 import decorateZuoLian from '../skill/ZuoLian'
+import decorateYanXi from '../skill/YanXi'
 import {
   getCount,
   hasPositiveID,
@@ -31,7 +32,7 @@ const HAND_EXCHANGE_EXCLUDED_SPELL_IDS: ReadonlySet<number> = new Set([
   3208, // 骋烈
   3483, // 诫厉
   3903, // 天候
-  XING_ZUO_SPELL_ID,
+  3776, // 兴作
   987, // 观虚
   988 // 观虚
 ])
@@ -127,7 +128,7 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
   room.registerMoveEventHandler(3903, decorateTianHou)
 
   //【兴作】：牌底与手牌整批交换，保留牌底已有的明牌。
-  room.registerMoveEventHandler(XING_ZUO_SPELL_ID, decorateXingZuo)
+  room.registerMoveEventHandler(3776, decorateXingZuo)
 
   //【思泣】：协议不公开返回牌 ID，按弃牌堆顺序筛选红牌实体作为明确来源。
   room.registerMoveEventHandler(3543, decorateSiQi)
@@ -156,6 +157,8 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
 
   // 蔡瑁【佐练】：仅在弃牌堆随机取牌时，优先最后入堆的火杀，其次雷杀。
   room.registerMoveEventHandler(3488, decorateZuoLian)
+  // 宴戏
+  room.registerMoveEventHandler(7017, decorateYanXi)
 
   // 樊稠【兴乱】：优先筛选点数为 6 的候选。
   room.registerMoveEventHandler(

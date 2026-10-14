@@ -1,4 +1,4 @@
-import { POSITION_RANDOM, POSITION_TOP } from '../tracker/candidate/cardPositions'
+import { POSITION_TOP } from '../tracker/candidate/cardPositions'
 
 function finishHandledMove(context) {
   context.finishMove()
@@ -10,19 +10,6 @@ export function handleSpecialZones(context) {
 
   // 回收区 12
   if (patched.ToZone == 12 || patched.FromZone == 12) {
-    return finishHandledMove(context)
-  }
-
-  // 浑天仪特殊底置 (随机)
-  if (
-    patched.SpellID == 3694 &&
-    patched.FromZone == 0 &&
-    patched.ToZone == 1 &&
-    patched.ToPosition == POSITION_TOP + 1 &&
-    patched.MoveType == 19
-  ) {
-    patched.ToPosition = POSITION_RANDOM
-
     return finishHandledMove(context)
   }
 

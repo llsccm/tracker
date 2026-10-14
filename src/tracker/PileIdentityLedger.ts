@@ -392,6 +392,19 @@ export class PileIdentityLedger {
     this.commit(reason, () => this.insertKnownInternal(cardIDs, count, position))
   }
 
+  /** 放弃指定明牌的定位，转回未定位批次；不改变牌堆物理张数。 */
+  anonymizeKnownPileIdentities(cardIDs: readonly CardID[], reason: string): void {
+    const identities = normalizeIDs(cardIDs).filter((cardID) =>
+      this.knownPileIdentityIDs.has(cardID)
+    )
+    if (identities.length === 0) return
+
+    // 仅重新分类当前已定位牌堆身份；避免对已在 cohort 中的身份重复增加暗槽数。
+    this.commit(reason, () =>
+      this.insertKnownInternal(identities, identities.length, POSITION_RANDOM)
+    )
+  }
+
   insertAnonymous(count: number, position: PublicPosition, reason: string): void {
     this.commit(reason, () => this.insertAnonymousInternal(count, position))
   }
