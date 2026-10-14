@@ -42,6 +42,7 @@ import type {
 //   22: '替换装备',
 //   Mode_ZIRUO = 23;
 //   Mode_GAMEOVER_NOTIFY = 24;
+//   27: '主动交给'（跨技能通用，牌面可见性仍由 CardIDs 决定）,
 //   255: '系统'
 //
 
@@ -69,7 +70,7 @@ export const MOVE_TYPE = {
   CRAFT: 20,
   SHOW: 21,
   REPLACE_EQUIP: 22,
-  FANJIAN: 27,
+  GIVE: 27,
   SYSTEM: 255
 } as const
 
@@ -101,6 +102,7 @@ export const MOVE_TYPE_LABELS = {
   [MOVE_TYPE.CRAFT]: '锻造',
   [MOVE_TYPE.SHOW]: '展示',
   [MOVE_TYPE.REPLACE_EQUIP]: '替换装备',
+  [MOVE_TYPE.GIVE]: '主动交给',
   [MOVE_TYPE.SYSTEM]: '系统'
 } as const
 

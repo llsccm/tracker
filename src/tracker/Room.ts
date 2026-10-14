@@ -1467,6 +1467,7 @@ export class Room extends RoomBase {
     this.movement.applyMoveCandidatePropagation(context)
     this.movement.moveUnknownCardsForContext(context)
     this.movement.moveKnownCardsForContext(context)
+    this.movement.anonymizeRandomPileReturn(context)
 
     context.postMovePublicCandidates?.forEach(({ card, candidate }) => {
       if (!context.publicMovedCards.includes(card) || card.location !== candidate.zone) return

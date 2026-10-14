@@ -23,6 +23,7 @@
 | 诡伏相邻获得消息补全 | `SpellID=3709` + `DataID=3709` | `src/tracker/skill/GuiFu.ts`、`tests/tracker/roleData3709.test.ts` |
 | 下书明暗选择 | `SpellID=361` | `src/handler/skills/XiaShu.ts`、`tests/tracker/xiaShu.test.ts` |
 | 反间展示与手牌移交 | `SpellID=713`、`MoveType=27` | `docs/protocols/PubGsCMoveCard-713.md`；现有列表解码条件不匹配该样例 |
+| 问卦候选来源筛选 | `SpellID=780`、暗交牌 `MoveType=27` 后紧邻回堆 | `src/tracker/skill/WenGua.ts`；`tests/tracker/wenGuaCandidateSource.test.ts` |
 | 权变牌堆顶观看与获得 | `SpellID=7011`、`MoveType=21/18` | `docs/protocols/GsCRoleOptTargetNtf-7011.md` |
 | 暗置标记区候选 | `FromZone=5`、`ToZone=4/8`、全暗 `CardIDs` | `RoomMovement.handleHiddenMarkMove()`、`hiddenMarkCandidates` |
 | 观虚目标视角交换 | `SpellID=987/988` | `src/tracker/skill/GuanXu.ts`、`tests/tracker/guanXuExchange.test.ts` |
@@ -67,6 +68,17 @@
 - 样例先由 5 号同区展示 `119`，再以 `MoveType=27` 移交给 1 号，最后由 1 号同区展示五张牌；展示列表包含 `119`。
 - 样例中的 `MoveType=21` 都是 `5 -> 5` 同区展示；`MoveType=27` 是 `5 -> 5` 的跨座位移交，不应仅凭 Zone 相同视作无操作。
 - `src/handler/skills/Spell713.ts` 的首项下标解码要求 `CardCount === CardIDs.length - 2`，与本样例的等长列表不符；技能处理器在 `src/handler/spellEffects.js` 中当前未注册。
+
+## 问卦候选来源筛选（SpellID=780）
+
+- `MoveType=27` 是跨技能通用的“主动交给”（`MOVE_TYPE.GIVE`）。
+- 相关角色携带真实 ID 的交牌/回堆继续走通用已知牌移动。
+- 第三方无正 ID 的单张交牌记录来源候选身份集合，紧邻回顶/回底时通过 `publicCandidateSource`
+  限定公共候选来源，避免污染接收者原有明牌。空集合明确禁止扩散，不回退为接收者全部明牌。
+- 对相关旧组的来源/接收者手牌数量约束保守失效，不建立精确公共区批次约束。交牌/回堆已确认相邻，
+  仅按 `780` 注册处理器，不监听其它移动；数量、类型、座位等不匹配时保留通用处理。
+- 完整批次名额、精确排除接收者候选及长链关联仍未实现。原始样例和精度边界见
+  [问卦协议说明](../protocols/PubGsCMoveCard-780.md)。
 
 ## 暗置标记区候选流程
 

@@ -34,7 +34,6 @@ export function summarizeMoveEvent(event: NormalizedMoveEvent, options: MoveSumm
       moveType: eventOptions.moveType,
       position: eventOptions.position,
       fromPosition: eventOptions.fromPosition,
-      resetKnownToUnknown: eventOptions.resetKnownToUnknown,
       ...(options.includeSourceCards
         ? { sourceCards: eventOptions.sourceCards?.map((card) => card.id) }
         : {})
@@ -57,7 +56,6 @@ export function summarizeMoveContext(context: RoomMoveContext, options: MoveSumm
     cardCount: context.cardCount,
     position: context.position,
     fromPosition: context.fromPosition,
-    resetKnownToUnknown: context.resetKnownToUnknown,
     targetSeats: context.targetSeats,
     handMoveCount: context.handMoveCount,
     sourceHandSeat: context.sourceHandSeat,

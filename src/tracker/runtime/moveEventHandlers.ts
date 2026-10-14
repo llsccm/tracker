@@ -11,6 +11,7 @@ import decorateSiQi from '../skill/SiQi'
 import decorateTianHou from '../skill/TianHou'
 import decorateZuoLian from '../skill/ZuoLian'
 import decorateYanXi from '../skill/YanXi'
+import { decorateWenGuaCandidateSource } from '../skill/WenGua'
 import {
   getCount,
   hasPositiveID,
@@ -19,7 +20,6 @@ import {
   type MoveEventDraft,
   getSourceZoneCards
 } from '../skill/moveEventUtils'
-import decorateWenGua from '../skill/WenGua'
 import {
   decorateDuoQiEntitySafety,
   decorateDuoQiKnownMove,
@@ -40,30 +40,6 @@ const HAND_EXCHANGE_EXCLUDED_SPELL_IDS: ReadonlySet<number> = new Set([
 export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEventDraft {
   const move = event.protocol
   const spellID = move.SpellID
-
-  // 浑天仪：协议上是外部牌随机压入牌堆，显式标记来源为 outside。
-  if (spellID === 3694 && move.FromZone === 0 && move.ToZone === 1 && move.MoveType === 19) {
-    return patchEvent(event, {
-      options: {
-        fromZone: 'outside',
-        position: POSITION_RANDOM,
-        // 随机入堆即失去具体位置，先匿名化，避免账本把代表实体重新确认为牌顶明牌。
-        resetKnownToUnknown: true
-      }
-    })
-  }
-
-  // 手气卡：手牌放回牌堆时，用 ConstraintGroup 保留同次返回关系，替代旧 pack(to.cards)。
-  if (move.FromZone === 5 && move.ToZone === 1 && spellID === 0 && move.MoveType === 19) {
-    return patchEvent(event, {
-      options: {
-        // 实测会重新混入牌堆；本地匿名槽顺序只是代表顺序，不是牌顶事实。
-        position: POSITION_RANDOM,
-        // 手气卡返还的明牌重新进入牌堆后，应恢复为未知牌身份。
-        resetKnownToUnknown: true
-      }
-    })
-  }
 
   // observePendingChengLieFinalDiscard(event, room)
 
@@ -146,8 +122,8 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
   // 族钟繇【诫厉】：目标视角定位换出槽位，第三方视角保留手牌/牌顶范围弱候选。
   room.registerMoveEventHandler(3483, decorateJieLi)
 
-  // 徐氏【问卦】
-  room.registerMoveEventHandler(780, decorateWenGua)
+  // 徐氏【问卦】：相邻的主动交牌/回堆消息只筛选候选来源，不追踪单个实体。
+  room.registerMoveEventHandler(780, decorateWenGuaCandidateSource)
 
   // 蒲元【奇思】：优先筛选装备牌候选。
   // room.registerMoveEventHandler(

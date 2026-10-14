@@ -921,46 +921,6 @@ describe('TrackerController', () => {
     })
   })
 
-  it('问卦将已知手牌置于牌堆底时不扩散公共候选', () => {
-    const { controller } = createTrackerControllerHarness()
-    const handCardIDs = [2, 43, 130, 125, 146]
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
-    controller.initTrackerDeck([...handCardIDs, 1])
-    controller.syncTrackerMove(protocolMove({ CardIDs: handCardIDs, ToID: 1 }))
-
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [146],
-        CardCount: 1,
-        FromID: 1,
-        FromZone: 5,
-        FromZoneParam: 0,
-        FromPosition: 0,
-        MoveType: 15,
-        SpellID: 780,
-        ToID: 255,
-        ToZone: 1,
-        ToZoneParam: 0,
-        ToPosition: 0
-      })
-    )
-
-    const room = controller.getTrackerRoom()
-    const returnedCard = room.cardIndex.get(146)
-    expect(returnedCard.location).toBe('pile')
-    expect(returnedCard.publicCandidates).toEqual([])
-
-    handCardIDs.slice(0, -1).forEach((id) => {
-      const card = room.cardIndex.get(id)
-      expect(card.location).toBe('player')
-      expect(card.subZone).toBe('hand')
-      expect(card.publicCandidates).toEqual([])
-    })
-    expect(room.getPlayer(1).candidateHandCards).toEqual([])
-  })
-
   it('游戏外匿名牌先进入12区后按实体牌揭示到装备区', () => {
     const { controller } = createTrackerControllerHarness()
 

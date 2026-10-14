@@ -270,6 +270,17 @@ export class PileIdentityLedger {
 
       const staysInPile = move.fromZone === 1 && move.toZone === 1
       if (staysInPile) {
+        if (
+          move.toPosition === POSITION_RANDOM &&
+          (move.eventType === 'moveKnown' || move.eventType === 'moveUnknown')
+        ) {
+          // 牌堆内实际随机重插也会失去定位；同区展示仍保留原有公开身份语义。
+          this.insertKnownInternal(cardIDs, cardIDs.length, POSITION_RANDOM)
+          this.confirmVisiblePileIdentitiesInternal(move.visiblePileIdentityIDsAfter)
+          this.reconcilePileCountInternal(move.pileCountAfter)
+          this.previousDiscardCount = normalizeCount(move.discardCountAfter)
+          return
+        }
         // 同区展示只把身份从未决 cohort 提升为已知牌堆身份，不消费物理牌堆数量。
         cardIDs.forEach((cardID) => this.revealIdentityInPileInternal(cardID))
         this.confirmVisiblePileIdentitiesInternal(move.visiblePileIdentityIDsAfter)
@@ -301,17 +312,8 @@ export class PileIdentityLedger {
         }
       } else if (move.toZone === 1) {
         if (cardIDs.length > 0) {
-          // RANDOM 入堆会落入未知批次内部；即使本地 Zone 暂时追加到一端，也不能沿用该顺序。
-          const randomInsertion =
-            move.toPosition === POSITION_RANDOM ||
-            (move.fromZone === 0 && move.spellID === 3694) ||
-            cardIDs.some((cardID) => cardID === 4400 || cardID === 4401)
-
-          this.insertKnownInternal(
-            cardIDs,
-            cardIDs.length,
-            randomInsertion ? POSITION_RANDOM : move.toPosition
-          )
+          // 位置特例已在协议入口修正；身份账本与实体层使用同一份归一化位置。
+          this.insertKnownInternal(cardIDs, cardIDs.length, move.toPosition)
         }
 
         if (protocolUnknownCount > 0) {

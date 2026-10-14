@@ -476,7 +476,7 @@ describe('PileIdentityLedger', () => {
       toZone: 1,
       cardIDs: [4400],
       cardCount: 1,
-      toPosition: POSITION_TOP,
+      toPosition: POSITION_RANDOM,
       pileCountAfter: 4
     })
 

@@ -128,6 +128,12 @@ export interface MoveSourceEvent {
   [key: string]: unknown
 }
 
+/** 原样转移时的候选来源；只筛选公共候选，不指定物理来源或真实身份。 */
+export interface PublicCandidateSource {
+  fromSeat: SeatID
+  cards: Card[]
+}
+
 export interface MoveOptions {
   toSeatID?: SeatID
   subZone?: SubZone
@@ -145,7 +151,6 @@ export interface MoveOptions {
   moveType?: number
   position?: PublicPosition
   fromPosition?: PublicPosition
-  resetKnownToUnknown?: boolean
   /** 在来源选择前把这些已知身份降级为匿名物理代表。 */
   anonymizeCards?: Card[]
   /** 匿名化失败时取消本次移动，避免技能候选与身份账本失配。 */
@@ -153,6 +158,8 @@ export interface MoveOptions {
   /** 协议未公开 CardIDs，但技能已可靠确定的身份账本移动。 */
   pileIdentityCardIDs?: CardID[]
   sourceCards?: Card[]
+  /** 空集合表示不传播已知牌候选；省略时沿用当前来源手牌集合。 */
+  publicCandidateSource?: PublicCandidateSource
   publicCandidateReveal?: PublicCandidateReveal
   postMovePublicCandidates?: PostMovePublicCandidate[]
   sourceEvent?: MoveSourceEvent

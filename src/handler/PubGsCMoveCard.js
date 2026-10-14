@@ -1,7 +1,5 @@
-import { CardConfig } from '../config'
 import { Game } from '../tracker'
 import { tracker } from '../tracker/runtime/browser'
-import { POSITION_TOP } from '../tracker/candidate/cardPositions'
 import {
   hasMixedTrackerMoveVisibility,
   normalizeTrackerMovePosition,
@@ -37,29 +35,12 @@ export function handleMoveCard(msg) {
   /** @type {import('../tracker/types').PatchedMoveCardFields} */
   const patched = { ...raw, CardIDs: raw.CardIDs.slice() }
 
-  // 1. 入口过滤不解释技能编码的 CardIDs。
+  // 入口过滤不解释技能编码的 CardIDs。
   if (shouldIgnoreTrackerMove(raw)) return
 
-  // 2. 位置规则只修正端点，允许读取牌 ID 作为判据。
-  const specialEquipmentCards =
-    raw.CardCount === 4 &&
-    raw.FromZone === 1 &&
-    raw.FromPosition === POSITION_TOP + 1 &&
-    raw.ToZone === 5 &&
-    raw.SpellID === 0 &&
-    raw.MoveType === 1 &&
-    raw.CardIDs.length === raw.CardCount &&
-    raw.CardIDs.every((id) => CardConfig.GetInstance().getCard(id)?.type == 8)
+  Object.assign(patched, normalizeTrackerMovePosition(patched))
 
-  Object.assign(
-    patched,
-    normalizeTrackerMovePosition({
-      ...patched,
-      specialEquipmentCards
-    })
-  )
-
-  // 3. 响应器直接使用协议字段；端点与事件类型统一留到最终提交时解析。
+  // 响应器直接使用协议字段；端点与事件类型统一留到最终提交时解析。
   const afterMoveCallbacks = []
   const context = {
     raw,
