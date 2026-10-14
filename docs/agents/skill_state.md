@@ -121,6 +121,7 @@ tracker 状态；所需事实应由后续协议重新建立。
 | `qiaozhiSelection`     | 【巧织】`3544`                                                              | 展示 CardID、暗取数量和目标座位，用于最终差集推断                          | `src/tracker/skill/QiaoZhi.ts`；结算、可见结果到达或校验失败时删除                    |
 | `tianHouExchange`      | 周群【天候】`3903`                                                          | 交换批次、原牌顶/原手牌 `Card` 引用、明牌换出范围与约束组 ID               | `src/tracker/skill/TianHou.ts`；结算、展示或异常清理时删除                            |
 | `3776`                 | 【兴作】                                                                    | 原牌底实体、交换区手牌批次、发动者和目标座位                              | `src/tracker/skill/XingZuo.ts`；结算后删除，新批次替换旧记录，统一生命周期兜底清空 |
+| `7017` | 【宴戏】 | 成功批次获得者与剩余牌堆获得次数；国战成功保留随机来源 | `src/tracker/skill/YanXi.ts`；两张消费完或其它移动打断时删除，新成功标记替换旧批次，统一生命周期兜底清空 |
 | `780`                  | 徐氏【问卦】                                                                | 当前被追踪的单张 `Card` 实体，供他人放回牌堆时复用                         | `src/tracker/skill/WenGua.ts`；目标牌回牌堆后删除                                     |
 
 ## `spell` scope 当前使用清单

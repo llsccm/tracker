@@ -130,6 +130,17 @@ export function normalizeTrackerMovePosition({
     fromPosition = POSITION_RANDOM
   }
 
+  // 浑天仪：协议的特殊位置实际表示随机入堆。
+  if (
+    SpellID === 3694 &&
+    FromZone === 0 &&
+    ToZone === 1 &&
+    toPosition === POSITION_TOP + 1 &&
+    MoveType === 19
+  ) {
+    toPosition = POSITION_RANDOM
+  }
+
   // 回魂牌随机加入牌堆
   if (
     ToZone === 1 &&

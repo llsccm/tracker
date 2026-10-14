@@ -202,10 +202,6 @@ export function recordDuoQiRoleDataTarget(
   game: GameState,
   msg: DuoQiRoleDataTargetMessage
 ): DuoQiActivation | undefined {
-  if (Number(msg.DataID) !== 8 || !Array.isArray(msg.Datas)) return undefined
-  const spellID = Number(msg.Datas[0])
-  if (spellID !== DUO_QI_GAIN_ALL_SPELL_ID) return undefined
-
   const room = game.room
   if (!room) return undefined
 

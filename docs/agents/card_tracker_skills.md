@@ -118,6 +118,14 @@
 - `987/988` 显式绕过 `HandExchange`；即使目标恰好只有一张手牌，也不能把这条技能路径误判为
   双方整手互换。回归见 `tests/tracker/guanXuExchange.test.ts`。
 
+## 宴戏（7017）
+
+- 协议与实现取舍见 [`../protocols/PubGsCMoveCard-7017.md`](../protocols/PubGsCMoveCard-7017.md)。
+- `src/tracker/skill/YanXi.ts` 用先获得对方手牌识别成功批次；非国战随后连续取两次当前牌顶，国战成功保留随机来源。
+- 无成功批次时，公开 ID 走普通已知移动；没有真实 ID 则只匿名化移动前牌顶两槽中的明牌，放弃范围候选精度，不影响更深处明牌。
+- Room 的 `anonymizeCards` 流水线同步释放实体定位与 `PileIdentityLedger` 已定位牌堆身份，保留数量和身份全集；不要仅修改 `isKnown`。
+- 状态使用 `tracker` scope 的 `7017`，见 [`skill_state.md`](skill_state.md)；测试见 `tests/tracker/yanXi.test.ts`。
+
 ## 整手牌交换（通用协议模式）
 
 - 协议文档：`docs/protocols/hand-exchange.md`（以技能 121 为完整示例）。

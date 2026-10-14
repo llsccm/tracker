@@ -1420,12 +1420,16 @@ export class Room extends RoomBase {
       }
     }
 
+    const anonymizedPileIdentityIDs: CardID[] = []
     for (const card of context.anonymizeCards) {
       const releasedIdentityID = this.anonymizeLocatedIdentity(card, 'moveCards:ambiguousSource', {
         preservePlacement: true
       })
 
-      if (releasedIdentityID !== null) continue
+      if (releasedIdentityID !== null) {
+        if (card.location === 'pile') anonymizedPileIdentityIDs.push(releasedIdentityID)
+        continue
+      }
 
       trackerLogger.warn('模糊来源实体匿名化失败，身份仍被视为已定位', {
         reason: 'moveCards:ambiguousSource',
@@ -1436,6 +1440,14 @@ export class Room extends RoomBase {
       })
 
       if (context.requireAnonymizeSuccess) return false
+    }
+
+    // 来源明牌失去定位时，实体与身份账本一起降级，再消费本次匿名移动的数量。
+    if (anonymizedPileIdentityIDs.length > 0) {
+      this.pileIdentityLedger.anonymizeKnownPileIdentities(
+        anonymizedPileIdentityIDs,
+        'moveCards:ambiguousSource'
+      )
     }
 
     // trackerLogger.info(
