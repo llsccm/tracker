@@ -20,7 +20,7 @@ export function handleUpdateRoleDataExNtf(msg) {
         // 夺炁：SeatID 是目标，Datas=[SpellID, 技能拥有者座位]。
         if (spellID === 3730) recordDuoQiRoleDataTarget(Game, msg)
         // 清理宴戏
-        if (spellID === 7017) Game.deleteState(7017)
+        if (spellID === 7017) Game.deleteState('tracker', 7017)
       }
 
       break
