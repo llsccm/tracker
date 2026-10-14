@@ -204,7 +204,9 @@ accountedPileCount
 ### 已知或匿名牌回到牌堆
 
 - 明确位置的已知牌进入牌堆时，账本登记为 `knownPileIdentityIDs`，物理 `Zone` 保存端点顺序。
-- 随机插入已知牌无法保留批次边界时，Room 会把物理实体匿名化，身份回到 cohort。
+- 目标为牌堆且目标位置为 RANDOM 时，RoomMovement.anonymizeRandomPileReturn 统一把实际移入
+  的已知实体匿名化，身份回到 cohort；不依赖技能装饰器的开关，也不把来源 RANDOM 当作目标随机。
+  无 CardIDs 但取到已知来源实体时，同步释放账本的 located/discard 身份；未移动的实体不受影响。
 - 匿名回堆只能增加物理暗槽数量，无法证明具体身份或精确插入边界，因此统一保守合并/降级。
 - 洗牌通知以协议 `CardCount` 校正最终物理张数，匿名槽不足时补足，多余时退出追踪区；身份候选独立保留。
 

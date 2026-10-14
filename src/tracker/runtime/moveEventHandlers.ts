@@ -41,30 +41,6 @@ export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEven
   const move = event.protocol
   const spellID = move.SpellID
 
-  // 浑天仪：协议上是外部牌随机压入牌堆，显式标记来源为 outside。
-  if (spellID === 3694 && move.FromZone === 0 && move.ToZone === 1 && move.MoveType === 19) {
-    return patchEvent(event, {
-      options: {
-        fromZone: 'outside',
-        position: POSITION_RANDOM,
-        // 随机入堆即失去具体位置，先匿名化，避免账本把代表实体重新确认为牌顶明牌。
-        resetKnownToUnknown: true
-      }
-    })
-  }
-
-  // 手气卡：手牌放回牌堆时，用 ConstraintGroup 保留同次返回关系，替代旧 pack(to.cards)。
-  if (move.FromZone === 5 && move.ToZone === 1 && spellID === 0 && move.MoveType === 19) {
-    return patchEvent(event, {
-      options: {
-        // 实测会重新混入牌堆；本地匿名槽顺序只是代表顺序，不是牌顶事实。
-        position: POSITION_RANDOM,
-        // 手气卡返还的明牌重新进入牌堆后，应恢复为未知牌身份。
-        resetKnownToUnknown: true
-      }
-    })
-  }
-
   // observePendingChengLieFinalDiscard(event, room)
 
   // 牌堆与手牌交换有技能专属批次，不能落入双方整手交换账本。

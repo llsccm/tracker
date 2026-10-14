@@ -1,3 +1,4 @@
+import { CardConfig } from '@/config'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '../candidate/cardPositions'
 import type { RawMoveCardEvent } from '../types'
 
@@ -39,8 +40,6 @@ interface NormalizeTrackerMovePositionInput {
   ToPosition: number
   MoveType: number
   SpellID: number
-  isGuoZhan: boolean
-  specialEquipmentCards?: boolean
 }
 
 export function normalizeTrackerMovePosition({
@@ -52,8 +51,7 @@ export function normalizeTrackerMovePosition({
   ToZone,
   ToPosition,
   MoveType,
-  SpellID,
-  specialEquipmentCards = false
+  SpellID
 }: NormalizeTrackerMovePositionInput) {
   let fromPosition = FromPosition
   let toPosition = ToPosition
@@ -72,19 +70,19 @@ export function normalizeTrackerMovePosition({
   // }
 
   // 骋烈：协议标 RANDOM，实际从牌顶取
-  if (FromZone === 1 && fromPosition === POSITION_RANDOM && SpellID === 3208) {
+  if (FromZone === 1 && FromPosition === POSITION_RANDOM && SpellID === 3208) {
     fromPosition = POSITION_TOP
   }
 
   // 秦宓 天辩 13 拼点
-  if (FromZone === 1 && fromPosition === POSITION_RANDOM && MoveType === 13 && CardCount === 1) {
+  if (FromZone === 1 && FromPosition === POSITION_RANDOM && MoveType === 13 && CardCount === 1) {
     fromPosition = POSITION_TOP
   }
 
   // 蔡邕 辟撰
   if (
     FromZone === 1 &&
-    fromPosition === POSITION_RANDOM &&
+    FromPosition === POSITION_RANDOM &&
     ToZone === 4 &&
     MoveType === 8 &&
     SpellID === 795 &&
@@ -96,7 +94,7 @@ export function normalizeTrackerMovePosition({
   // 伊籍 机捷
   if (
     FromZone === 1 &&
-    fromPosition === POSITION_RANDOM &&
+    FromPosition === POSITION_RANDOM &&
     ToZone === 5 &&
     SpellID === 3101 &&
     CardCount === 1
@@ -104,28 +102,16 @@ export function normalizeTrackerMovePosition({
     fromPosition = POSITION_BOTTOM
   }
 
-  // 王元姬 宴戏 拿牌
-  // 目前废弃
-  // if (
-  //   FromZone === 1 &&
-  //   fromPosition === POSITION_RANDOM &&
-  //   ToZone === 5 &&
-  //   !isGuoZhan &&
-  //   YANXI_DRAW_SPELL_IDS.has(SpellID) &&
-  //   CardCount === 1
-  // ) {
-  //   fromPosition = POSITION_TOP
-  // }
-
   // 游戏开始后特殊装备牌
   if (
     FromZone === 1 &&
-    fromPosition === POSITION_TOP + 1 &&
+    FromPosition === POSITION_TOP + 1 &&
     ToZone === 5 &&
     SpellID === 0 &&
     MoveType === 1 &&
     CardCount === 4 &&
-    specialEquipmentCards
+    CardIDs.length === CardCount &&
+    CardIDs.every((id) => CardConfig.GetInstance().getCard(id)?.type == 8)
   ) {
     fromPosition = POSITION_RANDOM
   }
@@ -135,7 +121,7 @@ export function normalizeTrackerMovePosition({
     SpellID === 3694 &&
     FromZone === 0 &&
     ToZone === 1 &&
-    toPosition === POSITION_TOP + 1 &&
+    ToPosition === POSITION_TOP + 1 &&
     MoveType === 19
   ) {
     toPosition = POSITION_RANDOM
@@ -145,7 +131,7 @@ export function normalizeTrackerMovePosition({
   if (
     ToZone === 1 &&
     ToID === 255 &&
-    toPosition === POSITION_TOP &&
+    ToPosition === POSITION_TOP &&
     CardIDs.some((cardID) => cardID === 4400 || cardID === 4401)
   ) {
     toPosition = POSITION_RANDOM

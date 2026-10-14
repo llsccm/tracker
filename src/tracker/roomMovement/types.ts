@@ -40,7 +40,6 @@ export interface RoomMovementOptions {
   position?: PublicPosition
   fromPosition?: PublicPosition
   expectedSlotsBySeat?: ExpectedSlotsBySeatInput
-  resetKnownToUnknown?: boolean
   anonymizeCards?: Card[]
   requireAnonymizeSuccess?: boolean
   sourceCards?: Card[]
@@ -67,7 +66,6 @@ export interface RoomMoveContext {
   position: PublicPosition
   fromPosition: PublicPosition
   expectedSlotsBySeat?: ExpectedSlotsBySeatInput
-  resetKnownToUnknown: boolean
   anonymizeCards: Card[]
   requireAnonymizeSuccess: boolean
   sourceCards?: Card[]

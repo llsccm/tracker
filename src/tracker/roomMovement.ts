@@ -1,6 +1,6 @@
 import { trackerLogger } from '@/utils/logger'
 import { isAnonymous, type Card } from './Card'
-import { POSITION_TOP } from './candidate/cardPositions'
+import { POSITION_RANDOM, POSITION_TOP } from './candidate/cardPositions'
 import { summarizeMoveContext } from './helper/moveSummary'
 import type { Room } from './Room'
 import { RoomMovementCandidateMethods } from './roomMovement/candidates'
@@ -51,7 +51,6 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       position = POSITION_TOP,
       fromPosition = position,
       expectedSlotsBySeat,
-      resetKnownToUnknown = false,
       anonymizeCards = [],
       requireAnonymizeSuccess = false,
       sourceCards,
@@ -102,7 +101,6 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       position,
       fromPosition,
       expectedSlotsBySeat,
-      resetKnownToUnknown,
       anonymizeCards: Array.from(new Set(anonymizeCards)).filter(Boolean),
       requireAnonymizeSuccess,
       sourceCards,
@@ -709,7 +707,6 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       fromSubZone,
       knownCards,
       position,
-      resetKnownToUnknown,
       toSeatID,
       sourceEvent,
       spellID,
@@ -730,7 +727,6 @@ export class RoomMovement extends RoomMovementCandidateMethods {
 
     const swappedCardIDs: CardID[] = []
     const handledSpellCardIDs: CardID[] = []
-    const resetKnownCardIDs: CardID[] = []
     const resolvedSourceCardIDs: CardID[] = []
     const playerSourceSwapAttempts: unknown[] = []
     const registerUnassignedReplacement = (placeholder: Card | null | undefined) => {
@@ -899,31 +895,6 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       return
     }
 
-    // 手气卡、浑天仪等已知牌随机入堆后，必须真正匿名化槽位：
-    // 只 isKnown=false 会留下正 ID 未知牌，后续暗摸会原样绑成正 ID 独占暗手。
-    if (resetKnownToUnknown === true && toZone === 'pile') {
-      knownCards.forEach((card) => {
-        const previousCardID = this.room.anonymizeLocatedIdentity(
-          card,
-          'moveKnownCardsForContext:resetKnownToUnknown'
-        )
-        if (previousCardID === null) {
-          trackerLogger.warn('已知牌匿名化失败：card/index 不一致，继续重置槽位', {
-            reason: 'moveKnownCardsForContext:resetKnownToUnknown',
-            cardID: card.id,
-            entityID: card.entityID,
-            isKnown: card.isKnown
-          })
-        }
-        card.reset()
-        if (previousCardID !== null) {
-          resetKnownCardIDs.push(previousCardID)
-        } else if (card.id > 0) {
-          resetKnownCardIDs.push(card.id)
-        }
-      })
-    }
-
     if (fromSeat !== null && fromSeat !== undefined && !Number.isNaN(fromSeat)) {
       const knownCardSet = new Set(knownCards)
 
@@ -1083,10 +1054,47 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       spellID,
       swappedCardIDs,
       handledSpellCardIDs,
-      resetKnownCardIDs,
       resolvedSourceCardIDs,
       targetZoneExists: Boolean(targetZone)
     })
+  }
+
+  /** 随机入堆只保留身份候选，不把本地代表顺序当成确定位置。 */
+  anonymizeRandomPileReturn(context: RoomMoveContext): void {
+    if (
+      context.toZone !== 'pile' ||
+      (context.position !== POSITION_RANDOM && context.position !== 'random')
+    )
+      return
+
+    const inferredIdentityIDs: CardID[] = []
+    // 在两条移动路径汇合后处理：无 CardIDs 的移动也可能取到已知来源实体。
+    context.publicMovedCards.forEach((card) => {
+      if (card.id <= 0) return
+
+      const previousCardID = this.room.anonymizeLocatedIdentity(card, 'moveCards:randomPileReturn')
+      if (previousCardID === null) {
+        trackerLogger.warn('随机入堆匿名化失败：card/index 不一致', {
+          cardID: card.id,
+          entityID: card.entityID,
+          sourceEvent: context.sourceEvent
+        })
+        return
+      }
+      card.reset()
+      if (!context.knownIDs.includes(previousCardID)) inferredIdentityIDs.push(previousCardID)
+    })
+
+    // 协议未携带的来源身份不会由 Controller 的 CardIDs 记账；释放实体时同步移回 cohort，
+    // 避免身份仍留在 located/discard 集合。显式 ID 则继续由普通移动事务统一提交。
+    if (inferredIdentityIDs.length > 0) {
+      this.room.pileIdentityLedger.insertKnown(
+        inferredIdentityIDs,
+        inferredIdentityIDs.length,
+        POSITION_RANDOM,
+        'moveCards:inferredRandomPileReturn'
+      )
+    }
   }
 
   /**

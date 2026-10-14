@@ -145,7 +145,6 @@ export interface MoveOptions {
   moveType?: number
   position?: PublicPosition
   fromPosition?: PublicPosition
-  resetKnownToUnknown?: boolean
   /** 在来源选择前把这些已知身份降级为匿名物理代表。 */
   anonymizeCards?: Card[]
   /** 匿名化失败时取消本次移动，避免技能候选与身份账本失配。 */
