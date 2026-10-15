@@ -13,6 +13,7 @@ import {
   playerLocation,
   publicLocation
 } from './helpers/locationCandidates'
+import { getUnknownPlayerSourceCards } from '@/tracker/roomMovement/sourceQueries'
 
 function moveKnownCardsToHand(room, cardIDs, seatID) {
   room.moveCards(cardIDs, 'player', {
@@ -200,7 +201,7 @@ describe('隐藏标记区候选', () => {
     candidateCard.confirmKnown()
     candidateCard.setLocationCandidates([sourceMark, otherHand])
 
-    expect(room.movement.resolveSourcePlayerCandidate(candidateCard, context)).toBe(true)
+    expect(room.movement.sources.resolveSourcePlayerCandidate(candidateCard, context)).toBe(true)
     expect(candidateCard.subZone).toBe('mark')
     expect(candidateCard.spellID).toBe(414)
 
@@ -208,13 +209,13 @@ describe('隐藏标记区候选', () => {
     knownCard.setLocationCandidates([sourceMark, otherHand])
     placeholder.bindCandidates([6], 'mark', 414, { known: false })
 
-    expect(room.movement.getSourcePlaceholderReplacementCandidate(knownCard, context)).toEqual(
-      expect.objectContaining(otherHand)
-    )
-    expect(room.movement.swapKnownCardWithPlayerSourcePlaceholder(knownCard, context)).toBe(
+    expect(
+      room.movement.sources.getSourcePlaceholderReplacementCandidate(knownCard, context)
+    ).toEqual(expect.objectContaining(otherHand))
+    expect(room.movement.sources.swapKnownCardWithPlayerSourcePlaceholder(knownCard, context)).toBe(
       placeholder
     )
-    expect(room.movement.isCardInPlayerSource(knownCard, context)).toBe(true)
+    expect(room.movement.sources.isCardInPlayerSource(knownCard, context)).toBe(true)
     expect(knownCard.subZone).toBe('mark')
     expect(knownCard.spellID).toBe(414)
     expect(placeholder.subZone).toBe('hand')
@@ -231,10 +232,7 @@ describe('隐藏标记区候选', () => {
     first.bindCandidates([6], 'mark', 100, { known: false })
     second.bindCandidates([6], 'mark', 200, { known: false })
 
-    expect(room.movement.getUnknownPlayerSourceCards(6, 'mark', [100, 200])).toEqual([
-      first,
-      second
-    ])
+    expect(getUnknownPlayerSourceCards(room, 6, 'mark', [100, 200])).toEqual([first, second])
   })
 
   it('混合完整位置候选即使投影为空也可作为玩家标记来源', () => {
@@ -250,7 +248,7 @@ describe('隐藏标记区候选', () => {
 
     expect(mixedCandidate.subZone).toBe(null)
     expect(mixedCandidate.spellID).toBe(null)
-    expect(room.movement.getUnknownPlayerSourceCards(6, 'mark', 3389)).toEqual([
+    expect(getUnknownPlayerSourceCards(room, 6, 'mark', 3389)).toEqual([
       exactSource,
       mixedCandidate
     ])

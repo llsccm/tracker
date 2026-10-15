@@ -117,6 +117,30 @@ handler 中直接修改 `Card`、`Zone` 或玩家投影；`TrackerController` / 
 移动的端点取牌、公共候选、随机手牌转移和已知/匿名置换细节，应继续下钻到
 `src/tracker/roomMovement.ts`、`src/tracker/roomMovement/` 及对应协议/技能文档。
 
+### RoomMovement 内部组合
+
+`RoomMovement` 不再通过多层继承拼接行为，而是在构造时创建以下职责组件：
+
+| 组件 / 文件 | 职责与依赖 |
+| --- | --- |
+| `RoomMovementSources` / `roomMovement/sources.ts` | 来源定位、取牌、占位置换和手牌差量；仅通过 `HiddenMarkPlaceholderAccess` 调用标记占位查找、移除与替换 |
+| `RoomMovementCandidates` / `roomMovement/candidates.ts` | 随机手牌转移、公共候选传播和局部约束维护；不持有来源或标记组件 |
+| `RoomMovementHiddenMarks` / `roomMovement/hiddenMarks.ts` | 暗置标记、木牛与标记槽守恒；通过共享查询取得来源占位，不反向依赖来源组件 |
+| `roomMovement/sourceQueries.ts` | 无状态的候选读取、手牌查询与未知来源筛选；精确来源优先，同类实体保持原有顺序 |
+
+三个组件仍写入同一个 Room；标记账本仍通过 `Room.ensureSkillState()` 保存在按局隔离的 GameState 中。
+共享查询实时读取 Room / Card，不保存快照，不移动实体，也不初始化标记账本。
+
+Room 保留原有移动阶段顺序与最终收敛边界。RoomMovement 本身只实现移动阶段，不为组件或查询
+增加同名转发方法。细分行为直接通过只读组件引用调用：
+
+- `room.movement.sources`：来源操作与手牌差量。
+- `room.movement.candidates`：随机转移与公共区候选传播。
+- `room.movement.hiddenMarks`：标记揭示、占位迁移与守恒协调。
+- 纯读取直接从 `roomMovement/sourceQueries.ts` 导入，显式传入 Room。
+
+组件引用在构造后不可替换；不要把已移除的包装搬到 Room，或用 getter、绑定函数重新建立转发层。
+
 ### 收敛尾部
 
 `resolveConstraints()` 的概念顺序是：

@@ -5,24 +5,12 @@ import {
   getEquipmentMarkContainerByMarkSpellID
 } from '../candidate/equipmentMarkContainer'
 import { isHiddenMarkMove } from '../candidate/hiddenMarkMove'
-import {
-  createLocationCandidateKey,
-  fromSubZoneCandidate,
-  getPlayerLocationCandidates,
-  toSubZoneCandidate
-} from '../candidate/locationCandidate'
+import { createLocationCandidateKey, toSubZoneCandidate } from '../candidate/locationCandidate'
 import { createSubZoneCandidateKey } from '../candidate/subZoneCandidate'
 import type { Card } from '../Card'
 import type { Room } from '../Room'
-import type {
-  CardID,
-  LocationCandidate,
-  PlayerLocationCandidate,
-  SeatID,
-  SpellID,
-  SubZone,
-  SubZoneCandidate
-} from '../types'
+import type { CardID, LocationCandidate, PlayerLocationCandidate, SeatID, SpellID } from '../types'
+import { getCardPlayerLocationCandidates, takeUnknownCardsFromPlayer } from './sourceQueries'
 import {
   HIDDEN_MARK_STATE_KEY,
   type HiddenMarkRecord,
@@ -35,20 +23,21 @@ interface ObservedEquipmentMarkSnapshot {
   observedSeat: SeatID
 }
 
-export abstract class RoomMovementHiddenMarkMethods {
-  declare room: Room
+/**
+ * 维护暗置标记、木牛标记空间和候选确认，协调标记配额与匿名占位守恒。
+ * 账本保存在本局 Room 的技能状态中；共享来源查询只负责读取，不反向依赖来源组件。
+ */
+export class RoomMovementHiddenMarks {
+  constructor(private readonly room: Room) {}
 
-  abstract takeUnknownCardsFromPlayer(
-    seatID: SeatID,
-    count: number,
-    subZone?: SubZone,
-    spellIDs?: SpellID | SpellID[]
-  ): Card[]
-
-  createHiddenMarkTargetLocationCandidate(
-    spellID: SpellID | null,
-    targetSeat: SeatID
-  ): LocationCandidate {
+  /**
+   * 按标记账本的当前状态构造目标候选，不在账本中缓存可派生的位置。
+   * 装备标记使用稳定的 container 候选；普通标记使用账本当前目标座位的 player mark。
+   */
+  private createHiddenMarkTargetLocationCandidate({
+    spellID,
+    targetSeat
+  }: HiddenMarkRecord): LocationCandidate {
     // 装备标记容器使用 container；普通标记仍使用目标座位的 player mark。
     const containerCandidate = createEquipmentContainerLocationCandidate(spellID)
     if (containerCandidate) return containerCandidate
@@ -59,13 +48,6 @@ export abstract class RoomMovementHiddenMarkMethods {
       subZone: 'mark',
       spellID
     }
-  }
-
-  /**
-   * 按标记空间推导目标候选，不在账本中重复缓存可派生状态。
-   */
-  getHiddenMarkTargetLocationCandidate(record: HiddenMarkRecord): LocationCandidate {
-    return this.createHiddenMarkTargetLocationCandidate(record.spellID, record.targetSeat)
   }
 
   /** 以实际 mark700 协议更新空间座位；跨座位时接管内部牌迁移。 */
@@ -175,27 +157,19 @@ export abstract class RoomMovementHiddenMarkMethods {
   }
 
   /**
-   * 获取手牌暗置到标记区的房间级候选账本。
+   * 按需取得本局 GameState 中的暗置标记账本；首次访问初始化，组件不另存一份状态。
    */
-  getHiddenMarkState(): HiddenMarkState {
+  private getHiddenMarkState(): HiddenMarkState {
     return this.room.ensureSkillState(HIDDEN_MARK_STATE_KEY, () => {
       return { records: new Map<string, HiddenMarkRecord>(), muniuMarkSeat: null }
     })
   }
 
   /**
-   * 判断本次移动是否是“协议全暗的手牌牌进入技能标记区”。
-   * 这类移动不能按普通暗牌占位处理，因为来源手牌中可能已有明牌身份。
-   */
-  isHiddenMarkMove(context: RoomMoveContext): boolean {
-    return isHiddenMarkMove(context)
-  }
-
-  /**
    * 取得来源手牌中仍可能参与暗置的明牌。
    * 候选子区域牌只要仍包含“来源手牌”位置，也要纳入候选。
    */
-  getKnownHandCandidatesForHiddenMark(sourceSeat: SeatID): Card[] {
+  private getKnownHandCandidatesForHiddenMark(sourceSeat: SeatID): Card[] {
     return this.room.cards.filter(
       (card) =>
         card.location === 'player' &&
@@ -212,43 +186,14 @@ export abstract class RoomMovementHiddenMarkMethods {
   }
 
   /**
-   * 将当前卡牌状态投影成完整位置候选。
-   * 普通候选席位会展开成多个“某座位某子区”的候选位置。
-   */
-  getCardSubZoneCandidates(card: Card): SubZoneCandidate[] {
-    if (card.hasSubZoneCandidates?.()) {
-      return card.getSubZoneCandidates()
-    }
-
-    if (card.location !== 'player') return []
-
-    const subZone = card.subZone ?? 'hand'
-    return Array.from(card.seats).map((seatID) => ({
-      seatID: Number(seatID),
-      subZone,
-      spellID: subZone === 'mark' ? card.spellID : null
-    }))
-  }
-
-  /**
-   * 将当前卡牌状态投影成玩家区 LocationCandidate。
-   */
-  getCardPlayerLocationCandidates(card: Card): PlayerLocationCandidate[] {
-    if (card.hasLocationCandidates?.()) {
-      return getPlayerLocationCandidates(card.getLocationCandidates())
-    }
-
-    return this.getCardSubZoneCandidates(card)
-      .map((candidate) => fromSubZoneCandidate(candidate))
-      .filter((candidate): candidate is PlayerLocationCandidate => Boolean(candidate))
-  }
-
-  /**
    * 在原有候选位置基础上追加“目标标记区”位置。
    * 不能只保留来源手牌/目标标记，否则会破坏既有的跨角色候选。
    */
-  getHiddenMarkLocationCandidates(card: Card, record: HiddenMarkRecord): LocationCandidate[] {
-    const targetCandidate = this.getHiddenMarkTargetLocationCandidate(record)
+  private getHiddenMarkLocationCandidates(
+    card: Card,
+    record: HiddenMarkRecord
+  ): LocationCandidate[] {
+    const targetCandidate = this.createHiddenMarkTargetLocationCandidate(record)
     const targetCandidateKey = createLocationCandidateKey(targetCandidate)
     const locationCandidates: LocationCandidate[] = []
     const locationCandidateKeys = new Set<string>()
@@ -261,7 +206,7 @@ export abstract class RoomMovementHiddenMarkMethods {
       locationCandidates.push(candidate)
     }
 
-    this.getCardPlayerLocationCandidates(card)
+    getCardPlayerLocationCandidates(card)
       .filter(
         (candidate) =>
           !(
@@ -290,7 +235,7 @@ export abstract class RoomMovementHiddenMarkMethods {
     candidateLists: LocationCandidate[][]
   ): boolean {
     const targetCandidateKey = createLocationCandidateKey(
-      this.getHiddenMarkTargetLocationCandidate(record)
+      this.createHiddenMarkTargetLocationCandidate(record)
     )
 
     return candidateLists.every((candidates) =>
@@ -315,7 +260,7 @@ export abstract class RoomMovementHiddenMarkMethods {
    * 4. 尝试把账本投影成可见候选位置与可收敛约束。
    */
   handleHiddenMarkMove(context: RoomMoveContext): boolean {
-    if (!this.isHiddenMarkMove(context)) return false
+    if (!isHiddenMarkMove(context)) return false
 
     const sourceSeat = context.sourceHandSeat
     const targetSeat = context.targetSeats[0]
@@ -387,11 +332,11 @@ export abstract class RoomMovementHiddenMarkMethods {
    * 暗牌放入标记区时，除了给明牌加弱候选，还要把来源手牌中的暗占位实体移过去。
    * 否则后续标记区打出或换座时，只剩候选明牌，没有可维护数量的暗实体。
    */
-  moveHiddenMarkPlaceholders(context: RoomMoveContext, record: HiddenMarkRecord): Card[] {
+  private moveHiddenMarkPlaceholders(context: RoomMoveContext, record: HiddenMarkRecord): Card[] {
     const count = Math.max(0, Number(context.unknownCount) || 0)
     if (count <= 0) return []
 
-    const placeholderCards = this.takeUnknownCardsFromPlayer(record.sourceSeat, count, 'hand')
+    const placeholderCards = takeUnknownCardsFromPlayer(this.room, record.sourceSeat, count, 'hand')
     if (placeholderCards.length === 0) return []
 
     this.room.removeCardsFromConstraintGroups(placeholderCards)
@@ -413,7 +358,7 @@ export abstract class RoomMovementHiddenMarkMethods {
   }
 
   /** 来源牌已由调用方筛选；优先使用候选所属账本的占位，避免跨来源重复回收。 */
-  protected findHiddenMarkSourcePlaceholder(card: Card, sourceCards: Card[]): Card | null {
+  findHiddenMarkSourcePlaceholder(card: Card, sourceCards: Card[]): Card | null {
     const state = this.room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)
     if (!state) return null
 
@@ -425,7 +370,10 @@ export abstract class RoomMovementHiddenMarkMethods {
     return null
   }
 
-  // 某个暗标记占位被已知牌替换后，从旧账本中摘掉，避免后续重复迁移。
+  /**
+   * 暗标记占位被替换或回收后，从本局所有标记账本摘除其引用，避免后续重复迁移。
+   * 只清理账本成员，不移动实体，也不创建缺失账本。
+   */
   removeHiddenMarkPlaceholder(card: Card): void {
     const state = this.room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)
     if (!state?.records?.size) return
@@ -435,6 +383,10 @@ export abstract class RoomMovementHiddenMarkMethods {
     })
   }
 
+  /**
+   * 全明装备标记快照到达后，清理旧暗占位引用并释放不在快照中的同空间占位。
+   * 快照内实体保留原位供后续绑定；返回实际释放前的占位 CardID，供诊断使用。
+   */
   private clearHiddenMarkPlaceholdersForObservedSnapshot(
     record: HiddenMarkRecord,
     observedCards: Set<Card>
@@ -476,7 +428,7 @@ export abstract class RoomMovementHiddenMarkMethods {
    * 将仍在 unlocated 的协议正 ID 物化到本记录的 mark 匿名占位上。
    * 解决“账本/协议已认定身份，占位仍匿名、cardIndex 无实体”的核心脱钩。
    */
-  materializeUnlocatedIdentitiesOntoMarkPlaceholders(
+  private materializeUnlocatedIdentitiesOntoMarkPlaceholders(
     record: HiddenMarkRecord,
     identityIDs: CardID[],
     reason: string
@@ -531,11 +483,12 @@ export abstract class RoomMovementHiddenMarkMethods {
 
   /**
    * 标记确认后：正 ID 实体落在 mark/container，并从占位账本摘掉对应匿名。
+   * 返回位置候选或占位是否发生变化；匿名实体不能作为已确认标记身份。
    */
   bindConfirmedMarkCardToMarkSpace(record: HiddenMarkRecord, card: Card, reason: string): boolean {
     if (!(card.id > 0)) return false
 
-    const candidate = this.getHiddenMarkTargetLocationCandidate(record)
+    const candidate = this.createHiddenMarkTargetLocationCandidate(record)
     let changed = false
 
     card.confirmKnown()
@@ -589,6 +542,8 @@ export abstract class RoomMovementHiddenMarkMethods {
    * clearHiddenMarkPlaceholdersForObservedSnapshot 单独负责，不走本原语。
    *
    * @returns 是否发生实体位置或账本变更
+   *
+   * 返回是否实际回收占位；无可回收占位时不伪造变更，异常配额另行告警。
    */
   reconcileMarkSpace(record: HiddenMarkRecord, reason: string): boolean {
     const livePlaceholders = Array.from(record.placeholderCards ?? []).filter((card) =>
@@ -656,11 +611,12 @@ export abstract class RoomMovementHiddenMarkMethods {
       Number(card.spellID) === Number(record.spellID)
     if (inMarkSpace) return true
 
-    const candidate = this.getHiddenMarkTargetLocationCandidate(record)
+    const candidate = this.createHiddenMarkTargetLocationCandidate(record)
     return candidate.type === 'container' && card.hasLocationCandidate?.(candidate) === true
   }
 
-  /** 实体 ID 被公共来源替换时，隐藏标记账本要继续指向新的暗占位实体 */
+  /** 实体 ID 被公共来源替换时，隐藏标记账本要继续指向新的暗占位实体 *   * 身份物化也使用此入口迁移成员引用；不搬牌，也不创建缺失账本。
+   */
   replaceHiddenMarkPlaceholder(previousCard: Card, nextCard: Card): void {
     const state = this.room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)
     if (!state?.records?.size) return
@@ -689,7 +645,7 @@ export abstract class RoomMovementHiddenMarkMethods {
    * 强约束：当 min/max 相等且候选全集只剩来源手牌/目标标记时，
    * 创建 expectedSlotsBySubZone，使 4 选 1、4 选 3 等 N 选 K 自动收敛。
    */
-  applyHiddenMarkProjection(record: HiddenMarkRecord): boolean {
+  private applyHiddenMarkProjection(record: HiddenMarkRecord): boolean {
     const activeCards = Array.from(record.cards).filter(
       (card) =>
         card.location === 'player' &&
@@ -736,7 +692,7 @@ export abstract class RoomMovementHiddenMarkMethods {
       subZone: 'hand',
       spellID: null
     }
-    const markCandidate = this.getHiddenMarkTargetLocationCandidate(record)
+    const markCandidate = this.createHiddenMarkTargetLocationCandidate(record)
     const subZoneSlots = new Map<string, number>()
     const handSubZoneCandidate = toSubZoneCandidate(handCandidate)
     const handSubZoneKey = handSubZoneCandidate
@@ -769,10 +725,6 @@ export abstract class RoomMovementHiddenMarkMethods {
     return true
   }
 
-  /**
-   * 当候选明牌后续以明确来源移动时，反向确认它原先属于手牌或标记区。
-   * 例如从标记区明置进弃牌，则确认该牌占用标记区名额。
-   */
   /**
    * 整手完整揭示时，对来源手牌的木马/标记弱候选做局部反向收敛。
    *
@@ -815,7 +767,7 @@ export abstract class RoomMovementHiddenMarkMethods {
         if (record.confirmedMarkCards.has(card)) return false
         if (card.location !== 'player' || !card.seats.has(Number(seat))) return false
         // 仍把 hand 作为可能位置的候选，才需要反向收敛到 mark。
-        const handCandidates = this.getCardPlayerLocationCandidates(card)
+        const handCandidates = getCardPlayerLocationCandidates(card)
         return (
           card.subZone === 'hand' ||
           handCandidates.some(
@@ -827,7 +779,7 @@ export abstract class RoomMovementHiddenMarkMethods {
       strandedCandidates.forEach((card) => {
         if (record.confirmedMarkCards.size >= record.knownMarkMax) return
 
-        const candidate = this.getHiddenMarkTargetLocationCandidate(record)
+        const candidate = this.createHiddenMarkTargetLocationCandidate(record)
         card.confirmKnown()
         // 解到标记区并移除 hand 分支：容器（木马 700）collapse 成单一容器候选，
         // player mark 直接 resolve 成 mark。此处已由完整揭示证明该牌不在手牌，可强收敛。
@@ -862,6 +814,11 @@ export abstract class RoomMovementHiddenMarkMethods {
     return changed
   }
 
+  /**
+   * 当候选明牌以明确来源移动时，反向确认它原先占用手牌或标记区名额。
+   * 例如从标记区明置进弃牌，确认该牌占用标记名额；必须匹配实际标记空间，
+   * 且木牛迁座后的确认不能把账本迁回旧座位。返回位置候选或占位是否发生变化。
+   */
   resolveHiddenMarkCandidateFromMove(card: Card, context: RoomMoveContext): boolean {
     const state = this.room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)
     if (!state?.records?.size) return false
@@ -898,7 +855,7 @@ export abstract class RoomMovementHiddenMarkMethods {
           this.retargetMuniuRecord(record, moveMarkSeat)
         }
 
-        const candidate = this.getHiddenMarkTargetLocationCandidate(record)
+        const candidate = this.createHiddenMarkTargetLocationCandidate(record)
 
         // hand/mark 确认互斥
         this.setHiddenMarkConfirmation(record, card, 'mark')
@@ -966,6 +923,10 @@ export abstract class RoomMovementHiddenMarkMethods {
     return changed
   }
 
+  /**
+   * 识别单一目标座位、无暗牌且已知 ID 数量完整的装备标记区快照。
+   * 返回标记 ID 和观测承载座位；普通标记或不完整快照返回 null，不修改状态。
+   */
   getObservedEquipmentMarkSnapshot(context: RoomMoveContext): ObservedEquipmentMarkSnapshot | null {
     if (
       context.toZone !== 'player' ||
@@ -1018,7 +979,7 @@ export abstract class RoomMovementHiddenMarkMethods {
       if (state.records.get(record.id) !== record) return
       if (Number(record.spellID) !== markSpellID) return
 
-      const targetCandidate = this.getHiddenMarkTargetLocationCandidate(record)
+      const targetCandidate = this.createHiddenMarkTargetLocationCandidate(record)
       if (targetCandidate.type !== 'container') return
 
       if (record.targetSeat !== observedSeat) {
@@ -1119,6 +1080,10 @@ export abstract class RoomMovementHiddenMarkMethods {
     confirmed.add(card)
   }
 
+  /**
+   * 只有该批候选全部确认属于手牌或标记时才结清账本；未确认完的记录继续保留。
+   * 此处只移除记录并输出诊断，候选收敛与占位协调由前置步骤完成。
+   */
   private settleHiddenMarkRecord(record: HiddenMarkRecord, reason: string): void {
     if (record.confirmedHandCards.size + record.confirmedMarkCards.size < record.cards.size) return
 

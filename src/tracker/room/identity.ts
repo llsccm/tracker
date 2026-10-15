@@ -276,7 +276,7 @@ export class RoomIdentity {
         target.combinationID = oldCombinationID
       }
 
-      room.movement.replaceHiddenMarkPlaceholder(existing, target)
+      room.movement.hiddenMarks.replaceHiddenMarkPlaceholder(existing, target)
       return
     }
 

@@ -1,9 +1,13 @@
 import { trackerLogger } from '@/utils/logger'
 import { isAnonymous, type Card } from './Card'
 import { POSITION_RANDOM, POSITION_TOP } from './candidate/cardPositions'
+import { normalizePublicPosition } from './candidate/publicCandidate'
 import { summarizeMoveContext } from './helper/moveSummary'
 import type { Room } from './Room'
-import { RoomMovementCandidateMethods } from './roomMovement/candidates'
+import { RoomMovementCandidates } from './roomMovement/candidates'
+import { RoomMovementHiddenMarks } from './roomMovement/hiddenMarks'
+import { RoomMovementSources } from './roomMovement/sources'
+import { getPlayerHandCardsBySeat, getUnknownPlayerSourceCards } from './roomMovement/sourceQueries'
 import {
   registerUnassignedMarkSpaceCards,
   removeUnassignedMarkSpaceCards
@@ -17,15 +21,21 @@ import type {
 import type { CardID, PublicZoneName, SeatID } from './types'
 
 /**
- * Room 的移动阶段实现模块。
- * 只保存 room 引用，不持有独立状态，避免移动推断状态在 Room 与子对象之间分裂。
+ * Room 的移动阶段实现模块，组合来源、候选与暗置标记组件，不持有独立推断状态。
+ * 本类只实现移动阶段；细分行为直接访问只读组件，共享查询直接从 sourceQueries 导入。
  */
-export class RoomMovement extends RoomMovementCandidateMethods {
-  declare room: Room
+export class RoomMovement {
+  /** 来源取牌、占位置换与观测手牌差量；构造后不替换本局组件。 */
+  readonly sources: RoomMovementSources
+  /** 随机手牌与公共区候选传播，和来源组件共享同一个 Room。 */
+  readonly candidates: RoomMovementCandidates
+  /** 暗置标记、木牛空间与占位账本；身份物化直接调用其成员维护入口。 */
+  readonly hiddenMarks: RoomMovementHiddenMarks
 
-  constructor(room: Room) {
-    super()
-    this.room = room
+  constructor(private readonly room: Room) {
+    this.hiddenMarks = new RoomMovementHiddenMarks(room)
+    this.sources = new RoomMovementSources(room, this.hiddenMarks)
+    this.candidates = new RoomMovementCandidates(room)
   }
 
   /**
@@ -186,7 +196,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       // RANDOM 牌堆来源没有可观察的物理端点。此时从任意匿名槽中选择代表，避免牌顶
       // 已有公开明牌时误判来源实体缺失并 createExternal；其它公共区仍严格按端点解析。
       const endpointCards =
-        fromZone === 'pile' && this.normalizePublicPosition(fromPosition) === 'random'
+        fromZone === 'pile' && normalizePublicPosition(fromPosition) === 'random'
           ? (sourceZone?.cards ?? []).filter(isAnonymous).slice(-endpointCount).reverse()
           : this.room.getPublicEndpointCards(fromZone, endpointCount, fromPosition)
       // Phase 5 后公共 known 只有两种合法物理来源：来源区已经存在的同 ID 实体，或没有
@@ -279,7 +289,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       let sourceTargets =
         explicitTargets.length > 0
           ? explicitTargets
-          : this.getUnknownPlayerSourceCards(fromSeat, fromSubZone, markSpellID)
+          : getUnknownPlayerSourceCards(this.room, fromSeat, fromSubZone, markSpellID)
               .filter(isAnonymous)
               .slice(0, knownIDs.length)
 
@@ -304,7 +314,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         const usedTargets = new Set(availableTargets)
         context.targetSeats.forEach((targetSeat) => {
           if (Number(targetSeat) === Number(fromSeat)) return
-          this.getUnknownPlayerSourceCards(targetSeat, fromSubZone, markSpellID)
+          getUnknownPlayerSourceCards(this.room, targetSeat, fromSubZone, markSpellID)
             .filter(isAnonymous)
             .forEach((card) => {
               if (usedTargets.has(card) || availableTargets.length >= knownIDs.length) return
@@ -318,7 +328,9 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       context.knownCards = knownIDs
         .map((cardID) => {
           const existing = this.room.cardIndex.get(cardID)
-          const existingInSource = Boolean(existing && this.isCardInPlayerSource(existing, context))
+          const existingInSource = Boolean(
+            existing && this.sources.isCardInPlayerSource(existing, context)
+          )
           const target = existingInSource ? existing : availableTargets.shift()
           const ledgerBefore = {
             inCardIndex: this.room.cardIndex.has(cardID),
@@ -449,14 +461,14 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     } = context
 
     // 木牛流马内部牌只随 mark700 协议迁移，不随装备本体移动。
-    if (this.handleMuniuMarkMove(context)) return
+    if (this.hiddenMarks.handleMuniuMarkMove(context)) return
 
     // 暗置标记区候选会接管默认暗牌移动，避免明牌身份被未知占位吞掉。
-    if (this.handleHiddenMarkMove(context)) return
+    if (this.hiddenMarks.handleHiddenMarkMove(context)) return
 
     if (
       forceRandomHandTransferCandidates ||
-      this.shouldPropagateRandomHandTransferCandidates({
+      this.candidates.shouldPropagateRandomHandTransferCandidates({
         sourceSeat: sourceHandSeat,
         targetSeat: targetHandSeat,
         count: handMoveCount,
@@ -469,7 +481,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     ) {
       // 随机获得来源手牌时：若来源仍有明牌，扩展为“来源/目标都可能持有”；
       // 来源全暗则走下方默认暗牌移动，不必做无展示价值的 N 选 K。
-      const propagatedCards = this.markRandomHandTransferCandidates({
+      const propagatedCards = this.candidates.markRandomHandTransferCandidates({
         fromSeat: sourceHandSeat,
         targetSeat: targetHandSeat,
         count: handMoveCount,
@@ -490,7 +502,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     }
 
     if (
-      this.shouldMarkRandomHandToPublicCandidates(
+      this.candidates.shouldMarkRandomHandToPublicCandidates(
         sourceHandSeat,
         targetHandSeat,
         toZone,
@@ -498,7 +510,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       )
     ) {
       // 身份未知的手牌回到公共区时，保留牌堆顶/底候选，后续被摸走时还能继续传播。
-      this.markRandomHandToPublicCandidates({
+      this.candidates.markRandomHandToPublicCandidates({
         fromSeat: sourceHandSeat,
         toZone,
         position,
@@ -508,7 +520,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     }
 
     // 若来源公共区已有候选牌，摸入手牌时把公共候选转化为目标玩家手牌候选。
-    this.propagatePublicCandidatesToHand({
+    this.candidates.propagatePublicCandidatesToHand({
       fromZone,
       fromPosition,
       toZone,
@@ -559,7 +571,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     }
 
     if (toZone === 'player') {
-      const movedUnknownCards = this.takeSourceCards(unknownCount, {
+      const movedUnknownCards = this.sources.takeSourceCards(unknownCount, {
         toZone,
         sourceIsOutside,
         fromSeat,
@@ -577,7 +589,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       context.movedUnknownCards = movedUnknownCards
 
       movedUnknownCards.forEach((card) => {
-        this.resolveSourcePlayerCandidate(card, context)
+        this.sources.resolveSourcePlayerCandidate(card, context)
       })
       this.room.removeCardsFromConstraintGroups(movedUnknownCards)
 
@@ -620,7 +632,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       return
     }
 
-    const movedUnknownCards = this.takeSourceCards(unknownCount, {
+    const movedUnknownCards = this.sources.takeSourceCards(unknownCount, {
       toZone,
       sourceIsOutside,
       fromSeat,
@@ -661,7 +673,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
 
     context.movedUnknownCards = movedUnknownCards
     movedUnknownCards.forEach((card) => {
-      this.resolveSourcePlayerCandidate(card, context)
+      this.sources.resolveSourcePlayerCandidate(card, context)
     })
     this.room.removeCardsFromConstraintGroups(movedUnknownCards)
 
@@ -675,7 +687,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
 
     context.publicMovedCards.push(...movedUnknownCards)
 
-    this.updatePublicCandidatesAfterUnknownPileReturn({
+    this.candidates.updatePublicCandidatesAfterUnknownPileReturn({
       toZone,
       position,
       count: unknownCount
@@ -720,7 +732,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     if (knownCards.length === 0) {
       // 装备容器全明快照可能因来源迁座暂未物化成功；仍按协议 CardIDs 收敛弱候选。
       if (toZone === 'player') {
-        this.resolveHiddenMarkCandidatesFromObservedMarkSnapshot(context)
+        this.hiddenMarks.resolveHiddenMarkCandidatesFromObservedMarkSnapshot(context)
       }
       return
     }
@@ -737,7 +749,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
       if (placeholder)
         registerUnassignedMarkSpaceCards(this.room, placeholder.spellID, [placeholder])
     }
-    const observedEquipmentMarkSnapshot = this.getObservedEquipmentMarkSnapshot(context)
+    const observedEquipmentMarkSnapshot = this.hiddenMarks.getObservedEquipmentMarkSnapshot(context)
     const playerSourceContext = observedEquipmentMarkSnapshot
       ? { ...context, fromSeat: observedEquipmentMarkSnapshot.observedSeat }
       : context
@@ -757,27 +769,38 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         isFromPlayerSource &&
         card.isKnown !== true &&
         card.getLocationCandidates().length > 1 &&
-        Boolean(this.findExactUnknownPlayerSourcePlaceholder(playerSourceContext, card))
+        Boolean(this.sources.findExactUnknownPlayerSourcePlaceholder(playerSourceContext, card))
 
       if (
         isFromPlayerSource &&
-        (!this.isCardInPlayerSource(card, playerSourceContext) ||
+        (!this.sources.isCardInPlayerSource(card, playerSourceContext) ||
           shouldSwapSpeculativePlayerIdentity)
       ) {
         const locationBeforeSwap = card.location
-        const placeholder = this.swapKnownCardWithPlayerSourcePlaceholder(card, playerSourceContext)
+        const placeholder = this.sources.swapKnownCardWithPlayerSourcePlaceholder(
+          card,
+          playerSourceContext
+        )
         let fallbackPlaceholder: Card | null = null
         if (!placeholder && fromSubZone === 'hand') {
-          fallbackPlaceholder = this.swapCardWithUnknown(card, playerSourceContext, knownCards)
+          fallbackPlaceholder = this.sources.swapCardWithUnknown(
+            card,
+            playerSourceContext,
+            knownCards
+          )
           const canDeferToKnownSourcePlaceholder =
             context.sourceHandTotalObserved &&
             context.sourceHandTotalBefore <= context.handMoveCount
           const createdSourcePlaceholder =
             !fallbackPlaceholder && !canDeferToKnownSourcePlaceholder
-              ? this.createPlayerSourcePlaceholderForKnownCard(card, playerSourceContext)
+              ? this.sources.createPlayerSourcePlaceholderForKnownCard(card, playerSourceContext)
               : null
           if (!fallbackPlaceholder && createdSourcePlaceholder) {
-            fallbackPlaceholder = this.swapCardWithUnknown(card, playerSourceContext, knownCards)
+            fallbackPlaceholder = this.sources.swapCardWithUnknown(
+              card,
+              playerSourceContext,
+              knownCards
+            )
           }
           if (!fallbackPlaceholder && createdSourcePlaceholder) {
             trackerLogger.warn('已创建来源瞬时匿名占位但仍未完成置换', {
@@ -839,16 +862,16 @@ export class RoomMovement extends RoomMovementCandidateMethods {
         !isFromPlayerSource &&
         typeof context.fromZone === 'string' &&
         this.room.zones.has(context.fromZone)
-      if (isFromPublicSource && !this.isCardInPublicSource(card, context)) {
-        const placeholder = this.swapKnownCardWithPublicSourcePlaceholder(card, context)
+      if (isFromPublicSource && !this.sources.isCardInPublicSource(card, context)) {
+        const placeholder = this.sources.swapKnownCardWithPublicSourcePlaceholder(card, context)
         if (placeholder) {
           swappedCardIDs.push(card.id)
           registerUnassignedReplacement(placeholder)
         }
       }
 
-      this.resolveHiddenMarkCandidateFromMove(card, context)
-      if (this.resolveSourcePlayerCandidate(card, context)) {
+      this.hiddenMarks.resolveHiddenMarkCandidateFromMove(card, context)
+      if (this.sources.resolveSourcePlayerCandidate(card, context)) {
         resolvedSourceCardIDs.push(card.id)
       }
 
@@ -873,7 +896,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
     })
 
     if (toZone === 'player') {
-      this.resolveHiddenMarkCandidatesFromObservedMarkSnapshot(context)
+      this.hiddenMarks.resolveHiddenMarkCandidatesFromObservedMarkSnapshot(context)
 
       this.room.createConstraintGroup({
         id: combinationID,
@@ -903,7 +926,7 @@ export class RoomMovement extends RoomMovementCandidateMethods {
 
       const sourceHandCards =
         fromSubZone === 'hand'
-          ? this.getPlayerHandCardsBySeat(fromSeat).filter(
+          ? getPlayerHandCardsBySeat(this.room, fromSeat).filter(
               (sourceCard) => !knownCardSet.has(sourceCard) && !sourceCard.suspended
             )
           : []
@@ -1006,18 +1029,18 @@ export class RoomMovement extends RoomMovementCandidateMethods {
           this.room.removeCardsFromConstraintGroups([placeholder])
           const placeholderWasKnown = placeholder.isKnown === true
           // 与 swap 路径一致：确定明牌槽不能被占位污染；公共候选槽可继续承载。
-          const keepPreviousPosition = this.hasPublicCandidateAt(card, residue.zoneID)
+          const keepPreviousPosition = this.sources.hasPublicCandidateAt(card, residue.zoneID)
           if (keepPreviousPosition) {
             placeholder.moveToPublicZone(residue.zoneID)
             zone.replaceCard(card, placeholder)
           } else if (residue.zoneID === 'pile') {
             zone.removeCard(card)
-            this.insertUnknownPlaceholderIntoPile(zone, placeholder)
+            this.sources.insertUnknownPlaceholderIntoPile(zone, placeholder)
           } else {
             zone.removeCard(card)
             zone.add(placeholder, POSITION_TOP)
           }
-          this.removeHiddenMarkPlaceholder(placeholder)
+          this.hiddenMarks.removeHiddenMarkPlaceholder(placeholder)
           repairedResidues.push({
             ...residue,
             placeholderCardID: placeholder.id,

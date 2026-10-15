@@ -1455,14 +1455,14 @@ export class Room extends RoomBase {
     //   summarizeMoveContext(context, { includeKnownCardIDs: true })
     // )
 
-    this.movement.applyHandTotalDelta(
+    this.movement.sources.applyHandTotalDelta(
       context.sourceHandSeat,
       context.targetHandSeat,
       context.handMoveCount
     )
     // 整手完整揭示时先把木马/标记弱候选反向收敛（并挤回被占用的手牌占位），
     // 必须早于 resolveKnownMoveCards，否则匿名槽数量已错、明牌会被 createExternal。
-    this.movement.resolveHiddenMarkCandidatesFromFullHandReveal(context)
+    this.movement.hiddenMarks.resolveHiddenMarkCandidatesFromFullHandReveal(context)
     this.movement.resolveKnownMoveCards(context)
     this.movement.applyMoveCandidatePropagation(context)
     this.movement.moveUnknownCardsForContext(context)
