@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import type { Room } from '@/tracker/Room'
 import { HIDDEN_MARK_STATE_KEY } from '@/tracker/roomMovement/types'
@@ -61,6 +61,8 @@ function countAnonymousHand(room, seatID: number): number {
 }
 
 describe('mark 空间守恒原语 reconcileMarkSpace', () => {
+  afterEach(() => vi.restoreAllMocks())
+
   it('player-mark 确认占住名额后，溢出匿名占位回来源手牌而非 outside', () => {
     const seatID = 3
     const { room } = createTestRoom({
@@ -82,7 +84,11 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
     const card141 = room.cardIndex.get(141)!
     record.confirmedHandCards.delete(card141)
     record.confirmedMarkCards.add(card141)
-    const changed = room.movement.bindConfirmedMarkCardToMarkSpace(record, card141, 'test:confirm')
+    const changed = room.movement.hiddenMarks.bindConfirmedMarkCardToMarkSpace(
+      record,
+      card141,
+      'test:confirm'
+    )
 
     expect(changed).toBe(true)
     // 占位被挤出账本，回到来源手牌，保持匿名
@@ -114,7 +120,7 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
     const card141 = room.cardIndex.get(141)!
     record.confirmedHandCards.delete(card141)
     record.confirmedMarkCards.add(card141)
-    room.movement.bindConfirmedMarkCardToMarkSpace(record, card141, 'test:confirm')
+    room.movement.hiddenMarks.bindConfirmedMarkCardToMarkSpace(record, card141, 'test:confirm')
 
     expect(record.placeholderCards.size).toBe(0)
     // 木马虽是 container，占位仍有手牌物理背书 → 回手牌，不能 outside
@@ -143,13 +149,13 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
       const card = room.cardIndex.get(id)!
       record.confirmedHandCards.delete(card)
       record.confirmedMarkCards.add(card)
-      room.movement.bindConfirmedMarkCardToMarkSpace(record, card, 'test:confirm')
+      room.movement.hiddenMarks.bindConfirmedMarkCardToMarkSpace(record, card, 'test:confirm')
     }
 
     // 两次确认后占位全部挤回，无负数、无残留
     expect(record.placeholderCards.size).toBe(0)
     // 幂等：再次 reconcile 不再回收
-    expect(room.movement.reconcileMarkSpace(record, 'test:idempotent')).toBe(false)
+    expect(room.movement.hiddenMarks.reconcileMarkSpace(record, 'test:idempotent')).toBe(false)
   })
 
   it('无可回收占位时对 mark 配额溢出告警并返回 false', () => {
@@ -172,13 +178,13 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
       const card = room.cardIndex.get(id)!
       record.confirmedHandCards.delete(card)
       record.confirmedMarkCards.add(card)
-      room.movement.bindConfirmedMarkCardToMarkSpace(record, card, 'test:confirm')
+      room.movement.hiddenMarks.bindConfirmedMarkCardToMarkSpace(record, card, 'test:confirm')
     }
 
     record.hiddenCount = 1
     const warnSpy = vi.spyOn(trackerLogger, 'warn')
     const debugSpy = vi.spyOn(trackerLogger, 'debug')
-    const changed = room.movement.reconcileMarkSpace(record, 'test:quota-overflow')
+    const changed = room.movement.hiddenMarks.reconcileMarkSpace(record, 'test:quota-overflow')
 
     expect(changed).toBe(false)
     expect(record.placeholderCards.size).toBe(0)
@@ -220,7 +226,7 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
     const card141 = room.cardIndex.get(141)!
     record.confirmedHandCards.delete(card141)
     record.confirmedMarkCards.add(card141)
-    room.movement.bindConfirmedMarkCardToMarkSpace(record, card141, 'test:confirm')
+    room.movement.hiddenMarks.bindConfirmedMarkCardToMarkSpace(record, card141, 'test:confirm')
 
     // 只回收本 spell 的占位；异 spell 占位保持在 mark，未被误绑回手牌
     expect(record.placeholderCards.has(foreign!)).toBe(true)
@@ -241,7 +247,8 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
     hiddenHandToMark(room, { seatID, count: 1, spellID: TROJAN_SPELL_ID })
     dealKnownHand(room, [113], seatID)
 
-    const reconcileSpy = vi.spyOn(room.movement, 'reconcileMarkSpace')
+    // 监听本局实际执行收敛的组件，不修改其它 Room 共用的原型。
+    const reconcileSpy = vi.spyOn(room.movement.hiddenMarks, 'reconcileMarkSpace')
 
     room.moveCards([29, 50, 113], 'process', {
       fromSeatID: seatID,

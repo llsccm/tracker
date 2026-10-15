@@ -25,7 +25,7 @@
 | 反间展示与手牌移交 | `SpellID=713`、`MoveType=27` | `docs/protocols/PubGsCMoveCard-713.md`；现有列表解码条件不匹配该样例 |
 | 问卦候选来源筛选 | `SpellID=780`、暗交牌 `MoveType=27` 后紧邻回堆 | `src/tracker/skill/WenGua.ts`；`tests/tracker/wenGuaCandidateSource.test.ts` |
 | 权变牌堆顶观看与获得 | `SpellID=7011`、`MoveType=21/18` | `docs/protocols/GsCRoleOptTargetNtf-7011.md` |
-| 暗置标记区候选 | `FromZone=5`、`ToZone=4/8`、全暗 `CardIDs` | `RoomMovement.handleHiddenMarkMove()`、`hiddenMarkCandidates` |
+| 暗置标记区候选 | `FromZone=5`、`ToZone=4/8`、全暗 `CardIDs` | `RoomMovementHiddenMarks.handleHiddenMarkMove()`、`hiddenMarkCandidates` |
 | 观虚目标视角交换 | `SpellID=987/988` | `src/tracker/skill/GuanXu.ts`、`tests/tracker/guanXuExchange.test.ts` |
 | 整手牌交换 | `MoveType=11` + `5<->10` + 整手张数 | `src/tracker/skill/HandExchange.ts` |
 | 骋烈其他视角的暗中交换与弃置 | `SpellID=3208` | `src/tracker/skill/ChengLie.ts`、`tests/tracker/chengLie.test.ts` |
@@ -87,7 +87,7 @@
 当协议出现 `FromZone=5`、`ToZone=4/8`、`CardIDs` 全暗且 `CardCount > 0` 时，记牌器会检查来源手牌是否存在明牌候选：
 
 1. 若没有来源明牌，沿用普通暗牌占位移动逻辑。
-2. 若存在来源明牌，由 `RoomMovement.handleHiddenMarkMove()` 接管默认暗牌移动，并通过
+2. 若存在来源明牌，由 `RoomMovementHiddenMarks.handleHiddenMarkMove()` 接管默认暗牌移动，并通过
    `Room.readSkillState('hiddenMarkCandidates')` 访问统一状态仓库中的候选账本。
 3. 账本记录来源座位、当前投影目标座位、`spellID`、候选明牌、已确认手牌/标记牌，以及本次暗置的明牌落入标记区数量范围。这里的 `spellID` 表示标记空间 ID：协议 `zone 4` 按旧 `Zone` 规则优先取 `ZoneParam || SpellID`，`zone 8` 优先取 `SpellID || ZoneParam`；木牛流马（木马）的标记空间 ID 固定为 `700`。普通标记账本 ID 为 `sourceSeat:targetSeat:spellID`；唯一可迁座的木牛流马使用 `sourceSeat:muniu:161`，不同来源手牌分别记账，承载座位变化不改变账本或约束组 ID。
 4. 先将候选明牌投影为完整位置候选：保留原有 `A 手牌 / B 手牌` 等候选，再追加目标标记位置。普通标记追加 `目标座位 标记`；木马追加装备容器候选 `container:equipment:161:700`，再由索引按 mark700 协议记录的空间座位显示到玩家标记区。尚未观察到标记协议时，才以装备位置作初始兜底。这一步不会丢掉既有跨角色候选。

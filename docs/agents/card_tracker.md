@@ -52,7 +52,7 @@
 - `RoomMoveEvents` 位于 `src/tracker/room/moveEvents.ts`，维护按局隔离的处理器注册表、领域输入补齐及有序装饰链。
 - `RoomIdentity` 位于 `src/tracker/room/identity.ts`，实现物化、匿名化、已有身份接管和外部实体创建，Room 保留稳定入口。
 
-- `RoomMovement` 位于 `src/tracker/roomMovement.ts`，负责 `moveCards()` 的阶段细节：来源取牌、已知牌解析、候选传播、公共区候选位置传播、暗牌占位移动、已知牌落区和公共组合约束创建。
+- `RoomMovement` 位于 `src/tracker/roomMovement.ts`，通过组合 `RoomMovementSources`、`RoomMovementCandidates`、`RoomMovementHiddenMarks` 实现移动阶段；共享读取集中在 `roomMovement/sourceQueries.ts`，不再使用纵向多层继承。Room 保留阶段顺序与收敛边界，详见 [`room.md`](room.md)。
 - `RoomConstraints` 位于 `src/tracker/roomConstraints.ts`，负责约束组维护、实体牌解析、稳定列表同步、基于 `locationIndex` 的视图组同步以及候选席位过广时的暂停追踪。
 - `RoomPublicZones` 位于 `src/tracker/roomPublicZones.ts`，负责公共区一致性检查、公共区牌序读取、玩家手牌 ID 查询以及旧辅助兼容的 zoneID 读面。
 - `RoomDiagnostics` 位于 `src/tracker/room/diagnostics.ts`，负责 DEV 身份/槽位与身份账本守恒、玩家快照和影子索引检查、抽样门控及收敛轮数告警；Room 的公开断言 API 保持不变。

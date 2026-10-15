@@ -25,7 +25,7 @@
 | 问题 | 首选符号 / 文件 | 回归入口 |
 | --- | --- | --- |
 | 初始化为什么只有负 ID 暗槽 | `Room.initDeck()`、`Card` | `pileIdentityLedgerIntegration.test.ts` |
-| 匿名移动从哪里取实体 | `RoomMovement.moveUnknownCardsForContext()`、`RoomMovementSourceMethods.takeSourceCards()` | `trackerController.test.ts`、`pileDisplayOrder.test.ts` |
+| 匿名移动从哪里取实体 | `RoomMovement.moveUnknownCardsForContext()`、`RoomMovementSources.takeSourceCards()` | `trackerController.test.ts`、`pileDisplayOrder.test.ts` |
 | 正 ID 如何绑定到匿名槽 | `Room.materialize()`、`RoomMovement.resolveKnownMoveCards()` | `publicEndpointCards.test.ts`、`knownDiscardConfirm.test.ts` |
 | cohort 如何消费、合并和降级 | `PileIdentityLedger.applyMove()` | `pileIdentityLedger.test.ts` |
 | 洗牌如何关闭旧世代 | `Room.shufflePile()`、`PileIdentityLedger.createShuffleTransition()` | `pileIdentityLedgerIntegration.test.ts` |

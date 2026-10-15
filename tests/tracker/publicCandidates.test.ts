@@ -47,7 +47,7 @@ describe('公共候选传播', () => {
     first.setLocationCandidates([pileTop])
     second.setLocationCandidates([pileTop])
 
-    const affectedCards = room.movement.propagatePublicCandidatesToHand({
+    const affectedCards = room.movement.candidates.propagatePublicCandidatesToHand({
       fromZone: 'pile',
       fromPosition: POSITION_TOP,
       toZone: 'player',
@@ -92,7 +92,7 @@ describe('公共候选传播', () => {
     card.confirmKnown()
     card.setLocationCandidates([pileTop, pileBottom, hand1, hand2])
 
-    const affectedCards = room.movement.propagatePublicCandidatesToHand({
+    const affectedCards = room.movement.candidates.propagatePublicCandidatesToHand({
       fromZone: 'pile',
       fromPosition: POSITION_TOP,
       toZone: 'player',
@@ -132,7 +132,7 @@ describe('公共候选传播', () => {
     card.confirmKnown()
     card.setLocationCandidates([pileTop])
 
-    const affectedCards = room.movement.propagatePublicCandidatesToHand({
+    const affectedCards = room.movement.candidates.propagatePublicCandidatesToHand({
       fromZone: 'pile',
       fromPosition: POSITION_TOP,
       toZone: 'player',
