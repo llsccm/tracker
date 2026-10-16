@@ -1,3 +1,4 @@
+import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import { describe, expect, it } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { HAND_EXCHANGE_STATE_KEY } from '@/tracker/skill/HandExchange'
@@ -235,18 +236,8 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
 
   it('装饰器：手牌进交换区时登记批次并拆明暗 sourceCards', () => {
     const { room } = setupController()
-    const event = {
-      type: 'moveCards',
-      cardIDs: [],
-      cardCount: 8,
-      toZone: 'exchange',
-      options: {
-        fromSeatID: seatB,
-        fromSubZone: 'hand',
-        fromZone: null,
-        cardCount: 8
-      },
-      raw: {
+    const event = normalizeMoveEvent(
+      protocolMove({
         CardIDs: [],
         CardCount: 8,
         FromID: seatB,
@@ -255,8 +246,8 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
         ToZone: 10,
         MoveType: 11,
         SpellID: 121
-      }
-    }
+      })
+    )
 
     const decorated = room.decorateMoveEvent(event)
     expect([...decorated.cardIDs].sort((a: number, b: number) => a - b)).toEqual(
@@ -348,18 +339,8 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
 
   it('非整手的 5->10 交换不接管（避免误伤佐练类路径）', () => {
     const { room } = setupController()
-    const event = {
-      type: 'moveCards',
-      cardIDs: [106],
-      cardCount: 1,
-      toZone: 'exchange',
-      options: {
-        fromSeatID: seatB,
-        fromSubZone: 'hand',
-        fromZone: null,
-        cardCount: 1
-      },
-      raw: {
+    const event = normalizeMoveEvent(
+      protocolMove({
         CardIDs: [106],
         CardCount: 1,
         FromID: seatB,
@@ -368,8 +349,8 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
         ToZone: 10,
         MoveType: 11,
         SpellID: 3488
-      }
-    }
+      })
+    )
 
     const decorated = room.decorateMoveEvent(event)
     expect(decorated.cardIDs).toEqual([106])
@@ -388,18 +369,8 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
         1: 4
       }
     })
-    const event = {
-      type: 'moveCards',
-      cardIDs: [],
-      cardCount: 1,
-      toZone: 'exchange',
-      options: {
-        fromSeatID: 1,
-        fromSubZone: 'hand',
-        fromZone: null,
-        cardCount: 1
-      },
-      raw: {
+    const event = normalizeMoveEvent(
+      protocolMove({
         CardIDs: [],
         CardCount: 1,
         FromID: 1,
@@ -408,8 +379,8 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
         ToZone: 10,
         MoveType: 11,
         SpellID: 3488
-      }
-    }
+      })
+    )
 
     const decorated = room.decorateMoveEvent(event)
 
@@ -420,18 +391,8 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
 
   it('未登记批次回手时不创建空账本', () => {
     const { room } = setupController()
-    const event = {
-      type: 'moveCards',
-      cardIDs: [],
-      cardCount: 4,
-      toZone: 'player',
-      options: {
-        seatID: seatB,
-        subZone: 'hand',
-        fromZone: 'exchange',
-        cardCount: 4
-      },
-      raw: {
+    const event = normalizeMoveEvent(
+      protocolMove({
         CardIDs: [],
         CardCount: 4,
         FromID: seatA,
@@ -440,8 +401,8 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
         ToZone: 5,
         MoveType: 11,
         SpellID: 121
-      }
-    }
+      })
+    )
 
     const decorated = room.decorateMoveEvent(event)
     expect(decorated.options?.sourceCards).toBeUndefined()

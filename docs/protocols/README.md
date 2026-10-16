@@ -19,8 +19,13 @@
 
 | 文档 | SpellID | 场景 | 关键识别 |
 | --- | ---: | --- | --- |
+| [木牛流马](PubGsCMoveCard-700.md) | `700` | 手牌暗置、装备本体迁座及附属暗标记通知 | `5 -> 4`、`6 -> 6`、`4 -> 4`；标记空间按 ZoneParam=`700` 识别 |
+| [反间](PubGsCMoveCard-713.md) | `713` | 5 号展示并移交一张手牌，1 号随后展示五张手牌 | `MoveType=21` 同区展示；`MoveType=27` 主动交给 |
+| [问卦](PubGsCMoveCard-780.md) | `780` | 主动交牌、回堆及第三方候选来源筛选 | `MoveType=27` 主动交给；`MoveType=15` 回顶/底；不补造身份，完整批次推断未实现 |
 | [骋烈（其他视角）](PubGsCMoveCard-3208.md) | `3208` | 牌顶展示、暗中交换、暗标记分配与弃置 | `1/5 -> 10`、两条 `10 -> 10`、`10 -> 5/4`、`4 -> 2`；仅最初展示有 ID |
+| [诡伏](PubGsCMoveCard-3709.md) | `3709` | 牌堆/弃牌堆获得与相邻角色数据配对 | `1/2 -> 5`、获得、无 ID；仅在 `patched` 补齐身份 |
 | [焚巢](PubGsCMoveCard-3752.md) | `3752` | 弃牌堆取目标牌 | `2 -> 5`、获得、随机、无正 ID |
+| [宴戏](PubGsCMoveCard-7017.md) | `7017` | 成功批次与失败单张获得 | 先获对方手牌确认成功；非国战连续取牌顶，国战随机；失败暗牌仅放弃原前两槽明牌定位 |
 | [兴作](PubGsCMoveCard-3776.md) | `3776` | 牌底与目标手牌经交换区互换 | `MoveType=11`、`1/5 -> 10 -> 5/1`；牌底明牌随批次保留 |
 
 ## `GsCRoleOptTargetNtf`
@@ -32,7 +37,7 @@
 | [`GsCRoleOptTargetNtf-3483.md`](GsCRoleOptTargetNtf-3483.md) |        `3483` | 诫厉：观看牌堆顶 + 目标部分手牌，后续交换拆回    | 生产目标只定位自己回堆槽；第三方仅保留目标手牌/牌顶范围弱候选 |
 | [`GsCRoleOptTargetNtf-3876.md`](GsCRoleOptTargetNtf-3876.md) |        `3876` | 界强识：目标全部手牌明牌                         | `Params` 全是手牌 ID，`fullHand`                                                   |
 | [`GsCRoleOptTargetNtf-3903.md`](GsCRoleOptTargetNtf-3903.md) |        `3903` | 天候：发动者私有观看，其他视角匿名换牌及单牌展示 | `Type=28/29` 分别解析；匿名交换建立手牌/牌顶候选；单牌收敛牌顶前三范围             |
-| [`GsCRoleOptTargetNtf-7011.md`](GsCRoleOptTargetNtf-7011.md) |        `7011` | 权变：观看牌堆顶                                 | `targetSeatID=255`；`Params` 即牌堆顶；配对同区展示 `MoveType=21`                  |
+| [`GsCRoleOptTargetNtf-7011.md`](GsCRoleOptTargetNtf-7011.md) |        `7011` | 权变：观看牌堆顶并随后获得一张已展示牌           | `Params` 给出牌堆顶；同区展示 `MoveType=21`，随后 `1 -> 5` 获得明牌 `MoveType=18` |
 
 ## `CGsRoleSpellOptRep`
 
@@ -46,7 +51,7 @@
 | -------------------------------------------------------- | -----: | ---------------- | ---------------------------------------------------- |
 | [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `8` | OPT_DATA_ADD_SPELL_EFFECT | `SeatID` 为目标；`Datas=[3730,技能拥有者座位]` |
 | [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `3544` | 巧织暗取牌       | `Datas=[cardID,0]`；非主视角将牌面物化到目标普通手牌 |
-| [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `3709` | 诡伏弃牌堆随机获得 | `Datas=[count,...cardIDs,...]`；非主视角延迟到角色数据再移动真实弃牌 |
+| [诡伏](PubGsCMoveCard-3709.md) | `3709` | 诡伏当前持有状态 | 获得牌、用牌后或获得技能时同步；仅有待配对获得移动时补入 `patched` |
 | [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `4022` | 裴秀地图状态更新 | `Datas=[mapID,currentCell,historyCount,...]`，仅己方 |
 
 ## 相关代码入口

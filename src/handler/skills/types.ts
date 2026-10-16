@@ -1,11 +1,13 @@
 import type { GameState } from '@/tracker/Game'
-import type { CardID, RawMoveCardEvent, SeatID, SpellID } from '@/tracker/types'
+import type { PatchedMoveCardFields, RawMoveCardEvent, SeatID } from '@/tracker/types'
 
-// PubGsCMoveCard 预处理后，CardIDs 已统一为数组；这里不是 Room 的领域 MoveContext。
-export interface SkillMoveContext extends RawMoveCardEvent {
+// PubGsCMoveCard 入口统一数组和数值字段；响应器不再重复转换。
+// 这里不是 Room 的领域 MoveContext。
+export interface SkillMoveContext {
+  readonly raw: Readonly<RawMoveCardEvent>
+  readonly patched: PatchedMoveCardFields
   game: GameState
-  CardIDs: CardID[]
-  SpellID: SpellID
+  afterMove?: (callback: () => void) => void
 }
 
 export interface RoleDataMessage {

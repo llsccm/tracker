@@ -12,7 +12,7 @@ describe('Room.moveCards 组合路线', () => {
     const knownCard = getCard(room, 1)
 
     room.moveCards([1, 0], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 2,
@@ -37,7 +37,7 @@ describe('Room.moveCards 组合路线', () => {
     const { room } = createTestRoom({ cardIDs: [31, 71, 97, 32, 92, 150], seatIDs: [1] })
 
     room.moveCards([], 'player', {
-      seatID: 255,
+      toSeatID: 255,
       subZone: 'mark',
       spellID: 35,
       fromZone: 'pile',
@@ -88,7 +88,7 @@ describe('Room.moveCards 组合路线', () => {
     const { room } = createTestRoom({ cardIDs: [31, 32, 71, 72, 150], seatIDs: [1] })
 
     room.moveCards([], 'player', {
-      seatID: 255,
+      toSeatID: 255,
       subZone: 'mark',
       spellID: 35,
       fromZone: 'pile',
@@ -96,7 +96,7 @@ describe('Room.moveCards 组合路线', () => {
       sourceEvent: { type: 'test:popup-mark-35' }
     })
     room.moveCards([], 'player', {
-      seatID: 255,
+      toSeatID: 255,
       subZone: 'mark',
       spellID: 36,
       fromZone: 'pile',
@@ -130,7 +130,7 @@ describe('Room.moveCards 组合路线', () => {
     const { room } = createTestRoom({ cardIDs: [31, 71, 97], seatIDs: [1] })
 
     room.moveCards([], 'player', {
-      seatID: 255,
+      toSeatID: 255,
       subZone: 'mark',
       spellID: 35,
       fromZone: 'pile',
@@ -164,7 +164,7 @@ describe('Room.moveCards 组合路线', () => {
     const knownMarkCard = getCard(room, 31)
 
     room.moveCards([31], 'player', {
-      seatID: 255,
+      toSeatID: 255,
       subZone: 'mark',
       spellID: 35,
       fromZone: 'pile',
@@ -172,7 +172,7 @@ describe('Room.moveCards 组合路线', () => {
       sourceEvent: { type: 'test:known-seatless-mark' }
     })
     room.moveCards([], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 1,
@@ -213,7 +213,7 @@ describe('Room.moveCards 组合路线', () => {
     const discardedCard = getCard(room, 41)
 
     room.moveCards([87, 41], 'player', {
-      seatID: 255,
+      toSeatID: 255,
       subZone: 'mark',
       spellID: 3544,
       fromZone: 'pile',
@@ -222,7 +222,7 @@ describe('Room.moveCards 组合路线', () => {
     })
 
     room.moveCards([87], 'player', {
-      seatID: 7,
+      toSeatID: 7,
       fromSeatID: 216,
       fromZone: null,
       fromSubZone: 'mark',
@@ -256,7 +256,7 @@ describe('Room.moveCards 组合路线', () => {
     const cards = [1, 2].map((id) => getCard(room, id))
 
     room.moveCards([1, 2], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 2,
@@ -265,7 +265,7 @@ describe('Room.moveCards 组合路线', () => {
     room.syncObservedPlayerHandCount(1, 2)
 
     room.moveCards([0], 'player', {
-      seatID: 2,
+      toSeatID: 2,
       fromSeatID: 1,
       fromZone: null,
       fromSubZone: 'hand',
@@ -316,13 +316,14 @@ describe('Room.moveCards 组合路线', () => {
     })
 
     room.moveCards([0], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       subZone: 'hand',
       fromZone: 'pile',
       fromPosition: POSITION_TOP,
       cardCount: 1,
       sourceEvent: { type: 'test:draw-public-candidate-route' }
     })
+    //
     ;[first, second].forEach((card) => {
       expect(locationKeys(card)).toEqual(
         [

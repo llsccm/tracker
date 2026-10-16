@@ -23,13 +23,6 @@ export interface PlayerHandCardIDOptions {
   knownOnly?: boolean
 }
 
-interface CardLocationInfo {
-  card: Card | null
-  keys: CardID[]
-  zones: string[]
-  description: string
-}
-
 /**
  * Room 的公共区查询与旧协议兼容读面辅助模块。
  * getPublicZone 作为高频入口保留在 Room，这里集中处理一致性检查和旧 zoneID 转换。
@@ -196,50 +189,5 @@ export class RoomPublicZones {
       )
       .map((card) => card.id)
       .filter((id) => id > 0)
-  }
-
-  /**
-   * 获取卡牌旧辅助兼容所需的位置读面。
-   */
-  getCardLocationInfo(cardID: CardID | string): CardLocationInfo {
-    const card = this.room.cardIndex.get(Number(cardID)) ?? null
-    if (!card)
-      return {
-        card: null,
-        keys: [],
-        zones: [],
-        description: ''
-      }
-
-    return {
-      card,
-      keys: [card.isKnown ? card.id : 0],
-      zones: this.getLegacyZoneIDsForCard(card),
-      description: card.getLocationDescription()
-    }
-  }
-
-  /**
-   * 将新版卡牌位置转换为旧辅助可读的 zoneID。
-   */
-  getLegacyZoneIDsForCard(card: Card | null): string[] {
-    if (!card) return []
-
-    if (card.location === 'pile') return ['1-255']
-    if (card.location === 'discard') return ['2-255']
-    if (card.location === 'process') return ['3-255']
-    if (card.location === 'exchange') return ['10-255']
-    if (card.location === 'exile') return ['12-255']
-    if (card.location === 'outside') return ['0-255']
-    if (card.location !== 'player') return ['?']
-
-    const zone =
-      card.subZone === 'equip' ? 6 : card.subZone === 'judge' ? 7 : card.subZone === 'mark' ? 4 : 5
-
-    return Array.from(card.seats).map((seatID) =>
-      zone === 4 && card.spellID !== null
-        ? `${zone}-${seatID}-${card.spellID}`
-        : `${zone}-${seatID}`
-    )
   }
 }

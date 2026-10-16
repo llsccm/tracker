@@ -559,7 +559,7 @@ describe('牌堆展示顺序', () => {
     room.getPlayer(1).syncObservedHandCount(2)
 
     room.moveCards([0], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       fromSeatID: 1,
       fromZone: 5,
       fromSubZone: 'hand',
@@ -571,14 +571,14 @@ describe('牌堆展示顺序', () => {
 
     const record = room
       .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
-      .records.get('1:1:700')!
+      .records.get('1:muniu:161')!
     expect(record.placeholderCards.has(hiddenMarkPlaceholder)).toBe(true)
 
     room.shufflePile({ cardCount: 3 })
 
     const updatedRecord = room
       .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
-      .records.get('1:1:700')!
+      .records.get('1:muniu:161')!
     const placeholderCards = Array.from(updatedRecord.placeholderCards) as Card[]
     const currentPlaceholder = placeholderCards[0]
 
@@ -613,7 +613,7 @@ describe('牌堆展示顺序', () => {
       visibleMarkCards.map((card) => card.id),
       'player',
       {
-        seatID: 7,
+        toSeatID: 7,
         fromZone: 700,
         fromSubZone: 'mark',
         fromSpellID: 700,
@@ -671,7 +671,7 @@ describe('牌堆展示顺序', () => {
     room.getPlayer(7).syncObservedHandCount(3)
 
     room.moveCards([0, 0], 'player', {
-      seatID: 7,
+      toSeatID: 7,
       fromSeatID: 7,
       fromZone: 5,
       fromSubZone: 'hand',
@@ -704,7 +704,7 @@ describe('牌堆展示顺序', () => {
     expect(getSuspendedIdentityIDs(room)).toEqual([3, 11, 12, 73, 105])
 
     room.moveCards(visibleMarkIdentityIDs, 'player', {
-      seatID: 7,
+      toSeatID: 7,
       fromSubZone: 'mark',
       fromSpellID: 700,
       subZone: 'mark',

@@ -1,66 +1,57 @@
-import type { Card } from '../Card'
-import { POSITION_RANDOM } from '../candidate/cardPositions'
+import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
+import { MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Room } from '../Room'
+import type { CardID, SeatID } from '../types'
+import { hasPositiveID, patchEvent, type MoveEventDraft } from './moveEventUtils'
 
-import {
-  getRaw,
-  hasPositiveID,
-  getCount,
-  patchEvent,
-  nextGroupID,
-  type MoveEventDraft,
-  getEventSourceCards,
-  createSourcePatch
-} from './moveEventUtils'
+const WEN_GUA_SPELL_ID = 780
 
-interface WenGuaState {
-  trackedCard: Card | null
+interface WenGuaCandidateState {
+  fromSeat: SeatID
+  toSeat: SeatID
+  cardIDs: CardID[]
 }
 
-// 徐氏【问卦】：追踪当前回合被问卦移动的一张牌，后续他人放回牌堆时复用该实体。
-export default function decorateWenGua(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
-  const fromZone = Number(raw.FromZone)
-  const toZone = Number(raw.ToZone)
+/** 只记录交牌前的已知候选集合，防止回堆时扩散接收者原有明牌。 */
+export function decorateWenGuaCandidateSource(event: MoveEventDraft, room: Room): MoveEventDraft {
+  const pending = room.readSkillState<WenGuaCandidateState>(WEN_GUA_SPELL_ID)
+  // 已确认交牌/回堆消息相邻；每条问卦移动消费旧记录，新交牌再建立自己的来源名单。
+  if (pending) room.deleteSkillState(WEN_GUA_SPELL_ID)
 
-  if (fromZone !== 5 || Number(raw.FromPosition) !== POSITION_RANDOM || getCount(event) !== 1) {
+  const move = event.protocol
+  if (
+    move.SpellID !== WEN_GUA_SPELL_ID ||
+    move.FromZone !== 5 ||
+    event.cardCount !== 1 ||
+    hasPositiveID(event.cardIDs)
+  )
+    return event
+
+  if (move.MoveType === MOVE_TYPE.GIVE && move.ToZone === 5 && move.FromID !== move.ToID) {
+    room.setSkillState<WenGuaCandidateState>(WEN_GUA_SPELL_ID, {
+      fromSeat: move.FromID,
+      toSeat: move.ToID,
+      cardIDs: room.getPlayerHandCardIDs(move.FromID, { includeCandidates: true })
+    })
     return event
   }
 
-  const currentSeatID = room?.game?.currentID
-
-  // 当前角色获得问卦牌：记录实体，后续判断是否被其他角色放回牌堆。
-  if (toZone === 5 && Number(raw.FromID) === Number(currentSeatID)) {
-    const state = room.ensureSkillState<WenGuaState>(780, () => ({ trackedCard: null }))
-    const sourceCards = getEventSourceCards(event, room)
-    state.trackedCard = sourceCards[0] ?? null
-
-    return patchEvent(event, {
-      options: {
-        ...createSourcePatch(event, sourceCards),
-        combinationID: nextGroupID(room, 780, 'wengua_track')
-      }
-    })
-  }
-
-  // 他人把被追踪的问卦牌放回牌堆：全暗事件也能补上真实 ID。
-  const trackedCard = room.readSkillState<WenGuaState>(780)?.trackedCard
   if (
-    toZone === 1 &&
-    Number(raw.FromID) !== Number(currentSeatID) &&
-    trackedCard &&
-    trackedCard.location === 'player' &&
-    trackedCard.seats.has(Number(raw.FromID))
-  ) {
-    room.deleteSkillState(780)
-    return patchEvent(event, {
-      cardIDs: hasPositiveID(event.cardIDs) ? event.cardIDs : [trackedCard.id || 0],
-      options: {
-        sourceCards: [trackedCard],
-        combinationID: nextGroupID(room, 780, 'wengua_return')
-      }
-    })
-  }
+    !pending ||
+    move.MoveType !== MOVE_TYPE.MOVE ||
+    move.ToZone !== 1 ||
+    move.FromID !== pending.toSeat ||
+    (event.options.position !== POSITION_TOP && event.options.position !== POSITION_BOTTOM)
+  )
+    return event
 
-  return event
+  return patchEvent(event, {
+    options: {
+      // 空集合也必须传递，表示 A 全暗时禁止把 B 原有明牌扩散到牌堆。
+      publicCandidateSource: {
+        fromSeat: pending.fromSeat,
+        cards: room.findCardsByIDs(pending.cardIDs)
+      }
+    }
+  })
 }

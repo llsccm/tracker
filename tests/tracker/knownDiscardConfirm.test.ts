@@ -11,7 +11,7 @@ describe('known 路径落弃明牌确认', () => {
     try {
       room.moveCards([61036], 'player', {
         fromZone: 'exile',
-        seatID: 0,
+        toSeatID: 0,
         subZone: 'hand',
         cardCount: 1
       })
@@ -35,7 +35,7 @@ describe('known 路径落弃明牌确认', () => {
     try {
       room.moveCards([61037], 'player', {
         fromZone: 'exile',
-        seatID: 0,
+        toSeatID: 0,
         subZone: 'hand',
         cardCount: 1
       })

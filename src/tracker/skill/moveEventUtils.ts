@@ -1,7 +1,7 @@
 import { CARD_INSTANCE_STATUS } from '../CardCounter'
 import type { Card } from '../Card'
 import type { Room } from '../Room'
-import type { CardID, NormalizedMoveEvent, SubZone } from '../types'
+import type { CardID, NormalizedMoveEvent, SeatID, SubZone } from '../types'
 
 /** 技能移动装饰器消费并返回的完整标准化移动事件。 */
 export type MoveEventDraft = NormalizedMoveEvent
@@ -9,11 +9,11 @@ export type MoveEventDraft = NormalizedMoveEvent
 /**
  * `patchEvent` 接受的浅补丁。
  *
- * 事件顶层字段可以按需替换；`options` 单独声明为可选字段集合，表示补丁会与原
- * `options` 合并，而不是要求调用方重新提供完整配置。
+ * 只允许修改领域分支、身份和数量；不覆盖原始协议或追溯数据。
+ * `options` 本身已定义可选字段，补丁只与原选项浅合并。
  */
-export type MoveEventPatch = Omit<Partial<MoveEventDraft>, 'options'> & {
-  options?: Partial<MoveEventDraft['options']>
+export type MoveEventPatch = Partial<Pick<MoveEventDraft, 'type' | 'cardIDs' | 'cardCount'>> & {
+  options?: MoveEventDraft['options']
 }
 
 /**
@@ -26,9 +26,9 @@ export function getRaw(event: MoveEventDraft): any {
   return event.raw ?? event.options?.sourceEvent?.raw ?? {}
 }
 
-/** 读取事件声明的牌数，优先使用事件顶层值，并把负数限制为 0。 */
+/** 读取当前标准事件的移动牌数；格式化由入口统一完成。 */
 export function getCount(event: MoveEventDraft): number {
-  return Math.max(0, Number(event.cardCount ?? event.options?.cardCount ?? 0))
+  return event.cardCount
 }
 
 /** 判断协议牌 ID 中是否至少明确提供了一张真实身份牌。 */
@@ -54,8 +54,9 @@ export function nextGroupID(room: Room, spellID: number | string, label: string)
 export function patchEvent(event: MoveEventDraft, patch: MoveEventPatch = {}): MoveEventDraft {
   return {
     ...event,
-    ...patch,
+    type: patch.type ?? event.type,
     cardIDs: patch.cardIDs ?? event.cardIDs,
+    cardCount: patch.cardCount ?? event.cardCount,
     options: {
       ...event.options,
       ...(patch.options ?? {})
@@ -96,12 +97,11 @@ export function getEventSourceCards(event: MoveEventDraft, room: Room): Card[] {
 /** 从明确玩家子区中按现有实体顺序选取指定数量的未公开牌。 */
 function getUnknownPlayerCards(
   room: Room,
-  seatID: unknown,
+  seatID: SeatID | undefined,
   count: number,
   subZone: SubZone = 'hand'
 ): Card[] {
-  const seat = Number(seatID)
-  if (Number.isNaN(seat)) return []
+  if (seatID === undefined) return []
 
   const playerCards: Card[] = []
   if (!(count > 0)) return playerCards
@@ -112,7 +112,7 @@ function getUnknownPlayerCards(
     if (
       card.location === 'player' &&
       card.subZone === subZone &&
-      card.seats.has(seat) &&
+      card.seats.has(seatID) &&
       card.isKnown !== true
     ) {
       playerCards.push(card)
@@ -126,19 +126,6 @@ function getUnknownPlayerCards(
 /** 将公共区内部的“底到顶”数组复制并转换为“顶到底”读取顺序。 */
 export function getTopFirstCards<T>(cards: readonly T[] = []): T[] {
   return cards.slice().reverse()
-}
-
-/**
- * 为全暗协议补充已推断的来源实体。
- *
- * 协议已携带正 ID 时必须继续让精确身份路径处理，不能用 `sourceCards` 覆盖它。
- */
-export function createSourcePatch(
-  event: MoveEventDraft,
-  cards: Card[]
-): Pick<MoveEventDraft['options'], 'sourceCards'> {
-  if (hasPositiveID(event.cardIDs)) return {}
-  return cards.length > 0 ? { sourceCards: cards } : {}
 }
 
 /** 兼容既有技能导入；通用实现位于 tracker helper，避免核心模块反向依赖 skill。 */

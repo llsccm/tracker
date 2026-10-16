@@ -1,3 +1,4 @@
+import { protocolMove } from './helpers/trackerController'
 import { describe, expect, it } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
@@ -34,7 +35,7 @@ function createShuffleBaselineRoom(materializeDeckIdentities: boolean) {
     materializeDeckIdentities
   })
   room.moveCards([10, 11, 12], 'player', {
-    seatID: 1,
+    toSeatID: 1,
     subZone: 'hand',
     fromZone: 'pile',
     cardCount: 3,
@@ -60,7 +61,7 @@ describe('Room.cards 遍历基线', () => {
 
     const { stats } = collectTraversalStats(() => {
       room.moveCards([1], 'player', {
-        seatID: 1,
+        toSeatID: 1,
         subZone: 'hand',
         fromZone: 'pile',
         cardCount: 1,
@@ -89,7 +90,7 @@ describe('Room.cards 遍历基线', () => {
 
     const { stats } = collectTraversalStats(() => {
       room.moveCards([], 'player', {
-        seatID: 2,
+        toSeatID: 2,
         subZone: 'hand',
         fromZone: 'pile',
         cardCount: 2,
@@ -257,31 +258,35 @@ describe('Room.cards 遍历基线', () => {
     registerDefaultMoveEventHandlers(room)
 
     const pileStage = room.decorateMoveEvent(
-      normalizeMoveEvent({
-        CardCount: 2,
-        CardIDs: [],
-        FromID: 255,
-        FromZone: 1,
-        MoveType: 11,
-        SpellID: 3903,
-        ToID: 2,
-        ToZone: 10
-      })
-    )
-    room.moveCards(pileStage.cardIDs, pileStage.toZone, pileStage.options)
-
-    const { stats } = collectTraversalStats(() => {
-      room.decorateMoveEvent(
-        normalizeMoveEvent({
+      normalizeMoveEvent(
+        protocolMove({
           CardCount: 2,
           CardIDs: [],
-          FromID: 2,
-          FromZone: 5,
+          FromID: 255,
+          FromZone: 1,
           MoveType: 11,
           SpellID: 3903,
           ToID: 2,
           ToZone: 10
         })
+      )
+    )
+    room.moveCards(pileStage.cardIDs, pileStage.toZone, pileStage.options)
+
+    const { stats } = collectTraversalStats(() => {
+      room.decorateMoveEvent(
+        normalizeMoveEvent(
+          protocolMove({
+            CardCount: 2,
+            CardIDs: [],
+            FromID: 2,
+            FromZone: 5,
+            MoveType: 11,
+            SpellID: 3903,
+            ToID: 2,
+            ToZone: 10
+          })
+        )
       )
     })
 

@@ -3,6 +3,9 @@ import type { PublicCandidate, PublicPosition, PublicZoneName } from '../types'
 
 export type PublicCandidatePosition = 'top' | 'bottom' | 'random'
 
+/**
+ * 将协议位置常量或顶/底名称归一为公共候选位置；其余值（含空值）表示随机位置。
+ */
 export function normalizePublicPosition(
   position: PublicPosition | null | undefined
 ): PublicCandidatePosition {
@@ -28,6 +31,9 @@ export function getPublicCandidateLabel(
   return `${zoneName}随机${countText}张`
 }
 
+/**
+ * 创建包含区域、归一化位置、张数和显示标签的公共区候选；不修改任何牌或区域。
+ */
 export function createPublicCandidate(
   zone: PublicZoneName,
   position: PublicPosition,

@@ -132,42 +132,12 @@ Datas: [cardID, 0]
 `handleQiaoZhi()`。它将 `cardID` 作为已知身份物化到 `SeatID` 的普通手牌，
 但不再次增加手牌总数；暗取数量已经由前置移动消息记录。
 
-## `DataID = 3709`：诡伏获得牌
+## `DataID = 3709`：诡伏当前持有状态
 
-诡伏会从摸牌堆或弃牌堆随机获得牌。主视角的 `PubGsCMoveCard` 已经携带实际 `CardIDs`，沿用普通移动同步，不需要处理这条角色数据。
-
-其他视角获得牌时，移动消息可能只有数量：
-
-```text
-CardCount: 1
-CardIDs: []
-FromID: 255
-FromPosition: 65282
-FromZone: 2
-MoveType: 18
-SpellID: 3709
-ToID: 2
-ToPosition: 65280
-ToZone: 5
-```
-
-随后到达的 `GsCUpdateRoleDataExNtf` 才提供实际牌面。`Datas` 的格式是首项数量，后面紧跟对应数量的 CardID，末尾可以有补位零。该列表是当前仍因 3709 获得并持有的全部牌；后续消息会把新获得的 ID 放在前面，并在尾部保留仍持有的旧 ID：
-
-```text
-Datas: [1, 132, 0, 0, 0, 0]
-Datas: [2, 2, 132, 0, 0, 0, 0]
-```
-
-非主视角的弃牌堆路径按两阶段结算：
-
-- 移动消息只增加目标手牌数量，并创建 `CardCount` 个匿名手牌占位。弃牌堆的实体、顺序、数量和牌堆身份账本均保持不变。
-- 匿名手牌只保留一个小型 FIFO，记录座位、实体引用和来源事件，用于核对相邻消息并在积压或乱序时告警。
-- 角色数据先与该座位的上次当前快照比较，只处理尚未确认的新增 `CardID`；已经进入弃牌堆等公共区的旧牌会从匹配快照中移除。快照缩短或顺序变化本身不视为异常，旧牌的删除由通用移动处理。弃牌堆路径确认新增 `CardIDs` 都是当前弃牌堆中的已知实体后，先退役对应匿名手牌，再以 `handMoveCount: 0` 执行正常的 `discard -> player.hand` 明牌移动；牌堆路径没有 pending 记录，则回退为普通明牌同步。因此弃牌堆只在确认具体身份时减少，目标手牌总数不会重复增加，身份账本也只提交一次真实移动。
-- 主视角不重复消费角色数据，避免与移动消息中的真实 `CardIDs` 重复同步。
-
-前置移动与角色数据的 FIFO 座位不符，或弃牌堆 pending 的实际身份无法精确定位时，不消费 FIFO 并告警。重复收到同一当前快照或只删除旧牌是空操作；缺少待结算记录时，兼容回退只同步当前快照的新增 `CardID`，以兼容牌堆获得和回放缺失前置移动的场景。
-
-处理入口为 `src/handler/skills/GuiFu.ts`；结算入口为 `TrackerController.settleTrackerPendingDiscardGain()`，缺少待结算记录时才使用 `TrackerController.revealTrackerCards()` 回退。
+获得诡伏牌、使用诡伏牌后以及获得技能时都可能同步此角色数据；它本身不是获得牌事件。
+仅在存在前置待配对的无 ID 获得移动时，按移动张数取当前列表的新增前缀补齐身份；
+独立状态更新不移动牌、不修正手牌数量。协议样例、配对流程及 `raw` / `patched` 约定统一见
+[诡伏协议专页](PubGsCMoveCard-3709.md)。
 
 ## 地图浮窗
 
@@ -183,7 +153,7 @@ Datas: [2, 2, 132, 0, 0, 0, 0]
 
 - 消息路由：`src/logic.js`
 - 3544 处理：`src/handler/skills/QiaoZhi.ts`
-- 3709 处理：`src/handler/skills/GuiFu.ts`
+- 3709 处理：`src/handler/skills/GuiFu.ts`、`src/tracker/skill/GuiFu.ts`
 - 协议解析与路线求解：`src/utils/peixiuRouteFeature.js`
 - 地图浮窗：`src/ui/PeiXiuMapWindow.js`
 - 地图配置：`src/config/SpellExtendConfig.js`

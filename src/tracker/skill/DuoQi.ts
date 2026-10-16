@@ -3,7 +3,7 @@ import type { GameState } from '../Game'
 import { getPositiveIDs } from '../helper/cardIDs'
 import type { Room } from '../Room'
 import type { CardID, SeatID } from '../types'
-import { getRaw, patchEvent, type MoveEventDraft } from './moveEventUtils'
+import { getCount, patchEvent, type MoveEventDraft } from './moveEventUtils'
 
 /** 狂魔 */
 export const DUO_QI_GAIN_ALL_SPELL_ID = 3730
@@ -73,8 +73,7 @@ export function getDuoQiState(room: Room): DuoQiState | undefined {
 
 function getHandCards(room: Room, seatID: SeatID): Card[] {
   return room.cards.filter(
-    (card) =>
-      card.location === 'player' && card.subZone === 'hand' && card.seats.has(Number(seatID))
+    (card) => card.location === 'player' && card.subZone === 'hand' && card.seats.has(seatID)
   )
 }
 
@@ -177,8 +176,8 @@ export function recordDuoQiActivation(
   const effectIndex = Number(msg.EffectIndex)
   if (effectIndex !== 2) return undefined
 
-  const ownerSeatID = Number(msg.SkillOwerSeatID ?? msg.SeatID ?? msg.SrcSeatID)
-  const targetSeatID = Number(msg.DestSeatIDs?.[0])
+  const ownerSeatID = msg.SkillOwerSeatID ?? msg.SeatID ?? msg.SrcSeatID
+  const targetSeatID = msg.DestSeatIDs?.[0]
   if (
     !Number.isFinite(ownerSeatID) ||
     !Number.isFinite(targetSeatID) ||
@@ -203,17 +202,13 @@ export function recordDuoQiRoleDataTarget(
   game: GameState,
   msg: DuoQiRoleDataTargetMessage
 ): DuoQiActivation | undefined {
-  if (Number(msg.DataID) !== 8 || !Array.isArray(msg.Datas)) return undefined
-  const spellID = Number(msg.Datas[0])
-  if (spellID !== DUO_QI_GAIN_ALL_SPELL_ID) return undefined
-
   const room = game.room
   if (!room) return undefined
 
   const state = getDuoQiState(room)
   if (!state) return undefined
 
-  const targetSeatID = Number(msg.SeatID)
+  const targetSeatID = msg.SeatID
   const ownerSeatID = Number(msg.Datas[1])
   if (
     !Number.isFinite(targetSeatID) ||
@@ -238,29 +233,19 @@ export function recordDuoQiRoleDataTarget(
 // 协议 FromID/ToID 会随区域改变含义；这里只接受归一化后的“目标手牌 -> owner 手牌”
 // 或“弃牌堆 -> owner 手牌”，避免同 SpellID 的装备、标记等后续移动误触发推断。
 function activationMatchesMove(activation: DuoQiActivation, event: MoveEventDraft): boolean {
-  const targetSeatInput: unknown = event.options?.seatID
-  const targetSeatValues =
-    targetSeatInput !== null &&
-    targetSeatInput !== undefined &&
-    typeof targetSeatInput !== 'string' &&
-    typeof (targetSeatInput as Iterable<unknown>)[Symbol.iterator] === 'function'
-      ? Array.from(targetSeatInput as Iterable<unknown>)
-      : [targetSeatInput]
-  const targetSeatIDs = targetSeatValues.map(Number).filter(Number.isFinite)
   if (
     event.toZone !== 'player' ||
-    event.options?.subZone !== 'hand' ||
-    targetSeatIDs.length !== 1 ||
-    targetSeatIDs[0] !== activation.ownerSeatID
+    event.options.subZone !== 'hand' ||
+    event.options.toSeatID !== activation.ownerSeatID
   ) {
     return false
   }
 
-  if (event.options?.fromZone === 'discard') return true
+  if (event.options.fromZone === 'discard') return true
   return (
-    event.options?.fromZone == null &&
-    event.options?.fromSubZone === 'hand' &&
-    Number(event.options?.fromSeatID) === activation.targetSeatID
+    event.options.fromZone == null &&
+    event.options.fromSubZone === 'hand' &&
+    event.options.fromSeatID === activation.targetSeatID
   )
 }
 
@@ -284,7 +269,6 @@ function isCardInOwnerHand(card: Card, ownerSeatID: SeatID): boolean {
 }
 
 function decorateGainAll(event: MoveEventDraft, room: Room, state: DuoQiState): MoveEventDraft {
-  const raw = getRaw(event)
   const activation = state.activations.get(DUO_QI_GAIN_ALL_SPELL_ID)
   if (!activation || activation.skipInference || !activationMatchesMove(activation, event))
     return event
@@ -300,7 +284,7 @@ function decorateGainAll(event: MoveEventDraft, room: Room, state: DuoQiState): 
     sourceZone
   )
 
-  const cardCount = Math.max(0, Number(event.cardCount ?? raw.CardCount) || 0)
+  const cardCount = getCount(event)
   if (sourceCards.length !== cardCount) return event
 
   return patchEvent(event, {
@@ -318,7 +302,7 @@ function resolveRandomHandCandidatesForGainAll(
   activation: DuoQiActivation,
   sourceZone: number
 ): void {
-  const cardCount = Math.max(0, Number(event.cardCount ?? getRaw(event).CardCount) || 0)
+  const cardCount = getCount(event)
   if (cardCount <= 0) return
 
   const definiteSourceCards = collectGainAllSourceCards(
@@ -456,7 +440,7 @@ function collectRecentDiscardSourceCards(
   const sourceCandidates = (room.zones.get('discard')?.cards ?? []).filter((card) =>
     targetInitialCardIDsInDiscard.has(card.id)
   )
-  const gainedCount = Math.max(0, Number(event.cardCount) || 0)
+  const gainedCount = getCount(event)
   if (gainedCount <= 0 || sourceCandidates.length < gainedCount) return []
 
   // 弃牌区按 bottom-first 保存；3731 默认取得目标角色较后进入弃牌区的夺炁牌。
@@ -480,7 +464,7 @@ function decorateRandomDiscardGain(
 
   // 与 3731 的暗手牌随机获取不同，弃牌区有可复现的先后顺序；即使其它视角收到空
   // CardIDs，也能按“目标夺炁牌后入优先”还原实际身份。
-  const gainedCount = Math.max(0, Number(event.cardCount) || 0)
+  const gainedCount = getCount(event)
   const sourceCards = collectRecentDiscardSourceCards(event, room, state, activation)
   if (gainedCount <= 0 || sourceCards.length !== gainedCount) return event
 
@@ -496,7 +480,7 @@ export function decorateDuoQiMove(event: MoveEventDraft, room: Room): MoveEventD
   const state = getDuoQiState(room)
   if (!state) return event
 
-  const spellID = Number(getRaw(event).SpellID ?? event.options?.spellID)
+  const spellID = event.protocol.SpellID
   if (spellID === DUO_QI_GAIN_ALL_SPELL_ID) return decorateGainAll(event, room, state)
   if (spellID === DUO_QI_RANDOM_GAIN_SPELL_ID) {
     return decorateRandomHandGain(decorateRandomDiscardGain(event, room, state), state)
@@ -518,7 +502,7 @@ function decorateRandomHandGain(event: MoveEventDraft, state: DuoQiState): MoveE
     return event
   }
 
-  const count = Math.max(0, Number(event.cardCount) || 0)
+  const count = getCount(event)
   const candidateEntities = new Set(
     getInitialEntitiesForSeat(state, activation.targetSeatID).filter(
       (card) =>
@@ -551,7 +535,7 @@ export function decorateDuoQiKnownMove(event: MoveEventDraft, room: Room): MoveE
   const state = getDuoQiState(room)
   if (!state || state.pendingRandomHandGroups.length === 0) return event
 
-  const fromSeatID = Number(event.options?.fromSeatID)
+  const fromSeatID = event.options.fromSeatID
   if (
     event.options?.fromSubZone !== 'hand' ||
     !Number.isFinite(fromSeatID) ||
@@ -584,18 +568,18 @@ export function decorateDuoQiEntitySafety(event: MoveEventDraft, room: Room): Mo
   const state = getDuoQiState(room)
   if (!state) return event
 
-  const raw = getRaw(event)
-  const spellID = Number(raw.SpellID ?? event.options?.spellID)
-  const fromSeatID = Number(raw.FromID)
+  const move = event.protocol
+  const spellID = move.SpellID
+  const fromSeatID = move.FromID
   const isUnknownHandSelection =
-    Number(raw.FromZone) === 5 && !event.cardIDs?.some?.((cardID: CardID) => cardID > 0)
+    move.FromZone === 5 && !event.cardIDs?.some?.((cardID: CardID) => cardID > 0)
 
   if (!isUnknownHandSelection || spellID === DUO_QI_GAIN_ALL_SPELL_ID) return event
 
   // 3731 由技能私有局部候选组保留初始归属；此处不能清掉整组实体标签。
   if (spellID === DUO_QI_RANDOM_GAIN_SPELL_ID) return event
 
-  const selectionCount = Math.max(0, Number(event.cardCount ?? raw.CardCount) || 0)
+  const selectionCount = getCount(event)
   const sourcePlayer = room.getPlayer(fromSeatID)
   const physicalHandCards = getHandCards(room, fromSeatID)
   const sourceHandCount = sourcePlayer?.hasObservedHandCount
@@ -651,11 +635,11 @@ function finishRandomHandGroupsAfterGainAll(
 ): void {
   if (!state || state.pendingRandomHandGroups.length === 0) return
 
-  const spellID = Number(getRaw(event).SpellID ?? event.options?.spellID)
+  const spellID = event.protocol.SpellID
   if (
     spellID !== DUO_QI_GAIN_ALL_SPELL_ID ||
     event.options?.fromSubZone !== 'hand' ||
-    !Number.isFinite(Number(event.options?.fromSeatID))
+    !Number.isFinite(event.options.fromSeatID)
   ) {
     return
   }
@@ -674,7 +658,7 @@ function finishRandomHandGroupsAfterGainAll(
 function commitRandomHandCandidates(state: DuoQiState | undefined, event: MoveEventDraft): void {
   if (!state || state.pendingRandomHandGroups.length === 0) return
 
-  const sequence = Number(event.options?.duoQiRandomHandGroupSequence)
+  const sequence = event.options.duoQiRandomHandGroupSequence
   const group = state.pendingRandomHandGroups.find((candidate) => candidate.sequence === sequence)
   if (!group) return
 

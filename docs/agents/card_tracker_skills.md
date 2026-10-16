@@ -5,18 +5,46 @@
 > [`docs/protocols/README.md`](../protocols/README.md)。新增技能临时状态前先查
 > [`skill_state.md`](skill_state.md)，确认统一状态仓库中的 key 与访问入口。
 
+## 移动装饰器输入契约
+
+- `MoveEventDraft.protocol` 直接引用最终 `patched` 的只读协议；`cardIDs` 初始复用其只读数组，技能分支直接读取数值，
+  不再从 `getRaw(event)` 取字段并重复 `Number()` 转换。
+- 响应器只读取 `patched`，下书按手牌区协议判断并读取 `FromID/ToID`；端点仅在最终事件归一化时解析。
+- 当前移动牌与数量以 `event.cardIDs` / `event.cardCount` 为准；`protocol` 保留装饰前的协议字段，
+  `patchEvent()` 不因来源实体或候选推断而改写它。
+- `event.raw` 与 `options.sourceEvent.raw` 引用同一份原始输入；后者随 `MoveOptions` 进入 Room，保留来源追溯。
+- `Room.decorateMoveEvent()` 接收完整标准事件；领域直调仍使用 `Room.moveCards()`。
+  独立技能通知、角色数据或选择回复仍在各自解析入口处理原始字段，不套用移动协议契约。
+
 ## 快速索引
 
 | 场景 | 协议或识别条件 | 主要实现 / 回归入口 |
 | --- | --- | --- |
+| 诡伏相邻获得消息补全 | `SpellID=3709` + `DataID=3709` | `src/tracker/skill/GuiFu.ts`、`tests/tracker/roleData3709.test.ts` |
 | 下书明暗选择 | `SpellID=361` | `src/handler/skills/XiaShu.ts`、`tests/tracker/xiaShu.test.ts` |
-| 暗置标记区候选 | `FromZone=5`、`ToZone=4/8`、全暗 `CardIDs` | `RoomMovement.handleHiddenMarkMove()`、`hiddenMarkCandidates` |
+| 反间展示与手牌移交 | `SpellID=713`、`MoveType=27` | `docs/protocols/PubGsCMoveCard-713.md`；现有列表解码条件不匹配该样例 |
+| 问卦候选来源筛选 | `SpellID=780`、暗交牌 `MoveType=27` 后紧邻回堆 | `src/tracker/skill/WenGua.ts`；`tests/tracker/wenGuaCandidateSource.test.ts` |
+| 权变牌堆顶观看与获得 | `SpellID=7011`、`MoveType=21/18` | `docs/protocols/GsCRoleOptTargetNtf-7011.md` |
+| 暗置标记区候选 | `FromZone=5`、`ToZone=4/8`、全暗 `CardIDs` | `RoomMovementHiddenMarks.handleHiddenMarkMove()`、`hiddenMarkCandidates` |
 | 观虚目标视角交换 | `SpellID=987/988` | `src/tracker/skill/GuanXu.ts`、`tests/tracker/guanXuExchange.test.ts` |
 | 整手牌交换 | `MoveType=11` + `5<->10` + 整手张数 | `src/tracker/skill/HandExchange.ts` |
 | 骋烈其他视角的暗中交换与弃置 | `SpellID=3208` | `src/tracker/skill/ChengLie.ts`、`tests/tracker/chengLie.test.ts` |
 | 诫厉观看与暂存 | `SpellID=3483` | `handleRoleOptTargetNtf`、`tests/tracker/roleOptTargetNtf.test.ts` |
 | 天候私有观看与展示 | `SpellID=3903` | `src/tracker/skill/TianHou.ts`、`tests/tracker/tianHouExchange.test.ts` |
 | 兴作牌底与手牌交换 | `SpellID=3776` | `src/tracker/skill/XingZuo.ts`、`tests/tracker/xingZuo.test.ts` |
+
+## 诡伏相邻获得消息补全（SpellID=3709）
+
+- 协议约定：无 ID 的获得移动与角色数据相邻；当前持有列表将新增 ID 放在前面。
+- `src/tracker/skill/GuiFu.ts` 使用 GameState `tracker` scope 的 `3709` key 暂存一条移动，
+  牌堆与弃牌来源都不提前写入实体或数量。角色数据按前置 `CardCount` 取新增前缀，
+  补齐 ID 后经 Controller 执行一次普通移动；技能不自行修改身份账本。
+- 不维护 FIFO、历史快照或额外匿名手牌；不支持移动积压、跨座位乱序和分批揭示。
+  用牌后、获得技能时等没有前置获得移动的角色数据忽略，不根据状态列表独立移动牌；
+  失配或被下一条移动打断时告警清除暂存。
+- 已携带 ID 的移动立即同步，主视角不重复处理角色数据。
+- 原始移动、相邻角色数据及 `raw` / `patched` 约定见
+  [诡伏协议专页](../protocols/PubGsCMoveCard-3709.md)。
 
 ## 下书明暗选择（SpellID=361）
 
@@ -34,21 +62,41 @@
   `choice/actorSeatID`；移动完成回调是唯一结算点，负责确认展示牌并清理技能状态。
 - 协议样例：`docs/protocols/GsCRoleOptTargetNtf-361.md`。
 
+## 反间展示与手牌移交（SpellID=713）
+
+- 三条原始消息及可确认的字段含义见 `docs/protocols/PubGsCMoveCard-713.md`。
+- 样例先由 5 号同区展示 `119`，再以 `MoveType=27` 移交给 1 号，最后由 1 号同区展示五张牌；展示列表包含 `119`。
+- 样例中的 `MoveType=21` 都是 `5 -> 5` 同区展示；`MoveType=27` 是 `5 -> 5` 的跨座位移交，不应仅凭 Zone 相同视作无操作。
+- `src/handler/skills/Spell713.ts` 的首项下标解码要求 `CardCount === CardIDs.length - 2`，与本样例的等长列表不符；技能处理器在 `src/handler/spellEffects.js` 中当前未注册。
+
+## 问卦候选来源筛选（SpellID=780）
+
+- `MoveType=27` 是跨技能通用的“主动交给”（`MOVE_TYPE.GIVE`）。
+- 相关角色携带真实 ID 的交牌/回堆继续走通用已知牌移动。
+- 第三方无正 ID 的单张交牌记录来源候选身份集合，紧邻回顶/回底时通过 `publicCandidateSource`
+  限定公共候选来源，避免污染接收者原有明牌。空集合明确禁止扩散，不回退为接收者全部明牌。
+- 对相关旧组的来源/接收者手牌数量约束保守失效，不建立精确公共区批次约束。交牌/回堆已确认相邻，
+  仅按 `780` 注册处理器，不监听其它移动；数量、类型、座位等不匹配时保留通用处理。
+- 完整批次名额、精确排除接收者候选及长链关联仍未实现。原始样例和精度边界见
+  [问卦协议说明](../protocols/PubGsCMoveCard-780.md)。
+
 ## 暗置标记区候选流程
+
+木牛流马的三条相邻原始协议及 ZoneParam 语义见 [木牛流马协议说明](../protocols/PubGsCMoveCard-700.md)。装备本体迁座只处理装备自身；随后附属 mark700 协议才迁移内部牌、账本与投影，不得将空 CardIDs 当成空容器快照。
 
 当协议出现 `FromZone=5`、`ToZone=4/8`、`CardIDs` 全暗且 `CardCount > 0` 时，记牌器会检查来源手牌是否存在明牌候选：
 
 1. 若没有来源明牌，沿用普通暗牌占位移动逻辑。
-2. 若存在来源明牌，由 `RoomMovement.handleHiddenMarkMove()` 接管默认暗牌移动，并通过
+2. 若存在来源明牌，由 `RoomMovementHiddenMarks.handleHiddenMarkMove()` 接管默认暗牌移动，并通过
    `Room.readSkillState('hiddenMarkCandidates')` 访问统一状态仓库中的候选账本。
-3. 账本记录来源座位、当前投影目标座位、`spellID`、候选明牌、已确认手牌/标记牌，以及本次暗置的明牌落入标记区数量范围。这里的 `spellID` 表示标记空间 ID：协议 `zone 4` 按旧 `Zone` 规则优先取 `ZoneParam || SpellID`，`zone 8` 优先取 `SpellID || ZoneParam`；木牛流马（木马）的标记空间 ID 固定为 `700`。
-4. 先将候选明牌投影为完整位置候选：保留原有 `A 手牌 / B 手牌` 等候选，再追加目标标记位置。普通标记追加 `目标座位 标记`；木马追加装备容器候选 `container:equipment:161:700`，再由索引按 161 当前装备座位显示到玩家标记区。这一步不会丢掉既有跨角色候选。
+3. 账本记录来源座位、当前投影目标座位、`spellID`、候选明牌、已确认手牌/标记牌，以及本次暗置的明牌落入标记区数量范围。这里的 `spellID` 表示标记空间 ID：协议 `zone 4` 按旧 `Zone` 规则优先取 `ZoneParam || SpellID`，`zone 8` 优先取 `SpellID || ZoneParam`；木牛流马（木马）的标记空间 ID 固定为 `700`。普通标记账本 ID 为 `sourceSeat:targetSeat:spellID`；唯一可迁座的木牛流马使用 `sourceSeat:muniu:161`，不同来源手牌分别记账，承载座位变化不改变账本或约束组 ID。
+4. 先将候选明牌投影为完整位置候选：保留原有 `A 手牌 / B 手牌` 等候选，再追加目标标记位置。普通标记追加 `目标座位 标记`；木马追加装备容器候选 `container:equipment:161:700`，再由索引按 mark700 协议记录的空间座位显示到玩家标记区。尚未观察到标记协议时，才以装备位置作初始兜底。这一步不会丢掉既有跨角色候选。
 5. 当范围 `knownMarkMin === knownMarkMax` 且候选全集只剩 `来源手牌 / 目标标记` 时，创建 `ConstraintGroup.expectedSlotsByLocation` 精确约束，并同步可镜像的 `expectedSlotsBySubZone`，支持 4 选 1、4 选 2、4 选 3 等 N 选 K。木马容器候选只参与 `expectedSlotsByLocation`，不生成 `expectedSlotsBySubZone` 镜像。
-6. 后续某张候选明牌明确从同一标记空间进入弃牌区时，确认它占用该标记区名额；明确从来源手牌移动时，确认它占用手牌名额。普通标记要求座位与标记 ID 同时匹配；木马标记 `700` 若 `markID` 一致但座位变化，会先把账本的当前投影座位重定向，再继续使用同一个装备容器候选收敛。161 木马被其他技能移动时，即使本次协议 `spellID` 不是 700，也会通过装备物理牌 ID 识别并迁移容器投影。
+6. 后续某张候选明牌明确从同一标记空间进入弃牌区时，确认它占用该标记区名额；明确从来源手牌移动时，确认它占用手牌名额。普通标记要求座位与标记 ID 同时匹配；木马标记 `700` 若 `markID` 一致但座位变化，会先把账本的当前投影座位重定向，再继续使用同一个装备容器候选收敛。装备本体 `6 -> 6` 不迁移内部牌；收到来源与目标标记 ID 都为 `700` 的跨座位 `mark -> mark` 协议后，才迁移标记实体、暗占位与候选账本，并同步精确约束的座位读面，不重命名或合并账本。`hiddenMarkCandidates.muniuMarkSeat` 记录该空间的显式观测座位，使两条协议之间的候选投影也留在旧座位。候选明牌与来源标记占位置换时，优先选用该候选所属账本的可用占位，避免消耗另一来源的占位后又触发本账本重复回收。
 7. 技能 `414` 的标记牌暗置回手牌时，返回协议可能使用 `3389` 作为 `SpellID`；同样由 `3389` 触发的标记也会以 `3389` 返回。因此从标记区按暗牌数量取源牌时，`414` 与 `3389` 作为兼容标记空间互扫，避免明牌仍残留在 `414` 标记区。
 8. 洗牌发现承担 cohort 未决身份的正 ID 暗标记实体时，会将同一实体原地匿名化为稳定负 `id/entityID`；标记位置、候选集合及 `hiddenMarkCandidates` 中的对象引用保持不变，不再暂停原实体或创建替身。
 9. 来源手牌被完整揭示时，`Room.moveCards()` 会在 `resolveKnownMoveCards()` 之前调用 `resolveHiddenMarkCandidatesFromFullHandReveal()`：未出现在完整手牌快照中的弱候选会先确认到标记空间，再让已知牌物化读取修正后的匿名手牌槽。这个前置时序仍是当前运行时契约。
-10. 正 ID 确认占用标记名额后，`reconcileMarkSpace(record, reason)` 统一回收溢出的匿名标记占位。无论目标是普通 player mark 还是木马装备容器，只要占位来自来源手牌，就必须挤回 `sourceSeat` 手牌，不能丢到 `outside`；只有全明装备容器快照清零后、失去手牌物理背书的孤儿占位由 `clearHiddenMarkPlaceholdersForObservedSnapshot()` 独立移出玩家区。
+10. 正 ID 确认占用标记名额后，`reconcileMarkSpace(record, reason)` 按账本累计暗置额度统一回收溢出的匿名标记占位；`hiddenCount` 不是当前标记区容量，牌离开造成不足时不会在这里补造实体。无论目标是普通 player mark 还是木马装备容器，只要占位来自来源手牌，就必须挤回 `sourceSeat` 手牌，不能丢到 `outside`；只有全明装备容器快照清零后、失去手牌物理背书的孤儿占位由 `clearHiddenMarkPlaceholdersForObservedSnapshot()` 独立移出玩家区。
 11. `ConstraintGroup.expectedSlotsByLocation` 继续只承载精确数量约束。弱记录的范围求解与容器对称增强已经评估并暂缓：部分揭示的“未出现”不是负向证据，完整揭示又必须先于已知牌物化，观察快照还包含实体物化与孤儿清理，现阶段引入通用范围求解器不能替代这些局部流程。
 
 示例：
@@ -81,6 +129,14 @@
   `sourceCards`，避免技能层再次反转而破坏协议顺序。
 - `987/988` 显式绕过 `HandExchange`；即使目标恰好只有一张手牌，也不能把这条技能路径误判为
   双方整手互换。回归见 `tests/tracker/guanXuExchange.test.ts`。
+
+## 宴戏（7017）
+
+- 协议与实现取舍见 [`../protocols/PubGsCMoveCard-7017.md`](../protocols/PubGsCMoveCard-7017.md)。
+- `src/tracker/skill/YanXi.ts` 用先获得对方手牌识别成功批次；非国战随后连续取两次当前牌顶，国战成功保留随机来源。
+- 无成功批次时，公开 ID 走普通已知移动；没有真实 ID 则只匿名化移动前牌顶两槽中的明牌，放弃范围候选精度，不影响更深处明牌。
+- Room 的 `anonymizeCards` 流水线同步释放实体定位与 `PileIdentityLedger` 已定位牌堆身份，保留数量和身份全集；不要仅修改 `isKnown`。
+- 状态使用 `tracker` scope 的 `7017`，见 [`skill_state.md`](skill_state.md)；测试见 `tests/tracker/yanXi.test.ts`。
 
 ## 整手牌交换（通用协议模式）
 

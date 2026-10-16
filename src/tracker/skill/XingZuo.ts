@@ -7,13 +7,12 @@ import type { SeatID } from '../types'
 import {
   getCount,
   getPositiveIDs,
-  getRaw,
   hasPositiveID,
   type MoveEventDraft,
   patchEvent
 } from './moveEventUtils'
 
-export const XING_ZUO_SPELL_ID = 3776
+const XING_ZUO_SPELL_ID = 3776
 
 interface XingZuoBatch {
   actorSeat: SeatID
@@ -27,15 +26,15 @@ interface XingZuoBatch {
 
 /** 兴作：牌底整批与目标全部手牌置换，原手牌整批回牌底。 */
 export default function decorateXingZuo(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
-  if (raw.SpellID !== XING_ZUO_SPELL_ID || raw.MoveType !== MOVE_TYPE.EXCHANGE) {
+  const move = event.protocol
+  if (move.SpellID !== XING_ZUO_SPELL_ID || move.MoveType !== MOVE_TYPE.EXCHANGE) {
     return event
   }
 
-  if (raw.FromZone === 1 && raw.ToZone === 10) {
+  if (move.FromZone === 1 && move.ToZone === 10) {
     const pileCards = room.getPublicEndpointCards('pile', getCount(event), POSITION_BOTTOM)
     room.setSkillState<XingZuoBatch>(XING_ZUO_SPELL_ID, {
-      actorSeat: raw.ToID,
+      actorSeat: move.ToID,
       pileCards,
       handSeat: null,
       handCount: 0,
@@ -52,11 +51,11 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
   const batch = room.readSkillState<XingZuoBatch>(XING_ZUO_SPELL_ID)
   if (!batch) return event
 
-  if (raw.FromZone === 5 && raw.ToZone === 10 && raw.ToID === batch.actorSeat) {
-    batch.handSeat = raw.FromID
+  if (move.FromZone === 5 && move.ToZone === 10 && move.ToID === batch.actorSeat) {
+    batch.handSeat = move.FromID
     batch.handCount = getCount(event)
     batch.exchangeBeforeHand = new Set(room.zones.get('exchange')?.cards ?? [])
-    const player = room.getPlayer(raw.FromID)
+    const player = room.getPlayer(move.FromID)
     // 兴作必定换出全部手牌，无需依赖本地观测张数来判断是否为整手交换。
     if (!hasPositiveID(event.cardIDs) && player) {
       return patchEvent(event, {
@@ -66,7 +65,7 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
     return event
   }
 
-  if (raw.FromZone !== 10 || raw.FromID !== batch.actorSeat) return event
+  if (move.FromZone !== 10 || move.FromID !== batch.actorSeat) return event
   if (!batch.exchangeBeforeHand) return event
 
   // 在下一条协议到达时记录上一条实际移入的实体，包含通用移动创建的暗占位。
@@ -74,14 +73,14 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
     (card) => !batch.exchangeBeforeHand!.has(card)
   )
 
-  if (raw.ToZone === 10 && raw.ToID === batch.actorSeat) {
+  if (move.ToZone === 10 && move.ToID === batch.actorSeat) {
     // 两条同区通知只描述交换动画，不提供重新混合两批牌的身份或顺序信息。
     return patchEvent(event, { type: 'noop' })
   }
 
   if (
-    raw.ToZone === 5 &&
-    raw.ToID === batch.handSeat &&
+    move.ToZone === 5 &&
+    move.ToID === batch.handSeat &&
     getCount(event) === batch.pileCards.length &&
     !batch.returnedToHand
   ) {
@@ -89,7 +88,7 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
     return patchBatchCards(event, room, batch.pileCards)
   }
 
-  if (raw.ToZone === 1 && getCount(event) === batch.handCount && batch.returnedToHand) {
+  if (move.ToZone === 1 && getCount(event) === batch.handCount && batch.returnedToHand) {
     room.deleteSkillState(XING_ZUO_SPELL_ID)
     const candidate = createPublicCandidate('pile', POSITION_BOTTOM, batch.handCount)
     const hasCompleteOrder = getPositiveIDs(event.cardIDs).length === batch.handCount

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { getDuoQiState } from '@/tracker/skill/DuoQi'
 // import { normalizeTrackerMovePosition } from '@/tracker/runtime/protocolRules'
@@ -11,6 +11,10 @@ import {
 import { assertTrackerReplayConsistency } from './helpers/protocolReplay/snapshot'
 
 describe('tracker protocol replay', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('解析严格 JSONL 且拒绝时间等录制 schema 外字段', () => {
     const source = [
       JSON.stringify({ seq: 1, className: 'MsgGameRoundNtf', payload: { isPassed: false } }),
@@ -149,6 +153,54 @@ describe('tracker protocol replay', () => {
     expect(replayer.gameState.getSpellState(361)).toBeUndefined()
   })
 
+  it('下书回放状态分别保存在各自 GameState 中', () => {
+    const first = new TrackerProtocolReplayer()
+    const second = new TrackerProtocolReplayer()
+    const replayState = (
+      replayer: TrackerProtocolReplayer,
+      cardID: number,
+      targetSeatID: number,
+      actorSeatID: number,
+      choice: number
+    ) =>
+      replayer.replay(
+        openingRecords().concat([
+          {
+            seq: 5,
+            className: 'GsCRoleOptTargetNtf',
+            payload: { SpellID: 361, Param: 0, Type: 29, Params: [cardID], targetSeatID }
+          },
+          {
+            seq: 6,
+            className: 'CGsRoleSpellOptRep',
+            payload: { SpellID: 361, Type: 22, Datas: [choice, 1], SeatID: actorSeatID }
+          }
+        ])
+      )
+
+    try {
+      expect(replayState(first, 1, 2, 1, 1).success).toBe(true)
+      expect(replayState(second, 3, 1, 2, 2).success).toBe(true)
+      expect(first.gameState.getSpellState(361)).toEqual({
+        shownCardIDs: [1],
+        targetSeatID: 2,
+        actorSeatID: 1,
+        choice: 1
+      })
+      expect(second.gameState.getSpellState(361)).toEqual({
+        shownCardIDs: [3],
+        targetSeatID: 1,
+        actorSeatID: 2,
+        choice: 2
+      })
+      second.controller.destroyTrackerRoom()
+      expect(first.gameState.getSpellState(361)).toMatchObject({ shownCardIDs: [1], choice: 1 })
+    } finally {
+      first.controller.destroyTrackerRoom()
+      second.controller.destroyTrackerRoom()
+    }
+  })
+
   it('重放看牌协议并保留牌堆顶顺序供逻辑推断检查', () => {
     const records = openingRecords().concat({
       seq: 5,
@@ -239,23 +291,6 @@ describe('tracker protocol replay', () => {
     expect(report.failure?.stateAfter.room?.deckReady).toBe(true)
   })
 
-  it('SpellID=713 的剔除下标越界时停止回放', () => {
-    const records = openingRecords().concat({
-      seq: 5,
-      className: 'PubGsCMoveCard',
-      payload: movePayload({
-        CardIDs: [99, 0, 0],
-        CardCount: 1,
-        MoveType: 21,
-        SpellID: 713
-      })
-    })
-    const report = new TrackerProtocolReplayer({ currentUserID: 101 }).replay(records)
-
-    expect(report.success).toBe(false)
-    expect(report.failure?.message).toContain('SpellID=713 移动协议剔除下标 99 越界')
-  })
-
   // it('回魂牌回牌堆时按原始牌顶位置过滤牌面', () => {
   //   const normalized = normalizeTrackerMovePosition({
   //     CardIDs: [4400, 7],
@@ -275,16 +310,24 @@ describe('tracker protocol replay', () => {
   //   expect(normalized.ToPosition).toBe(POSITION_RANDOM)
   // })
 
-  it('一致性检查读取玩家快照而不推进快照游标', () => {
+  it('一致性检查只读取玩家快照，不刷新或重建缓存', () => {
     const replayer = new TrackerProtocolReplayer({ currentUserID: 101 })
     const report = replayer.replay(openingRecords())
     expect(report.success).toBe(true)
 
     const room = replayer.controller.getReadyTrackerRoom()
     if (!room) throw new Error('测试预期 Room 已完成重建')
-    const snapshotSeq = room.playerSnapshotSeq
+    const snapshot = room.playerCardsSnapshot
+    const snapshotCards = [...snapshot]
+    const refreshSpy = vi.spyOn(room, 'refreshPlayerSnapshot')
+    const rebuildSpy = vi.spyOn(room, 'rebuildPlayerSnapshot')
+
     assertTrackerReplayConsistency(room, 'readonly-player-snapshot', { checkIndexes: false })
-    expect(room.playerSnapshotSeq).toBe(snapshotSeq)
+
+    expect(refreshSpy).not.toHaveBeenCalled()
+    expect(rebuildSpy).not.toHaveBeenCalled()
+    expect(room.playerCardsSnapshot).toBe(snapshot)
+    expect(room.playerCardsSnapshot).toEqual(snapshotCards)
   })
 
   it('保留 isSend 后与生产处理器一致跳过发送侧移动', () => {

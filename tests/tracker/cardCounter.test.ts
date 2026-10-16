@@ -36,14 +36,14 @@ describe('CardCounter 状态索引', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5], seatIDs: [1] })
 
     room.moveCards([0], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 1,
       sourceEvent: { type: 'test:hidden-hand' }
     })
     room.moveCards([2], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       subZone: 'hand',
       fromZone: 'pile',
       cardCount: 1,

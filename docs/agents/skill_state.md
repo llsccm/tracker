@@ -15,8 +15,9 @@
 - `GameState.updateRecordInfo()` 只更新对局 ID 与模式，不清空统一仓库。座位开局经 Controller
   调用 `beginPlayback()`，即使重新播放同一 `gameId` 也清空本轮状态；初始化信息重复到达不影响它。
   对局 ID 和模式名称独立于 Room 绑定状态，随对局信息切换、显式重置或结束清理。
-- Room 的 `readSkillState()` 等方法只是 `tracker` 命名空间的领域薄入口；tracker 代码不应直接导入
-  全局 `Game`，以保留测试隔离和依赖注入能力。
+- Room 的 `readSkillState()` 等方法继承自 `src/tracker/room/RoomBase.ts`，只是 `tracker` 命名空间的
+  领域薄入口；状态仍由 GameState 唯一保存。tracker 代码不应直接导入全局 `Game`，
+  以保留测试隔离和依赖注入能力。
 
 ## 状态模型
 
@@ -109,17 +110,19 @@ tracker 状态；所需事实应由后续协议重新建立。
 
 | Key                    | 技能 / 协议                                                                 | 保存内容与用途                                                             | 实现与清理                                                                            |
 | ---------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `hiddenMarkCandidates` | 通用暗置标记推断；覆盖普通标记、`414/3389` 兼容标记空间及木牛流马容器 `700` | 明牌候选、匿名占位、来源/目标座位、标记空间、数量范围与约束组关系          | `src/tracker/roomMovement/hiddenMarks.ts`；随候选结算维护，统一生命周期兜底清空       |
-| `unassignedMarkSpaces` | `seatID=255` 等无席位弹窗/标记空间                                          | `spellID -> Card[]` 暗占位实体桶                                           | `src/tracker/roomMovement/hiddenMarks.ts`；取牌或实体移出时更新，统一生命周期兜底清空 |
+| `hiddenMarkCandidates` | 通用暗置标记推断；覆盖普通标记、`414/3389` 兼容标记空间及木牛流马容器 `700` | 明牌候选、匿名占位、来源/目标座位、标记空间、数量范围、约束组关系与 `muniuMarkSeat` 显式空间座位          | `src/tracker/roomMovement/hiddenMarks.ts`；随候选结算维护，统一生命周期兜底清空       |
+| `unassignedMarkSpaces` | `seatID=255` 等无席位弹窗/标记空间                                          | `spellID -> Card[]` 暗占位实体桶                                           | `src/tracker/roomMovement/unassignedMarkSpaces.ts`；取牌或实体移出时更新，统一生命周期兜底清空 |
 | `chengLieDiscardQueue` | 马承【骋烈】 | 待近似弃置的牌顶展示 ID；暗标记不绑定身份，每条标记弃置按张数消费队列，显式 ID 优先 | `src/tracker/skill/ChengLie.ts`；队列耗尽后删除 |
 | `duoQi`                | 【狂魔】`3730` 与【夺炁】`3731` 共享                                        | 初始手牌归属、`Card` 实体归属、未决 CardID、发动记录及随机获得候选组       | `src/tracker/skill/DuoQi.ts`；初始化替换旧状态，统一生命周期兜底清空                  |
 | `guanXuExchange`       | 黄承彦【观虚】`987/988`                                                     | 牌堆侧/手牌侧 exchange 逻辑桶、桶内 `Card` 引用与牌顶范围候选              | `src/tracker/skill/GuanXu.ts`；各 SpellID 桶结算后删除，全部为空时删除总账本          |
 | `handExchangeBatches`  | 通用整手牌交换模式；完整实战样例为 `SpellID=121`，实现不绑定单一技能        | 按 SpellID 和原持有座位保存整手批次、`Card` 引用、候选批次令牌与恢复元数据 | `src/tracker/skill/HandExchange.ts`；单个 SpellID 结算后删分账，全部为空时删除总账本  |
 | `3483`                 | 族钟繇【诫厉】                                                              | 观看上下文、目标/第三方交换批次、协议 ID 到匿名槽映射及目标手牌候选        | `src/tracker/skill/JieLi.ts`；结算完成或协议失配时删除                                |
+| `3709` | 【诡伏】 | 单条待补全获得移动的 `raw` / `patched`，不保存实体或历史快照 | `src/tracker/skill/GuiFu.ts`；相邻角色数据消费、失配或后续移动打断时删除，Controller 重建牌堆与统一生命周期清理 |
 | `qiaozhiSelection`     | 【巧织】`3544`                                                              | 展示 CardID、暗取数量和目标座位，用于最终差集推断                          | `src/tracker/skill/QiaoZhi.ts`；结算、可见结果到达或校验失败时删除                    |
 | `tianHouExchange`      | 周群【天候】`3903`                                                          | 交换批次、原牌顶/原手牌 `Card` 引用、明牌换出范围与约束组 ID               | `src/tracker/skill/TianHou.ts`；结算、展示或异常清理时删除                            |
 | `3776`                 | 【兴作】                                                                    | 原牌底实体、交换区手牌批次、发动者和目标座位                              | `src/tracker/skill/XingZuo.ts`；结算后删除，新批次替换旧记录，统一生命周期兜底清空 |
-| `780`                  | 徐氏【问卦】                                                                | 当前被追踪的单张 `Card` 实体，供他人放回牌堆时复用                         | `src/tracker/skill/WenGua.ts`；目标牌回牌堆后删除                                     |
+| `7017` | 【宴戏】 | 成功批次获得者与剩余牌堆获得次数；国战成功保留随机来源 | `src/tracker/skill/YanXi.ts`；两张消费完或其它移动打断时删除，新成功标记替换旧批次，统一生命周期兜底清空 |
+| `780` | 徐氏【问卦】 | 交牌前来源已知 ID 集合及双方座位；用于相邻回堆的候选筛选，不追踪单个实体 | `src/tracker/skill/WenGua.ts`；仅 `780` 处理器读写，新交牌替换来源、回堆或失配消费，统一生命周期清理 |
 
 ## `spell` scope 当前使用清单
 
@@ -132,11 +135,11 @@ tracker 状态；所需事实应由后续协议重新建立。
 | `3090`          | 【博图】                       | 当前轮次的发动计数                                  | `src/handler/PubGsCUseSpell.js`；`GameState.setTurn()` 删除                                                   |
 | `2143`          | 国战【乱击】                   | 本阶段已使用牌的花色集合，用于花色提示              | `src/handler/PubGsCUseSpell.js`；进入新的个人回合时删除                                                       |
 | `361`           | 【下书】                       | 展示 CardID、真实目标座位、发动者选择和座位         | `src/handler/skills/XiaShu.ts`；配对手牌移动完成后删除                                                        |
-| `441` / `3492`  | 【称象】/【界称象】            | 处理区展示的 CardID，供后续目标通知绘制点数组合     | `src/handler/spellEffects.js`、`src/handler/GsCRoleOptTargetNtf.js`；消费后删除                               |
+| `441` / `3492`  | 【称象】/【界称象】            | 处理区展示的 CardID，供后续目标通知绘制点数组合     | `src/handler/skills/ChengXiang.ts`、`src/handler/GsCRoleOptTargetNtf.js`；消费后删除                               |
 | `3488`          | 蔡瑁【佐练】                   | 各来源座位展示的 CardID 与 exchange 暂存栈顶 CardID | `src/handler/skills/ZuoLian.ts`；字段随交换阶段删除，统一生命周期兜底清空                                     |
-| `3157` / `3511` | 夏侯玄【清议】/李婉【联句】    | 其它视角先看到的完整 CardID，供后续全暗移动回填     | `src/handler/PubGsCUseSpell.js`、`src/handler/spellEffects.js`；匹配移动消费后删除                            |
+| `3157` / `3511` | 夏侯玄【清议】/李婉【联句】    | 其它视角先看到的完整 CardID，供后续全暗移动回填     | `src/handler/PubGsCUseSpell.js`、`src/handler/skills/QingYiLianJu.ts`；匹配移动消费后删除                            |
 | `3571`          | 郭照【椒遇】                   | 用户选择对应的红/黑颜色集合                         | `src/handler/GsCUpdateRoleDataExNtf.js`、`src/handler/skills/JiaoYu.ts`；统一生命周期清空                     |
-| `3750`          | 谋许攸【迁附】                 | 控顶阶段的 CardID 顺序，供后续暗牌回堆移动回填      | `src/handler/PubGsCUseSpell.js`、`src/handler/spellEffects.js`；回堆回填后删除，统一生命周期兜底清空          |
+| `3750`          | 谋许攸【迁附】                 | 控顶阶段的 CardID 顺序，供后续暗牌回堆移动回填      | `src/handler/PubGsCUseSpell.js`、`src/handler/skills/QianFu.ts`；回堆回填后删除，统一生命周期兜底清空          |
 | `4022`          | 裴秀【尽览】及地图/手牌镜像 UI | 地图协议、路线求解、预设路径和手牌花色镜像状态      | `src/handler/GsCUpdateRoleDataExNtf.js`、`src/ui/PeiXiuHandMirror.js`；进入裴秀选技能阶段或统一生命周期时删除 |
 
 `src/handler/skills/YanXi.js` 仍包含 `getSpellState()` 读取，但对应 `7016/7017` 注册当前已注释，
@@ -155,7 +158,8 @@ tracker 状态；所需事实应由后续协议重新建立。
 ## 相关入口
 
 - `src/tracker/Game.ts`：统一 `stateStore`、通用 API、兼容 spell API 与生命周期清理。
-- `src/tracker/Room.ts`：tracker scope 的领域薄入口。
+- `src/tracker/room/RoomBase.ts`：Room 继承的 tracker scope 领域薄入口与当前绑定实例检查。
+- `src/tracker/Room.ts`：完整实例的绑定和销毁协调。
 - [`room.md`](room.md)：Room 状态所有权和生命周期。
 - [`card_tracker_skills.md`](card_tracker_skills.md)：技能与协议特例。
 - [`lifecycle.md`](lifecycle.md)：Game、Room 与浏览器运行时的创建/销毁时序。

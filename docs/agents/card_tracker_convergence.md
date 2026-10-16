@@ -72,7 +72,7 @@ flowchart TD
 - 确定牌已经占满名额时，从其余候选牌中剔除该位置。
 - 候选牌数量不超过剩余名额时，只有这些牌的所有完整位置候选都被本组 `expectedSlotsByLocation` 覆盖，才可把它们锁定到该位置；只要仍能逃逸到组外位置，就必须保留不确定性。
 
-公共位置按完整 key 匹配，不能用同一公共区中的任意确定牌提前占满牌顶/范围名额。装备容器候选收敛后仍保持 container 语义，展示座位由投影层根据装备当前位置计算。
+公共位置按完整 key 匹配，不能用同一公共区中的任意确定牌提前占满牌顶/范围名额。装备容器候选收敛后仍保持 container 语义，展示座位优先取 mark 协议已观测的空间座位；尚未观测时才以装备位置兜底。装备本体移动不提前迁移内部牌或候选投影。
 
 `combinationID` 是展示与迁移标签，不是推理事实。同一张牌可属于多个约束组，标签被后处理组覆盖时不能让 `changed` 变为 `true`。
 
@@ -90,7 +90,7 @@ flowchart TD
 
 收敛循环使用三类增量机制：
 
-- **A2：玩家区增量快照**。`Room.refreshPlayerSnapshot()` 按 `dirtyCardEvents` 游标维护 `playerCardsSnapshot`；事件断档时回退全量重建，开发构建由 `assertPlayerSnapshotConsistency()` 校验。
+- **A2：玩家区增量快照**。`Room.refreshPlayerSnapshot()` 委托 `room/playerSnapshot.ts` 按 `dirtyCardEvents` 游标维护快照；数组、成员集合、游标和顺序表只在该模块内保存，Room 的 `playerCardsSnapshot` 是只读 getter。事件断档时回退全量重建，开发构建由 `assertPlayerSnapshotConsistency()` 校验。新实体通过 `Room.registerCardEntity()` 预先登记创建顺序，首次入手无需 `Room.cards.indexOf()`。
 - **E1：手牌槽按座位缓存**。首轮批量计算有观测手牌数的座位，后续轮次只为受影响座位懒重算；缓存只在单次 `resolveConstraints()` 内有效。
 - **E2：跳过未触碰座位**。首轮处理全部玩家，后续轮次跳过上一轮与本轮至今都未触碰的座位。
 

@@ -1,4 +1,4 @@
-import { POSITION_RANDOM, POSITION_TOP } from '../tracker/candidate/cardPositions'
+import { POSITION_TOP } from '../tracker/candidate/cardPositions'
 
 function finishHandledMove(context) {
   context.finishMove()
@@ -6,32 +6,19 @@ function finishHandledMove(context) {
 }
 
 export function handleSpecialZones(context) {
-  const { game } = context
+  const { game, patched } = context
 
   // 回收区 12
-  if (context.ToZone == 12 || context.FromZone == 12) {
-    return finishHandledMove(context)
-  }
-
-  // 浑天仪特殊底置 (随机)
-  if (
-    context.SpellID == 3694 &&
-    context.FromZone == 0 &&
-    context.ToZone == 1 &&
-    context.ToPosition == POSITION_TOP + 1 &&
-    context.MoveType == 19
-  ) {
-    context.ToPosition = POSITION_RANDOM
-
+  if (patched.ToZone == 12 || patched.FromZone == 12) {
     return finishHandledMove(context)
   }
 
   // 牌堆添加初始牌
   if (
-    context.FromZone == 0 &&
-    context.ToZone == 1 &&
-    context.ToPosition == POSITION_TOP &&
-    context.MoveType == 19
+    patched.FromZone == 0 &&
+    patched.ToZone == 1 &&
+    patched.ToPosition == POSITION_TOP &&
+    patched.MoveType == 19
   ) {
     if (!game.isGameStart) game.isGameStart = null
 
@@ -39,7 +26,7 @@ export function handleSpecialZones(context) {
   }
 
   // 弃牌堆 2 丢到洗牌堆 9
-  if (context.FromZone == 2 && context.ToZone == 9 && context.MoveType == 255) {
+  if (patched.FromZone == 2 && patched.ToZone == 9 && patched.MoveType == 255) {
     game.isPassed = false
     return finishHandledMove(context)
   }

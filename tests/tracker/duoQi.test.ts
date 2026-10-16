@@ -35,7 +35,7 @@ function bindHand(room: Room, cardIDs: number[], seatID: number, known = true): 
 function dealAnonymousHand(room: Room, seatID: number, count: number): void {
   room.moveCards([], 'player', {
     fromZone: 'pile',
-    seatID,
+    toSeatID: seatID,
     subZone: 'hand',
     cardCount: count
   })
@@ -249,7 +249,7 @@ describe('夺炁初始牌身份', () => {
     )![0]
 
     room.moveCards([0, 0, 0, 0], 'player', {
-      seatID: 2,
+      toSeatID: 2,
       fromSeatID: 1,
       fromSubZone: 'hand',
       fromZone: null,
@@ -707,15 +707,19 @@ describe('夺炁初始牌身份', () => {
       sequence: 11
     })
 
-    const knownMove = room.decorateMoveEvent({
-      cardIDs: [5],
-      cardCount: 1,
-      toZone: 'discard',
-      options: {
-        fromSeatID: 1,
-        fromSubZone: 'hand'
-      }
-    })
+    const knownMove = room.decorateMoveEvent(
+      normalizeMoveEvent(
+        protocolMove({
+          CardIDs: [5],
+          CardCount: 1,
+          FromID: 1,
+          FromZone: 5,
+          ToID: 255,
+          ToZone: 2,
+          MoveType: 4
+        })
+      )
+    )
     expect(knownMove.options).toMatchObject({
       duoQiRandomHandCandidateIDs: [5],
       duoQiRandomHandGroupSequence: 11
@@ -726,18 +730,20 @@ describe('夺炁初始牌身份', () => {
       Datas: [3730, 1],
       SeatID: 2
     })
-    const gainAllMove = room.decorateMoveEvent({
-      cardIDs: [],
-      cardCount: 1,
-      toZone: 'player',
-      options: {
-        spellID: 3730,
-        fromSeatID: 2,
-        fromSubZone: 'hand',
-        seatID: 1,
-        subZone: 'hand'
-      }
-    })
+    const gainAllMove = room.decorateMoveEvent(
+      normalizeMoveEvent(
+        protocolMove({
+          CardIDs: [],
+          CardCount: 1,
+          FromID: 2,
+          FromZone: 5,
+          ToID: 1,
+          ToZone: 5,
+          MoveType: 5,
+          SpellID: 3730
+        })
+      )
+    )
     commitDuoQiMove(room, gainAllMove)
 
     expect(state.pendingRandomHandGroups).toEqual([])

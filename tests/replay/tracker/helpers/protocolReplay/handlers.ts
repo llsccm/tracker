@@ -5,17 +5,13 @@ import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 import {
   FULL_HAND_ROLE_OPT_SPELL_IDS,
+  hasMixedTrackerMoveVisibility,
   normalizeTrackerMovePosition,
   PARTIAL_HAND_ROLE_OPT_SPELL_IDS,
-  prepareTrackerMoveCardIDs,
+  shouldIgnoreTrackerMove,
   shouldRevealAsFullHand
 } from '@/tracker/runtime/protocolRules'
-import type { RawMoveCardEvent } from '@/tracker/types'
 import { parseGuiFuCardIDs } from '@/handler/skills/GuiFu'
-import handleXiaShuMove, {
-  handleXiaShuChoice,
-  handleXiaShuTargetNotice
-} from '@/handler/skills/XiaShu'
 import {
   initializeDuoQiState,
   recordDuoQiActivation,
@@ -41,6 +37,13 @@ interface ReplayMoveContext {
   fromSubZone?: string
   toSubZone?: string
   fromSpellID?: number | null
+}
+
+interface ReplayXiaShuState {
+  shownCardIDs: number[]
+  targetSeatID: number
+  choice?: 1 | 2
+  actorSeatID?: number
 }
 
 export function applyTrackerReplayProtocol(
@@ -465,9 +468,24 @@ function applyRoleSpellOpt(
       }
       break
 
-    case 361:
-      didApply = handleXiaShuChoice(record.payload, context.gameState)
+    case 361: {
+      if (
+        type !== 22 ||
+        datas.length !== 2 ||
+        readNumber(payload.data_count ?? datas.length) !== 2
+      ) {
+        break
+      }
+      const choice = datas[0]
+      const state = context.gameState.getSpellState<ReplayXiaShuState>(361)
+      if (!state || (choice !== 1 && choice !== 2)) break
+
+      state.choice = choice
+      const actorSeatID = readNumber(payload.SeatID)
+      if (Number.isInteger(actorSeatID) && actorSeatID !== 255) state.actorSeatID = actorSeatID
+      didApply = true
       break
+    }
 
     default:
       break
@@ -504,10 +522,20 @@ function applyRoleOptTarget(
   }
 
   switch (spellID) {
-    case 361:
-      return handleXiaShuTargetNotice(record.payload, context.gameState)
-        ? applied()
-        : ignored('下书目标通知未携带有效目标或展示牌')
+    case 361: {
+      const shownCardIDs = params.filter((cardID) => cardID > 0)
+      if (
+        param !== 0 ||
+        type !== 29 ||
+        !Number.isInteger(targetSeatID) ||
+        targetSeatID === 255 ||
+        !shownCardIDs.length
+      ) {
+        return ignored('下书目标通知未携带有效目标或展示牌')
+      }
+      context.gameState.setSpellState<ReplayXiaShuState>(361, { shownCardIDs, targetSeatID })
+      return applied()
+    }
 
     case 943:
       if (param !== 0 || params.length !== 1) return ignored('图南未携带单张牌堆顶')
@@ -668,36 +696,7 @@ function applyRoleDataEx(
     }
     if (seatID === mySeatID) return ignored('主视角已从移动协议获知诡伏牌面')
     requireReadyRoom(context, record, '物化诡伏获得牌')
-    const sourceEvent = {
-      type: 'role-data-3709' as const,
-      label: 'GsCUpdateRoleDataExNtf:3709',
-      raw: record.payload
-    }
-    const settlement = context.controller.settleTrackerPendingDiscardGain(
-      seatID,
-      cardIDs,
-      sourceEvent
-    )
-    // invalid 表示本条录制无法安全消费当前 FIFO；回放继续保留现场，但不能宣称完整应用。
-    if (settlement.result === 'invalid') {
-      return partial('3709 身份通知无法与待结算获得牌匹配', { cardIDs, seatIDs: [seatID] })
-    }
-    // missing 已经推进 3709 快照，必须使用结算返回的差量，不能在此重新查询。
-    if (settlement.result === 'missing' && settlement.newCardIDs.length > 0) {
-      context.controller.revealTrackerCards(
-        {
-          type: 'player',
-          seatID,
-          fromSeatID: seatID,
-          fromZone: null,
-          fromSubZone: 'hand',
-          subZone: 'hand',
-          handMoveCount: 0,
-          sourceEvent
-        },
-        settlement.newCardIDs
-      )
-    }
+    context.controller.syncTrackerGuiFuRoleData(seatID, cardIDs)
     return applied()
   }
 
@@ -736,44 +735,27 @@ function applyMoveCard(
   requireReadyRoom(context, record, '同步移动协议')
   const move = readMove(record)
   const notes: string[] = []
-  const afterMoveCallbacks: (() => void)[] = []
-  const prepared = prepareTrackerMoveCardIDs({
-    CardIDs: move.CardIDs,
-    CardCount: move.CardCount,
-    MoveType: move.MoveType,
-    ToZone: move.ToZone,
-    SpellID: move.SpellID,
-    isSend: isTruthyProtocol(record.payload.isSend)
-  })
-  if (prepared.shouldReturn) {
+  const rawMove = { ...move, isSend: isTruthyProtocol(record.payload.isSend) }
+  if (shouldIgnoreTrackerMove(rawMove)) {
     return ignored('与生产处理器一致跳过空移动、无效区或发送侧消息')
   }
 
-  if (prepared.mixedVisibility) {
-    notes.push('明暗牌混合已按生产逻辑降级为全暗移动')
-  }
-
-  const normalized = normalizeTrackerMovePosition({
+  const normalizedMove = {
     ...move,
-    CardIDs: prepared.CardIDs,
     isGuoZhan: context.gameState.isGuoZhan
-  })
-  const normalizedEvent = normalizeMoveEvent({
-    ...move,
-    CardIDs: normalized.CardIDs,
-    FromPosition: normalized.FromPosition,
-    ToPosition: normalized.ToPosition
-  })
+  }
+  Object.assign(normalizedMove, normalizeTrackerMovePosition(normalizedMove))
+  const normalizedEvent = normalizeMoveEvent(normalizedMove, rawMove)
   const moveContext: ReplayMoveContext = {
     game: context.gameState,
-    CardIDs: normalized.CardIDs,
+    CardIDs: [...normalizedMove.CardIDs],
     CardCount: move.CardCount,
     FromID: move.FromID,
     FromZone: move.FromZone,
-    FromPosition: normalized.FromPosition,
+    FromPosition: normalizedMove.FromPosition,
     ToID: move.ToID,
     ToZone: move.ToZone,
-    ToPosition: normalized.ToPosition,
+    ToPosition: normalizedMove.ToPosition,
     MoveType: move.MoveType,
     SpellID: move.SpellID,
     SrcSeatID: readNumber(record.payload.SrcSeatID),
@@ -782,7 +764,9 @@ function applyMoveCard(
         ? undefined
         : Number(normalizedEvent.options.fromSeatID),
     toSeatID:
-      normalizedEvent.options.seatID == null ? undefined : Number(normalizedEvent.options.seatID),
+      normalizedEvent.options.toSeatID == null
+        ? undefined
+        : Number(normalizedEvent.options.toSeatID),
     fromSubZone: normalizedEvent.options.fromSubZone ?? undefined,
     toSubZone: normalizedEvent.options.subZone ?? undefined,
     fromSpellID:
@@ -796,32 +780,78 @@ function applyMoveCard(
     applyGameFlowState(context, record, moveContext)
     const spellNote = applyMoveSpellState(moveContext)
     if (spellNote) notes.push(spellNote)
-
-    if (moveContext.SpellID === 361) {
-      // 与生产 PubGsCMoveCard 一致：移动前注册下书副作用，tracker 同步完成后再结算。
-      handleXiaShuMove({
-        ...moveContext,
-        tracker: context.controller,
-        afterMove(callback: () => void) {
-          afterMoveCallbacks.push(callback)
-        }
-      })
-    }
   }
+
+  const afterMove = specialZoneHandled ? undefined : createXiaShuAfterMove(context, moveContext)
 
   if (matchesCardConfigDependentEquipmentMove(moveContext)) {
     notes.push('特殊装备牌随机位置归一化依赖浏览器 CardConfig，本次保留原协议位置')
   }
 
-  context.controller.syncTrackerMove(record.payload as RawMoveCardEvent, {
-    CardIDs: moveContext.CardIDs,
+  const syncCardIDs = hasMixedTrackerMoveVisibility(moveContext) ? [] : moveContext.CardIDs
+  if (syncCardIDs.length === 0 && moveContext.CardIDs.length > 0) {
+    notes.push('明暗牌混合已按生产逻辑降级为全暗移动')
+  }
+
+  const patchedMove = {
+    ...rawMove,
+    CardIDs: syncCardIDs,
     FromPosition: moveContext.FromPosition,
     ToPosition: moveContext.ToPosition
-  })
+  }
+  context.controller.syncTrackerMove(patchedMove, rawMove)
   // 下书需要先看到通用随机转移建立的数量约束，不能在 syncTrackerMove 之前执行。
-  afterMoveCallbacks.splice(0).forEach((callback) => callback())
+  afterMove?.()
 
   return notes.length > 0 ? partial(notes.join('；')) : applied()
+}
+
+function createXiaShuAfterMove(
+  context: TrackerProtocolReplayContext,
+  move: ReplayMoveContext
+): (() => void) | undefined {
+  if (
+    move.SpellID !== 361 ||
+    move.FromZone !== 5 ||
+    move.ToZone !== 5 ||
+    move.fromSubZone !== 'hand' ||
+    move.toSubZone !== 'hand' ||
+    move.CardCount <= 0
+  )
+    return undefined
+
+  const state = context.gameState.getSpellState<ReplayXiaShuState>(361)
+  if (!state || state.targetSeatID !== move.fromSeatID) return undefined
+  if (
+    ![move.fromSeatID, move.toSeatID].every(
+      (seatID) => Number.isInteger(seatID) && seatID >= 0 && seatID !== 255
+    )
+  ) {
+    return undefined
+  }
+  if (Number.isInteger(state.actorSeatID) && state.actorSeatID !== move.toSeatID) return undefined
+
+  // 生产下书处理器使用浏览器单例；回放必须只操作自己的 GameState 和 Controller。
+  return () => {
+    const current = context.gameState.getSpellState<ReplayXiaShuState>(361)
+    if (!current || (current.choice !== 1 && current.choice !== 2)) return
+    if (current.choice === 2) {
+      if (!Number.isInteger(current.targetSeatID) || !current.shownCardIDs.length) return
+      context.controller.revealTrackerCards(
+        {
+          type: 'player',
+          seatID: current.targetSeatID,
+          handMoveCount: 0,
+          sourceEvent: {
+            type: 'xiaShu:hidden-choice',
+            label: '下书选择暗牌，展示牌留在原目标手牌'
+          }
+        },
+        current.shownCardIDs
+      )
+    }
+    context.gameState.deleteSpellState(361)
+  }
 }
 
 function applySpecialZoneState(context: ReplayMoveContext): boolean {

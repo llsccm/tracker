@@ -15,8 +15,14 @@ export function handleUpdateRoleDataExNtf(msg) {
   switch (DataID) {
     // OPT_DATA_ADD_SPELL_EFFECT
     case 8:
-      // 夺炁：SeatID 是目标，Datas=[SpellID, 技能拥有者座位]。
-      recordDuoQiRoleDataTarget(Game, msg)
+      if (Array.isArray(Datas)) {
+        const spellID = msg.Datas[0]
+        // 夺炁：SeatID 是目标，Datas=[SpellID, 技能拥有者座位]。
+        if (spellID === 3730) recordDuoQiRoleDataTarget(Game, msg)
+        // 清理宴戏
+        if (spellID === 7017) Game.deleteState('tracker', 7017)
+      }
+
       break
 
     //出杀次数
@@ -88,7 +94,7 @@ export function handleUpdateRoleDataExNtf(msg) {
       handleQiaoZhi(msg, Game.myID)
       break
 
-    // 诡伏：非主视角先收到匿名移动，角色数据随后补充实际牌面。
+    // 诡伏：角色数据补齐相邻获得消息的 ID，再提交一次普通移动。
     case GUI_FU_ROLE_DATA_ID:
       handleGuiFu(msg, Game.myID)
       break

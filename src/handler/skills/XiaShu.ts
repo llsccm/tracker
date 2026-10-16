@@ -1,9 +1,7 @@
-import type { GameState } from '@/tracker/Game'
-import type { TrackerController } from '@/tracker/runtime/trackerController'
-import type { CardID, RawMoveCardEvent, SeatID, SubZone } from '@/tracker/types'
-
-type XiaShuGame = Pick<GameState, 'getSpellState' | 'setSpellState' | 'deleteSpellState'>
-type XiaShuTracker = Pick<TrackerController, 'revealTrackerCards'>
+import { Game } from '@/tracker'
+import { tracker } from '@/tracker/runtime/browser'
+import type { CardID, SeatID } from '@/tracker/types'
+import type { SkillMoveContext } from './types'
 
 interface XiaShuState {
   shownCardIDs: CardID[]
@@ -28,55 +26,41 @@ interface XiaShuChoiceMessage {
   [key: string]: unknown
 }
 
-interface XiaShuMoveContext extends RawMoveCardEvent {
-  game: XiaShuGame
-  tracker?: XiaShuTracker
-  fromSeatID?: SeatID | null
-  toSeatID?: SeatID | null
-  fromSubZone?: SubZone | null
-  toSubZone?: SubZone | null
-  afterMove?: (callback: () => void) => void
-}
-
 const XIA_SHU_SPELL_ID = 361
 const XIA_SHU_TAKE_SHOWN = 1
 const XIA_SHU_TAKE_HIDDEN = 2
 
-function isValidSeatID(value: SeatID | string): boolean {
-  const seatID = Number(value)
-  return Number.isInteger(seatID) && seatID >= 0 && seatID !== 255
+function isValidSeatID(seatID: SeatID | null | undefined): boolean {
+  return seatID != null && Number.isInteger(seatID) && seatID >= 0 && seatID !== 255
 }
 
-function getXiaShuState(game: XiaShuGame): XiaShuState | undefined {
-  const state = game.getSpellState<XiaShuState>(XIA_SHU_SPELL_ID)
+function getXiaShuState(): XiaShuState | undefined {
+  const state = Game.getSpellState<XiaShuState>(XIA_SHU_SPELL_ID)
   if (!state || Array.isArray(state) || typeof state !== 'object') return undefined
   return state
 }
 
-export function handleXiaShuTargetNotice(msg: XiaShuTargetNotice, game: XiaShuGame): boolean {
-  const { Param, Params, targetSeatID, Type } = msg
-  if (Number(Param) !== 0 || Number(Type) !== 29 || !Array.isArray(Params)) return false
-
+export function handleXiaShuTargetNotice(msg: XiaShuTargetNotice): boolean {
+  const { Params, targetSeatID } = msg
   const shownCardIDs = Params.map(Number).filter((id) => id > 0)
   const targetSeat = Number(targetSeatID)
   if (!shownCardIDs.length || !Number.isInteger(targetSeat) || targetSeat === 255) return false
 
   // 该通知同时给出展示牌与真实目标座位；SeatID/SrcSeatID 则都是技能发动者。
-  game.setSpellState<XiaShuState>(XIA_SHU_SPELL_ID, {
+  Game.setSpellState<XiaShuState>(XIA_SHU_SPELL_ID, {
     shownCardIDs,
     targetSeatID: targetSeat
   })
   return true
 }
 
-function settleXiaShuAfterMove(game: XiaShuGame, tracker?: XiaShuTracker): boolean {
-  const state = getXiaShuState(game)
+function settleXiaShuAfterMove(): boolean {
+  const state = getXiaShuState()
   if (!state) return false
   if (state.choice !== XIA_SHU_TAKE_SHOWN && state.choice !== XIA_SHU_TAKE_HIDDEN) return false
 
   if (state.choice === XIA_SHU_TAKE_HIDDEN) {
     if (!Number.isInteger(state.targetSeatID) || !state.shownCardIDs?.length) return false
-    if (typeof tracker?.revealTrackerCards !== 'function') return false
 
     // 暗牌转移已经由通用框架建立“目标剩余 / 发动者获得”的 N 选 K 约束。
     // 此处只把展示牌零增量确认在原目标手中：当它们填满目标的剩余手牌槽后，
@@ -96,19 +80,17 @@ function settleXiaShuAfterMove(game: XiaShuGame, tracker?: XiaShuTracker): boole
     )
   }
 
-  game.deleteSpellState(XIA_SHU_SPELL_ID)
+  Game.deleteSpellState(XIA_SHU_SPELL_ID)
   return true
 }
 
-export function handleXiaShuChoice(msg: XiaShuChoiceMessage, game: XiaShuGame): boolean {
-  const { Datas, SeatID, Type } = msg
-  const dataCount = Number(msg.data_count ?? Datas?.length)
-  if (Number(Type) !== 22 || dataCount !== 2 || !Array.isArray(Datas)) return false
+export function handleXiaShuChoice(msg: XiaShuChoiceMessage): boolean {
+  const { Datas, SeatID } = msg
 
   const choice = Number(Datas[0])
   if (choice !== XIA_SHU_TAKE_SHOWN && choice !== XIA_SHU_TAKE_HIDDEN) return false
 
-  const state = getXiaShuState(game)
+  const state = getXiaShuState()
   if (!state) return false
 
   const actorSeatID = Number(SeatID)
@@ -120,19 +102,18 @@ export function handleXiaShuChoice(msg: XiaShuChoiceMessage, game: XiaShuGame): 
   return true
 }
 
-export default function handleXiaShuMove(context: XiaShuMoveContext): void {
+export default function handleXiaShuMove(context: SkillMoveContext): void {
+  const { patched } = context
   const isHandTransfer =
-    Number(context.SpellID) === XIA_SHU_SPELL_ID &&
-    Number(context.FromZone) === 5 &&
-    Number(context.ToZone) === 5 &&
-    context.fromSubZone === 'hand' &&
-    context.toSubZone === 'hand' &&
-    Number(context.CardCount) > 0
+    patched.SpellID === XIA_SHU_SPELL_ID &&
+    patched.FromZone === 5 &&
+    patched.ToZone === 5 &&
+    patched.CardCount > 0
   if (!isHandTransfer) return
 
-  const state = getXiaShuState(context.game)
-  const targetSeatID = Number(context.fromSeatID)
-  const transferSeatID = Number(context.toSeatID)
+  const state = getXiaShuState()
+  const targetSeatID = patched.FromID
+  const transferSeatID = patched.ToID
   if (!state || state.targetSeatID !== targetSeatID) return
   if (!isValidSeatID(targetSeatID) || !isValidSeatID(transferSeatID)) return
   if (Number.isInteger(state.actorSeatID) && state.actorSeatID !== transferSeatID) return
@@ -140,6 +121,6 @@ export default function handleXiaShuMove(context: XiaShuMoveContext): void {
 
   // 必须等待通用移动完成：随机转移约束和双方观测手牌数都在该阶段建立。
   context.afterMove(() => {
-    settleXiaShuAfterMove(context.game, context.tracker)
+    settleXiaShuAfterMove()
   })
 }

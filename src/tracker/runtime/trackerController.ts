@@ -11,7 +11,7 @@ import {
   getProtocolPublicZone,
   isProtocolPlayerZone
 } from '../protocolZones'
-import { Room, type PendingDiscardGainSettlement } from '../Room'
+import { Room } from '../Room'
 import type {
   CardID,
   MoveOptions,
@@ -29,6 +29,8 @@ import type {
 } from '../types'
 import { registerDefaultMoveEventHandlers } from './moveEventHandlers'
 import { commitDuoQiMove, observeDuoQiKnownCardIDs } from '../skill/DuoQi'
+import { completeGuiFuMove, deferGuiFuMove } from '../skill/GuiFu'
+import { GUI_FU_ROLE_DATA_ID } from './protocolRules'
 
 interface RevealTarget {
   type?: 'player' | 'public' | string
@@ -37,9 +39,9 @@ interface RevealTarget {
   fromZone?: PublicZoneName | null
   fromSubZone?: string
   subZone?: string
-  spellID?: SpellID | string | null
+  spellID?: SpellID | null
   fullHand?: boolean
-  handCount?: number | string
+  handCount?: number
   // 协议已经通过其它消息同步过手牌数量时，只补充已知身份，不重复增加手牌总数。
   handMoveCount?: number
   zoneName?: PublicZoneName
@@ -170,20 +172,6 @@ export class TrackerController {
     return this.trackerRoom
   }
 
-  /** 取得 3709 当前角色数据相对于最近快照的新增 CardID。 */
-  getTrackerGuiFuRevealDelta(seatID: SeatID, cardIDs: CardID[] | CardID = []): CardID[] {
-    const ids = this.normalizeIDs(cardIDs).filter((id) => id > 0)
-    const readyRoom = this.getReadyTrackerRoom()
-    if (!readyRoom) return ids
-
-    try {
-      return readyRoom.getGuiFuRevealDelta(seatID, ids)
-    } catch (error) {
-      this.controllerLogger.warn('诡伏当前角色数据增量查询失败', { error, seatID, cardIDs: ids })
-      return ids
-    }
-  }
-
   isTrackerReady(): boolean {
     return Boolean(this.trackerRoom?.isDeckReady && !this.getRuntime()?.isDuanXian)
   }
@@ -231,6 +219,7 @@ export class TrackerController {
       return
     }
 
+    this.trackerRoom.deleteSkillState(GUI_FU_ROLE_DATA_ID)
     this.trackerRoom.initDeck(cardIDs)
     this.controllerView.mount(this.trackerRoom)
     this.controllerLogger.info('Room 牌堆初始化完成', { cardIDs })
@@ -310,46 +299,47 @@ export class TrackerController {
   /**
    * 同步底层 PubGsCMoveCard 协议到 Room。
    *
-   * 流程分四步：协议字段补丁、标准化、结合当前 Room 状态修正、交给 Room 执行。
+   * 直接接收完整 patched：标准化、结合当前 Room 状态修正、交给 Room 执行；不再拼接协议。
    * 这层不直接改卡牌状态，状态变更统一收口在 Room.moveCards()/shufflePile()/showCards。
    */
-  syncTrackerMove(msg: RawMoveCardEvent, finalMove: Partial<RawMoveCardEvent> = {}): void {
+  syncTrackerMove(
+    patched: Readonly<RawMoveCardEvent>,
+    raw: Readonly<RawMoveCardEvent> = patched
+  ): void {
     const readyRoom = this.getReadyTrackerRoom()
     if (!readyRoom) return
 
     try {
-      const patchedMsg = {
-        ...msg,
-        ...finalMove,
-        CardIDs: finalMove.CardIDs ?? msg.CardIDs
-      }
-
-      this.controllerLogger.info(getProtocolMoveSpecialLabel(patchedMsg) ?? '移动协议输入', {
-        raw: this.summarizeProtocolMove(msg),
-        patched: this.summarizeProtocolMove(patchedMsg)
+      this.controllerLogger.info(getProtocolMoveSpecialLabel(patched) ?? '移动协议输入', {
+        raw: this.summarizeProtocolMove(raw),
+        patched: this.summarizeProtocolMove(patched)
       })
 
-      const rawEvent = normalizeMoveEvent(patchedMsg)
+      // 诡伏配对只依赖协议字段；暂存时无需构造尚不能执行的标准事件。
+      if (deferGuiFuMove(readyRoom, raw, patched)) return
+      const normalizedEvent = normalizeMoveEvent(patched, raw)
 
-      // rawEvent 只代表协议文本；下一步还要根据当前卡牌状态修正来源子区。
+      // normalizedEvent 只代表协议文本；下一步还要根据当前卡牌状态修正来源子区。
       this.controllerLogger.debug(
         '移动事件归一化',
-        summarizeMoveEvent(rawEvent, MOVE_EVENT_SUMMARY_OPTIONS)
+        summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS)
       )
 
-      const stateEvent = this.normalizeEventWithTrackerState(rawEvent)
+      const stateEvent = this.normalizeEventWithTrackerState(normalizedEvent)
+      // 技能处理器
       const event = readyRoom.decorateMoveEvent(stateEvent)
       const pileCountBefore = readyRoom.zones.get('pile')?.cards.length ?? 0
-      const knownPileDrawCards = this.collectRegularDrawKnownPileCards(readyRoom, patchedMsg, event)
+      const knownPileDrawCards = this.collectRegularDrawKnownPileCards(readyRoom, patched, event)
+
       this.controllerLogger.debug('移动事件装饰完成', {
         before: summarizeMoveEvent(stateEvent, MOVE_EVENT_SUMMARY_OPTIONS),
         after: summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
       })
 
-      if (rawEvent.options.fromSubZone !== event.options.fromSubZone) {
+      if (normalizedEvent.options.fromSubZone !== event.options.fromSubZone) {
         this.controllerLogger.info('移动事件来源修正', {
           cardIDs: event.cardIDs,
-          fromSubZone: rawEvent.options.fromSubZone,
+          fromSubZone: normalizedEvent.options.fromSubZone,
           correctedFromSubZone: event.options.fromSubZone
         })
       }
@@ -377,22 +367,26 @@ export class TrackerController {
           '移动事件分支: shuffleDiscardIntoPile',
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
+
         // 洗牌闭世代依赖账本提交结果，因此把同一条身份事件交给 Room，在物理区重建前提交；
         // 其它移动仍保持“先移动实体、再写账本”的普通后置流程。
         // 注意：createPileIdentityMove 在 readyRoom.shufflePile 之前调用，因此
         // visiblePileIdentityIDsAfter 及依赖 pileCountAfter 的取值都是事务开始、洗牌前的可见状态。
         const pileIdentityMove = this.createPileIdentityMove(
-          patchedMsg,
+          patched,
           event,
           readyRoom,
           pileCountBefore,
           knownPileDrawCards
         )
+
         readyRoom.shufflePile({
           cardCount: event.cardCount,
           identityMove: pileIdentityMove
         })
+
         this.controllerView.scheduleRender()
+
         return
       } else {
         this.controllerLogger.info(
@@ -410,7 +404,7 @@ export class TrackerController {
       }
 
       const pileIdentityMove = this.createPileIdentityMove(
-        patchedMsg,
+        patched,
         event,
         readyRoom,
         pileCountBefore,
@@ -422,9 +416,9 @@ export class TrackerController {
     } catch (e) {
       this.controllerLogger.warn('移动同步异常，已跳过本次 tracker 更新', {
         error: e,
-        raw: this.summarizeProtocolMove(msg)
+        raw: this.summarizeProtocolMove(raw)
       })
-      this.onError('[Refactor] 移动同步失败:', e, msg)
+      this.onError('[Refactor] 移动同步失败:', e, raw)
     }
   }
 
@@ -570,20 +564,21 @@ export class TrackerController {
     if (ids.length === 0) return
 
     const raw = event.raw ?? event.options?.sourceEvent?.raw ?? {}
-    const zone = Number(raw.ToZone ?? raw.FromZone)
-    const seatID = Number(raw.ToID ?? raw.FromID)
+    const move = event.protocol
+    const zone = move.ToZone ?? move.FromZone
+    const seatID = move.ToID ?? move.FromID
     const subZone = getProtocolPlayerSubZone(zone, null)
     const spellID = getProtocolMarkSpellID(
       zone,
       {
-        toZoneParam: raw.ToZoneParam,
-        fromZoneParam: raw.FromZoneParam,
-        spellID: raw.SpellID
+        toZoneParam: move.ToZoneParam,
+        fromZoneParam: move.FromZoneParam,
+        spellID: move.SpellID
       },
-      (raw.SpellID as SpellID | string | null | undefined) ?? null
+      move.SpellID
     )
 
-    if (subZone && !Number.isNaN(seatID) && seatID !== 255) {
+    if (subZone && seatID != null && seatID !== 255) {
       this.controllerLogger.info('展示明牌进入玩家区', {
         ids,
         seatID,
@@ -592,7 +587,7 @@ export class TrackerController {
       })
 
       readyRoom.moveCards(ids, 'player', {
-        seatID,
+        toSeatID: seatID,
         fromSeatID: seatID,
         fromZone: null,
         fromSubZone: subZone,
@@ -610,7 +605,7 @@ export class TrackerController {
 
     const zoneName = getProtocolPublicZone(zone, event.toZone ?? 'process')
     const position = event.options?.position ?? event.options?.fromPosition ?? POSITION_TOP
-    const sourceZoneName = getProtocolPublicZone(raw.FromZone)
+    const sourceZoneName = getProtocolPublicZone(move.FromZone)
     const materializationZone =
       sourceZoneName && sourceZoneName !== zoneName ? sourceZoneName : zoneName
     const knownCards = this.resolveKnownCards(ids, {
@@ -677,7 +672,7 @@ export class TrackerController {
         }
 
         readyRoom.moveCards(ids, 'player', {
-          seatID,
+          toSeatID: seatID,
           fromSeatID: target.fromSeatID ?? (target.fromZone == null ? seatID : undefined),
           fromZone: target.fromZone ?? null,
           fromSubZone: target.fromSubZone ?? subZone,
@@ -713,29 +708,13 @@ export class TrackerController {
     }
   }
 
-  /**
-   * 结算“匿名弃牌获得 -> 角色数据给出 CardID”的两阶段协议。
-   * 返回 Room 在推进快照前算出的新增身份，供 `missing` 调用方继续走普通明牌回退。
-   */
-  settleTrackerPendingDiscardGain(
-    seatID: SeatID,
-    cardIDs: CardID[] | CardID = [],
-    sourceEvent?: MoveOptions['sourceEvent']
-  ): PendingDiscardGainSettlement {
-    const ids = this.normalizeIDs(cardIDs).filter((id) => id > 0)
-    if (ids.length === 0) return { result: 'invalid', newCardIDs: [] }
-
+  /** 补齐相邻诡伏移动的身份，再走普通移动管线，数量和身份账本都只提交一次。 */
+  syncTrackerGuiFuRoleData(seatID: SeatID, cardIDs: readonly CardID[]): void {
     const readyRoom = this.getReadyTrackerRoom()
-    if (!readyRoom) return { result: 'missing', newCardIDs: ids }
+    if (!readyRoom) return
 
-    try {
-      const settlement = readyRoom.settlePendingDiscardGain(seatID, ids, sourceEvent)
-      if (settlement.result === 'settled') this.controllerView.scheduleRender()
-      return settlement
-    } catch (error) {
-      this.controllerLogger.warn('弃牌堆待回填身份结算失败', { error, seatID, cardIDs: ids })
-      return { result: 'invalid', newCardIDs: [] }
-    }
+    const move = completeGuiFuMove(readyRoom, seatID, cardIDs)
+    if (move) this.syncTrackerMove(move.patched, move.raw)
   }
 
   /**
@@ -904,14 +883,14 @@ export class TrackerController {
     }
   }
 
-  private normalizeIDs(cardIDs: CardID[] | CardID = []): CardID[] {
-    return Array.isArray(cardIDs) ? [...cardIDs] : [cardIDs]
+  private normalizeIDs(cardIDs: readonly CardID[] | CardID = []): CardID[] {
+    return typeof cardIDs === 'number' ? [cardIDs] : [...cardIDs]
   }
 
   /**
    * 移动日志摘要只保留协议定位字段，避免日志里展开完整原始对象。
    */
-  private summarizeProtocolMove(msg: RawMoveCardEvent = {}) {
+  private summarizeProtocolMove(msg: RawMoveCardEvent) {
     return {
       CardIDs: this.normalizeIDs(msg.CardIDs),
       CardCount: msg.CardCount,

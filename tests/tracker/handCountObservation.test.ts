@@ -5,6 +5,7 @@ import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidat
 import type { RoomMoveContext } from '@/tracker/roomMovement/types'
 import { createTestRoom, getCard } from './helpers/room'
 import { playerLocation } from './helpers/locationCandidates'
+import { getPlayerHandCardsBySeat } from '@/tracker/roomMovement/sourceQueries'
 
 describe('玩家手牌数观测', () => {
   it('未观测时负向 delta 不建立 0 张手牌快照', () => {
@@ -37,7 +38,7 @@ describe('玩家手牌数观测', () => {
 
     expect(sourcePlayer.hasObservedHandCount).toBe(false)
 
-    const candidateCards = room.movement.markRandomHandTransferCandidates({
+    const candidateCards = room.movement.candidates.markRandomHandTransferCandidates({
       fromSeat: 1,
       targetSeat: 2,
       count: 1,
@@ -80,7 +81,7 @@ describe('玩家手牌数观测', () => {
       fromZone: null,
       fromSeatID: 2,
       fromSubZone: 'hand',
-      seatID: 3,
+      toSeatID: 3,
       subZone: 'hand',
       cardCount: 3,
       sourceEvent: { type: 'test:all-entity-random-hand-transfer' }
@@ -100,8 +101,8 @@ describe('玩家手牌数观测', () => {
     expect(hiddenIDs.map((id) => getCard(room, id)).every((card) => card.seats.size === 2)).toBe(
       true
     )
-    expect(room.movement.getPlayerHandCardsBySeat(2)).toHaveLength(9)
-    expect(room.movement.getPlayerHandCardsBySeat(3)).toHaveLength(9)
+    expect(getPlayerHandCardsBySeat(room, 2)).toHaveLength(9)
+    expect(getPlayerHandCardsBySeat(room, 3)).toHaveLength(9)
 
     expect(targetPlayer.candidateHandCards).toEqual(knownIDs.map((id) => getCard(room, id)))
   })
@@ -112,14 +113,14 @@ describe('玩家手牌数观测', () => {
 
     try {
       room.moveCards([], 'player', {
-        seatID: 1,
+        toSeatID: 1,
         subZone: 'hand',
         fromZone: 'pile',
         cardCount: 4,
         sourceEvent: { type: 'test:draw-four-unknown' }
       })
 
-      const sourceBefore = room.movement.getPlayerHandCardsBySeat(1)
+      const sourceBefore = getPlayerHandCardsBySeat(room, 1)
       expect(sourceBefore).toHaveLength(4)
       expect(sourceBefore.every((card) => card.isKnown !== true)).toBe(true)
 
@@ -127,14 +128,14 @@ describe('玩家手牌数观测', () => {
         fromZone: null,
         fromSeatID: 1,
         fromSubZone: 'hand',
-        seatID: 0,
+        toSeatID: 0,
         subZone: 'hand',
         cardCount: 1,
         sourceEvent: { type: 'test:all-hidden-random-gain' }
       })
 
-      const sourceAfter = room.movement.getPlayerHandCardsBySeat(1)
-      const targetAfter = room.movement.getPlayerHandCardsBySeat(0)
+      const sourceAfter = getPlayerHandCardsBySeat(room, 1)
+      const targetAfter = getPlayerHandCardsBySeat(room, 0)
       const transferGroup = Array.from(room.constraintGroups.values()).find(
         (group) =>
           (group.sourceEvent as { type?: string } | null)?.type === 'test:all-hidden-random-gain'
@@ -179,7 +180,7 @@ describe('玩家手牌数观测', () => {
       fromZone: null,
       fromSeatID: 2,
       fromSubZone: 'hand',
-      seatID: 1,
+      toSeatID: 1,
       subZone: 'hand',
       cardCount: 1,
       sourceEvent: { type: 'test:random-transfer-with-hidden-coverage' }
@@ -202,14 +203,14 @@ describe('玩家手牌数观测', () => {
       // seats.has(1) 实体数 = 4，唯一归属实体 = 3，对应 sourceTotal=3。
       // 至少 1 张明牌才会触发候选传播门槛。
       room.moveCards([11], 'player', {
-        seatID: 1,
+        toSeatID: 1,
         subZone: 'hand',
         fromZone: 'pile',
         cardCount: 1,
         sourceEvent: { type: 'test:draw-one-known' }
       })
       room.moveCards([], 'player', {
-        seatID: 1,
+        toSeatID: 1,
         subZone: 'hand',
         fromZone: 'pile',
         cardCount: 2,
@@ -221,7 +222,7 @@ describe('玩家手牌数观测', () => {
       residualCandidate.isKnown = false
       room.notifyCardChanged(residualCandidate, { type: 'test:residual-multi-seat-candidate' })
 
-      const sourceEntitiesBefore = room.movement.getPlayerHandCardsBySeat(1)
+      const sourceEntitiesBefore = getPlayerHandCardsBySeat(room, 1)
       expect(sourceEntitiesBefore).toHaveLength(4)
       expect(sourceEntitiesBefore.filter((card) => card.seats.size === 1)).toHaveLength(3)
       expect(sourceEntitiesBefore.some((card) => card.isKnown === true)).toBe(true)
@@ -231,7 +232,7 @@ describe('玩家手牌数观测', () => {
         fromZone: null,
         fromSeatID: 1,
         fromSubZone: 'hand',
-        seatID: 5,
+        toSeatID: 5,
         subZone: 'hand',
         cardCount: 1,
         sourceEvent: { type: 'test:random-transfer-after-residual-candidate' }
@@ -491,9 +492,9 @@ describe('玩家手牌数观测', () => {
     // combinationID 是最近标签，可能落后于实体实际参与的约束组。
     candidateCard.combinationID = 'stale-group'
 
-    expect(room.movement.swapKnownCardWithPlayerSourcePlaceholder(candidateCard, context)).toBe(
-      placeholder
-    )
+    expect(
+      room.movement.sources.swapKnownCardWithPlayerSourcePlaceholder(candidateCard, context)
+    ).toBe(placeholder)
     expect(group.cards.has(candidateCard)).toBe(false)
     expect(group.cards.has(placeholder)).toBe(true)
     expect(placeholder.combinationID).toBe('migrated-group')

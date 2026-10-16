@@ -110,7 +110,7 @@ describe('身份账本守恒', () => {
     })
 
     room.moveCards([], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       fromZone: 'pile',
       cardCount: 2,
       sourceEvent: { type: 'conservation:draw-unknown' }
@@ -137,7 +137,7 @@ describe('身份账本守恒', () => {
     const discard = room.zones.get('discard')!
 
     room.moveCards([], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       fromZone: 'pile',
       cardCount: 2,
       sourceEvent: { type: 'conservation:draw-unknown' }
@@ -335,7 +335,7 @@ describe('身份账本守恒', () => {
     const pile = room.zones.get('pile')!
 
     room.moveCards([], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       fromZone: 'pile',
       cardCount: 2,
       sourceEvent: { type: 'conservation:draw-unknown' }
@@ -358,7 +358,7 @@ describe('身份账本守恒', () => {
 
     const pileCountBefore = pile.cards.length
     room.moveCards([4], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       fromZone: 'pile',
       cardCount: 1,
       sourceEvent: { type: 'conservation:draw-known-onto-hidden-slot' }
@@ -386,7 +386,7 @@ describe('身份账本守恒', () => {
     expect(room.deckIdentities.has(externalID)).toBe(false)
 
     room.moveCards([externalID], 'player', {
-      seatID: 1,
+      toSeatID: 1,
       fromZone: 'outside',
       cardCount: 1,
       sourceEvent: { type: 'conservation:external-zone-12' }
@@ -397,7 +397,7 @@ describe('身份账本守恒', () => {
 
     // 该外部牌进入弃牌堆并参与洗牌后，身份全集不应再次增长。
     room.moveCards([externalID], 'discard', {
-      seatID: 1,
+      toSeatID: 1,
       fromZone: 'player',
       cardCount: 1,
       sourceEvent: { type: 'conservation:external-discard' }

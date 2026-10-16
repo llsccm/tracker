@@ -87,47 +87,70 @@ export type RawMoveEventType =
   | 'moveUnknown'
   | string
 
+/** PubGsCMoveCard 的 12 个核心字段固定存在；0 表示无技能，255 等端点 ID 按区域解释。 */
 export interface RawMoveCardEvent {
-  CardIDs?: CardID[] | CardID
-  CardCount?: number | string
-  FromZone?: ZoneID | string
-  FromID?: SeatID
-  FromZoneParam?: SpellID | string | null
-  FromPosition?: PublicPosition
-  ToZone?: ZoneID | string
-  ToID?: SeatID
-  ToZoneParam?: SpellID | string | null
-  ToPosition?: PublicPosition
-  MoveType?: number | string
-  SpellID?: SpellID | string | null
+  CardIDs: readonly CardID[]
+  readonly CardCount: number
+  /** 公共区可使用 255，标记区也可能使用技能 ID；不能无条件当作座位。 */
+  FromID: number
+  FromPosition: number
+  FromZone: ZoneID
+  FromZoneParam: SpellID
+  ToID: number
+  ToPosition: number
+  ToZone: ZoneID
+  ToZoneParam: SpellID
+  MoveType: number
+  SpellID: SpellID
+  SrcSeatID?: SeatID
   Label?: string
-  [key: string]: unknown
+  isSend?: boolean
+}
+
+/** 最终完整协议的只读视图；不复制对象，也不放宽必填字段。 */
+export type NormalizedMoveCardFields = Readonly<RawMoveCardEvent>
+
+/** 协议修正只允许改牌 ID 与端点位置，其余字段仍以原始协议为准。 */
+export type PatchedMoveCardFields = Omit<
+  NormalizedMoveCardFields,
+  'CardIDs' | 'FromPosition' | 'ToPosition'
+> & {
+  CardIDs: CardID[]
+  FromPosition: number
+  ToPosition: number
 }
 
 export interface MoveSourceEvent {
   type?: RawMoveEventType
   label?: string
-  moveType?: RawMoveCardEvent['MoveType']
+  moveType?: number
   raw?: RawMoveCardEvent | Record<string, unknown>
   [key: string]: unknown
 }
 
+/** 原样转移时的候选来源；只筛选公共候选，不指定物理来源或真实身份。 */
+export interface PublicCandidateSource {
+  fromSeat: SeatID
+  cards: Card[]
+}
+
 export interface MoveOptions {
-  seatID?: SeatID
+  toSeatID?: SeatID
   subZone?: SubZone
-  spellID?: SpellID | string | null
+  /** 按端点映射的技能 ID；纯公共区移动保留协议 SpellID。 */
+  spellID?: SpellID
   combinationID?: number | string | null
   fromZone?: PublicZoneName | number | null
   fromSeatID?: SeatID
   fromSubZone?: SubZone
-  fromSpellID?: SpellID | string | null
+  fromSpellID?: SpellID
   cardCount?: number
   /** 协议手牌总数变化量；候选身份不移动实体时可与 cardCount 不同。 */
   handMoveCount?: number
-  moveType?: RawMoveCardEvent['MoveType']
+  duoQiRandomHandGroupSequence?: number
+  moveType?: number
   position?: PublicPosition
   fromPosition?: PublicPosition
-  resetKnownToUnknown?: boolean
   /** 在来源选择前把这些已知身份降级为匿名物理代表。 */
   anonymizeCards?: Card[]
   /** 匿名化失败时取消本次移动，避免技能候选与身份账本失配。 */
@@ -135,6 +158,8 @@ export interface MoveOptions {
   /** 协议未公开 CardIDs，但技能已可靠确定的身份账本移动。 */
   pileIdentityCardIDs?: CardID[]
   sourceCards?: Card[]
+  /** 空集合表示不传播已知牌候选；省略时沿用当前来源手牌集合。 */
+  publicCandidateSource?: PublicCandidateSource
   publicCandidateReveal?: PublicCandidateReveal
   postMovePublicCandidates?: PostMovePublicCandidate[]
   sourceEvent?: MoveSourceEvent
@@ -142,10 +167,12 @@ export interface MoveOptions {
 }
 
 export interface NormalizedMoveEvent {
+  /** 直接引用最终 patched，后续只读；raw 仅用于原始数据追溯。 */
+  readonly protocol: NormalizedMoveCardFields
   type: RawMoveEventType
-  cardIDs: CardID[]
+  cardIDs: readonly CardID[]
   cardCount: number
-  moveType?: RawMoveCardEvent['MoveType']
+  moveType?: number
   toZone: PublicZoneName | 'player'
   options: MoveOptions
   raw?: RawMoveCardEvent | Record<string, unknown>
@@ -154,7 +181,7 @@ export interface NormalizedMoveEvent {
 export interface MoveContext extends MoveOptions {
   cardIDs: CardID[]
   toZone: PublicZoneName | 'player'
-  seatID: SeatID | null
+  toSeatID: SeatID | null
   spellID: SpellID | null
   fromSeat?: SeatID | null
   targetSeats?: SeatID[]

@@ -92,7 +92,7 @@ export class AmbiguousKnownIndex {
 
     affectedCards.forEach((card) => this.applyCardChange(card, groups))
 
-    // 装备容器候选的描述座位取决于装备当前承载座位；装备移动时候选牌自身可能不脏。
+    // 容器候选的描述座位取决于空间观测；标记协议更新座位时候选牌自身可能不脏。
     if (this.containerDependentCards.size > 0) {
       for (const card of Array.from(this.containerDependentCards)) {
         if (!affectedCards.has(card)) this.applyCardChange(card, groups)
@@ -128,7 +128,7 @@ export class AmbiguousKnownIndex {
     return Array.from(this.items.entries())
       .sort((a, b) => Number(a[0]) - Number(b[0]))
       .map(([cardID, item]) => [
-        Number(cardID),
+        cardID,
         token(item.card),
         item.candidateSeats.map(Number),
         item.groups.map((group) => String(group.id)).sort(),
@@ -136,11 +136,11 @@ export class AmbiguousKnownIndex {
       ])
   }
 
-  get(cardID: CardID | string): AmbiguousKnownItem | null {
-    return this.items.get(Number(cardID)) ?? null
+  get(cardID: CardID): AmbiguousKnownItem | null {
+    return this.items.get(cardID) ?? null
   }
 
-  describe(cardID: CardID | string): string {
+  describe(cardID: CardID): string {
     return this.get(cardID)?.description ?? ''
   }
 

@@ -1,3 +1,4 @@
+import type { MoveEventHandler } from '../room/moveEvents'
 import { POSITION_RANDOM } from '../candidate/cardPositions'
 import type { Room } from '../Room'
 import { decorateChengLieMove } from '../skill/ChengLie'
@@ -5,12 +6,13 @@ import decorateFenChao from '../skill/FenChao'
 import decorateGuanXu from '../skill/GuanXu'
 import decorateHandExchange from '../skill/HandExchange'
 import decorateJieLi from '../skill/JieLi'
-import decorateXingZuo, { XING_ZUO_SPELL_ID } from '../skill/XingZuo'
+import decorateXingZuo from '../skill/XingZuo'
 import decorateSiQi from '../skill/SiQi'
 import decorateTianHou from '../skill/TianHou'
 import decorateZuoLian from '../skill/ZuoLian'
+import decorateYanXi from '../skill/YanXi'
+import { decorateWenGuaCandidateSource } from '../skill/WenGua'
 import {
-  getRaw,
   getCount,
   hasPositiveID,
   nextGroupID,
@@ -18,61 +20,26 @@ import {
   type MoveEventDraft,
   getSourceZoneCards
 } from '../skill/moveEventUtils'
-import decorateWenGua from '../skill/WenGua'
 import {
   decorateDuoQiEntitySafety,
   decorateDuoQiKnownMove,
   decorateDuoQiMove
 } from '../skill/DuoQi'
 
-export type MoveEventHandler = (event: MoveEventDraft, room: Room) => MoveEventDraft
+export type { MoveEventHandler } from '../room/moveEvents'
 
 const HAND_EXCHANGE_EXCLUDED_SPELL_IDS: ReadonlySet<number> = new Set([
   3208, // 骋烈
   3483, // 诫厉
   3903, // 天候
-  XING_ZUO_SPELL_ID,
+  3776, // 兴作
   987, // 观虚
   988 // 观虚
 ])
 
 export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const raw = getRaw(event)
-  const spellID = Number(raw.SpellID ?? event.options?.spellID)
-
-  // 浑天仪：协议上是外部牌随机压入牌堆，显式标记来源为 outside。
-  if (
-    spellID === 3694 &&
-    Number(raw.FromZone) === 0 &&
-    Number(raw.ToZone) === 1 &&
-    Number(raw.MoveType) === 19
-  ) {
-    return patchEvent(event, {
-      options: {
-        fromZone: 'outside',
-        position: POSITION_RANDOM,
-        // 随机入堆即失去具体位置，先匿名化，避免账本把代表实体重新确认为牌顶明牌。
-        resetKnownToUnknown: true
-      }
-    })
-  }
-
-  // 手气卡：手牌放回牌堆时，用 ConstraintGroup 保留同次返回关系，替代旧 pack(to.cards)。
-  if (
-    Number(raw.FromZone) === 5 &&
-    Number(raw.ToZone) === 1 &&
-    spellID === 0 &&
-    Number(raw.MoveType) === 19
-  ) {
-    return patchEvent(event, {
-      options: {
-        // 实测会重新混入牌堆；本地匿名槽顺序只是代表顺序，不是牌顶事实。
-        position: POSITION_RANDOM,
-        // 手气卡返还的明牌重新进入牌堆后，应恢复为未知牌身份。
-        resetKnownToUnknown: true
-      }
-    })
-  }
+  const move = event.protocol
+  const spellID = move.SpellID
 
   // observePendingChengLieFinalDiscard(event, room)
 
@@ -90,13 +57,13 @@ function createFilteredPublicMoveHandler(
   predicate: (card: any) => boolean
 ): MoveEventHandler {
   return (event, room) => {
-    const raw = getRaw(event)
-    const fromZone = Number(raw.FromZone)
+    const move = event.protocol
+    const fromZone = move.FromZone
 
     if (
       hasPositiveID(event.cardIDs) ||
       ![1, 2].includes(fromZone) ||
-      Number(raw.FromPosition) !== POSITION_RANDOM
+      move.FromPosition !== POSITION_RANDOM
     ) {
       return event
     }
@@ -137,7 +104,7 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
   room.registerMoveEventHandler(3903, decorateTianHou)
 
   //【兴作】：牌底与手牌整批交换，保留牌底已有的明牌。
-  room.registerMoveEventHandler(XING_ZUO_SPELL_ID, decorateXingZuo)
+  room.registerMoveEventHandler(3776, decorateXingZuo)
 
   //【思泣】：协议不公开返回牌 ID，按弃牌堆顺序筛选红牌实体作为明确来源。
   room.registerMoveEventHandler(3543, decorateSiQi)
@@ -155,8 +122,8 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
   // 族钟繇【诫厉】：目标视角定位换出槽位，第三方视角保留手牌/牌顶范围弱候选。
   room.registerMoveEventHandler(3483, decorateJieLi)
 
-  // 徐氏【问卦】
-  room.registerMoveEventHandler(780, decorateWenGua)
+  // 徐氏【问卦】：相邻的主动交牌/回堆消息只筛选候选来源，不追踪单个实体。
+  room.registerMoveEventHandler(780, decorateWenGuaCandidateSource)
 
   // 蒲元【奇思】：优先筛选装备牌候选。
   // room.registerMoveEventHandler(
@@ -166,6 +133,8 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
 
   // 蔡瑁【佐练】：仅在弃牌堆随机取牌时，优先最后入堆的火杀，其次雷杀。
   room.registerMoveEventHandler(3488, decorateZuoLian)
+  // 宴戏
+  room.registerMoveEventHandler(7017, decorateYanXi)
 
   // 樊稠【兴乱】：优先筛选点数为 6 的候选。
   room.registerMoveEventHandler(

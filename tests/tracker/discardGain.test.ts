@@ -26,7 +26,7 @@ function createRoomWithDiscard(discardIDs = [1, 2, 3, 4, 5, 6]) {
   return { controller, room, onError }
 }
 
-function discardGainMove(overrides: RawMoveCardEvent = {}) {
+function discardGainMove(overrides: Partial<RawMoveCardEvent> = {}) {
   return protocolMove({
     CardCount: 4,
     CardIDs: [],
@@ -142,7 +142,7 @@ describe('弃牌堆未知获得', () => {
       fromZone: 'discard',
       fromSeatID: 1,
       fromSubZone: 'mark',
-      seatID: 3,
+      toSeatID: 3,
       subZone: 'mark',
       spellID: 4023,
       moveType: 18,
@@ -194,7 +194,7 @@ describe('弃牌堆未知获得', () => {
     const { room } = createRoomWithDiscard()
     const playerSourceCards = [...room.zones.get('pile')!.cards]
     room.moveCards([], 'player', {
-      seatID: testCase.seatID,
+      toSeatID: testCase.seatID,
       subZone: testCase.subZone,
       spellID: 35,
       fromZone: 'pile',
@@ -212,7 +212,10 @@ describe('弃牌堆未知获得', () => {
       sourceCards: testCase.emptySource ? [] : undefined
     }
 
-    const gainedCards = room.movement.takeSourceCards(2, { ...sourceOptions, fromZone: 'discard' })
+    const gainedCards = room.movement.sources.takeSourceCards(2, {
+      ...sourceOptions,
+      fromZone: 'discard'
+    })
 
     expect(gainedCards).toHaveLength(2)
     expect(gainedCards.every(isAnonymous)).toBe(true)
@@ -224,7 +227,7 @@ describe('弃牌堆未知获得', () => {
     expect(room.zones.get('discard')!.cards).toEqual(discardBefore)
 
     // 同一来源随后仍可按正常玩家/标记路径取出，证明弃牌获得没有消费其实体或空间账本。
-    const regularSourceCards = room.movement.takeSourceCards(2, {
+    const regularSourceCards = room.movement.sources.takeSourceCards(2, {
       ...sourceOptions,
       fromZone: null
     })
@@ -305,7 +308,7 @@ describe('MoveType=15 弃牌堆明确来源兼容', () => {
     room.moveCards([], 'player', {
       fromZone: 'discard',
       fromSeatID: null,
-      seatID: 3,
+      toSeatID: 3,
       subZone: 'hand',
       moveType: 15,
       cardCount: 2,

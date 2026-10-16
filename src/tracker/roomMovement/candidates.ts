@@ -1,20 +1,10 @@
 import { trackerLogger } from '@/utils/logger'
 import { createLocationCandidateKey, fromPublicCandidate } from '../candidate/locationCandidate'
-import {
-  createPublicCandidate,
-  normalizePublicPosition,
-  type PublicCandidatePosition
-} from '../candidate/publicCandidate'
+import { createPublicCandidate, normalizePublicPosition } from '../candidate/publicCandidate'
 import type { Card } from '../Card'
-import type {
-  PlayerLocationCandidate,
-  PublicCandidate,
-  PublicLocationCandidate,
-  PublicPosition,
-  PublicZoneName,
-  SeatID
-} from '../types'
-import { RoomMovementSourceMethods } from './sources'
+import type { PlayerLocationCandidate, PublicLocationCandidate, SeatID } from '../types'
+import type { Room } from '../Room'
+import { getKnownHandCardsBySeat, getPlayerHandCardsBySeat } from './sourceQueries'
 import {
   PAIDUI_POSITIONS,
   type MoveTargetZone,
@@ -25,7 +15,13 @@ import {
   type UnknownPileReturnOptions
 } from './types'
 
-export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
+/**
+ * 维护随机移动的候选传播与局部数量约束；共用 Room 状态，不独立缓存推断结果。
+ * 普通来源取牌由来源组件负责，整体收敛仍由 Room 在移动阶段结束后执行。
+ */
+export class RoomMovementCandidates {
+  constructor(private readonly room: Room) {}
+
   /**
    * 判断玩家间随机手牌转移是否值得做完整实体候选传播。
    *
@@ -67,6 +63,7 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
 
   /**
    * 玩家间随机获得手牌时，让来源手牌的全部实体共同参与来源/目标位置约束。
+   * 返回参与建模的实体；空数组表示未建立候选模型，调用方仍可执行默认暗牌移动。
    */
   markRandomHandTransferCandidates({
     fromSeat,
@@ -100,7 +97,7 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
       return []
     }
 
-    const existingSourceCards = this.getPlayerHandCardsBySeat(fromSeat)
+    const existingSourceCards = getPlayerHandCardsBySeat(this.room, fromSeat)
     // 未观测路径：借这次必要扫描顺带确认是否存在可展示明牌。
     if (
       !force &&
@@ -272,14 +269,33 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
     fromSeat,
     toZone,
     position,
-    unknownCount
+    unknownCount,
+    candidateSource
   }: RandomHandToPublicOptions): Card[] {
     if (fromSeat === null) return []
 
-    const sourceCandidateCards = this.getKnownHandCardsBySeat(fromSeat)
+    const sourceCandidateCards = candidateSource
+      ? candidateSource.cards.filter(
+          (card) =>
+            card.isKnown === true &&
+            card.location === 'player' &&
+            card.subZone === 'hand' &&
+            card.seats.has(fromSeat)
+        )
+      : getKnownHandCardsBySeat(this.room, fromSeat)
+
+    if (candidateSource) {
+      // 原转移的 A/B 名额不再适用于回堆后的代表实体，保守失效而不新建精确公共区约束。
+      // 用原始集合查找受影响的旧组，避免候选已收敛后遗漏仍残留的数量条件。
+      this.invalidateHandTransferConstraintsForCards(
+        candidateSource.cards,
+        candidateSource.fromSeat,
+        fromSeat
+      )
+    }
     if (sourceCandidateCards.length === 0) return []
 
-    const candidate = this.createPublicCandidate(toZone, position, unknownCount)
+    const candidate = createPublicCandidate(toZone, position, unknownCount)
     sourceCandidateCards.forEach((card) => card.addPublicCandidate(candidate))
 
     trackerLogger.info('手牌候选进入公共区', {
@@ -308,7 +324,7 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
   }: UnknownPileReturnOptions): void {
     if (toZone !== 'pile' || !(count > 0)) return
 
-    const candidate = this.createPublicCandidate(toZone, position, count)
+    const candidate = createPublicCandidate(toZone, position, count)
     this.room.cards
       .filter((card) =>
         card.publicCandidates?.some((item) => item.zone === 'pile' && item.position === 'top')
@@ -322,18 +338,8 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
   }
 
   /**
-   * 创建公共区候选位置对象。
-   */
-  createPublicCandidate(
-    zone: PublicZoneName,
-    position: PublicPosition,
-    count: number
-  ): PublicCandidate {
-    return createPublicCandidate(zone, position, count)
-  }
-
-  /**
    * 牌堆顶/底候选被摸走时，把命中的明牌候选传播到摸牌玩家手牌。
+   * 返回受影响的实体；只表达位置可能性，不直接认定某张候选身份就是实际被摸走的牌。
    */
   propagatePublicCandidatesToHand({
     fromZone,
@@ -344,7 +350,7 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
     count,
     sourceEvent
   }: PublicCandidatesToHandOptions): Card[] {
-    const position = this.normalizePublicPosition(fromPosition)
+    const position = normalizePublicPosition(fromPosition)
     // 非顶部底部
     if (
       fromZone !== 'pile' ||
@@ -379,7 +385,7 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
         if (typeof candidateCount !== 'number') return [candidate]
         if (count >= candidateCount) return []
 
-        return [this.createPublicCandidate(candidate.zone, fromPosition, candidateCount - count)]
+        return [createPublicCandidate(candidate.zone, fromPosition, candidateCount - count)]
       })
 
       const nextPublicLocationCandidates = nextPublicCandidates
@@ -430,16 +436,9 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
   }
 
   /**
-   * 将协议位置常量转换成公共候选位置名。
-   */
-  normalizePublicPosition(position: PublicPosition): PublicCandidatePosition {
-    return normalizePublicPosition(position)
-  }
-
-  /**
    * 扩展包含指定卡牌的既有约束组候选席位，避免新传播座位被旧组裁掉。
    */
-  expandConstraintGroupsForCards(cards: Card[], seatID: SeatID): void {
+  private expandConstraintGroupsForCards(cards: Card[], seatID: SeatID): void {
     const cardSet = new Set(cards)
 
     this.room.constraintGroups.forEach((group) => {
@@ -459,7 +458,7 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
    * 目标手牌的精确槽位已经被新的随机转移重新分配，继续保留会把新目标候选
    * 错误地裁成旧批次的零名额。
    */
-  invalidateHandTransferConstraintsForCards(
+  private invalidateHandTransferConstraintsForCards(
     cards: Card[],
     fromSeat: SeatID,
     targetSeat: SeatID
@@ -534,15 +533,5 @@ export class RoomMovementCandidateMethods extends RoomMovementSourceMethods {
     if (changed) {
       this.room.markConstraintGroupsDirty('invalidateHandTransferConstraintsForCards')
     }
-  }
-
-  /**
-   * 按移动包的手牌进出数量调整来源和目标玩家总手牌数。
-   */
-  applyHandTotalDelta(sourceSeat: SeatID | null, targetSeat: SeatID | null, count: number): void {
-    if (!(count > 0) || sourceSeat === targetSeat) return
-
-    this.adjustPlayerHandTotal(sourceSeat, -count)
-    this.adjustPlayerHandTotal(targetSeat, count)
   }
 }

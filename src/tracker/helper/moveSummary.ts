@@ -1,6 +1,5 @@
-import type { Card } from '../Card'
 import type { RoomMoveContext } from '../roomMovement/types'
-import type { CardID, MoveOptions, NormalizedMoveEvent } from '../types'
+import type { NormalizedMoveEvent } from '../types'
 
 interface MoveSummaryOptions {
   normalizeCardIDs?: boolean
@@ -10,38 +9,20 @@ interface MoveSummaryOptions {
   includeSourceCardIDs?: boolean
 }
 
-type SummarizableMoveEvent = Partial<NormalizedMoveEvent> & {
-  options?: Partial<MoveOptions> & {
-    sourceCards?: Card[]
-  }
-}
-
-type SummarizableMoveContext = Partial<RoomMoveContext> & {
-  sourceCards?: Card[]
-  knownCards?: Card[]
-}
-
-function normalizeIDs(cardIDs: CardID[] | CardID = []): CardID[] {
-  return Array.isArray(cardIDs) ? [...cardIDs] : [cardIDs]
-}
-
-export function summarizeMoveEvent(
-  event: SummarizableMoveEvent = {},
-  options: MoveSummaryOptions = {}
-) {
-  const eventOptions = event.options ?? {}
+export function summarizeMoveEvent(event: NormalizedMoveEvent, options: MoveSummaryOptions = {}) {
+  const eventOptions = event.options
   const moveType = event.moveType ?? eventOptions.moveType
   const label = eventOptions.sourceEvent?.label
 
   return {
     type: event.type,
-    cardIDs: options.normalizeCardIDs ? normalizeIDs(event.cardIDs) : event.cardIDs,
+    cardIDs: options.normalizeCardIDs ? [...event.cardIDs] : event.cardIDs,
     ...(moveType !== undefined ? { moveType } : {}),
     ...(label ? { label } : {}),
     toZone: event.toZone,
     ...(options.includeEventCardCount ? { cardCount: event.cardCount } : {}),
     options: {
-      seatID: eventOptions.seatID,
+      toSeatID: eventOptions.toSeatID,
       subZone: eventOptions.subZone,
       spellID: eventOptions.spellID,
       combinationID: eventOptions.combinationID,
@@ -53,7 +34,6 @@ export function summarizeMoveEvent(
       moveType: eventOptions.moveType,
       position: eventOptions.position,
       fromPosition: eventOptions.fromPosition,
-      resetKnownToUnknown: eventOptions.resetKnownToUnknown,
       ...(options.includeSourceCards
         ? { sourceCards: eventOptions.sourceCards?.map((card) => card.id) }
         : {})
@@ -61,14 +41,11 @@ export function summarizeMoveEvent(
   }
 }
 
-export function summarizeMoveContext(
-  context: SummarizableMoveContext = {},
-  options: MoveSummaryOptions = {}
-) {
+export function summarizeMoveContext(context: RoomMoveContext, options: MoveSummaryOptions = {}) {
   return {
     cardIDs: context.cardIDs,
     toZone: context.toZone,
-    seatID: context.seatID,
+    toSeatID: context.toSeatID,
     subZone: context.subZone,
     spellID: context.spellID,
     combinationID: context.combinationID,
@@ -79,7 +56,6 @@ export function summarizeMoveContext(
     cardCount: context.cardCount,
     position: context.position,
     fromPosition: context.fromPosition,
-    resetKnownToUnknown: context.resetKnownToUnknown,
     targetSeats: context.targetSeats,
     handMoveCount: context.handMoveCount,
     sourceHandSeat: context.sourceHandSeat,

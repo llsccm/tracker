@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
+import { normalizeTrackerMovePosition } from '@/tracker/runtime/protocolRules'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
 
 describe('PileIdentityLedger integration', () => {
@@ -19,17 +20,16 @@ describe('PileIdentityLedger integration', () => {
     const huntianyiIDs = [31023, 31022, 31021, 31020]
 
     huntianyiIDs.forEach((cardID, index) => {
-      controller.syncTrackerMove(
-        protocolMove({
-          CardIDs: [cardID],
-          FromZone: 0,
-          ToZone: 1,
-          ToID: 255,
-          ToPosition: toPosition,
-          MoveType: 19,
-          SpellID: 3694
-        })
-      )
+      const raw = protocolMove({
+        CardIDs: [cardID],
+        FromZone: 0,
+        ToZone: 1,
+        ToID: 255,
+        ToPosition: toPosition,
+        MoveType: 19,
+        SpellID: 3694
+      })
+      controller.syncTrackerMove({ ...raw, ...normalizeTrackerMovePosition(raw) }, raw)
 
       expect(pile.cards).toHaveLength(5 + index)
       expect(pile.cards.every((card) => isAnonymous(card) && !card.isKnown)).toBe(true)

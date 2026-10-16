@@ -1,10 +1,9 @@
 import type { Card } from '../Card'
-import type { SpellIDInput } from '../candidate/markSpellID'
 import type {
   CardID,
-  LocationCandidate,
   MoveSourceEvent,
   PostMovePublicCandidate,
+  PublicCandidateSource,
   PublicPosition,
   PublicZoneName,
   SeatID,
@@ -27,25 +26,25 @@ export type MoveTargetZone = PublicZoneName | 'player'
 export type KnownCardCreationReason = 'external-source' | 'known-fallback'
 
 export interface RoomMovementOptions {
-  seatID?: SeatInput
+  toSeatID?: SeatInput
   subZone?: SubZone
-  spellID?: SpellIDInput
+  spellID?: SpellID
   combinationID?: string | number | null
   fromZone?: SourceZoneInput
   fromSeatID?: SeatID
   fromSubZone?: SubZone
-  fromSpellID?: SpellIDInput
+  fromSpellID?: SpellID
   cardCount?: number
   /** 协议手牌总数变化量；省略时沿用实际移动实体数 cardCount。 */
   handMoveCount?: number
-  moveType?: number | string
+  moveType?: number
   position?: PublicPosition
   fromPosition?: PublicPosition
   expectedSlotsBySeat?: ExpectedSlotsBySeatInput
-  resetKnownToUnknown?: boolean
   anonymizeCards?: Card[]
   requireAnonymizeSuccess?: boolean
   sourceCards?: Card[]
+  publicCandidateSource?: PublicCandidateSource
   /** 技能需要保留全暗手牌的 N 选 K 身份事实时，强制建立随机转移候选。 */
   forceRandomHandTransferCandidates?: boolean
   postMovePublicCandidates?: PostMovePublicCandidate[]
@@ -54,9 +53,9 @@ export interface RoomMovementOptions {
 }
 
 export interface RoomMoveContext {
-  cardIDs: CardID[]
+  cardIDs: readonly CardID[]
   toZone: MoveTargetZone
-  seatID?: SeatInput
+  toSeatID?: SeatInput
   subZone: SubZone
   spellID: SpellID | null
   combinationID?: string | number | null
@@ -65,14 +64,14 @@ export interface RoomMoveContext {
   fromSubZone: SubZone
   fromSpellID?: SpellID | null
   cardCount: number
-  moveType?: number | string
+  moveType?: number
   position: PublicPosition
   fromPosition: PublicPosition
   expectedSlotsBySeat?: ExpectedSlotsBySeatInput
-  resetKnownToUnknown: boolean
   anonymizeCards: Card[]
   requireAnonymizeSuccess: boolean
   sourceCards?: Card[]
+  publicCandidateSource?: PublicCandidateSource
   forceRandomHandTransferCandidates: boolean
   postMovePublicCandidates?: PostMovePublicCandidate[]
   sourceEvent?: MoveSourceEvent
@@ -90,18 +89,17 @@ export interface RoomMoveContext {
   movedUnknownCards: Card[]
   publicMovedCards: Card[]
   skipUnknownMovement: boolean
-  hiddenMarkRecord: HiddenMarkRecord | null
 }
 
 export interface HiddenMarkRecord {
-  id: string
-  groupID: string
+  readonly id: string
+  readonly groupID: string
   sourceSeat: SeatID
   targetSeat: SeatID
   spellID: SpellID | null
-  targetLocationCandidate: LocationCandidate
   cards: Set<Card>
   placeholderCards: Set<Card>
+  /** 累计暗置额度；不是随出牌递减的当前标记区容量。 */
   hiddenCount: number
   knownMarkMin: number
   knownMarkMax: number
@@ -112,10 +110,12 @@ export interface HiddenMarkRecord {
 
 export interface HiddenMarkState {
   records: Map<string, HiddenMarkRecord>
+  /** mark700 协议确认的空间座位，与装备本体的位置独立。 */
+  muniuMarkSeat: SeatID | null
 }
 
 export interface UnassignedMarkSpaceState {
-  spaces: Map<SpellID | string, Card[]>
+  spaces: Map<SpellID, Card[]>
 }
 
 export interface TakeSpecificSourceFallback {
@@ -136,7 +136,7 @@ export interface TakeSourceCardsOptions {
   fromSpellID?: SpellID | null
   sourceCards?: Card[]
   sourceEvent?: MoveSourceEvent
-  moveType?: number | string
+  moveType?: number
 }
 
 export interface RandomHandTransferCheckOptions {
@@ -173,6 +173,7 @@ export interface RandomHandToPublicOptions {
   toZone: PublicZoneName
   position: PublicPosition
   unknownCount: number
+  candidateSource?: PublicCandidateSource
 }
 
 export interface UnknownPileReturnOptions {
@@ -194,5 +195,5 @@ export interface PublicCandidatesToHandOptions {
 export const PAIDUI_POSITIONS = ['top', 'bottom']
 // GameState tracker 命名空间中的通用账本 key：记录“手牌暗置到标记区”的明牌候选关系。
 export const HIDDEN_MARK_STATE_KEY = 'hiddenMarkCandidates'
-// GameState tracker 命名空间中的通用账本 key：记录 seatID=255 等无席位标记空间里的暗占位实体。
+// GameState tracker 命名空间中的通用账本 key：记录 toSeatID=255 等无席位标记空间里的暗占位实体。
 export const UNASSIGNED_MARK_SPACE_STATE_KEY = 'unassignedMarkSpaces'
