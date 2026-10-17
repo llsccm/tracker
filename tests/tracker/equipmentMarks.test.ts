@@ -1,0 +1,140 @@
+import { describe, expect, it } from 'vitest'
+import {
+  getEquipmentMarkRecordKey,
+  getEquipmentMarkSeatChange,
+  getObservedEquipmentMarkSnapshot,
+  resolveEquipmentContainerLocationCandidates
+} from '@/tracker/roomMovement/equipmentMarks'
+import {
+  HIDDEN_MARK_STATE_KEY,
+  type HiddenMarkState,
+  type RoomMovementOptions
+} from '@/tracker/roomMovement/types'
+import type { Room } from '@/tracker/Room'
+import type { CardID } from '@/tracker/types'
+import { createTestRoom } from './helpers/room'
+import { equipmentContainer, playerLocation } from './helpers/locationCandidates'
+
+function createMarkContext(
+  room: Room,
+  cardIDs: readonly CardID[] = [],
+  options: RoomMovementOptions = {}
+) {
+  return room.movement.createMoveContext(cardIDs, 'player', {
+    fromSeatID: 0,
+    fromSubZone: 'mark',
+    fromSpellID: 700,
+    toSeatID: 6,
+    subZone: 'mark',
+    spellID: 700,
+    cardCount: 2,
+    ...options
+  })
+}
+
+describe('装备标记容器只读规则', () => {
+  it.each([
+    { observedSeat: undefined, expectedSeat: 6 },
+    { observedSeat: null, expectedSeat: 6 },
+    { observedSeat: 0, expectedSeat: 0 }
+  ])(
+    '座位观测 $observedSeat 对应标记座位 $expectedSeat，查询不写状态',
+    ({ observedSeat, expectedSeat }) => {
+      const { room } = createTestRoom({ cardIDs: [161], seatIDs: [0, 6] })
+      room.moveCards([161], 'player', {
+        fromZone: 'pile',
+        toSeatID: 6,
+        subZone: 'equip',
+        spellID: 700,
+        cardCount: 1
+      })
+
+      expect(
+        resolveEquipmentContainerLocationCandidates(
+          equipmentContainer(161, 700),
+          room.cardIndex,
+          observedSeat
+        )
+      ).toEqual([playerLocation(expectedSeat, 'mark', 700)])
+      expect(room.cardIndex.get(161)!.seats).toEqual(new Set([6]))
+      expect(room.readSkillState(HIDDEN_MARK_STATE_KEY)).toBeUndefined()
+    }
+  )
+
+  it('装备离开装备区后，旧空间观测不能继续产生标记投影', () => {
+    const { room } = createTestRoom({ cardIDs: [161], seatIDs: [0, 6] })
+    room.moveCards([161], 'discard', { fromZone: 'pile', cardCount: 1 })
+
+    expect(
+      resolveEquipmentContainerLocationCandidates(equipmentContainer(161, 700), room.cardIndex, 0)
+    ).toEqual([])
+    expect(room.cardIndex.get(161)!.location).toBe('discard')
+    expect(room.readSkillState(HIDDEN_MARK_STATE_KEY)).toBeUndefined()
+  })
+
+  it('装备记录键按来源区分且不含承载座位，普通标记交回通用流程', () => {
+    expect(getEquipmentMarkRecordKey(0, 700)).toBe('0:muniu:161')
+    expect(getEquipmentMarkRecordKey(6, 700)).toBe('6:muniu:161')
+    expect(getEquipmentMarkRecordKey(0, 414)).toBeNull()
+    expect(getEquipmentMarkRecordKey(0, null)).toBeNull()
+  })
+
+  it.each([
+    { name: '同空间跨座', options: {}, transferFromSeat: 0 },
+    { name: '手牌放入容器', options: { fromSubZone: 'hand' }, transferFromSeat: null },
+    { name: '同座位通知', options: { fromSeatID: 6 }, transferFromSeat: null },
+    { name: '不同来源标记', options: { fromSpellID: 414 }, transferFromSeat: null }
+  ] as const)('$name 区分目标观测与实际迁移，规则不修改上下文', ({ options, transferFromSeat }) => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [0, 6] })
+    const context = Object.freeze(createMarkContext(room, [], options))
+
+    expect(getEquipmentMarkSeatChange(context)).toEqual({
+      markSpellID: 700,
+      targetSeat: 6,
+      transferFromSeat
+    })
+    expect(context.skipUnknownMovement).toBe(false)
+    expect(room.readSkillState(HIDDEN_MARK_STATE_KEY)).toBeUndefined()
+  })
+
+  it('装备本体、普通标记、多目标与来源标记不匹配不被识别为同一容器目标', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [0, 6] })
+    expect(getEquipmentMarkSeatChange(createMarkContext(room, [], { subZone: 'equip' }))).toBeNull()
+    expect(getEquipmentMarkSeatChange(createMarkContext(room, [], { spellID: 414 }))).toBeNull()
+    expect(getEquipmentMarkSeatChange(createMarkContext(room, [], { toSeatID: [0, 6] }))).toBeNull()
+    expect(getEquipmentMarkSeatChange(createMarkContext(room), 414)).toBeNull()
+    expect(room.readSkillState(HIDDEN_MARK_STATE_KEY)).toBeUndefined()
+  })
+
+  it('只识别完整可见快照，空 CardIDs 的暗迁座和部分揭示均不构成快照', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [0, 6] })
+    expect(getObservedEquipmentMarkSnapshot(createMarkContext(room, [1, 2]))).toEqual({
+      markSpellID: 700,
+      observedSeat: 6
+    })
+    expect(getObservedEquipmentMarkSnapshot(createMarkContext(room))).toBeNull()
+    expect(getObservedEquipmentMarkSnapshot(createMarkContext(room, [1, 0]))).toBeNull()
+    expect(
+      getObservedEquipmentMarkSnapshot(createMarkContext(room, [1, 2], { fromSubZone: 'hand' }))
+    ).toBeNull()
+    expect(
+      getObservedEquipmentMarkSnapshot(createMarkContext(room, [1, 2], { fromSpellID: null }))
+    ).toBeNull()
+    expect(room.readSkillState(HIDDEN_MARK_STATE_KEY)).toBeUndefined()
+  })
+
+  it('零张通知不创建账本，普通暗置仅由协调层写入观测而不接管空间迁移', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [0, 6] })
+    const zeroCount = createMarkContext(room, [], { cardCount: 0 })
+    expect(room.movement.hiddenMarks.handleMuniuMarkMove(zeroCount)).toBe(false)
+    expect(zeroCount.skipUnknownMovement).toBe(false)
+    expect(room.readSkillState(HIDDEN_MARK_STATE_KEY)).toBeUndefined()
+
+    const putIntoContainer = createMarkContext(room, [], { fromSubZone: 'hand' })
+    expect(room.movement.hiddenMarks.handleMuniuMarkMove(putIntoContainer)).toBe(false)
+    expect(putIntoContainer.skipUnknownMovement).toBe(false)
+    const state = room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
+    expect(state.muniuMarkSeat).toBe(6)
+    expect(state.records.size).toBe(0)
+  })
+})

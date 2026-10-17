@@ -50,10 +50,13 @@
 
 - `PlayerSnapshot` 位于 `src/tracker/room/playerSnapshot.ts`，独占玩家快照缓存；新实体通过 `Room.registerCardEntity()` 同时登记快照及区域索引顺序。
 - `RoomMoveEvents` 位于 `src/tracker/room/moveEvents.ts`，维护按局隔离的处理器注册表、领域输入补齐及有序装饰链。
-- `RoomIdentity` 位于 `src/tracker/room/identity.ts`，实现物化、匿名化、已有身份接管和外部实体创建，Room 保留稳定入口。
+- `RoomIdentity` 位于 `src/tracker/room/identity.ts`，实现物化、匿名化、移动身份批处理、已有身份接管和外部实体创建；Room 保留身份账本事务与稳定入口。
 
 - `RoomMovement` 位于 `src/tracker/roomMovement.ts`，通过组合 `RoomMovementSources`、`RoomMovementCandidates`、`RoomMovementHiddenMarks` 实现移动阶段；共享读取集中在 `roomMovement/sourceQueries.ts`，不再使用纵向多层继承。Room 保留阶段顺序与收敛边界，详见 [`room.md`](room.md)。
-- `RoomConstraints` 位于 `src/tracker/roomConstraints.ts`，负责约束组维护、实体牌解析、稳定列表同步、基于 `locationIndex` 的视图组同步以及候选席位过广时的暂停追踪。
+- 已知牌三路来源解析与统一确认在 `roomMovement/knownSources.ts`，逐牌来源校正、落区和旧公共槽回补在 `roomMovement/knownPlacement.ts`；RoomMovement 的两个已知牌入口仅保留阶段编排，不缓存批次状态或重复实现来源置换。
+- 移动上下文快照由无状态的 `roomMovement/context.ts` 构造；未知身份的来源取牌与目标落区阶段由 `roomMovement/unknownPlacement.ts` 实现，RoomMovement 保留调用入口与阶段顺序。
+- 装备容器座位、迁座、稳定记录键和完整快照规则在 `roomMovement/equipmentMarks.ts`；该模块只读输入，暗置标记组件继续负责唯一账本、占位与收敛协调，不建立独立木牛状态。
+- `RoomConstraints` 位于 `src/tracker/roomConstraints.ts`，集中实现不动点收敛、E1/E2 手牌槽懒缓存、匿名手牌实体对账、约束组维护、实体牌解析及稳定态的索引/视图组/计数器同步。Room 保留 `resolveConstraints()` 公开入口和状态所有权，DEV 诊断按需传入。
 - `RoomPublicZones` 位于 `src/tracker/roomPublicZones.ts`，负责公共区一致性检查、公共区牌序读取、玩家手牌 ID 查询以及旧辅助兼容的 zoneID 读面。
 - `RoomDiagnostics` 位于 `src/tracker/room/diagnostics.ts`，负责 DEV 身份/槽位与身份账本守恒、玩家快照和影子索引检查、抽样门控及收敛轮数告警；Room 的公开断言 API 保持不变。
 - `protocolZones.ts` 负责把协议区域编号映射为新版公共区与玩家子区；`MoveEventNormalizer` 只做分类与字段映射，不直接修改 `Room` 状态。`FromID` / `ToID` 的含义依赖具体 `FromZone` / `ToZone`，不能一律当作座位 ID：例如 `FromZone=8` 弹窗标记回牌堆时，`FromID` 可能是技能/标记空间 ID；`FromZone=1` 牌堆来源时，`FromID=255` 可能只是牌堆/无座位占位。
