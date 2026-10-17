@@ -24,8 +24,8 @@ export interface PlayerHandCardIDOptions {
 }
 
 /**
- * Room 的公共区查询与旧协议兼容读面辅助模块。
- * getPublicZone 作为高频入口保留在 Room，这里集中处理一致性检查和旧 zoneID 转换。
+ * Room 的公共区查询。
+ * getPublicZone 作为高频入口保留在 Room，这里集中处理一致性检查。
  */
 export class RoomPublicZones {
   declare room: Room

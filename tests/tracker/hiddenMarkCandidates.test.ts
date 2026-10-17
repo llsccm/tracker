@@ -760,6 +760,25 @@ describe('隐藏标记区候选', () => {
     expect(room.locationIndex.markBySeatAndSpell.get(5).get(700)).toContain(knownCard)
   })
 
+  it('未观察标记协议时容器候选回退到装备座位且不初始化账本', () => {
+    const { room } = createTestRoom({ cardIDs: [161], seatIDs: [4] })
+
+    room.moveCards([161], 'player', {
+      toSeatID: 4,
+      subZone: 'equip',
+      fromZone: 'pile',
+      spellID: 700,
+      cardCount: 1,
+      sourceEvent: { type: 'test:muniu-equip' }
+    })
+
+    expect(room.readSkillState(HIDDEN_MARK_STATE_KEY)).toBeUndefined()
+    expect(room.resolveEquipmentContainerLocationCandidates(equipmentContainer(161, 700))).toEqual([
+      playerLocation(4, 'mark', 700)
+    ])
+    expect(room.readSkillState(HIDDEN_MARK_STATE_KEY)).toBeUndefined()
+  })
+
   it('木牛流马离开装备区后容器候选不再投影到旧标记座位', () => {
     const { room } = createTestRoom({ cardIDs: [161, 152, 153], seatIDs: [4, 5] })
     const knownCard = getCard(room, 152)

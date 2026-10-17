@@ -1,9 +1,8 @@
-import { getEquipmentMarkContainerByMarkSpellID } from './candidate/equipmentMarkContainer'
-import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from './roomMovement/types'
-import { Card, hasRealIdentity, isAnonymous } from './Card'
+import { Card } from './Card'
 import { Player } from './Player'
 import { Zone } from './Zone'
 import { CardCounter } from './CardCounter'
+import { POSITION_RANDOM } from './candidate/cardPositions'
 import { GameState } from './Game'
 import { AmbiguousKnownIndex } from './AmbiguousKnownIndex'
 import { CardLocationIndex } from './CardLocationIndex'
@@ -25,10 +24,7 @@ import { RoomIdentity, type AnonymizeLocatedIdentityOptions } from './room/ident
 import { RoomDiagnostics } from './room/diagnostics'
 import { RoomMovement } from './roomMovement'
 import { type PlayerHandCardIDOptions, RoomPublicZones } from './roomPublicZones'
-import { normalizeLocationCandidate } from './candidate/locationCandidate'
 import type { LocationCandidateInput } from './candidate/locationCandidate'
-import { collectHandSlotCardsBySeat, getHandSlotKindForSeat } from './candidate/handSlotCounts'
-import { recordTraversal } from './traversalStats'
 import { trackerLogger } from '@/utils/logger'
 import type { ConstraintGroup } from './ConstraintGroup'
 import type {
@@ -45,12 +41,6 @@ import type {
 
 interface RoomOptions {
   gameState?: GameState
-}
-
-interface HandSlotCountSummary {
-  knownCount: number
-  candidateCount: number
-  candidateCards: Card[]
 }
 
 interface ShufflePileOptions {
@@ -230,62 +220,11 @@ export class Room extends RoomBase {
         discardCountAfter: this.zones.get('discard')?.cards.length ?? 0
       })
 
-      this.anonymizePileCohortIdentityEntities(context)
+      this.identity.anonymizePileCohortIdentityEntities(context)
       this.assertPileIdentityLedgerConsistency(context)
     } catch (error) {
       trackerLogger.warn('牌堆身份账本移动更新失败', { error, move })
     }
-  }
-
-  /**
-   * 将 ledger 已释放回 cohort 的牌堆身份同步投影成匿名物理槽。
-   *
-   * 典型场景是已知牌被随机混入牌堆：ledger 只能把身份放回 cohort，而 Room 的物理槽也
-   * 必须同步解绑正 ID。无 CardIDs 的 MoveType=18 不走该转换，它只消费匿名槽并保留全部
-   * knownPileIdentityIDs。
-   *
-   * 这里严格限制为“当前仍在物理牌堆”与“最终 cohort 身份”的交集。玩家区、mark、discard
-   * 或 suspended 实体不在本方法中自动修复，避免把其它移动错误误判成牌堆投影更新。
-   */
-  private anonymizePileCohortIdentityEntities(context: string): CardID[] {
-    const pile = this.zones.get('pile')
-    if (!pile) return []
-
-    const cohortIdentityIDs = new Set(this.pileIdentityLedger.getUnresolvedIdentityIDs())
-    if (cohortIdentityIDs.size === 0) return []
-
-    const anonymizedIdentityIDs: CardID[] = []
-
-    pile.cards.slice().forEach((card) => {
-      const cardID = card.id
-      if (!(cardID > 0) || !cohortIdentityIDs.has(cardID)) return
-
-      const releasedIdentityID = this.anonymizeLocatedIdentity(
-        card,
-        `${context}:cohortPileProjection`
-      )
-
-      if (releasedIdentityID === null) {
-        trackerLogger.warn('牌堆 cohort 身份投影匿名化失败', {
-          context,
-          cardID,
-          entityID: card.entityID,
-          location: card.location
-        })
-        return
-      }
-
-      anonymizedIdentityIDs.push(releasedIdentityID)
-    })
-
-    if (anonymizedIdentityIDs.length > 0) {
-      trackerLogger.debug('牌堆 cohort 身份已投影为匿名槽', {
-        context,
-        cardIDs: anonymizedIdentityIDs
-      })
-    }
-
-    return anonymizedIdentityIDs
   }
 
   /**
@@ -595,90 +534,6 @@ export class Room extends RoomBase {
     return this.identity.createExternalCards(cardIDs, count)
   }
 
-  reconcileAnonymousHandCards(slotCountsBySeat: Map<SeatID, HandSlotCountSummary>): {
-    created: Card[]
-    released: Card[]
-  } {
-    const created: Card[] = []
-    const released: Card[] = []
-
-    // 没有任何已观测玩家时直接返回：与旧“逐玩家 early-return”等价，避免无谓的归组扫描。
-    let hasObservedPlayer = false
-    for (const player of this.players.values()) {
-      if (player.hasObservedHandCount) {
-        hasObservedPlayer = true
-        break
-      }
-    }
-    if (!hasObservedPlayer) return { created, released }
-
-    // 一次性按归属座位归组“单一归属的暗手牌”，取代过去对每个已观测玩家各扫一遍 Room.cards。
-    // 复用 resolveConstraints 增量维护的 player 快照（成员严格等于 card.location==='player'），
-    // 把每条移动尾部的 O(玩家数 × 全牌数) 降为 O(玩家区牌数)。
-    const playerCards = this.playerCardsSnapshot
-    recordTraversal('reconcileAnonymousHandCards:group', playerCards.length)
-    const hiddenHandCardsBySeat = new Map<SeatID, Card[]>()
-    for (const card of playerCards) {
-      if (card.subZone !== 'hand' || card.isKnown === true || card.suspended === true) {
-        continue
-      }
-      const ownerSeatID = card.resolvedSeat
-      if (ownerSeatID === null) continue
-      const existing = hiddenHandCardsBySeat.get(ownerSeatID)
-      if (existing) existing.push(card)
-      else hiddenHandCardsBySeat.set(ownerSeatID, [card])
-    }
-    const ambiguousHiddenCoverageBySeat = this.constraints.collectAmbiguousHiddenHandCoverage()
-
-    this.players.forEach((player, seatID) => {
-      if (!player.hasObservedHandCount) return
-      const slotCounts = slotCountsBySeat.get(seatID)
-      if ((slotCounts?.candidateCards.length ?? 0) > 0 && slotCounts?.candidateCount === 0) {
-        return
-      }
-
-      const unknownHandCards = hiddenHandCardsBySeat.get(seatID) ?? []
-      const ambiguousHiddenCoverage = ambiguousHiddenCoverageBySeat.get(seatID) ?? 0
-      const coveredUnknownCount = unknownHandCards.length + ambiguousHiddenCoverage
-      const missingCount = Math.max(0, player.unknownCardCount - coveredUnknownCount)
-
-      if (missingCount > 0) {
-        const placeholders = this.createExternalCards([], missingCount)
-        placeholders.forEach((card) => {
-          card.bindCandidates([seatID], 'hand', null, { known: false })
-        })
-        created.push(...placeholders)
-      }
-
-      let excessCount = Math.max(0, coveredUnknownCount - player.unknownCardCount)
-      if (excessCount <= 0) return
-
-      for (const card of unknownHandCards) {
-        if (excessCount <= 0) break
-        if (!isAnonymous(card)) continue
-
-        this.removeCardsFromConstraintGroups([card])
-        card.moveToPublicZone('outside')
-        released.push(card)
-        excessCount -= 1
-      }
-    })
-
-    if (created.length > 0 || released.length > 0) {
-      trackerLogger.info('匿名手牌实体对账', {
-        created: created.map((card) => ({
-          entityID: card.entityID,
-          seatID: card.resolvedSeat
-        })),
-        released: released.map((card) => ({
-          entityID: card.entityID
-        }))
-      })
-    }
-
-    return { created, released }
-  }
-
   // 公共区主入口与兼容查询；低频查询辅助位于 roomPublicZones.js。
   clearCardsFromPublicZones(cards: Card[] = []) {
     return this.publicZones.clearCardsFromPublicZones(cards)
@@ -700,29 +555,7 @@ export class Room extends RoomBase {
   resolveEquipmentContainerLocationCandidates(
     candidate: LocationCandidateInput
   ): SubZoneCandidate[] {
-    const normalized = normalizeLocationCandidate(candidate)
-    if (normalized?.type !== 'container' || normalized.containerType !== 'equipment') return []
-
-    const equipment = this.cardIndex.get(normalized.cardID)
-    // 装备本体离开装备区后标记空间不再存在；旧 muniuMarkSeat 不能继续投影到玩家标记区。
-    if (equipment?.location !== 'player' || equipment.subZone !== 'equip') return []
-
-    const container = getEquipmentMarkContainerByMarkSpellID(normalized.spellID)
-    const markSeat =
-      container?.equipmentCardID === normalized.cardID
-        ? this.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.muniuMarkSeat
-        : null
-    // 已观察到 mark700 后，其座位只由标记协议更新，不能随装备提前换位。
-    // 尚无标记协议的容器候选保留装备位置兜底。
-    const seats =
-      markSeat !== null && markSeat !== undefined ? [markSeat] : Array.from(equipment.seats)
-
-    return seats.map((seatID) => ({
-      type: 'player',
-      seatID,
-      subZone: 'mark',
-      spellID: normalized.spellID
-    }))
+    return this.movement.hiddenMarks.resolveEquipmentContainerLocationCandidates(candidate)
   }
 
   /** 获取指定玩家手牌中的物理牌 ID
@@ -893,7 +726,7 @@ export class Room extends RoomBase {
     if (closesPileGeneration) {
       // 每个过期未决身份都需要一个 suspended 展示实体；这些实体不占牌堆物理槽。
       // 尚未物化的身份会直接按最终 suspended 状态注册，避免污染只服务既有投影的脏事件流。
-      const suspensionResult = this.suspendUnresolvedPileIdentitiesForShuffle(
+      const suspensionResult = this.identity.suspendUnresolvedPileIdentitiesForShuffle(
         expiringIdentityIDs,
         recycledIdentityIDs
       )
@@ -947,7 +780,7 @@ export class Room extends RoomBase {
     }
 
     // 账本已经在物理事务前滚动；这里完成实体投影、收敛与最终态校验，事务中间态不告警。
-    this.anonymizePileCohortIdentityEntities(identityContext)
+    this.identity.anonymizePileCohortIdentityEntities(identityContext)
     this.resolveConstraints()
     // 直接调用 Room 的历史测试可能绕过此前移动的账本事件；只有 Controller 提供完整事件时，
     // 才能要求 Room 分区与账本在本次事务末尾严格一致。
@@ -988,331 +821,13 @@ export class Room extends RoomBase {
     return null
   }
 
-  /**
-   * 把一次真实洗牌前仍留在 cohort 中的身份转为可展示的 suspended 实体。
-   *
-   * cohort 身份可能尚未物化，也可能暂由玩家手牌、mark 或旧兼容牌堆槽中的正 ID 暗实体
-   * 承载。后一种情况不能直接 suspend 原实体，否则会凭空删掉一个物理槽；必须先调用
-   * anonymizeLocatedIdentity({ preservePlacement: true })，让同一对象继续承担匿名位置数量，
-   * 再创建一个 detached 正 ID 实体负责展示。已经 suspended 的历史身份保持原对象，不重复
-   * 创建；本轮洗回弃牌身份属于新世代，由调用方显式排除。
-   */
-  private suspendUnresolvedPileIdentitiesForShuffle(
-    identityIDs: readonly CardID[],
-    recycledIdentityIDs: ReadonlySet<CardID>
-  ): { suspendedIdentityIDs: CardID[]; anonymizedIdentityIDs: CardID[] } {
-    const suspendedIdentityIDs: CardID[] = []
-    const anonymizedIdentityIDs: CardID[] = []
-
-    identityIDs.forEach((cardID) => {
-      if (!(cardID > 0) || recycledIdentityIDs.has(cardID)) return
-
-      const existing = this.cardIndex.get(cardID)
-      if (existing && (existing.suspended === true || this.suspendedKnownCards.has(existing))) {
-        return
-      }
-
-      // 已经通过协议公开的身份不属于“尚未出现”。正常生产事务中 ledger 已把它移出 cohort；
-      // 该分支同时让直接调用 Room 的测试/兼容路径不会把可见实体错误暂停。
-      if (existing?.isKnown === true) return
-
-      if (existing) {
-        const releasedIdentityID = this.anonymizeLocatedIdentity(
-          existing,
-          'shufflePile:expiredCohortIdentity',
-          { preservePlacement: true }
-        )
-        if (releasedIdentityID === null) {
-          trackerLogger.warn('洗牌关闭旧牌堆世代时释放暗实体身份失败', {
-            cardID,
-            entityID: existing.entityID,
-            location: existing.location
-          })
-          return
-        }
-        anonymizedIdentityIDs.push(releasedIdentityID)
-      } else if (!this.unlocatedIdentities.has(cardID)) {
-        trackerLogger.warn('洗牌关闭旧牌堆世代时身份不在 Room 分区中', { cardID })
-        return
-      }
-
-      const displayCard = this.createDetachedSuspendedIdentity(cardID)
-      if (!displayCard) {
-        trackerLogger.warn('洗牌关闭旧牌堆世代时创建 suspended 展示实体失败', { cardID })
-        return
-      }
-      suspendedIdentityIDs.push(cardID)
-    })
-
-    if (suspendedIdentityIDs.length > 0) this.markViewDirty('pile-generation-suspended')
-    return { suspendedIdentityIDs, anonymizedIdentityIDs }
-  }
-
-  /**
-   * 为旧牌堆世代中尚未物化的身份直接创建最终 suspended 展示实体。
-   *
-   * 这类实体从未进入玩家区或公共区，三个增量索引没有旧投影需要删除；若复用
-   * createExternalCards() -> confirmKnown() -> suspendKnownCard()，中间态会产生无意义的通用
-   * dirtyCardEvent。这里先写完最终状态再登记索引与计数器，只通过 viewDirty 通知候选区重绘。
-   * 已经承担物理位置的身份仍由调用方先匿名化，其原实体变化继续走完整脏事件路径。
-   */
-  private createDetachedSuspendedIdentity(cardID: CardID): Card | null {
-    if (!(cardID > 0) || this.cardIndex.has(cardID)) return null
-    if (!this.unlocatedIdentities.has(cardID)) return null
-
-    const card = new Card(cardID, this)
-    card.location = 'suspended'
-    card.isKnown = true
-    card.suspended = true
-    card.syncTimestamp()
-
-    this.registerCardEntity(card)
-    this.deckIdentities.add(cardID)
-    this.cardIndex.set(cardID, card)
-    this.unlocatedIdentities.delete(cardID)
-    this.suspendedKnownCards.add(card)
-    // 动态实体仍需按 room.cards 创建顺序登记；它当前不参与任何位置投影，无需触发重投影。
-    this.counter?.addCard(card)
-    return card
-  }
-
   createConstraintGroup(...args) {
     return (this.constraints.createConstraintGroup as any)(...args)
   }
 
-  collectPlayerHandSlotCounts(
-    cards: Card[] = this.cards,
-    seatIDs: Iterable<SeatID> = this.players.keys()
-  ): Map<SeatID, HandSlotCountSummary> {
-    const countsBySeat = new Map<SeatID, HandSlotCountSummary>()
-    // E1：调用方可只传需要重算的 seat，避免每轮为所有玩家重复分类同一批 playerCards。
-    const targetSeatIDs = Array.from(seatIDs, Number).filter((seatID) => this.players.has(seatID))
-    const handSlotCardsBySeat = collectHandSlotCardsBySeat(cards, targetSeatIDs)
-
-    targetSeatIDs.forEach((seatID) => {
-      const player = this.players.get(seatID)
-      if (!player) return
-
-      const slotCards = handSlotCardsBySeat.get(seatID)
-      countsBySeat.set(seatID, {
-        knownCount: slotCards?.knownCards.length ?? 0,
-        candidateCount: player.getCandidateHandSlotCount(slotCards?.candidateCards ?? []),
-        candidateCards: slotCards?.candidateCards ?? []
-      })
-    })
-
-    return countsBySeat
-  }
-
-  private createHandSlotCountResolver(
-    playerCards: Card[],
-    observedSeatIDs: SeatID[],
-    previousTouchedSeats: Set<SeatID> | null,
-    handSlotCountsCache: Map<SeatID, HandSlotCountSummary>
-  ): (seatID: SeatID) => HandSlotCountSummary | undefined {
-    const handSlotCountsBySeat =
-      previousTouchedSeats === null
-        ? this.collectPlayerHandSlotCounts(playerCards, observedSeatIDs)
-        : new Map<SeatID, HandSlotCountSummary>()
-
-    if (previousTouchedSeats === null) {
-      handSlotCountsBySeat.forEach((summary, seatID) => {
-        handSlotCountsCache.set(seatID, summary)
-      })
-    }
-
-    return (seatID: SeatID): HandSlotCountSummary | undefined => {
-      if (handSlotCountsBySeat.has(seatID)) {
-        return handSlotCountsBySeat.get(seatID)
-      }
-
-      if (previousTouchedSeats === null) {
-        return handSlotCountsCache.get(seatID)
-      }
-
-      // 后续轮次只会走到 E2 判定为受影响的 seat，这里按单 seat 懒重算。
-      const summary = this.collectPlayerHandSlotCounts(playerCards, [seatID]).get(seatID)
-      if (summary) {
-        handSlotCountsBySeat.set(seatID, summary)
-        handSlotCountsCache.set(seatID, summary)
-      }
-
-      return summary ?? handSlotCountsCache.get(seatID)
-    }
-  }
-
-  /**
-   * 执行房间级约束收敛，并同步玩家视图组、模糊明牌索引与计数器。
-   * 这里保留三类核心收敛规则；低频的组创建、暂停追踪和列表同步在 RoomConstraints 中实现。
-   */
+  /** 房间级收敛的稳定入口；求解、座位懒缓存与稳定态同步由 RoomConstraints 实现。 */
   resolveConstraints(): void {
-    let changed = true
-    let limit = 100 // 限制循环上限防死锁
-    let overbroadKnownCards: Card[] = []
-    // E1：收敛循环内复用未触碰 seat 的手牌槽统计；触碰 seat 会按需刷新。
-    const handSlotCountsCache = new Map<SeatID, HandSlotCountSummary>()
-    // A2：入口读取增量维护的 player 快照（消费上次收敛以来的 dirtyCardEvents）。
-    // 非 player 牌不存在陈旧 owner，对约束一/三是严格 no-op；轮内 location 漂移必把
-    // changed 置真，由轮末增量刷新兜底。游标断档时 refreshPlayerSnapshot 内部回退全量。
-    let playerCards = this.refreshPlayerSnapshot()
-    // E2：上一轮触碰座位集；null 表示首轮，约束三无条件处理全部玩家。
-    let previousTouchedSeats: Set<SeatID> | null = null
-    // 收敛轮数：喂给非终止回归看门狗（正常 ≤2 轮）。
-    let rounds = 0
-
-    try {
-      while (changed && limit-- > 0) {
-        changed = false
-        overbroadKnownCards = []
-        const touchedSeats = new Set<SeatID>()
-        this.resolveTouchedSeats = touchedSeats
-        rounds += 1
-
-        // === 约束一：候选席位变化后同步确定拥有者 ===
-        recordTraversal('resolveConstraints:constraint1', playerCards.length)
-        for (const card of playerCards) {
-          changed = card.syncOwnerFromSeats('room:resolveOwner') || changed
-          // 判断是否过渡发散 停止追踪
-          if (this.constraints.isOverbroadKnownCard(card)) {
-            overbroadKnownCards.push(card)
-          }
-        }
-
-        // === 约束二：局部 ConstraintGroup 收敛 ===
-        for (const group of this.constraintGroups.values()) {
-          changed = group.resolve() || changed
-        }
-
-        // === 约束三：暗牌额度降为 0 时的排他排除 ===
-        // E1：首轮只批量计算有观测手牌数的座位；后续轮次按触碰座位懒重算，
-        // 未触碰座位复用上一轮缓存，并由 E2 直接跳过。
-        const observedSeatIDs = Array.from(this.players.entries())
-          .filter(([, player]) => player.hasObservedHandCount)
-          .map(([seatID]) => seatID)
-        const getHandSlotCounts = this.createHandSlotCountResolver(
-          playerCards,
-          observedSeatIDs,
-          previousTouchedSeats,
-          handSlotCountsCache
-        )
-
-        for (const [seatID, player] of this.players.entries()) {
-          // 座位的 knownCount/candidateCount/排他目标只随触碰它的卡牌变化；
-          // 上一轮和本轮至今都未触碰时，重算与排他必是幂等 no-op，直接跳过。
-          if (
-            previousTouchedSeats &&
-            !previousTouchedSeats.has(seatID) &&
-            !touchedSeats.has(seatID)
-          ) {
-            continue
-          }
-
-          if (!player.hasObservedHandCount) {
-            continue
-          }
-
-          const handSlotCounts = getHandSlotCounts(seatID)
-          changed = player.refreshUnknownCardCount(handSlotCounts) || changed
-
-          const lockedKnownCount = handSlotCounts?.knownCount ?? 0
-
-          // 只有确定明牌已经占满手牌总数时，才排除该玩家的候选明牌。
-          if (player.hasObservedHandCount && player.observedHandCount - lockedKnownCount <= 0) {
-            recordTraversal('resolveConstraints:constraint3:exclusion', playerCards.length)
-            for (const card of playerCards) {
-              if (
-                card.location === 'player' &&
-                card.hasLocationCandidates?.() &&
-                getHandSlotKindForSeat(card, seatID) === 'candidate'
-              ) {
-                const handLocationCandidates = card
-                  .getLocationCandidates()
-                  .filter(
-                    (candidate) =>
-                      candidate.type === 'player' &&
-                      candidate.seatID === seatID &&
-                      candidate.subZone === 'hand'
-                  )
-
-                handLocationCandidates.forEach((candidate) => {
-                  changed =
-                    card.removeLocationCandidate(candidate, 'room:unknownQuotaExclusion') || changed
-                })
-
-                continue
-              }
-
-              if (
-                card.location === 'player' &&
-                card.subZone === 'hand' &&
-                // 完整位置候选由 expectedSlotsBySubZone 处理，不参与旧 seats 排除。
-                !card.hasSubZoneCandidates?.() &&
-                card.seats.size > 1 &&
-                card.seats.has(seatID)
-              ) {
-                changed = card.deleteSeat(seatID, 'room:unknownQuotaExclusion') || changed
-              }
-            }
-          }
-        }
-
-        // 匿名实体增减会改变玩家区快照，必须纳入本轮 changed 并重新执行全部约束。
-        const anonymousHandChanges = this.reconcileAnonymousHandCards(handSlotCountsCache)
-        if (anonymousHandChanges.created.length > 0 || anonymousHandChanges.released.length > 0) {
-          changed = true
-        }
-
-        previousTouchedSeats = touchedSeats
-
-        // A2：轮内发生变化时增量刷新快照，兜住全部 location 漂移（含轮内新进入 player 的牌）。
-        if (changed) {
-          playerCards = this.refreshPlayerSnapshot()
-        }
-      }
-    } finally {
-      this.resolveTouchedSeats = null
-    }
-
-    this.lastResolveRounds = rounds
-    if (rounds > this.maxResolveRounds) this.maxResolveRounds = rounds
-    if (import.meta.env.DEV) this.diagnostics.assertConvergenceRounds(rounds)
-
-    this.assertPlayerSnapshotConsistency(playerCards)
-
-    // changed=true 说明本轮可能新增过渡发散明牌，需全量扫描；稳定时只检查本轮收集的集合。
-    if (changed) {
-      this.constraints.suspendOverbroadKnownCards()
-    } else {
-      this.constraints.suspendOverbroadKnownCards(overbroadKnownCards)
-    }
-
-    // 增量维护区域投影索引；游标断档时 applyDirtyCardEvents 内部回退全量 rebuild。
-    // 纯公共区之间的暗牌移动不发脏牌事件，靠 Zone 变更累积的 dirtyPublicZones 补齐。
-    this.locationIndex.applyDirtyCardEvents(this, { dirtyPublicZones: this.dirtyPublicZones })
-    this.dirtyPublicZones.clear()
-    const shouldAssertShadowIndexes =
-      import.meta.env.DEV && this.diagnostics.shouldAssertShadowIndexConsistency()
-    if (shouldAssertShadowIndexes) this.assertLocationIndexConsistency()
-
-    // 约束收敛完毕后同步视图物理组排序
-    this.constraints.syncViewGroups()
-
-    // 增量维护已知明牌的模糊反查索引；约束组结构变化会影响 source label / membership，
-    // 单牌 dirty 事件无法覆盖这些跨牌描述变化，因此只在结构 dirty 时全量回退。
-    const constraintGroups = Array.from(this.constraintGroups.values())
-    if (this.constraintGroupsDirty) {
-      this.ambiguousKnownIndex.rebuild(constraintGroups)
-      this.constraintGroupsDirty = false
-    } else {
-      this.ambiguousKnownIndex.applyDirtyCardEvents(constraintGroups)
-    }
-
-    if (shouldAssertShadowIndexes) this.assertAmbiguousKnownIndexConsistency()
-
-    // 触发计数器与视图订阅更新
-    this.counter.update()
-
-    this.assertConservation('resolveConstraints')
+    this.constraints.resolveConstraints(import.meta.env.DEV ? this.diagnostics : undefined)
   }
 
   /**
@@ -1400,52 +915,16 @@ export class Room extends RoomBase {
   ): boolean {
     const context = this.movement.createMoveContext(cardIDs, toZone, opt)
 
-    if (context.requireAnonymizeSuccess) {
-      // 先对整组做无副作用预检，避免前几张已释放、后续成员失败时留下半匿名化状态。
-      const invalidAnonymizeCards = context.anonymizeCards.filter(
-        (card) => !hasRealIdentity(card) || card.id <= 0 || this.cardIndex.get(card.id) !== card
-      )
-
-      if (invalidAnonymizeCards.length > 0) {
-        invalidAnonymizeCards.forEach((card) => {
-          trackerLogger.warn('模糊来源实体匿名化失败，身份仍被视为已定位', {
-            reason: 'moveCards:ambiguousSource:preflight',
-            cardID: card.id,
-            entityID: card.entityID,
-            location: card.location,
-            isKnown: card.isKnown
-          })
-        })
-        return false
-      }
-    }
-
-    const anonymizedPileIdentityIDs: CardID[] = []
-    for (const card of context.anonymizeCards) {
-      const releasedIdentityID = this.anonymizeLocatedIdentity(card, 'moveCards:ambiguousSource', {
-        preservePlacement: true
-      })
-
-      if (releasedIdentityID !== null) {
-        if (card.location === 'pile') anonymizedPileIdentityIDs.push(releasedIdentityID)
-        continue
-      }
-
-      trackerLogger.warn('模糊来源实体匿名化失败，身份仍被视为已定位', {
-        reason: 'moveCards:ambiguousSource',
-        cardID: card.id,
-        entityID: card.entityID,
-        location: card.location,
-        isKnown: card.isKnown
-      })
-
-      if (context.requireAnonymizeSuccess) return false
-    }
+    const anonymization = this.identity.anonymizeMoveSourceCards(
+      context.anonymizeCards,
+      context.requireAnonymizeSuccess
+    )
+    if (!anonymization.success) return false
 
     // 来源明牌失去定位时，实体与身份账本一起降级，再消费本次匿名移动的数量。
-    if (anonymizedPileIdentityIDs.length > 0) {
+    if (anonymization.pileIdentityIDs.length > 0) {
       this.pileIdentityLedger.anonymizeKnownPileIdentities(
-        anonymizedPileIdentityIDs,
+        anonymization.pileIdentityIDs,
         'moveCards:ambiguousSource'
       )
     }
@@ -1467,7 +946,15 @@ export class Room extends RoomBase {
     this.movement.applyMoveCandidatePropagation(context)
     this.movement.moveUnknownCardsForContext(context)
     this.movement.moveKnownCardsForContext(context)
-    this.movement.anonymizeRandomPileReturn(context)
+    const inferredIdentityIDs = this.identity.anonymizeRandomPileReturn(context)
+    if (inferredIdentityIDs.length > 0) {
+      this.pileIdentityLedger.insertKnown(
+        inferredIdentityIDs,
+        inferredIdentityIDs.length,
+        POSITION_RANDOM,
+        'moveCards:inferredRandomPileReturn'
+      )
+    }
 
     context.postMovePublicCandidates?.forEach(({ card, candidate }) => {
       if (!context.publicMovedCards.includes(card) || card.location !== candidate.zone) return
