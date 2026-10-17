@@ -41,7 +41,7 @@ export class RoomIdentity {
 
     const pileIdentityIDs: CardID[] = []
     for (const card of cards) {
-      const releasedIdentityID = this.anonymizeLocatedIdentity(card, 'moveCards:ambiguousSource', {
+      const releasedIdentityID = room.anonymizeLocatedIdentity(card, 'moveCards:ambiguousSource', {
         preservePlacement: true
       })
 
@@ -76,7 +76,7 @@ export class RoomIdentity {
     context.publicMovedCards.forEach((card) => {
       if (card.id <= 0) return
 
-      const previousCardID = this.anonymizeLocatedIdentity(card, 'moveCards:randomPileReturn')
+      const previousCardID = this.room.anonymizeLocatedIdentity(card, 'moveCards:randomPileReturn')
       if (previousCardID === null) {
         trackerLogger.warn('随机入堆匿名化失败：card/index 不一致', {
           cardID: card.id,

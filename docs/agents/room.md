@@ -227,15 +227,15 @@ cohort 身份到匿名实体的投影，并协调洗回身份匿名化和物理�
 | 玩家区快照、事件游标、实体创建顺序 | `room/playerSnapshot.ts` | 唯一派生缓存，Room 保留查询和刷新入口 |
 | 处理器注册、移动事件装饰及输入类型 | `room/moveEvents.ts` | 注册表按局隔离，输出规范化事件 |
 | 身份物化、匿名化、外部/suspended 实体创建与世代身份投影 | `room/identity.ts` | Room 保留状态所有权、账本事务协调、公开原语及成功解绑后的诊断；不复制身份账本 |
-
-`RoomIdentity.anonymizeMoveSourceCards()` 负责模糊来源实体的整批预检与身份解绑，
-`anonymizeRandomPileReturn()` 在已知/未知移动路径汇合后转换随机回堆实体；
-Room 继续负责相应的 `PileIdentityLedger` 事务和阶段顺序。
 | DEV 身份/槽位守恒、玩家快照、影子索引断言与收敛告警 | `room/diagnostics.ts` | 只读检查，保留 Room 公开薄入口；抽样计数随初始化/销毁重置 |
 | 稳定且高频的单局公开入口 | `Room.ts` 的薄门面 | 便于调用方检索与引用追踪 |
 | 技能专属事件装饰与临时账本 | `src/tracker/skill/` + GameState `tracker` 状态 | 技能状态按局隔离，Room 仅提供领域访问入口 |
 | 牌实体、玩家事实或公共区模型语义 | `Card.ts` / `Player.ts` / `Zone.ts` | 由对应模型维护自身不变量 |
 | DOM、挂载、渲染合并与显隐 | `src/tracker/view/` / `src/ui/` | Room 只记录可供视图消费的状态与脏事件 |
+
+`RoomIdentity.anonymizeMoveSourceCards()` 负责模糊来源实体的整批预检与身份解绑，
+`anonymizeRandomPileReturn()` 在已知/未知移动路径汇合后转换随机回堆实体；
+Room 继续负责相应的 `PileIdentityLedger` 事务和阶段顺序。
 
 新增内部辅助方法时，先判断它是在维护 Room 的权威状态，还是某个行为阶段的实现细节。后者优先放入
 对应行为模块，再由 Room 暴露必要的薄入口。
