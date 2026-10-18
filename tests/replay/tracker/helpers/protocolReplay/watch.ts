@@ -353,8 +353,7 @@ export function createWatchedCardState(card: Card, room: Room): ReplayWatchedCar
     location: card.location ?? null,
     subZone: card.subZone ?? null,
     seats: Array.from(card.seats).sort((left, right) => left - right),
-    candidates: card
-      .getLocationCandidates()
+    candidates: card.locationCandidates
       .map((candidate) => createLocationCandidateKey(candidate))
       .filter(Boolean)
       .sort(),

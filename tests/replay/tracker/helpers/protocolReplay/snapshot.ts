@@ -86,8 +86,7 @@ function createRoomSnapshot(room: Room) {
   const ambiguousKnownCards = room.cards
     .filter(
       (card) =>
-        card.id > 0 &&
-        (card.suspended || card.getLocationCandidates().length > 1 || card.seats.size > 1)
+        card.id > 0 && (card.suspended || card.locationCandidates.length > 1 || card.seats.size > 1)
     )
     .map((card) => ({
       cardID: card.id,
