@@ -154,8 +154,10 @@ Room 保留原有移动阶段顺序与最终收敛边界。RoomMovement 本身�
 - `room.movement.sources`：来源操作与手牌差量。
 - `room.movement.candidates`：随机转移与公共区候选传播。
 - `room.movement.hiddenMarks`：标记揭示、占位迁移与守恒协调。
-- `RoomMovementUnknownPlacement`：分离匿名牌移动规则，RoomMovement 保留阶段入口。
 - 纯读取直接从 `roomMovement/sourceQueries.ts` 导入，显式传入 Room。
+
+`RoomMovementUnknownPlacement` 与两个已知牌组件一样由 RoomMovement 私有持有，只能经
+`moveUnknownCardsForContext()` 阶段入口调用。
 
 组件引用在构造后不可替换；不要把已移除的包装搬到 Room，或用 getter、绑定函数重新建立转发层。
 

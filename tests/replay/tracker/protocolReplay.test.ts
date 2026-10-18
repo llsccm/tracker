@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { getDuoQiState } from '@/tracker/skill/DuoQi'
+import { trackerLogger } from '@/utils/logger'
 // import { normalizeTrackerMovePosition } from '@/tracker/runtime/protocolRules'
 import {
   formatTrackerProtocolReplayReport,
@@ -46,6 +47,15 @@ describe('tracker protocol replay', () => {
     expect(() =>
       parseTrackerProtocolJsonl(JSON.stringify({ seq: 1, className: 'MsgGameOver', payload: [] }))
     ).toThrow('payload 必须是 JSON 对象')
+  })
+
+  it('只在回放期间拦截 logger.error', () => {
+    expect(() => new TrackerProtocolReplayer({ toSeq: 0 })).toThrow('toSeq 必须是正整数')
+    expect(vi.isMockFunction(trackerLogger.error)).toBe(false)
+
+    new TrackerProtocolReplayer({ currentUserID: 101 }).replay(openingRecords())
+
+    expect(vi.isMockFunction(trackerLogger.error)).toBe(false)
   })
 
   it('在隔离 GameState 和 TrackerController 中重建牌堆与玩家手牌', () => {
