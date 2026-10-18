@@ -60,8 +60,10 @@ export function handleUpdateRoleDataExNtf(msg) {
 
         // 获得新技能得重建缓存
         if (Game.turn >= 1 && (Game.isShanHeTu || Game.isRoguelike1v1)) {
+          if (import.meta.env.DEV) console.info(msg)
           setTimeout(() => {
             laya.zhanfaRegister()
+            laya.drawCounter()
           }, 0)
         }
       }
@@ -70,13 +72,13 @@ export function handleUpdateRoleDataExNtf(msg) {
 
     case 16:
       if (!Array.isArray(Datas)) break
-      if (SeatID !== undefined && SeatID == Game.myID) {
-        if (Game.turn >= 1 && (Game.isShanHeTu || Game.isRoguelike1v1)) {
-          setTimeout(() => {
-            laya.zhanfaRegister()
-          }, 0)
-        }
+      if (SeatID === undefined || SeatID !== Game.myID) break
+      if (Game.turn >= 1 && (Game.isShanHeTu || Game.isRoguelike1v1)) {
+        setTimeout(() => {
+          laya.zhanfaRegister()
+        }, 0)
       }
+
       break
 
     // OPT_DATA_UPDATE_NEW_SPELL

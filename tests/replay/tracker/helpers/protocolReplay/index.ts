@@ -1,6 +1,8 @@
+import { vi } from 'vitest'
 import { GameState } from '@/tracker/Game'
 import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 import { TrackerController } from '@/tracker/runtime/trackerController'
+import { trackerLogger } from '@/utils/logger'
 import { ReplayAssertionRunner, type ReplayAssertionViolation } from './assertions'
 import { applyTrackerReplayProtocol } from './handlers'
 import { ReplayMetrics } from './metrics'
@@ -70,13 +72,12 @@ export class TrackerProtocolReplayer {
 
   constructor(options: TrackerProtocolReplayOptions = {}) {
     this.gameState = new GameState()
+    vi.spyOn(trackerLogger, 'error').mockImplementation((message, ...details) => {
+      throw new Error(formatControllerError(String(message), details))
+    })
     this.controller = new TrackerController({
       ...options.controllerOptions,
-      gameState: this.gameState,
-      runtime: this.gameState,
-      onError: (message, ...details) => {
-        throw new Error(formatControllerError(String(message), details))
-      }
+      gameState: this.gameState
     })
     this.context = {
       controller: this.controller,

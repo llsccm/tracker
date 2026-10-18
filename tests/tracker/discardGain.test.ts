@@ -1,12 +1,16 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import type { RawMoveCardEvent } from '@/tracker/types'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import {
+  createErrorSpy,
+  createTrackerControllerHarness,
+  protocolMove
+} from './helpers/trackerController'
 
 function createRoomWithDiscard(discardIDs = [1, 2, 3, 4, 5, 6]) {
-  const onError = vi.fn()
-  const { controller } = createTrackerControllerHarness({ onError })
+  const errorSpy = createErrorSpy()
+  const { controller } = createTrackerControllerHarness()
   controller.initTrackerRoom()
   controller.registerTrackerPlayers(
     [
@@ -23,7 +27,7 @@ function createRoomWithDiscard(discardIDs = [1, 2, 3, 4, 5, 6]) {
   }
 
   const room = controller.getTrackerRoom()!
-  return { controller, room, onError }
+  return { controller, room, errorSpy }
 }
 
 function discardGainMove(overrides: Partial<RawMoveCardEvent> = {}) {
@@ -72,7 +76,7 @@ describe('弃牌堆未知获得', () => {
       overrides: { SpellID: 9999, FromPosition: POSITION_BOTTOM }
     }
   ])('$scenario 创建四张负 ID 暗手牌，不按弃牌顺序猜测身份', ({ overrides }) => {
-    const { controller, room, onError } = createRoomWithDiscard()
+    const { controller, room, errorSpy } = createRoomWithDiscard()
     const discardBefore = [...room.zones.get('discard')!.cards]
     const pileBefore = [...room.zones.get('pile')!.cards]
     const message = discardGainMove(overrides)
@@ -101,14 +105,14 @@ describe('弃牌堆未知获得', () => {
     ])
     expect(room.assertPileIdentityLedgerConsistency('test:anonymous-discard-gain')).toEqual([])
     expect(message.CardIDs).toEqual(cardIDsBefore)
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it.each([
     { cardIDs: [2, 5, 1, 4], knownIDs: [1, 2, 4, 5], discardIDs: [3, 6], unknownCount: 0 },
     { cardIDs: [2, 0, 5, 0], knownIDs: [2, 5], discardIDs: [1, 3, 4, 6], unknownCount: 2 }
   ])('协议给出 $cardIDs 时精确移动已知牌，仅为未知部分补位', (testCase) => {
-    const { controller, room, onError } = createRoomWithDiscard()
+    const { controller, room, errorSpy } = createRoomWithDiscard()
 
     controller.syncTrackerMove(discardGainMove({ CardIDs: testCase.cardIDs }))
 
@@ -126,7 +130,7 @@ describe('弃牌堆未知获得', () => {
       testCase.discardIDs
     )
     expect(room.assertPileIdentityLedgerConsistency('test:known-discard-gain')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -236,7 +240,7 @@ describe('弃牌堆未知获得', () => {
   })
 
   it.each([15, 18])('MoveType=%i 缺少弃牌历史时仍按协议张数创建暗牌', (moveType) => {
-    const { controller, room, onError } = createRoomWithDiscard([])
+    const { controller, room, errorSpy } = createRoomWithDiscard([])
 
     controller.syncTrackerMove(discardGainMove({ MoveType: moveType }))
 
@@ -246,11 +250,11 @@ describe('弃牌堆未知获得', () => {
     expect(player.observedHandCount).toBe(4)
     expect(room.zones.get('discard')!.cards).toEqual([])
     expect(room.zones.get('pile')!.cards).toHaveLength(8)
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('后续揭示非最新弃牌时正确更新明暗手牌，手牌总数不增加', () => {
-    const { controller, room, onError } = createRoomWithDiscard()
+    const { controller, room, errorSpy } = createRoomWithDiscard()
     controller.syncTrackerMove(discardGainMove())
 
     controller.revealTrackerCards({ type: 'player', seatID: 3 }, [2, 5])
@@ -264,11 +268,11 @@ describe('弃牌堆未知获得', () => {
     expect(room.cards.filter((card) => card.id === 5)).toHaveLength(1)
     expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([1, 3, 4, 6])
     expect(room.assertPileIdentityLedgerConsistency('test:discard-gain-reveal')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('MoveType=19 仍按弃牌端点移动已有实体', () => {
-    const { controller, room, onError } = createRoomWithDiscard()
+    const { controller, room, errorSpy } = createRoomWithDiscard()
 
     controller.syncTrackerMove(discardGainMove({ MoveType: 19 }))
 
@@ -277,13 +281,13 @@ describe('弃牌堆未知获得', () => {
     expect(player.unknownCardCount).toBe(0)
     expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual([1, 2])
     expect(room.cards).toHaveLength(8)
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 })
 
 describe('MoveType=15 弃牌堆明确来源兼容', () => {
   it('剩墨已回填正 ID 时仍精确移动对应实体', () => {
-    const { controller, room, onError } = createRoomWithDiscard()
+    const { controller, room, errorSpy } = createRoomWithDiscard()
     const sourceCards = [2, 5].map((id) => room.cardIndex.get(id)!)
 
     controller.syncTrackerMove(
@@ -297,7 +301,7 @@ describe('MoveType=15 弃牌堆明确来源兼容', () => {
     expect(player.unknownCardCount).toBe(0)
     expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual([1, 3, 4, 6])
     expect(room.assertPileIdentityLedgerConsistency('test:move15-known-discard')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('完整 sourceCards 仍移动指定实体', () => {

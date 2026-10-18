@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import { summarizeMoveEvent } from '@/tracker/helper/moveSummary'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import {
+  createErrorSpy,
+  createTrackerControllerHarness,
+  protocolMove
+} from './helpers/trackerController'
 
 const returnMove = protocolMove({
   CardCount: 1,
@@ -69,10 +73,9 @@ describe('移动事件技能 ID', () => {
 
   it('弃牌回牌堆底将技能传到 Room，但不把公共牌变成技能标记', () => {
     const debug = vi.fn()
-    const onError = vi.fn()
+    const errorSpy = createErrorSpy()
     const { controller } = createTrackerControllerHarness({
-      logger: { debug, info: vi.fn(), warn: vi.fn() },
-      onError
+      logger: { debug, info: vi.fn(), warn: vi.fn() }
     })
     controller.initTrackerRoom()
     controller.initTrackerDeck([1, 2, 3])
@@ -83,7 +86,7 @@ describe('移动事件技能 ID', () => {
 
     controller.syncTrackerMove(returnMove)
 
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
     expect(moveCards).toHaveBeenCalledWith(
       [1],
       'pile',

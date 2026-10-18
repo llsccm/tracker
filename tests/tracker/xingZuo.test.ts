@@ -1,11 +1,15 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import {
+  createErrorSpy,
+  createTrackerControllerHarness,
+  protocolMove
+} from './helpers/trackerController'
 
 function setupExchange(bottomIDs: number[] = [1, 2, 3], handIDs: number[] = []) {
-  const onError = vi.fn()
-  const { controller } = createTrackerControllerHarness({ onError })
+  const errorSpy = createErrorSpy()
+  const { controller } = createTrackerControllerHarness()
   controller.initTrackerRoom()
   controller.registerTrackerPlayers(
     [1, 4, 7].map((seat) => ({ SeatID: seat, ClientID: seat })),
@@ -15,7 +19,7 @@ function setupExchange(bottomIDs: number[] = [1, 2, 3], handIDs: number[] = []) 
   controller.syncTrackerMove(protocolMove({ ToID: 4, CardCount: 4, CardIDs: handIDs }))
   controller.revealTrackerCardsInZone({ id: 255, zone: 1, pos: POSITION_BOTTOM }, bottomIDs)
   const room = controller.getTrackerRoom()!
-  return { controller, room, onError }
+  return { controller, room, errorSpy }
 }
 
 function exchangeMoves(pileCount = 3, handCount = 4) {
@@ -49,7 +53,7 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
   it.each([{ bottomIDs: [1, 2, 3] }, { bottomIDs: [1] }, { bottomIDs: [] }])(
     '底部已知牌 $bottomIDs 在六步交换后仍显示为目标手牌',
     ({ bottomIDs }) => {
-      const { controller, room, onError } = setupExchange(bottomIDs)
+      const { controller, room, errorSpy } = setupExchange(bottomIDs)
       const pile = room.zones.get('pile')!
       const originalBottom = pile.cards.slice(0, 3)
       const remainingPile = pile.cards.slice(3)
@@ -87,12 +91,12 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
       expect(room.hasSkillState(3776)).toBe(false)
       expect(room.hasSkillState('handExchangeBatches')).toBe(false)
       expect(room.assertPileIdentityLedgerConsistency('3776:complete')).toEqual([])
-      expect(onError).not.toHaveBeenCalled()
+      expect(errorSpy).not.toHaveBeenCalled()
     }
   )
 
   it('换出的明暗混合整手回到牌底，明牌只保留底部范围而不猜顺序', () => {
-    const { controller, room, onError } = setupExchange([1, 2, 3], [8, 9])
+    const { controller, room, errorSpy } = setupExchange([1, 2, 3], [8, 9])
     exchangeMoves().forEach((move) => controller.syncTrackerMove(move))
 
     expect(
@@ -111,11 +115,11 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
     expect(room.zones.get('pile')!.cards.slice(0, 4).filter(isAnonymous)).toHaveLength(2)
     expect(room.zones.get('exchange')!.cards).toEqual([])
     expect(room.assertPileIdentityLedgerConsistency('3776:known-return')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('连续发动且第二轮两批张数相同时，仍按来源批次交换', () => {
-    const { controller, room, onError } = setupExchange()
+    const { controller, room, errorSpy } = setupExchange()
     exchangeMoves().forEach((move) => controller.syncTrackerMove(move))
     const secondBottom = room.zones.get('pile')!.cards.slice(0, 3)
     exchangeMoves(3, 3).forEach((move) => controller.syncTrackerMove(move))
@@ -133,11 +137,11 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
     expect(room.zones.get('exchange')!.cards).toEqual([])
     expect(room.hasSkillState(3776)).toBe(false)
     expect(room.assertPileIdentityLedgerConsistency('3776:second-exchange')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('交换区已有其它批次时，不移动那些实体', () => {
-    const { controller, room, onError } = setupExchange()
+    const { controller, room, errorSpy } = setupExchange()
     controller.syncTrackerMove(protocolMove({ ToZone: 10, ToID: 1, CardIDs: [10] }))
     const otherCard = room.cardIndex.get(10)!
     exchangeMoves().forEach((move) => controller.syncTrackerMove(move))
@@ -151,11 +155,11 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
         .sort()
     ).toEqual([1, 2, 3])
     expect(room.assertPileIdentityLedgerConsistency('3776:other-batch')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('目标视角手牌带正 ID，回手揭示只物化原牌底批次', () => {
-    const { controller, room, onError } = setupExchange([1])
+    const { controller, room, errorSpy } = setupExchange([1])
     const originalBottom = room.zones.get('pile')!.cards.slice(0, 3)
     const moves = exchangeMoves()
     moves[1].CardIDs = [8, 9, 10, 11]
@@ -181,6 +185,6 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
     expect(room.zones.get('exchange')!.cards).toEqual([])
     expect(room.cards).toHaveLength(20)
     expect(room.assertPileIdentityLedgerConsistency('3776:visible-return')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 })

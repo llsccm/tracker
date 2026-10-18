@@ -100,10 +100,8 @@ describe('移动事件日志', () => {
       },
       warn() {}
     }
-    const gameState = createNoopGameState()
     const controller = new TrackerController({
-      gameState,
-      runtime: gameState,
+      gameState: createNoopGameState(),
       logger
     })
 
