@@ -392,14 +392,12 @@ export class RoomMovementCandidates {
         .map((candidate) => fromPublicCandidate(candidate))
         .filter((candidate): candidate is PublicLocationCandidate => Boolean(candidate))
       // 同一身份可同时有牌顶与牌底分支；只消费本次命中的端点，其他公共分支必须保留。
-      const retainedLocationCandidates = card
-        .getLocationCandidates()
-        .filter(
-          (candidate) =>
-            candidate.type !== 'public' ||
-            candidate.zone !== fromZone ||
-            candidate.position !== position
-        )
+      const retainedLocationCandidates = card.locationCandidates.filter(
+        (candidate) =>
+          candidate.type !== 'public' ||
+          candidate.zone !== fromZone ||
+          candidate.position !== position
+      )
       card.setLocationCandidates(
         [...retainedLocationCandidates, ...nextPublicLocationCandidates, targetHandCandidate],
         'publicCandidatesToHand'

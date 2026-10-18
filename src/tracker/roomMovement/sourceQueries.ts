@@ -12,7 +12,7 @@ import type { PlayerLocationCandidate, SeatID, SpellID, SubZone, SubZoneCandidat
  */
 export function getCardSubZoneCandidates(card: Card): SubZoneCandidate[] {
   if (card.hasSubZoneCandidates?.()) {
-    return card.getSubZoneCandidates()
+    return card.subZoneCandidates
   }
 
   if (card.location !== 'player') return []
@@ -31,7 +31,7 @@ export function getCardSubZoneCandidates(card: Card): SubZoneCandidate[] {
  */
 export function getCardPlayerLocationCandidates(card: Card): PlayerLocationCandidate[] {
   if (card.hasLocationCandidates?.()) {
-    return getPlayerLocationCandidates(card.getLocationCandidates())
+    return getPlayerLocationCandidates(card.locationCandidates)
   }
 
   return getCardSubZoneCandidates(card)

@@ -20,7 +20,7 @@
  * 2. HandExchangeCandidateRecord 只保存 spellID / subZone 元数据用于恢复兼容读面，
  *    绝不保存候选集合副本，避免通用约束收敛后的分支被旧快照复活。
  * 3. card.location / subZone / spellID 兼容读面由 projectCandidateRecord 同步；
- *    当通用约束删掉最后一个玩家分支时，改由 Card.syncLegacyCandidatesFromLocationCandidates
+ *    当通用约束删掉最后一个玩家分支时，改由 Card.reconcileLocationStateFromCandidates
  *    的 exchange 分支兜底为 location='exchange'。改其一必须同步其二。
  * 4. 逻辑暂存的候选牌 location 记为 'exchange'，但刻意不加入 zones.get('exchange')；
  *    因此按 Zone 成员统计的口径不会计入它们，按 card.location 统计的口径才会。
@@ -196,7 +196,7 @@ function createCandidateRecord(card: Card): HandExchangeCandidateRecord | null {
  * batchID 已直接保存在 locationCandidates；record 只负责恢复旧版 subZone / spellID 读面。
  */
 function projectCandidateRecord(room: Room, record: HandExchangeCandidateRecord): void {
-  const candidates = record.card.getLocationCandidates()
+  const candidates = record.card.locationCandidates
   const hasPlayerCandidate = candidates.some((candidate) => candidate.type === 'player')
   const hasBatchCandidate = candidates.some(isBatchCandidate)
 
@@ -242,7 +242,7 @@ function stageCandidateAlternatives(
     const record = createCandidateRecord(card)
     if (
       record &&
-      card.getLocationCandidates().some((candidate) => isHandCandidate(candidate, fromSeat))
+      card.locationCandidates.some((candidate) => isHandCandidate(candidate, fromSeat))
     ) {
       state.candidateRecords.set(card, record)
     }
@@ -252,7 +252,7 @@ function stageCandidateAlternatives(
   // 始终改写 Card 当前候选，通用约束在嵌套交换期间消除的分支不会被元数据索引复活。
   state.candidateRecords.forEach((record) => {
     let staged = false
-    const nextCandidates = record.card.getLocationCandidates().map((candidate) => {
+    const nextCandidates = record.card.locationCandidates.map((candidate) => {
       if (!isHandCandidate(candidate, fromSeat)) return candidate
       staged = true
       return {
@@ -285,7 +285,7 @@ function returnCandidateAlternatives(
 ): Set<number> {
   const logicallyResolvedKnownIDs = new Set<number>()
   state.candidateRecords.forEach((record, card) => {
-    const currentCandidates = card.getLocationCandidates()
+    const currentCandidates = card.locationCandidates
     const belongsToBatch = currentCandidates.some(
       (candidate) => isBatchCandidate(candidate) && candidate.batchID === batchID
     )

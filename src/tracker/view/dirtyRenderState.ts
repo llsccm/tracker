@@ -96,7 +96,7 @@ function collectAffectedSeatsFromCard(card: Card, affectedSeatIDs: Set<SeatID>):
   card.seats.forEach((seatID) => addSeat(seatID, affectedSeatIDs))
   card.subZoneCandidates.forEach((candidate) => addSeat(candidate.seatID, affectedSeatIDs))
 
-  card.getLocationCandidates?.().forEach((candidate) => {
+  card.locationCandidates.forEach((candidate) => {
     if (candidate.type === 'player') addSeat(candidate.seatID, affectedSeatIDs)
   })
 }

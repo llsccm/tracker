@@ -304,7 +304,7 @@ export class ConstraintGroup {
 
         if (candidateCards.length <= remainingExpected) {
           const constrainedCandidateCards = candidateCards.filter((card) => {
-            const allLocationCandidates = card.locationCandidates ?? []
+            const allLocationCandidates = card.locationCandidates
             if (allLocationCandidates.length === 0) return true
 
             return allLocationCandidates.every((lc) => {
@@ -347,13 +347,7 @@ export class ConstraintGroup {
 
         if (candidateCards.length <= remainingExpected) {
           const constrainedCandidateCards = candidateCards.filter((card) => {
-            const cardLocationCandidates = card.locationCandidates ?? []
-            const subZoneLocationCandidates = card.hasSubZoneCandidates?.()
-              ? (card.getSubZoneCandidates?.() ?? [])
-                  .map((subZoneCandidate) => fromSubZoneCandidate(subZoneCandidate))
-                  .filter(Boolean)
-              : []
-            const allLocationCandidates = cardLocationCandidates.concat(subZoneLocationCandidates)
+            const allLocationCandidates = card.locationCandidates
             if (allLocationCandidates.length === 0) return true
 
             return allLocationCandidates.every((lc) => {
@@ -422,13 +416,7 @@ export class ConstraintGroup {
         // 任意一张牌还有公共区或组外玩家位置候选时，都可能逃逸到那些位置，
         // 不能借它参与数量判断并强制锁定其它候选牌。
         const constrainedCandidateCards = candidateCards.filter((card) => {
-          const cardLocationCandidates = card.locationCandidates ?? []
-          const subZoneLocationCandidates = card.hasSubZoneCandidates?.()
-            ? (card.getSubZoneCandidates?.() ?? [])
-                .map((subZoneCandidate) => fromSubZoneCandidate(subZoneCandidate))
-                .filter(Boolean)
-            : []
-          const allLocationCandidates = cardLocationCandidates.concat(subZoneLocationCandidates)
+          const allLocationCandidates = card.locationCandidates
           if (allLocationCandidates.length === 0) return true
 
           return allLocationCandidates.every((lc) => {

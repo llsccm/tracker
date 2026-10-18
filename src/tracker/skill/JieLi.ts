@@ -229,7 +229,7 @@ function collectObserverTargetHandCards(room: Room, targetSeat: number): Card[] 
  * 却仍根据旧快照给它追加牌顶范围。
  */
 function hasTargetHandBranch(card: Card, targetSeat: number): boolean {
-  const locationCandidates = card.getLocationCandidates()
+  const locationCandidates = card.locationCandidates
   if (locationCandidates.length > 0) {
     return locationCandidates.some(
       (candidate) =>

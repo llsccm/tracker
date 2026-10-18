@@ -70,9 +70,9 @@ describe('视图 dirty 渲染状态', () => {
       prepare(room: Room, card: Card) {
         card.bindTo([1, 2, 3], 'hand')
         finishDirtyRender(room, collectDirtyRenderState(room))
-        const remaining = card
-          .getLocationCandidates()
-          .filter((candidate) => candidate.type !== 'player' || candidate.seatID !== 1)
+        const remaining = card.locationCandidates.filter(
+          (candidate) => candidate.type !== 'player' || candidate.seatID !== 1
+        )
         card.setLocationCandidates(remaining, 'test-shrink-location')
       },
       assert(state: ReturnType<typeof collectDirtyRenderState>) {

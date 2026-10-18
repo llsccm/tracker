@@ -350,7 +350,7 @@ export class RoomMovementSources {
     const oldSeats = new Set(Array.from(card.seats, Number))
     const oldCombinationID = card.combinationID
     const oldSpellID = card.spellID
-    const oldLocationCandidates = card.getLocationCandidates()
+    const oldLocationCandidates = card.locationCandidates
     const oldSuspended = card.suspended
     const keepPlaceholderAtPreviousPublicPosition = this.hasPublicCandidateAt(card, oldLocation)
     const preserveAmbiguousIdentity =
@@ -515,9 +515,9 @@ export class RoomMovementSources {
 
     return (
       card.publicCandidates?.some((candidate) => candidate.zone === zoneID) ||
-      card
-        .getLocationCandidates()
-        .some((candidate) => candidate.type === 'public' && candidate.zone === zoneID)
+      card.locationCandidates.some(
+        (candidate) => candidate.type === 'public' && candidate.zone === zoneID
+      )
     )
   }
 

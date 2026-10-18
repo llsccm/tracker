@@ -849,7 +849,7 @@ describe('TrackerController', () => {
       sourceEvent: { type: 'test:hidden-muniu-mark' }
     })
 
-    expect(candidateCard.getLocationCandidates().length).toBe(2)
+    expect(candidateCard.locationCandidates.length).toBe(2)
     expect(hiddenCard.isKnown).toBe(false)
 
     controller.revealTrackerCardsInZone(
@@ -871,7 +871,7 @@ describe('TrackerController', () => {
       expect(card.spellID).toBe(700)
       expect(card.seats.has(4)).toBe(true)
       expect(card.isKnown).toBe(true)
-      expect(card.getLocationCandidates()).toEqual([])
+      expect(card.locationCandidates).toEqual([])
     })
   })
 

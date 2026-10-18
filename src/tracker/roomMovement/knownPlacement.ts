@@ -99,7 +99,7 @@ export class RoomMovementKnownPlacement {
       const shouldSwapSpeculativePlayerIdentity =
         isFromPlayerSource &&
         card.isKnown !== true &&
-        card.getLocationCandidates().length > 1 &&
+        card.locationCandidates.length > 1 &&
         Boolean(this.sources.findExactUnknownPlayerSourcePlaceholder(playerSourceContext, card))
 
       if (

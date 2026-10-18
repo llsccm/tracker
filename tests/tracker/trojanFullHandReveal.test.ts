@@ -96,7 +96,7 @@ describe('木马弱候选 + 整手完整揭示', () => {
     // 断言 3：141 收敛进木马容器(mark:700)，不再是任何座位的普通手牌
     const settled141 = room.cardIndex.get(141)!
     expect(settled141.location).toBe('player')
-    expect(settled141.getLocationCandidates().map((c) => createLocationCandidateKey(c))).toEqual([
+    expect(settled141.locationCandidates.map((c) => createLocationCandidateKey(c))).toEqual([
       createLocationCandidateKey(equipmentContainer(161, TROJAN_SPELL_ID))
     ])
     // 已被木马容器候选收敛，不再拥有 hand 归属座位

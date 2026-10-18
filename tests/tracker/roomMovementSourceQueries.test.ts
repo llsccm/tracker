@@ -32,7 +32,7 @@ describe('移动组件共享来源查询', () => {
         location: card.location,
         subZone: card.subZone,
         seats: [...card.seats],
-        candidates: card.getLocationCandidates(),
+        candidates: card.locationCandidates,
         suspended: card.suspended,
         isKnown: card.isKnown
       })),

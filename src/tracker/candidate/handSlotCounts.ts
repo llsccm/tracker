@@ -17,14 +17,14 @@ export function getHandSlotKindForSeat(card: Card, seatID: number): HandSlotKind
 
   const normalizedSeatID = Number(seatID)
   const locationCandidates = card.hasLocationCandidates?.()
-    ? getPlayerLocationCandidates(card.getLocationCandidates())
+    ? getPlayerLocationCandidates(card.locationCandidates)
     : []
   const handLocationCandidates = locationCandidates.filter(
     (candidate) => candidate.seatID === normalizedSeatID && candidate.subZone === 'hand'
   )
 
   if (handLocationCandidates.length > 0) {
-    return card.getLocationCandidates().length === 1 ? 'known' : 'candidate'
+    return card.locationCandidates.length === 1 ? 'known' : 'candidate'
   }
 
   const hasSubZoneCandidates = card.hasSubZoneCandidates?.() === true

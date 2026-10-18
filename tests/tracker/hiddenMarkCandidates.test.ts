@@ -278,10 +278,7 @@ describe('隐藏标记区候选', () => {
     expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(mark))).toBe(markCount)
     cards.forEach((card) => {
       expect(
-        card
-          .getLocationCandidates()
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
+        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
       ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
     })
   })
@@ -309,10 +306,7 @@ describe('隐藏标记区候选', () => {
     expect(room.constraintGroups.has('hidden_mark_1:1:1234')).toBe(false)
     cards.forEach((card) => {
       expect(
-        card
-          .getLocationCandidates()
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
+        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
       ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
     })
   })
@@ -339,10 +333,7 @@ describe('隐藏标记区候选', () => {
     expect(room.constraintGroups.has('hidden_mark_1:1:1234')).toBe(false)
     cards.forEach((card) => {
       expect(
-        card
-          .getLocationCandidates()
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
+        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
       ).toEqual(
         [
           createLocationCandidateKey(sourceHand),
@@ -376,10 +367,7 @@ describe('隐藏标记区候选', () => {
     expect(room.constraintGroups.has('hidden_mark_1:1:1234')).toBe(false)
     cards.forEach((card) => {
       expect(
-        card
-          .getLocationCandidates()
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
+        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
       ).toEqual(
         [
           createLocationCandidateKey(sourceHand),
@@ -428,10 +416,7 @@ describe('隐藏标记区候选', () => {
     expect(record.knownMarkMax).toBe(1)
     expect(room.constraintGroups.has('hidden_mark_1:muniu:161')).toBe(false)
     expect(
-      knownCard
-        .getLocationCandidates()
-        .map((candidate) => createLocationCandidateKey(candidate))
-        .sort()
+      knownCard.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
     ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
     expect(hiddenCard.isKnown).toBe(false)
     expect(hiddenCard.subZone).toBe('mark')
@@ -466,10 +451,7 @@ describe('隐藏标记区候选', () => {
     expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(mark))).toBe(1)
     cards.forEach((card) => {
       expect(
-        card
-          .getLocationCandidates()
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
+        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
       ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
     })
 
@@ -555,7 +537,7 @@ describe('隐藏标记区候选', () => {
 
     expect(remainingCard.subZone).toBe('hand')
     expect(remainingCard.spellID).toBe(null)
-    expect(remainingCard.getLocationCandidates()).toEqual([])
+    expect(remainingCard.locationCandidates).toEqual([])
   })
 
   it('木马候选明牌从标记区打出时用暗占位替回手牌', () => {
@@ -591,10 +573,7 @@ describe('隐藏标记区候选', () => {
     const pileCountBefore = room.zones.get('pile').cards.length
 
     expect(
-      knownCard
-        .getLocationCandidates()
-        .map((candidate) => createLocationCandidateKey(candidate))
-        .sort()
+      knownCard.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
     ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
     expect(placeholderCard.subZone).toBe('mark')
     expect(placeholderCard.spellID).toBe(700)
@@ -686,10 +665,7 @@ describe('隐藏标记区候选', () => {
     })
 
     expect(
-      knownCard
-        .getLocationCandidates()
-        .map((candidate) => createLocationCandidateKey(candidate))
-        .sort()
+      knownCard.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
     ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
     expect(placeholderCard.seats.has(4)).toBe(true)
     const originalRecord = room
@@ -727,10 +703,7 @@ describe('隐藏标记区候选', () => {
     expect(knownCard.subZone).toBe('hand')
     expect(knownCard.seats.has(4)).toBe(true)
     expect(
-      knownCard
-        .getLocationCandidates()
-        .map((candidate) => createLocationCandidateKey(candidate))
-        .sort()
+      knownCard.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
     ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
     expect(placeholderCard.location).toBe('player')
     expect(placeholderCard.subZone).toBe('mark')
@@ -752,10 +725,7 @@ describe('隐藏标记区候选', () => {
     })
 
     expect(
-      knownCard
-        .getLocationCandidates()
-        .map((candidate) => createLocationCandidateKey(candidate))
-        .sort()
+      knownCard.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
     ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
     expect(room.locationIndex.markBySeatAndSpell.get(5).get(700)).toContain(knownCard)
   })
@@ -865,10 +835,7 @@ describe('隐藏标记区候选', () => {
     expect(room.cardIndex.has(70)).toBe(false)
     candidateCards.forEach((card) => {
       expect(
-        card
-          .getLocationCandidates()
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
+        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
       ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
     })
 
@@ -921,7 +888,7 @@ describe('隐藏标记区候选', () => {
       expect(card.subZone).toBe('hand')
       expect(card.spellID).toBe(null)
       expect(card.seats.has(6)).toBe(true)
-      expect(card.getLocationCandidates()).toEqual([])
+      expect(card.locationCandidates).toEqual([])
       expect(room.locationIndex.markBySeatAndSpell.get(7)?.get(700) ?? []).not.toContain(card)
     })
 
@@ -969,15 +936,14 @@ describe('隐藏标记区候选', () => {
     })
 
     expect(
-      candidateCard
-        .getLocationCandidates()
+      candidateCard.locationCandidates
         .map((candidate) => createLocationCandidateKey(candidate))
         .sort()
     ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
 
     room.syncObservedPlayerHandCount(4, 0)
 
-    expect(candidateCard.getLocationCandidates()).toEqual([mark])
+    expect(candidateCard.locationCandidates).toEqual([mark])
     expect(candidateCard.seats.size).toBe(0)
     expect(room.locationIndex.candidateHandBySeat.get(4)).not.toContain(candidateCard)
     expect(room.locationIndex.markBySeatAndSpell.get(4).get(700)).toContain(candidateCard)
@@ -1014,8 +980,7 @@ describe('隐藏标记区候选', () => {
     })
 
     expect(
-      candidateCard
-        .getLocationCandidates()
+      candidateCard.locationCandidates
         .map((candidate) => createLocationCandidateKey(candidate))
         .sort()
     ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
@@ -1037,13 +1002,14 @@ describe('隐藏标记区候选', () => {
       room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('4:muniu:161') ??
         false
     ).toBe(false)
+    //
     ;[candidateCard, hiddenCard].forEach((card) => {
       expect(card.location).toBe('player')
       expect(card.subZone).toBe('mark')
       expect(card.spellID).toBe(700)
       expect(card.seats.has(4)).toBe(true)
       expect(card.isKnown).toBe(true)
-      expect(card.getLocationCandidates()).toEqual([])
+      expect(card.locationCandidates).toEqual([])
     })
   })
   it('木牛流马往返迁座后继续暗置时复用账本与约束 ID，不重复累计名额', () => {
