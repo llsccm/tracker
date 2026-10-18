@@ -2,11 +2,15 @@ import { describe, expect, it, vi } from 'vitest'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { MOVE_TYPE } from '@/tracker/MoveEventNormalizer'
 import type { RawMoveCardEvent } from '@/tracker/types'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import {
+  createErrorSpy,
+  createTrackerControllerHarness,
+  protocolMove
+} from './helpers/trackerController'
 
 function createHarness(sourceIDs = [11, 12, 0], targetIDs = [13, 0]) {
-  const onError = vi.fn()
-  const { controller, gameState } = createTrackerControllerHarness({ onError })
+  const errorSpy = createErrorSpy()
+  const { controller, gameState } = createTrackerControllerHarness()
   controller.initTrackerRoom()
   controller.registerTrackerPlayers(
     [
@@ -24,7 +28,7 @@ function createHarness(sourceIDs = [11, 12, 0], targetIDs = [13, 0]) {
   room.getPlayer(4)!.syncObservedHandCount(targetIDs.length)
   room.resolveConstraints()
   gameState.currentID = 1
-  return { controller, gameState, room, onError }
+  return { controller, gameState, room, errorSpy }
 }
 
 function giveMove(overrides: Partial<RawMoveCardEvent> = {}) {
@@ -62,7 +66,7 @@ describe('问卦候选来源筛选', () => {
   it.each([POSITION_BOTTOM, POSITION_TOP])(
     '只向交牌来源的明牌传播位置 %i，不污染 B 原有明牌',
     (position) => {
-      const { controller, room, onError } = createHarness()
+      const { controller, room, errorSpy } = createHarness()
       const sourceCards = [room.cardIndex.get(11)!, room.cardIndex.get(12)!]
       const originalTargetCard = room.cardIndex.get(13)!
       const pile = room.zones.get('pile')!
@@ -116,12 +120,12 @@ describe('问卦候选来源筛选', () => {
       expect(originalTargetCard.seats).toEqual(new Set([4]))
       expect(originalTargetCard.publicCandidates).toEqual([])
       expect(room.assertPileIdentityLedgerConsistency('test:wengua-candidate-draw')).toEqual([])
-      expect(onError).not.toHaveBeenCalled()
+      expect(errorSpy).not.toHaveBeenCalled()
     }
   )
 
   it('A 全暗时传递空候选集合，不能回退到 B 的全部明牌', () => {
-    const { controller, room, onError } = createHarness([0, 0])
+    const { controller, room, errorSpy } = createHarness([0, 0])
     const moveSpy = vi.spyOn(room, 'moveCards')
     controller.syncTrackerMove(giveMove())
     controller.syncTrackerMove(returnMove())
@@ -129,11 +133,11 @@ describe('问卦候选来源筛选', () => {
     expect(room.cardIndex.get(13)!.publicCandidates).toEqual([])
     expect(room.cardIndex.get(13)!.seats).toEqual(new Set([4]))
     expect(room.assertPileIdentityLedgerConsistency('test:wengua-dark-source')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('可见 ID 的交互视角仍直接走通用已知牌移动', () => {
-    const { controller, room, onError } = createHarness()
+    const { controller, room, errorSpy } = createHarness()
     controller.syncTrackerMove(giveMove({ CardIDs: [11] }))
     expect(room.hasSkillState(780)).toBe(false)
     const moveSpy = vi.spyOn(room, 'moveCards')
@@ -142,11 +146,11 @@ describe('问卦候选来源筛选', () => {
     expect(room.zones.get('pile')!.cards[0].id).toBe(11)
     expect(room.cardIndex.get(13)!.publicCandidates).toEqual([])
     expect(room.assertPileIdentityLedgerConsistency('test:wengua-visible')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('B 原本没有暗牌时，失效旧数量约束仍保留 A 明牌的回堆可能性', () => {
-    const { controller, room, onError } = createHarness([11, 12, 0], [13])
+    const { controller, room, errorSpy } = createHarness([11, 12, 0], [13])
     controller.syncTrackerMove(giveMove())
     controller.syncTrackerMove(returnMove())
     for (const id of [11, 12]) {
@@ -158,7 +162,7 @@ describe('问卦候选来源筛选', () => {
     expect(room.cardIndex.get(13)!.publicCandidates).toEqual([])
     expect(room.getPlayer(4)!.observedHandCount).toBe(1)
     expect(room.assertPileIdentityLedgerConsistency('test:wengua-known-recipient')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it.each(['wrong-seat', 'wrong-type', 'wrong-count', 'visible'])(

@@ -2,15 +2,19 @@ import { describe, expect, it, vi } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { normalizeTrackerMovePosition } from '@/tracker/runtime/protocolRules'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import {
+  createErrorSpy,
+  createTrackerControllerHarness,
+  protocolMove
+} from './helpers/trackerController'
 
 describe('PileIdentityLedger integration', () => {
   it.each([
     { drawIDs: [19, 56], toPosition: POSITION_TOP + 1 },
     { drawIDs: [], toPosition: POSITION_RANDOM }
   ])('浑天仪随机入堆后匿名化，装备与摸牌不串用身份（%j）', ({ drawIDs, toPosition }) => {
-    const onError = vi.fn()
-    const { controller } = createTrackerControllerHarness({ onError })
+    const errorSpy = createErrorSpy()
+    const { controller } = createTrackerControllerHarness()
     controller.initTrackerRoom()
     controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 100 }], 100)
     controller.initTrackerDeck([19, 56, 80, 81])
@@ -85,7 +89,7 @@ describe('PileIdentityLedger integration', () => {
       })
     expect(room.cards).toHaveLength(entityCount)
     expect(createExternalSpy).not.toHaveBeenCalled()
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
     expect(room.assertPileIdentityLedgerConsistency('test:huntianyi-draw')).toEqual([])
   })
 

@@ -1,4 +1,5 @@
 import type { Card } from './Card'
+import type { GameState } from './Game'
 import type { Room } from './Room'
 
 export type CardID = number
@@ -207,20 +208,12 @@ export interface TrackerLogger {
   warn(...args: unknown[]): void
 }
 
-export interface TrackerRuntime {
-  isDuanXian?: boolean
-  bindRoom?(room: Room | null): void
-  syncRoomSeats?(room: Room): void
-}
-
 export interface TrackerControllerOptions {
   view?: Partial<TrackerView>
-  gameState?: TrackerRuntime | null
-  runtime?: TrackerRuntime | null
-  roomFactory?(options?: { gameState?: TrackerRuntime | null }): Room
+  /** 默认使用全局 Game 单例；测试可注入独立实例隔离状态。 */
+  gameState?: GameState
   getSeatUIs?(): unknown
   logger?: Partial<TrackerLogger>
-  onError?(...args: unknown[]): void
   registerMoveEventHandlers?(room: Room): void
 }
 

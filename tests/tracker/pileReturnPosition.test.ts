@@ -1,22 +1,26 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { normalizeTrackerMovePosition } from '@/tracker/runtime/protocolRules'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import {
+  createErrorSpy,
+  createTrackerControllerHarness,
+  protocolMove
+} from './helpers/trackerController'
 
 function createHarness() {
-  const onError = vi.fn()
-  const { controller } = createTrackerControllerHarness({ onError })
+  const errorSpy = createErrorSpy()
+  const { controller } = createTrackerControllerHarness()
   controller.initTrackerRoom()
   controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
   controller.initTrackerDeck([17, 18, 19])
   const room = controller.getTrackerRoom()!
-  return { controller, room, pile: room.zones.get('pile')!, onError }
+  return { controller, room, pile: room.zones.get('pile')!, errorSpy }
 }
 
 describe('回堆位置与匿名身份', () => {
   it.each([{ cardIDs: [] }, { cardIDs: [17] }])('手气卡只需入口位置修正（%j）', ({ cardIDs }) => {
-    const { controller, room, pile, onError } = createHarness()
+    const { controller, room, pile, errorSpy } = createHarness()
     controller.syncTrackerMove(protocolMove({ CardIDs: cardIDs, CardCount: 1 }))
     const raw = protocolMove({
       CardIDs: cardIDs,
@@ -38,11 +42,11 @@ describe('回堆位置与匿名身份', () => {
     expect(room.getPlayer(1)!.cards).toHaveLength(0)
     expect(room.cardIndex.has(17)).toBe(false)
     expect(room.assertPileIdentityLedgerConsistency('test:shouqi-random-return')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('牌堆内真实随机重插也匿名化，但不增加物理张数', () => {
-    const { controller, room, pile, onError } = createHarness()
+    const { controller, room, pile, errorSpy } = createHarness()
     controller.revealTrackerCards({ type: 'public', zoneName: 'pile' }, [17])
     const card = room.cardIndex.get(17)!
     controller.syncTrackerMove(
@@ -61,11 +65,11 @@ describe('回堆位置与匿名身份', () => {
     expect(room.cardIndex.has(17)).toBe(false)
     expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([])
     expect(room.assertPileIdentityLedgerConsistency('test:random-pile-reinsert')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it.each([2, 5, 11])('普通技能从 %i 区随机回堆，无需额外匿名化选项', (fromZone) => {
-    const { controller, room, pile, onError } = createHarness()
+    const { controller, room, pile, errorSpy } = createHarness()
     controller.syncTrackerMove(protocolMove({ CardIDs: [17], ToZone: fromZone }))
     const returnedCard = room.cardIndex.get(17)!
     const otherCards = [...pile.cards]
@@ -97,11 +101,11 @@ describe('回堆位置与匿名身份', () => {
     expect(room.getPlayer(1)!.cards.every(isAnonymous)).toBe(true)
     expect(room.cardIndex.has(17)).toBe(false)
     expect(room.assertPileIdentityLedgerConsistency('test:random-return-draw')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('无 CardIDs 的随机回堆也匿名化实际取到的已知弃牌实体', () => {
-    const { controller, room, pile, onError } = createHarness()
+    const { controller, room, pile, errorSpy } = createHarness()
     controller.syncTrackerMove(protocolMove({ CardIDs: [17], ToZone: 2 }))
     const returnedCard = room.cardIndex.get(17)!
 
@@ -124,13 +128,13 @@ describe('回堆位置与匿名身份', () => {
     expect(room.cardIndex.has(17)).toBe(false)
     expect(room.unlocatedIdentities.has(17)).toBe(true)
     expect(room.assertPileIdentityLedgerConsistency('test:inferred-random-return')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it.each([POSITION_BOTTOM, POSITION_TOP, 1])(
     '来源随机但目标精确为 %i 时保留实体身份',
     (position) => {
-      const { controller, room, pile, onError } = createHarness()
+      const { controller, room, pile, errorSpy } = createHarness()
       controller.syncTrackerMove(protocolMove({ CardIDs: [17], ToZone: 2 }))
       const returnedCard = room.cardIndex.get(17)!
 
@@ -157,12 +161,12 @@ describe('回堆位置与匿名身份', () => {
       expect(room.unlocatedIdentities.has(17)).toBe(false)
       expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([17])
       expect(room.assertPileIdentityLedgerConsistency('test:exact-return')).toEqual([])
-      expect(onError).not.toHaveBeenCalled()
+      expect(errorSpy).not.toHaveBeenCalled()
     }
   )
 
   it('743 无 CardIDs 的暗手牌回到牌顶，不误判为随机入堆', () => {
-    const { controller, room, pile, onError } = createHarness()
+    const { controller, room, pile, errorSpy } = createHarness()
     controller.syncTrackerMove(protocolMove({ CardIDs: [], CardCount: 1 }))
     const returnedCard = room.getPlayer(1)!.cards[0]
 
@@ -188,6 +192,6 @@ describe('回堆位置与匿名身份', () => {
     expect(pile.cards.at(-1)).toBe(returnedCard)
     expect(isAnonymous(returnedCard)).toBe(true)
     expect(room.assertPileIdentityLedgerConsistency('test:743-top-return')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 })

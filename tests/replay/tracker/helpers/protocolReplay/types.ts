@@ -169,10 +169,7 @@ export interface TrackerProtocolReplayReport {
   failure?: TrackerProtocolReplayFailure
 }
 
-type ReplayControllerOptions = Pick<
-  TrackerControllerOptions,
-  'registerMoveEventHandlers' | 'roomFactory'
->
+type ReplayControllerOptions = Pick<TrackerControllerOptions, 'registerMoveEventHandlers'>
 
 export interface TrackerProtocolReplayOptions {
   currentUserID?: number

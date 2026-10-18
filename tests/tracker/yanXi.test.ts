@@ -1,13 +1,17 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import type { RawMoveCardEvent } from '@/tracker/types'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import {
+  createErrorSpy,
+  createTrackerControllerHarness,
+  protocolMove
+} from './helpers/trackerController'
 
 function setupYanXi(topIDs: number[] = [1, 2, 3], isGuoZhan = false) {
-  const onError = vi.fn()
-  const { controller, gameState } = createTrackerControllerHarness({ onError })
+  const errorSpy = createErrorSpy()
+  const { controller, gameState } = createTrackerControllerHarness()
   controller.initTrackerRoom()
   controller.registerTrackerPlayers(
     [1, 4, 7].map((seat) => ({ SeatID: seat, ClientID: seat })),
@@ -20,7 +24,7 @@ function setupYanXi(topIDs: number[] = [1, 2, 3], isGuoZhan = false) {
   }
   gameState.isGuoZhan = isGuoZhan
   const room = controller.getTrackerRoom()!
-  return { controller, room, gameState, onError }
+  return { controller, room, gameState, errorSpy }
 }
 
 function yanXiMove(fields: Partial<RawMoveCardEvent> = {}) {
@@ -47,7 +51,7 @@ describe('宴戏成功批次与暗牌失败降级', () => {
   it.each([{ topIDs: [] }, { topIDs: [1] }, { topIDs: [1, 2] }, { topIDs: [1, 2, 3] }])(
     '非国战成功时依次取得原牌顶两张，端点明牌 $topIDs 不会被跳过',
     ({ topIDs }) => {
-      const { controller, room, onError } = setupYanXi(topIDs)
+      const { controller, room, errorSpy } = setupYanXi(topIDs)
       const pile = room.zones.get('pile')!
       const originalTop = pile.cards.slice(-2).reverse()
       const remainingPile = pile.cards.slice(0, -2)
@@ -72,12 +76,12 @@ describe('宴戏成功批次与暗牌失败降级', () => {
         expect(room.getPlayerHandCardIDs(7)).toContain(id)
         expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).not.toContain(id)
       })
-      expect(onError).not.toHaveBeenCalled()
+      expect(errorSpy).not.toHaveBeenCalled()
     }
   )
 
   it('成功分支优先使用协议公开的 ID，不改写原消息', () => {
-    const { controller, room, onError } = setupYanXi([])
+    const { controller, room, errorSpy } = setupYanXi([])
     const pileCount = room.zones.get('pile')!.cards.length
     controller.syncTrackerMove(successMarker())
     const first = yanXiMove({ CardIDs: [1] })
@@ -91,13 +95,13 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     expect(first.FromPosition).toBe(POSITION_RANDOM)
     expect(room.hasSkillState(7017)).toBe(false)
     expect(room.assertPileIdentityLedgerConsistency('yanxi:known-success')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it.each([{ cardIDs: [] }, { cardIDs: [0] }])(
     '失败且无真实 ID $cardIDs 时仅匿名化原前两槽，不影响原第三张',
     ({ cardIDs }) => {
-      const { controller, room, onError } = setupYanXi()
+      const { controller, room, errorSpy } = setupYanXi()
       const pile = room.zones.get('pile')!
       const top = pile.cards.slice(-2)
       const third = pile.cards.at(-3)!
@@ -120,12 +124,12 @@ describe('宴戏成功批次与暗牌失败降级', () => {
       expect(room.cards).toHaveLength(entityCount)
       expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([3])
       expect(room.assertPileIdentityLedgerConsistency('yanxi:hidden-failure')).toEqual([])
-      expect(onError).not.toHaveBeenCalled()
+      expect(errorSpy).not.toHaveBeenCalled()
     }
   )
 
   it('前两槽仅一张明牌时不向更深处寻找第二张明牌', () => {
-    const { controller, room, onError } = setupYanXi()
+    const { controller, room, errorSpy } = setupYanXi()
     const pile = room.zones.get('pile')!
     const first = pile.cards.at(-1)!
     const third = pile.cards.at(-3)!
@@ -152,11 +156,11 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     expect(third.id).toBe(3)
     expect(third.isKnown).toBe(true)
     expect(room.assertPileIdentityLedgerConsistency('yanxi:one-known')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it.each([1, 7])('失败但公开 CardID 时不因观察者座位 %s 清除其他明牌', (mySeat) => {
-    const { controller, room, onError } = setupYanXi()
+    const { controller, room, errorSpy } = setupYanXi()
     room.setMySeatID(mySeat)
     const top = room.cardIndex.get(1)!
     const third = room.cardIndex.get(3)!
@@ -168,11 +172,11 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     expect(third.isKnown).toBe(true)
     expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([1, 3])
     expect(room.assertPileIdentityLedgerConsistency('yanxi:known-failure')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('国战成功批次保持随机暗牌获得，不取走或匿名化牌顶明牌', () => {
-    const { controller, room, onError } = setupYanXi([1, 2, 3], true)
+    const { controller, room, errorSpy } = setupYanXi([1, 2, 3], true)
     const top = room.zones.get('pile')!.cards.slice(-3)
     const pileCount = room.zones.get('pile')!.cards.length
     controller.syncTrackerMove(successMarker())
@@ -186,11 +190,11 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     expect(room.zones.get('pile')!.cards).toHaveLength(pileCount - 2)
     expect(room.hasSkillState(7017)).toBe(false)
     expect(room.assertPileIdentityLedgerConsistency('yanxi:guozhan-success')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('国战成功的明牌协议仍精确获得指定 ID，不影响其他牌顶明牌', () => {
-    const { controller, room, onError } = setupYanXi([1, 2, 3], true)
+    const { controller, room, errorSpy } = setupYanXi([1, 2, 3], true)
     controller.syncTrackerMove(successMarker())
     controller.syncTrackerMove(yanXiMove({ CardIDs: [8] }))
     controller.syncTrackerMove(yanXiMove({ CardIDs: [9] }))
@@ -199,7 +203,7 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([1, 2, 3])
     expect(room.hasSkillState(7017)).toBe(false)
     expect(room.assertPileIdentityLedgerConsistency('yanxi:guozhan-known')).toEqual([])
-    expect(onError).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('成功额度耗尽后下一次暗牌获得按失败处理', () => {

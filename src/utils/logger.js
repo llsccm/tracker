@@ -42,6 +42,9 @@ function createLogger(scope) {
     warn(...args) {
       print('warn', args)
     },
+    error(...args) {
+      print('error', args)
+    },
     group(label, ...args) {
       if (!isLoggerEnabled()) return
       const group = console.groupCollapsed || console.group || console.info
