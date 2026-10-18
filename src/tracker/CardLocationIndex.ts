@@ -260,7 +260,7 @@ export class CardLocationIndex {
    */
   private cardHasContainerCandidates(card: Card): boolean {
     if (!card.hasLocationCandidates?.()) return false
-    return getContainerLocationCandidates(card.getLocationCandidates()).length > 0
+    return getContainerLocationCandidates(card.locationCandidates).length > 0
   }
 
   /**
@@ -273,29 +273,19 @@ export class CardLocationIndex {
 
     const targets: ProjectionTarget[] = []
 
-    const locationCandidates = card.hasLocationCandidates?.()
-      ? getPlayerLocationCandidates(card.getLocationCandidates())
-      : []
-    const containerCandidates = card.hasLocationCandidates?.()
-      ? getContainerLocationCandidates(card.getLocationCandidates()).flatMap((candidate) =>
-          room.resolveEquipmentContainerLocationCandidates(candidate)
-        )
-      : []
+    const locationCandidates = card.locationCandidates
+    const playerCandidates = getPlayerLocationCandidates(locationCandidates)
+    const containerCandidates = getContainerLocationCandidates(locationCandidates).flatMap(
+      (candidate) => room.resolveEquipmentContainerLocationCandidates(candidate)
+    )
 
-    if (
-      locationCandidates.length > 0 ||
-      containerCandidates.length > 0 ||
-      card.hasSubZoneCandidates?.()
-    ) {
+    if (playerCandidates.length > 0 || containerCandidates.length > 0) {
       if (card.isKnown !== true) return targets
 
       // 完整位置候选需要同时投影到所有可能区域。
       // 例如 A 手牌 / A 标记会同时出现在候选手牌和对应标记区里。
       // 装备容器候选先按空间已观测座位展开，再作为普通 mark 候选投影。
-      const candidates =
-        locationCandidates.length > 0 || containerCandidates.length > 0
-          ? [...locationCandidates, ...containerCandidates]
-          : card.getSubZoneCandidates()
+      const candidates = [...playerCandidates, ...containerCandidates]
 
       candidates.forEach((candidate) => {
         if (candidate.subZone === 'hand') {
@@ -323,14 +313,15 @@ export class CardLocationIndex {
       return targets
     }
 
+    const seats = card.seats
     if (card.subZone === 'hand') {
       if (card.isKnown !== true) return targets
 
-      if (card.seats.size === 1) {
-        const [seatID] = card.seats
+      if (seats.size === 1) {
+        const [seatID] = seats
         targets.push({ bucket: 'knownHand', seat: Number(seatID) })
-      } else if (card.seats.size > 1) {
-        card.seats.forEach((seatID) => {
+      } else if (seats.size > 1) {
+        seats.forEach((seatID) => {
           targets.push({ bucket: 'candidateHand', seat: Number(seatID) })
         })
       }
@@ -339,9 +330,9 @@ export class CardLocationIndex {
     }
 
     if (card.subZone === 'equip' || card.subZone === 'judge') {
-      if (card.seats.size !== 1) return targets
+      if (seats.size !== 1) return targets
 
-      const [seatID] = card.seats
+      const [seatID] = seats
       targets.push({ bucket: card.subZone === 'equip' ? 'equip' : 'judge', seat: Number(seatID) })
       return targets
     }
@@ -351,7 +342,7 @@ export class CardLocationIndex {
       if (card.isKnown !== true) return targets
 
       const spellID = card.spellID
-      card.seats.forEach((seatID) => {
+      seats.forEach((seatID) => {
         targets.push({ bucket: 'mark', seat: Number(seatID), spellID })
       })
     }

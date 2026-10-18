@@ -277,14 +277,12 @@ export class RoomConstraints {
                 card.hasLocationCandidates?.() &&
                 getHandSlotKindForSeat(card, seatID) === 'candidate'
               ) {
-                const handLocationCandidates = card
-                  .getLocationCandidates()
-                  .filter(
-                    (candidate) =>
-                      candidate.type === 'player' &&
-                      candidate.seatID === seatID &&
-                      candidate.subZone === 'hand'
-                  )
+                const handLocationCandidates = card.locationCandidates.filter(
+                  (candidate) =>
+                    candidate.type === 'player' &&
+                    candidate.seatID === seatID &&
+                    candidate.subZone === 'hand'
+                )
 
                 handLocationCandidates.forEach((candidate) => {
                   changed =
@@ -519,7 +517,7 @@ export class RoomConstraints {
    */
   getResolvedExpectedLocationCandidate(card: Card): LocationCandidate | null {
     if (card.hasLocationCandidates?.()) {
-      const locationCandidates = card.getLocationCandidates()
+      const locationCandidates = card.locationCandidates
       if (locationCandidates.length === 1) return locationCandidates[0]
     }
 
@@ -537,7 +535,7 @@ export class RoomConstraints {
     const ownerSeat = Number(Array.from(card.seats)[0])
 
     if (card.hasLocationCandidates?.()) {
-      const locationCandidates = card.getLocationCandidates()
+      const locationCandidates = card.locationCandidates
       if (locationCandidates.length !== 1) return null
 
       const playerCandidates = getPlayerLocationCandidates(locationCandidates).filter(
@@ -549,9 +547,9 @@ export class RoomConstraints {
     }
 
     if (card.hasSubZoneCandidates?.()) {
-      const ownerCandidates = card
-        .getSubZoneCandidates()
-        .filter((candidate) => Number(candidate.seatID) === Number(ownerSeat))
+      const ownerCandidates = card.subZoneCandidates.filter(
+        (candidate) => Number(candidate.seatID) === Number(ownerSeat)
+      )
 
       if (ownerCandidates.length !== 1) return null
       return ownerCandidates[0]

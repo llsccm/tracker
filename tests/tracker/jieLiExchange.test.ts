@@ -329,7 +329,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     const [showMove] = createJieLiMoves([4, 124, 99, 81], [91], [124])
     controller.syncTrackerMove(showMove)
 
-    expect(handCard.getLocationCandidates()).toEqual([])
+    expect(handCard.locationCandidates).toEqual([])
     expect(handCard.location).toBe('player')
     expect(handCard.subZone).toBe('hand')
     expect(Array.from(handCard.seats)).toEqual([targetSeat])
@@ -354,7 +354,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     expect(getTargetHandIDs(room)).toEqual(handBefore)
     expect(room.getPlayer(targetSeat)!.observedHandCount).toBe(handCountBefore)
     expect(exchange.cards).toHaveLength(0)
-    expect(handCard.getLocationCandidates()).toEqual([])
+    expect(handCard.locationCandidates).toEqual([])
     expect(room.hasSkillState(JIE_LI_SPELL_ID)).toBe(false)
   })
 

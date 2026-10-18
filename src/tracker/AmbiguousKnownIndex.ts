@@ -149,9 +149,9 @@ export class AmbiguousKnownIndex {
     const locations: string[] = []
 
     if (card.hasLocationCandidates?.()) {
-      const playerCandidates = getPlayerLocationCandidates(card.getLocationCandidates())
-      const containerCandidates = getContainerLocationCandidates(card.getLocationCandidates())
-      const publicCandidates = getPublicLocationCandidates(card.getLocationCandidates())
+      const playerCandidates = getPlayerLocationCandidates(card.locationCandidates)
+      const containerCandidates = getContainerLocationCandidates(card.locationCandidates)
+      const publicCandidates = getPublicLocationCandidates(card.locationCandidates)
 
       const projectedPlayerCandidates = [
         ...playerCandidates,
@@ -175,7 +175,7 @@ export class AmbiguousKnownIndex {
       })
     } else if (card.location === 'player' && card.hasSubZoneCandidates?.()) {
       // 子区域候选优先展示完整位置，避免 seats.size === 1 时只显示“某玩家手牌”。
-      card.getSubZoneCandidates().forEach((candidate) => {
+      card.subZoneCandidates.forEach((candidate) => {
         const prefix = this.room.formatSeatPrefix(candidate.seatID)
         locations.push(`${prefix}${getSubZoneName(candidate.subZone)}`)
       })
@@ -227,6 +227,6 @@ export class AmbiguousKnownIndex {
 
   private hasContainerLocationCandidates(card: Card): boolean {
     if (!card.hasLocationCandidates?.()) return false
-    return getContainerLocationCandidates(card.getLocationCandidates()).length > 0
+    return getContainerLocationCandidates(card.locationCandidates).length > 0
   }
 }

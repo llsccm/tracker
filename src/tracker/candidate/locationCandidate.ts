@@ -221,35 +221,31 @@ export function isSameLocationCandidate(
  * 从完整位置候选投影候选座位。
  */
 export function projectSeatsFromLocationCandidates(
-  candidates: LocationCandidateInput[] = []
+  candidates: readonly LocationCandidate[] = []
 ): Set<SeatID> {
   const seats = new Set<SeatID>()
-  getPlayerLocationCandidates(candidates).forEach((candidate) => seats.add(candidate.seatID))
+  candidates.forEach((candidate) => {
+    if (candidate.type === 'player') seats.add(candidate.seatID)
+  })
   return seats
 }
 
 export function getPlayerLocationCandidates(
-  candidates: LocationCandidateInput[] = []
-): PlayerLocationCandidate[] {
-  return candidates
-    .map((candidate) => normalizeLocationCandidate(candidate))
-    .filter(isPlayerLocationCandidate)
+  candidates: readonly LocationCandidate[] = []
+): Readonly<PlayerLocationCandidate>[] {
+  return candidates.filter(isPlayerLocationCandidate)
 }
 
 export function getPublicLocationCandidates(
-  candidates: LocationCandidateInput[] = []
-): PublicLocationCandidate[] {
-  return candidates
-    .map((candidate) => normalizeLocationCandidate(candidate))
-    .filter(isPublicLocationCandidate)
+  candidates: readonly LocationCandidate[] = []
+): Readonly<PublicLocationCandidate>[] {
+  return candidates.filter(isPublicLocationCandidate)
 }
 
 export function getContainerLocationCandidates(
-  candidates: LocationCandidateInput[] = []
-): ContainerLocationCandidate[] {
-  return candidates
-    .map((candidate) => normalizeLocationCandidate(candidate))
-    .filter(isContainerLocationCandidate)
+  candidates: readonly LocationCandidate[] = []
+): Readonly<ContainerLocationCandidate>[] {
+  return candidates.filter(isContainerLocationCandidate)
 }
 
 export function fromSubZoneCandidate(

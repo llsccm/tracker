@@ -4,13 +4,11 @@ import {
   createLocationCandidateKey,
   fromPublicCandidate,
   fromSubZoneCandidate,
-  getContainerLocationCandidates,
   getPlayerLocationCandidates,
   getPublicLocationCandidates,
   normalizeLocationCandidate,
   projectSeatsFromLocationCandidates,
-  toPublicCandidate,
-  toSubZoneCandidate
+  toPublicCandidate
 } from './candidate/locationCandidate'
 import type { LocationCandidateInput } from './candidate/locationCandidate'
 import type { SubZoneCandidateInput } from './candidate/subZoneCandidate'
@@ -81,8 +79,8 @@ export class Card extends BaseCard {
   declare round: number
   declare phase: number
   declare owner: SeatID | null
-  /** 完整位置候选 */
-  declare locationCandidates: LocationCandidate[]
+  /** 唯一候选存储；写入时冻结，读面可安全共享，不另存兼容投影。 */
+  private _locationCandidates: readonly Readonly<LocationCandidate>[] = Object.freeze([])
   declare suspended: boolean
   /** 嵌套组合指纹 */
   declare combinationID: string | number | null
@@ -111,8 +109,7 @@ export class Card extends BaseCard {
     // 2. 候选席位投影与拥有权
     this.owner = null // 当前拥有该牌的座位号，由 syncOwnerFromSeats 根据候选位置推导缓存
     // 完整位置候选：例如 A 手牌 / B 手牌 / A 标记。
-    // 它和 seats 并列存在，避免“owner 已确定”被误解成“子区域已确定”。
-    this.locationCandidates = []
+    // owner 已确定不代表子区域已确定；落定后由 location/owner/subZone/spellID 保存位置。
     this.suspended = false // 候选席位过度发散时暂停追踪
 
     // 3. 嵌套组合指纹 (同生共死关系)
@@ -131,12 +128,24 @@ export class Card extends BaseCard {
   }
 
   get resolvedSeat(): SeatID | null {
-    if (this.location !== 'player' || this.seats.size !== 1) return null
-    return this.seats.values().next().value ?? null
+    if (this.location !== 'player') return null
+    const seats = this.seats
+    return seats.size === 1 ? (seats.values().next().value ?? null) : null
+  }
+
+  get locationCandidates(): readonly Readonly<LocationCandidate>[] {
+    return this._locationCandidates
+  }
+
+  /** 仅接收内部已规范化候选；状态迁移与脏事件仍由各领域写入口负责。 */
+  private storeLocationCandidates(candidates: readonly LocationCandidate[]): void {
+    this._locationCandidates = Object.freeze(
+      candidates.map((candidate) => Object.freeze(candidate))
+    )
   }
 
   get seats(): Set<SeatID> {
-    // 迁移期兼容读面：seats 只是完整位置候选的座位投影，不再独立承载状态。
+    // 座位查询读面：未决位置按候选投影，已落定位置读取 owner。
     const candidateSeats = projectSeatsFromLocationCandidates(this.locationCandidates)
     if (candidateSeats.size > 0) return candidateSeats
     if (this.location === 'player' && this.owner !== null) return new Set([this.owner])
@@ -145,9 +154,9 @@ export class Card extends BaseCard {
 
   get subZoneCandidates(): SubZoneCandidate[] {
     // 迁移期兼容读面：玩家子区域候选只从完整位置主模型投影，不再独立存储。
-    return getPlayerLocationCandidates(this.locationCandidates)
-      .map((candidate) => toSubZoneCandidate(candidate))
-      .filter((candidate): candidate is SubZoneCandidate => Boolean(candidate))
+    return getPlayerLocationCandidates(this.locationCandidates).map(
+      ({ seatID, subZone, spellID }) => ({ seatID, subZone, spellID })
+    )
   }
 
   get publicCandidates(): PublicCandidate[] {
@@ -178,8 +187,9 @@ export class Card extends BaseCard {
   }
 
   hasSameSeats(nextSeats: Set<SeatID>): boolean {
-    if (this.seats.size !== nextSeats.size) return false
-    return Array.from(nextSeats).every((seat) => this.seats.has(seat))
+    const seats = this.seats
+    if (seats.size !== nextSeats.size) return false
+    return Array.from(nextSeats).every((seat) => seats.has(seat))
   }
 
   /**
@@ -258,11 +268,11 @@ export class Card extends BaseCard {
   }
 
   /**
-   * 收敛 seats 投影，并尽量同步 locationCandidates。
+   * 按座位筛选完整位置候选；无玩家候选时从已落定子区建立候选。
    *
    * 语义边界：
    * - 主要用途是“过滤/收敛”，不是“新增完整位置候选”。
-   * - 已有 locationCandidates / subZoneCandidates 时：只按 seats 过滤对应玩家位置候选。
+   * - 已有玩家位置候选时：只按 seats 过滤对应玩家位置候选。
    * - 尚无完整位置候选且 seats > 1 时：按当前 subZone 兼容生成玩家位置候选。
    * - 若要扩展候选座位，应优先用 addSeat / setLocationCandidates，避免依赖本方法静默新增。
    * - seats 只是位置候选的座位级投影；owner 确定不代表具体子区域已落定。
@@ -270,89 +280,60 @@ export class Card extends BaseCard {
   setSeats(nextSeats: SeatInput, reason = 'setSeats'): boolean {
     const normalizedSeats = this.normalizeSeats(nextSeats)
     const previousOwner = this.owner
-    const previousResolvedSeat = this.resolvedSeat
-    // 入口捕获变更前席位集合：候选收缩时被移除的座位只在这里可见。
+    // 候选收缩前捕获席位，剔除的座位必须进入脏事件。
     const previousSeats = this.seats
     const previousSeatSize = previousSeats.size
-    const seatsChanged = !this.hasSameSeats(normalizedSeats)
-    let subZoneCandidatesChanged = false
-    let resolvedSubZoneCandidate = null
+    const previousResolvedSeat =
+      this.location === 'player' && previousSeatSize === 1
+        ? (previousSeats.values().next().value ?? null)
+        : null
+    const seatsChanged =
+      previousSeatSize !== normalizedSeats.size ||
+      Array.from(normalizedSeats).some((seat) => !previousSeats.has(seat))
+    const playerCandidates = getPlayerLocationCandidates(this.locationCandidates)
+    let candidatesChanged = false
+    let resolvedCandidate: PlayerLocationCandidate | null = null
     let nextProjectedSeats = new Set(normalizedSeats)
 
-    if (this.subZoneCandidates.length > 0) {
-      // seats 收敛时只剔除对应角色的位置候选。
-      // 例如 A 手牌 / B 手牌 / A 标记排除 B 后，应保留 A 手牌 / A 标记。
-      const filteredCandidates = this.subZoneCandidates.filter((candidate) =>
-        normalizedSeats.has(candidate.seatID)
+    if (playerCandidates.length > 0) {
+      // 座位收敛只筛除对应玩家分支，保留同座位的不同子区及所有非玩家候选。
+      const filteredCandidates = this.locationCandidates.filter(
+        (candidate) => candidate.type !== 'player' || normalizedSeats.has(candidate.seatID)
       )
-      let filteredLocationCandidates: LocationCandidate[] = []
-      let locationCandidatesChanged = false
-      if (this.locationCandidates.length > 0) {
-        filteredLocationCandidates = this.locationCandidates.filter(
-          (candidate) => candidate.type !== 'player' || normalizedSeats.has(candidate.seatID)
-        )
-        locationCandidatesChanged =
-          filteredLocationCandidates.length !== this.locationCandidates.length
+      candidatesChanged = filteredCandidates.length !== this.locationCandidates.length
+      const [remainingCandidate] = filteredCandidates
+      if (filteredCandidates.length === 1 && remainingCandidate.type === 'player') {
+        resolvedCandidate = remainingCandidate
+      } else if (candidatesChanged) {
+        this.storeLocationCandidates(filteredCandidates)
       }
-
-      const remainingLocationCandidateCount =
-        this.locationCandidates.length > 0
-          ? filteredLocationCandidates.length
-          : filteredCandidates.length
-      subZoneCandidatesChanged = filteredCandidates.length !== this.subZoneCandidates.length
-
-      if (filteredCandidates.length === 1 && remainingLocationCandidateCount === 1) {
-        // 只有完整位置候选也只剩一个时，才真正落定子区域。
-        resolvedSubZoneCandidate = filteredCandidates[0]
-      } else if (subZoneCandidatesChanged || locationCandidatesChanged) {
-        if (locationCandidatesChanged) {
-          this.locationCandidates = filteredLocationCandidates
-        }
-      }
-
-      nextProjectedSeats = projectSeatsFromLocationCandidates(this.locationCandidates)
+      nextProjectedSeats = projectSeatsFromLocationCandidates(filteredCandidates)
     } else if (this.location === 'player' && normalizedSeats.size > 1) {
       const subZone = this.subZone ?? 'hand'
       const spellID = subZone === 'mark' ? this.spellID : null
       const nextLocationCandidates = Array.from(normalizedSeats)
         .map((seatID) => fromSubZoneCandidate({ seatID, subZone, spellID }))
         .filter((candidate): candidate is PlayerLocationCandidate => Boolean(candidate))
-      // 只有候选实际变化才算 changed；否则多座位候选牌会让约束二每轮把同一候选重投一遍、
-      // setSeats 恒返回 true，收敛永不到不动点、空转到 limit=100（收敛非终止 bug）。
-      const preservedLocationCandidates = this.locationCandidates.filter(
-        (candidate) => candidate.type !== 'player'
-      )
-      const previousKeys = this.locationCandidates
-        .filter((candidate) => candidate.type === 'player')
-        .map((candidate) => createLocationCandidateKey(candidate))
-        .sort()
-      const nextKeys = nextLocationCandidates
-        .map((candidate) => createLocationCandidateKey(candidate))
-        .sort()
-      subZoneCandidatesChanged =
-        previousKeys.length !== nextKeys.length ||
-        previousKeys.some((key, index) => key !== nextKeys[index])
-      if (subZoneCandidatesChanged) {
-        this.locationCandidates = [...preservedLocationCandidates, ...nextLocationCandidates]
-      }
+      // 此分支尚无玩家候选；已有候选的重复投影由上面的筛选分支保持幂等。
+      this.storeLocationCandidates([...this.locationCandidates, ...nextLocationCandidates])
+      candidatesChanged = nextLocationCandidates.length > 0
       nextProjectedSeats = projectSeatsFromLocationCandidates(this.locationCandidates)
     }
 
-    if (resolvedSubZoneCandidate) {
-      this.subZone = resolvedSubZoneCandidate.subZone
-      this.spellID = resolvedSubZoneCandidate.spellID
-      this.locationCandidates = []
+    if (resolvedCandidate) {
+      this.subZone = resolvedCandidate.subZone
+      this.spellID = resolvedCandidate.spellID
+      this.storeLocationCandidates([])
       this.syncTimestamp()
-      nextProjectedSeats = new Set([resolvedSubZoneCandidate.seatID])
+      nextProjectedSeats = new Set([resolvedCandidate.seatID])
     }
 
-    const candidatesChanged = subZoneCandidatesChanged || Boolean(resolvedSubZoneCandidate)
-
-    if (subZoneCandidatesChanged) {
+    if (candidatesChanged) {
       this.room?.notifyCardChanged?.(this, {
         type: 'card-subzone-candidates-filtered',
         reason,
-        candidates: this.subZoneCandidates
+        candidates: this.subZoneCandidates,
+        previousSeats: Array.from(previousSeats)
       })
     }
 
@@ -369,7 +350,7 @@ export class Card extends BaseCard {
       seatsChanged
     })
 
-    return candidatesChanged || ownerChanged
+    return candidatesChanged || Boolean(resolvedCandidate) || ownerChanged
   }
 
   /**
@@ -464,10 +445,6 @@ export class Card extends BaseCard {
     return this.locationCandidates.length > 0
   }
 
-  getLocationCandidates(): LocationCandidate[] {
-    return this.locationCandidates.slice()
-  }
-
   hasLocationCandidate(candidate: LocationCandidateInput | string): boolean {
     const key = typeof candidate === 'string' ? candidate : createLocationCandidateKey(candidate)
     if (!key) return false
@@ -476,69 +453,37 @@ export class Card extends BaseCard {
   }
 
   /**
-   * 从 locationCandidates 同步旧字段，保证旧视图和旧约束仍可读。
+   * 根据候选协调位置事实、owner 和公共区关系；兼容投影由 getter 即时生成。
    */
-  syncLegacyCandidatesFromLocationCandidates(
-    reason = 'syncLegacyCandidatesFromLocationCandidates'
-  ): boolean {
+  private reconcileLocationStateFromCandidates(reason: string): boolean {
     const playerCandidates = getPlayerLocationCandidates(this.locationCandidates)
-      .map((candidate) => toSubZoneCandidate(candidate))
-      .filter(Boolean)
-
-    const publicCandidates = getPublicLocationCandidates(this.locationCandidates)
-      .map((candidate) =>
-        toPublicCandidate(
-          candidate,
-          (zone, position, count) => getPublicCandidateLabel(zone, position, count) ?? null
-        )
-      )
-      .filter(Boolean)
-
-    const containerCandidates = getContainerLocationCandidates(this.locationCandidates)
+    const hasPublicCandidate = this.locationCandidates.some(
+      (candidate) => candidate.type === 'public'
+    )
+    const hasContainerCandidate = this.locationCandidates.some(
+      (candidate) => candidate.type === 'container'
+    )
     const hasExchangeBatchCandidate = this.locationCandidates.some(
       (candidate) =>
         candidate.type === 'outside' && candidate.zone === 'exchange' && Boolean(candidate.batchID)
     )
-
-    const previousSubZoneKeys = this.subZoneCandidates
-      .map((candidate) => createSubZoneCandidateKey(candidate))
-      .sort()
-      .join('|')
-
-    const nextSubZoneKeys = playerCandidates
-      .map((candidate) => createSubZoneCandidateKey(candidate))
-      .sort()
-      .join('|')
-
-    const previousPublicKeys = this.publicCandidates
-      .map((candidate) => JSON.stringify(candidate))
-      .sort()
-      .join('|')
-
-    const nextPublicKeys = publicCandidates
-      .map((candidate) => JSON.stringify(candidate))
-      .sort()
-      .join('|')
-
     const previousLocation = this.location
-    let changed = previousSubZoneKeys !== nextSubZoneKeys || previousPublicKeys !== nextPublicKeys
+    let changed = false
 
     // 玩家/容器/交换批次候选都不能继续残留在真实公共 Zone 被后续摸牌再次取到。
     if (
-      (playerCandidates.length > 0 ||
-        containerCandidates.length > 0 ||
-        hasExchangeBatchCandidate) &&
-      publicCandidates.length === 0
+      (playerCandidates.length > 0 || hasContainerCandidate || hasExchangeBatchCandidate) &&
+      !hasPublicCandidate
     ) {
       this.room?.clearCardsFromPublicZones?.([this])
     }
 
-    if (playerCandidates.length > 0 || containerCandidates.length > 0) {
+    if (playerCandidates.length > 0 || hasContainerCandidate) {
       this.location = 'player'
-      changed = previousLocation !== this.location || changed
+      changed = previousLocation !== this.location
       this.syncTimestamp()
 
-      const candidateSeats = projectSeatsFromLocationCandidates(this.locationCandidates)
+      const candidateSeats = new Set(playerCandidates.map((candidate) => candidate.seatID))
       if (candidateSeats.size > 0) {
         changed = this.setSeats(candidateSeats, `${reason}:seats`) || changed
       } else if (this.seats.size > 0 || this.owner !== null) {
@@ -546,14 +491,11 @@ export class Card extends BaseCard {
         changed = this.clearSeats(`${reason}:seats`) || changed
       }
     } else if (hasExchangeBatchCandidate) {
-      // 批次令牌是统一候选模型中的逻辑 exchange 位置；通用约束删掉最后一个玩家分支时，
-      // 这里必须立即同步物理读面，避免实体继续伪装成无座位玩家牌。
-      // 该分支与 skill/HandExchange.ts 的 projectCandidateRecord 是同一读面契约的两端：
-      // 逻辑 exchange 牌只记 location，不加入 zones.get('exchange')，两处改动需保持对齐。
+      // 批次令牌只记逻辑 exchange 位置，不加入公共 Zone；与 HandExchange 的读面契约一致。
       this.location = 'exchange'
       this.subZone = null
       this.spellID = null
-      changed = previousLocation !== this.location || changed
+      changed = previousLocation !== this.location
       changed = this.clearSeats(`${reason}:seats`) || changed
       this.syncTimestamp()
     } else if (this.seats.size > 0 || this.owner !== null) {
@@ -570,32 +512,21 @@ export class Card extends BaseCard {
   /**
    * 从当前旧状态构造完整位置候选，供迁移期增量更新使用。
    */
-  getLegacyLocationCandidates(): LocationCandidate[] {
-    const playerCandidates =
-      this.subZoneCandidates.length > 0
-        ? this.subZoneCandidates.map((candidate) => fromSubZoneCandidate(candidate))
-        : this.location === 'player'
-          ? Array.from(this.seats).map((seatID) =>
-              fromSubZoneCandidate({
-                seatID,
-                subZone: this.subZone ?? 'hand',
-                spellID: this.subZone === 'mark' ? this.spellID : null
-              })
-            )
-          : []
-
-    const publicCandidates = this.publicCandidates.map((candidate) =>
-      fromPublicCandidate(candidate)
-    )
-
-    return [...playerCandidates, ...publicCandidates].filter(Boolean)
+  private getResolvedLocationCandidates(): LocationCandidate[] {
+    if (this.location !== 'player' || this.owner === null) return []
+    const candidate = fromSubZoneCandidate({
+      seatID: this.owner,
+      subZone: this.subZone ?? 'hand',
+      spellID: this.subZone === 'mark' ? this.spellID : null
+    })
+    return candidate ? [candidate] : []
   }
 
   /**
    * 设置完整位置候选集合。
    */
   setLocationCandidates(
-    candidates: LocationCandidateInput[] = [],
+    candidates: readonly LocationCandidateInput[] = [],
     reason = 'setLocationCandidates'
   ): boolean {
     const uniqueCandidates = new Map<string, LocationCandidate>()
@@ -624,8 +555,8 @@ export class Card extends BaseCard {
     // 替换候选集前捕获席位集合：收缩后剩余多个候选时不会走 resolveLocationCandidate，
     // 后续 setSeats 入口看到的已是收缩后的投影，被移除的座位只在这里可见。
     const previousSeats = this.seats
-    this.locationCandidates = nextCandidates
-    this.syncLegacyCandidatesFromLocationCandidates(reason)
+    this.storeLocationCandidates(nextCandidates)
+    this.reconcileLocationStateFromCandidates(reason)
 
     this.room?.notifyCardChanged?.(this, {
       type: 'card-location-candidates-changed',
@@ -649,10 +580,7 @@ export class Card extends BaseCard {
     )
 
     const [remainingCandidate] = nextCandidates
-    if (
-      nextCandidates.length === 1 &&
-      normalizeLocationCandidate(remainingCandidate)?.type === 'player'
-    ) {
+    if (nextCandidates.length === 1 && remainingCandidate.type === 'player') {
       return this.resolveLocationCandidate(remainingCandidate, `${reason}:singleRemaining`)
     }
 
@@ -678,7 +606,7 @@ export class Card extends BaseCard {
 
     const previousSubZone = this.subZone
     const previousSpellID = this.spellID
-    const hadCandidates = this.subZoneCandidates.length > 0 || this.locationCandidates.length > 0
+    const hadCandidates = this.hasLocationCandidates()
     // 清空候选前捕获席位集合：落定到他座时被收缩掉的座位不会出现在后续 setSeats 事件里。
     const previousSeats = this.seats
 
@@ -687,7 +615,7 @@ export class Card extends BaseCard {
     this.location = 'player'
     this.subZone = normalized.subZone
     this.spellID = normalized.spellID
-    this.locationCandidates = []
+    this.storeLocationCandidates([])
     this.suspended = false
     this.syncTimestamp()
     const seatsChanged = this.setSeats([normalized.seatID], `${reason}:seat`)
@@ -711,11 +639,7 @@ export class Card extends BaseCard {
   }
 
   hasSubZoneCandidates(): boolean {
-    return this.subZoneCandidates.length > 0
-  }
-
-  getSubZoneCandidates(): SubZoneCandidate[] {
-    return this.subZoneCandidates.slice()
+    return this.locationCandidates.some((candidate) => candidate.type === 'player')
   }
 
   /**
@@ -725,7 +649,9 @@ export class Card extends BaseCard {
     const key = typeof candidate === 'string' ? candidate : createSubZoneCandidateKey(candidate)
     if (!key) return false
 
-    return this.subZoneCandidates.some((item) => createSubZoneCandidateKey(item) === key)
+    return this.locationCandidates.some(
+      (item) => item.type === 'player' && createSubZoneCandidateKey(item) === key
+    )
   }
 
   /**
@@ -736,13 +662,12 @@ export class Card extends BaseCard {
     candidates: SubZoneCandidateInput[] = [],
     reason = 'setSubZoneCandidates'
   ): boolean {
-    const publicCandidates = this.publicCandidates.map((candidate) =>
-      fromPublicCandidate(candidate)
+    const retainedCandidates = this.locationCandidates.filter(
+      (candidate) => candidate.type !== 'player'
     )
     const playerCandidates = candidates.map((candidate) => fromSubZoneCandidate(candidate))
-
     return this.setLocationCandidates(
-      [...publicCandidates, ...playerCandidates].filter(Boolean),
+      [...retainedCandidates, ...playerCandidates].filter(Boolean),
       reason
     )
   }
@@ -759,42 +684,29 @@ export class Card extends BaseCard {
     reason = 'removeSubZoneCandidate'
   ): boolean {
     const key = typeof candidate === 'string' ? candidate : createSubZoneCandidateKey(candidate)
-    if (!key || !this.hasSubZoneCandidate(key)) return false
-
-    if (this.locationCandidates.length > 0) {
-      const target = this.subZoneCandidates.find((item) => createSubZoneCandidateKey(item) === key)
-      return this.removeLocationCandidate(fromSubZoneCandidate(target), reason)
-    }
-
-    const nextCandidates = this.subZoneCandidates.filter(
-      (item) => createSubZoneCandidateKey(item) !== key
+    if (!key) return false
+    const target = this.locationCandidates.find(
+      (item) => item.type === 'player' && createSubZoneCandidateKey(item) === key
     )
-
-    if (nextCandidates.length === 1) {
-      return this.resolveSubZoneCandidate(nextCandidates[0], `${reason}:singleRemaining`)
-    }
-
-    return this.setSubZoneCandidates(nextCandidates, reason)
+    return target ? this.removeLocationCandidate(target, reason) : false
   }
 
   /**
    * 清空子区域候选。通常用于明确移动到公共区或已确定绑定到某个子区域。
    */
   clearSubZoneCandidates(reason = 'clearSubZoneCandidates'): boolean {
-    const hadPlayerLocationCandidates = this.locationCandidates.some(
-      (candidate) => candidate.type === 'player'
+    const nextCandidates = this.locationCandidates.filter(
+      (candidate) => candidate.type !== 'player'
     )
-    if (this.subZoneCandidates.length === 0 && !hadPlayerLocationCandidates) return false
+    if (nextCandidates.length === this.locationCandidates.length) return false
 
-    if (hadPlayerLocationCandidates) {
-      this.locationCandidates = this.locationCandidates.filter(
-        (candidate) => candidate.type !== 'player'
-      )
-      this.syncLegacyCandidatesFromLocationCandidates(`${reason}:locationCandidates`)
-    }
+    const previousSeats = this.seats
+    this.storeLocationCandidates(nextCandidates)
+    this.reconcileLocationStateFromCandidates(`${reason}:locationCandidates`)
     this.room?.notifyCardChanged?.(this, {
       type: 'card-subzone-candidates-cleared',
-      reason
+      reason,
+      previousSeats: Array.from(previousSeats)
     })
 
     return true
@@ -829,7 +741,7 @@ export class Card extends BaseCard {
     this.spellID = spellID
     this.syncTimestamp()
     this.clearSubZoneCandidates('bindCandidates')
-    this.locationCandidates = []
+    this.storeLocationCandidates([])
     this.suspended = false
 
     if (known) {
@@ -871,7 +783,7 @@ export class Card extends BaseCard {
     this.combinationID = null
     this.spellID = null
     const candidatesChanged = this.clearSubZoneCandidates(`moveToPublicZone:${destination}`)
-    this.locationCandidates = []
+    this.storeLocationCandidates([])
     this.suspended = false
     this.syncTimestamp()
 
@@ -937,7 +849,7 @@ export class Card extends BaseCard {
     const baseCandidates =
       this.locationCandidates.length > 0
         ? this.locationCandidates
-        : this.getLegacyLocationCandidates()
+        : this.getResolvedLocationCandidates()
 
     return this.setLocationCandidates(
       [...baseCandidates, fromPublicCandidate(normalized)].filter(Boolean),
@@ -946,23 +858,16 @@ export class Card extends BaseCard {
   }
 
   removePublicCandidates(predicate: (candidate: PublicCandidate | null) => boolean): boolean {
-    const baseCandidates =
-      this.locationCandidates.length > 0
-        ? this.locationCandidates
-        : this.getLegacyLocationCandidates()
-    if (!baseCandidates.some((candidate) => candidate.type === 'public')) return false
+    if (!this.locationCandidates.some((candidate) => candidate.type === 'public')) return false
 
-    const nextCandidates = baseCandidates.filter((candidate) => {
+    const nextCandidates = this.locationCandidates.filter((candidate) => {
       if (candidate.type !== 'public') return true
-
       const publicCandidate = toPublicCandidate(
         candidate,
         (zone, position, count) => getPublicCandidateLabel(zone, position, count) ?? null
       )
-
       return !predicate(publicCandidate)
     })
-
     return this.setLocationCandidates(nextCandidates, 'removePublicCandidates')
   }
 
@@ -978,7 +883,7 @@ export class Card extends BaseCard {
     this.isKnown = false
     this.combinationID = null
     this.spellID = null
-    this.locationCandidates = []
+    this.storeLocationCandidates([])
     this.suspended = false
     this.turn = 0
     this.round = 0

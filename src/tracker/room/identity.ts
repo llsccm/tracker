@@ -324,7 +324,7 @@ export class RoomIdentity {
       const oldSeats = Array.from(existing.seats, Number)
       const oldSpellID = existing.spellID
       const oldCombinationID = existing.combinationID
-      const oldLocationCandidates = existing.getLocationCandidates()
+      const oldLocationCandidates = existing.locationCandidates
       const targetZoneEntry = this.findPublicZoneEntry(target)
 
       if (!targetZoneEntry) return

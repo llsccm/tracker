@@ -227,8 +227,7 @@ export class RoomMovementHiddenMarks {
       )
       .forEach((candidate) => appendCandidate(candidate))
 
-    card
-      .getLocationCandidates()
+    card.locationCandidates
       .filter((candidate) => candidate.type !== 'player')
       .forEach((candidate) => appendCandidate(candidate))
 
@@ -505,7 +504,7 @@ export class RoomMovementHiddenMarks {
     if (candidate.type === 'container') {
       // 容器候选：身份确认后挂 container 候选；展示座位由 mark 空间观测决定。
       if (card.location === 'player' && !card.hasLocationCandidate?.(candidate)) {
-        const next = [...(card.getLocationCandidates?.() ?? []), candidate]
+        const next = [...(card.locationCandidates ?? []), candidate]
         changed = card.setLocationCandidates(next, reason) || changed
       }
     } else if (candidate.type === 'player') {

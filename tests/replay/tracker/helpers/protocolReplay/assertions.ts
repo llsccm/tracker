@@ -177,8 +177,7 @@ export function expectCardLocationCandidatesAt(
     check: ({ room }) => {
       const card = room?.cardIndex.get(cardID)
       if (!card) return `卡牌 ${cardID} 不在 cardIndex 中`
-      const actual = card
-        .getLocationCandidates()
+      const actual = card.locationCandidates
         .map((candidate) => createLocationCandidateKey(candidate))
         .filter(Boolean)
         .sort()

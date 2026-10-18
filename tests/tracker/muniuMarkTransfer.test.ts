@@ -96,7 +96,7 @@ function cardState(room: Room) {
     spellID: card.spellID,
     known: card.isKnown,
     seats: Array.from(card.seats),
-    candidates: card.getLocationCandidates()
+    candidates: card.locationCandidates
   }))
 }
 

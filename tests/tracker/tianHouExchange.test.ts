@@ -146,9 +146,9 @@ describe('周群天候其他视角换牌候选', () => {
         })
       ])
       expect(
-        card
-          .getLocationCandidates()
-          .some((candidate) => candidate.type === 'player' && candidate.seatID === actorSeat)
+        card.locationCandidates.some(
+          (candidate) => candidate.type === 'player' && candidate.seatID === actorSeat
+        )
       ).toBe(false)
     })
     expect(room.zones.get('exchange')!.cards).toHaveLength(0)

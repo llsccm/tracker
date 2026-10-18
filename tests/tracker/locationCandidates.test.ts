@@ -21,7 +21,7 @@ describe('完整位置候选回归', () => {
     expect(locationKeys(card)).toEqual(
       [createLocationCandidateKey(seatOneHand), createLocationCandidateKey(seatOneMark)].sort()
     )
-    expect(card.getSubZoneCandidates()).toHaveLength(2)
+    expect(card.subZoneCandidates).toHaveLength(2)
   })
 
   it('多座位候选重复投影后约束组 resolve 保持幂等', () => {
@@ -122,7 +122,7 @@ describe('完整位置候选回归', () => {
     cards.slice(markCount).forEach((card) => {
       expect(card.subZone).toBe('hand')
       expect(card.spellID).toBe(null)
-      expect(card.getLocationCandidates()).toEqual([])
+      expect(card.locationCandidates).toEqual([])
     })
   })
 
