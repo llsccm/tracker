@@ -324,20 +324,14 @@ export function logic(msg) {
         // 昭然 769 我不知道干嘛
         break
 
+      // 转化卡牌
       case 'MsgNtfUseCardType':
-        handleUseCard(
-          {
-            SeatID: Number(msg.castSeatId),
-            useType: msg.useType,
-            isSend: msg.isSend,
-            spellID: msg.spellID ?? msg.spellId
-          },
-          { shouldDrawCard: false }
-        )
+        handleUseCard(msg)
         break
 
-      //使用卡牌
+      // 使用卡牌
       case 'PubGsCUseCard':
+        if (msg.isSend === 1) break
         handleUseCard(msg)
         break
 
