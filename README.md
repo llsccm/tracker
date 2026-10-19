@@ -1,6 +1,7 @@
-# tracker
+# 三国杀小抄 Lite
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/llsccm/tracker)
+![GitHub Release](https://img.shields.io/github/v/release/llsccm/tracker)
+<a href="https://deepwiki.com/llsccm/tracker"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 
 一款记牌器
 

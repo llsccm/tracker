@@ -60,7 +60,7 @@ describe('AmbiguousKnownIndex 增量维护（Step 6）', () => {
     room.ambiguousKnownIndex.applyDirtyCardEvents(Array.from(room.constraintGroups.values()))
 
     expect(room.ambiguousKnownIndex.get(1)).toBeNull()
-    expect(card.getLocationCandidates()).toEqual([])
+    expect(card.locationCandidates).toEqual([])
     expectAmbiguousKnownIndexMatchesRebuild(room)
   })
 

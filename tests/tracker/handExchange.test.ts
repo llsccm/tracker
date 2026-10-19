@@ -694,9 +694,9 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
 
     const candidateCard = getCard(room, candidateID)
     expect(
-      candidateCard
-        .getLocationCandidates()
-        .some((candidate) => candidate.type === 'player' && candidate.seatID === 2)
+      candidateCard.locationCandidates.some(
+        (candidate) => candidate.type === 'player' && candidate.seatID === 2
+      )
     ).toBe(false)
     expect(candidateCard.location).toBe('exchange')
     expect(candidateCard.seats).toEqual(new Set())
@@ -717,9 +717,9 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(candidateCard.location).toBe('player')
     expect(candidateCard.seats).toEqual(new Set([3]))
     expect(
-      candidateCard
-        .getLocationCandidates()
-        .some((candidate) => candidate.type === 'player' && candidate.seatID === 2)
+      candidateCard.locationCandidates.some(
+        (candidate) => candidate.type === 'player' && candidate.seatID === 2
+      )
     ).toBe(false)
   })
 

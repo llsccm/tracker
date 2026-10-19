@@ -19,6 +19,11 @@
 
 `Room.resolveConstraints()` 的职责，是在当前协议事实、候选位置、局部数量约束和观测手牌数之间求出一个稳定状态。稳定状态意味着再执行一轮不会继续改变候选、owner、匿名手牌实体或相关派生计数。
 
+Room 仅保留该公开入口，实际不动点循环与稳定尾部在 `RoomConstraints.resolveConstraints()` 中实现。
+`collectPlayerHandSlotCounts()`、`createHandSlotCountResolver()` 和 `reconcileAnonymousHandCards()`
+是约束模块的私有辅助方法，手牌槽摘要及 E1/E2 缓存不对外暴露。Room 继续持有牌局事实、触碰座位集合、
+脏事件和轮数统计；DEV 诊断实例由 Room 按需传入，诊断抽样与最终校验的执行顺序不变。
+
 收敛遵循以下边界：
 
 - **保守**：没有协议事实或完整数量约束时保留候选，不用实体数组顺序、匿名占位身份或 UI 投影补造事实。
@@ -159,7 +164,7 @@ URL 参数 `debugAssert=1` 会恢复逐次检查，`debugAssert=0` 会关闭收�
 
 收敛核心变更至少关注以下回归：
 
-- [`tests/tracker/convergenceTermination.test.ts`](../../tests/tracker/convergenceTermination.test.ts)：幂等与终止轮数。
+- [`tests/tracker/convergenceTermination.test.ts`](../../tests/tracker/convergenceTermination.test.ts)：幂等与终止轮数、E1/E2 懒重算与缓存作用域、异常后的触碰座位清理。
 - [`tests/tracker/locationCandidates.test.ts`](../../tests/tracker/locationCandidates.test.ts)：owner 与完整位置候选边界。
 - [`tests/tracker/handCountObservation.test.ts`](../../tests/tracker/handCountObservation.test.ts)：观测手牌数、匿名实体与排他逻辑。
 - [`tests/tracker/resolveConstraintsIncrementalIndex.test.ts`](../../tests/tracker/resolveConstraintsIncrementalIndex.test.ts)：收敛尾部增量索引一致性。

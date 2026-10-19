@@ -4,6 +4,7 @@ import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candid
 import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/roomMovement/types'
 import { TrackerController } from '@/tracker/runtime/trackerController'
 import {
+  createErrorSpy,
   createTrackerControllerHarness,
   protocolMove,
   returnToPileMove
@@ -762,18 +763,8 @@ describe('TrackerController', () => {
   })
 
   it('tracker 内部移动异常不会向桥接层外抛出', () => {
-    const warnCalls = []
-    const errorCalls = []
-    const { controller } = createTrackerControllerHarness({
-      logger: {
-        warn(...args) {
-          warnCalls.push(args)
-        }
-      },
-      onError(...args) {
-        errorCalls.push(args)
-      }
-    })
+    const errorSpy = createErrorSpy()
+    const { controller } = createTrackerControllerHarness()
 
     controller.initTrackerRoom()
     controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
@@ -786,10 +777,11 @@ describe('TrackerController', () => {
 
     expect(() => controller.syncTrackerMove(protocolMove({ CardIDs: [1] }))).not.toThrow()
 
-    expect(warnCalls.some(([label]) => label === '移动同步异常，已跳过本次 tracker 更新')).toBe(
-      true
+    expect(errorSpy).toHaveBeenCalledWith(
+      '移动同步异常，已跳过本次 tracker 更新',
+      expect.objectContaining({ message: 'sync boom' }),
+      expect.anything()
     )
-    expect(errorCalls.some(([label]) => label === '[Refactor] 移动同步失败:')).toBe(true)
   })
 
   it('协议移动木马装备本体时同步装备归属', () => {
@@ -857,7 +849,7 @@ describe('TrackerController', () => {
       sourceEvent: { type: 'test:hidden-muniu-mark' }
     })
 
-    expect(candidateCard.getLocationCandidates().length).toBe(2)
+    expect(candidateCard.locationCandidates.length).toBe(2)
     expect(hiddenCard.isKnown).toBe(false)
 
     controller.revealTrackerCardsInZone(
@@ -879,7 +871,7 @@ describe('TrackerController', () => {
       expect(card.spellID).toBe(700)
       expect(card.seats.has(4)).toBe(true)
       expect(card.isKnown).toBe(true)
-      expect(card.getLocationCandidates()).toEqual([])
+      expect(card.locationCandidates).toEqual([])
     })
   })
 

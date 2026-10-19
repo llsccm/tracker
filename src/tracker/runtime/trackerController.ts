@@ -2,6 +2,7 @@ import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
 import { fromPublicCandidate } from '../candidate/locationCandidate'
 import { createPublicCandidate } from '../candidate/publicCandidate'
 import type { Card } from '../Card'
+import { Game, type GameState } from '../Game'
 import { summarizeMoveEvent } from '../helper/moveSummary'
 import { getProtocolMoveSpecialLabel, MOVE_TYPE, normalizeMoveEvent } from '../MoveEventNormalizer'
 import type { PileIdentityLedgerMove } from '../PileIdentityLedger'
@@ -24,13 +25,13 @@ import type {
   SpellID,
   TrackerControllerOptions,
   TrackerLogger,
-  TrackerRuntime,
   TrackerView
 } from '../types'
 import { registerDefaultMoveEventHandlers } from './moveEventHandlers'
 import { commitDuoQiMove, observeDuoQiKnownCardIDs } from '../skill/DuoQi'
 import { completeGuiFuMove, deferGuiFuMove } from '../skill/GuiFu'
 import { GUI_FU_ROLE_DATA_ID } from './protocolRules'
+import { trackerLogger } from '@/utils/logger'
 
 interface RevealTarget {
   type?: 'player' | 'public' | string
@@ -87,14 +88,6 @@ const noopLogger: TrackerLogger = {
   warn() {}
 }
 
-function defaultErrorHandler(...args: unknown[]): void {
-  console.error(...args)
-}
-
-function createDefaultRoom({ gameState }: { gameState?: TrackerRuntime | null } = {}): Room {
-  return gameState == null ? new Room() : new Room({ gameState } as any)
-}
-
 /**
  * 判断目标牌组是否已经位于公共区指定端点。
  * Zone 内部按底到顶保存；插入底部时会反转输入，所以底部比较也要使用反序。
@@ -128,11 +121,8 @@ function hasCardsAtPublicPosition(
 export class TrackerController {
   private readonly controllerView: TrackerView
   private readonly controllerLogger: TrackerLogger
-  private readonly gameState: TrackerRuntime | null
-  private readonly runtime: TrackerRuntime | null
-  private readonly roomFactory: NonNullable<TrackerControllerOptions['roomFactory']>
+  private readonly gameState: GameState
   private readonly getSeatUIs: NonNullable<TrackerControllerOptions['getSeatUIs']>
-  private readonly onError: NonNullable<TrackerControllerOptions['onError']>
   private readonly registerMoveEventHandlers: NonNullable<
     TrackerControllerOptions['registerMoveEventHandlers']
   >
@@ -140,12 +130,9 @@ export class TrackerController {
 
   constructor({
     view = noopView,
-    gameState = null,
-    runtime = gameState,
-    roomFactory = createDefaultRoom,
+    gameState = Game,
     getSeatUIs = () => {},
     logger = noopLogger,
-    onError = defaultErrorHandler,
     registerMoveEventHandlers = registerDefaultMoveEventHandlers
   }: TrackerControllerOptions = {}) {
     this.controllerView = {
@@ -157,15 +144,8 @@ export class TrackerController {
       ...logger
     }
     this.gameState = gameState
-    this.runtime = runtime
-    this.roomFactory = roomFactory
     this.getSeatUIs = getSeatUIs
-    this.onError = onError
     this.registerMoveEventHandlers = registerMoveEventHandlers
-  }
-
-  private getRuntime(): TrackerRuntime | null | undefined {
-    return this.runtime ?? this.trackerRoom?.game
   }
 
   getTrackerRoom(): Room | null {
@@ -173,7 +153,7 @@ export class TrackerController {
   }
 
   isTrackerReady(): boolean {
-    return Boolean(this.trackerRoom?.isDeckReady && !this.getRuntime()?.isDuanXian)
+    return Boolean(this.trackerRoom?.isDeckReady && !this.gameState.isDuanXian)
   }
 
   getReadyTrackerRoom(): Room | null {
@@ -192,16 +172,16 @@ export class TrackerController {
   initTrackerRoom(): void {
     try {
       this.trackerRoom?.destroy()
-      this.trackerRoom = this.roomFactory({ gameState: this.gameState })
-      this.trackerRoom.game.beginPlayback?.()
-      this.getRuntime()?.bindRoom?.(this.trackerRoom)
+      this.trackerRoom = new Room({ gameState: this.gameState })
+      this.gameState.beginPlayback()
+      this.gameState.bindRoom(this.trackerRoom)
       this.controllerLogger.info('Room 初始化')
       this.registerMoveEventHandlers(this.trackerRoom)
     } catch (e) {
-      this.onError('[Refactor] Room 初始化失败:', e)
+      trackerLogger.error('Room 初始化失败', e)
       this.controllerView.unmount()
       this.trackerRoom?.destroy()
-      this.getRuntime()?.bindRoom?.(null)
+      this.gameState.bindRoom(null)
       this.trackerRoom = null
     }
   }
@@ -213,7 +193,7 @@ export class TrackerController {
   initTrackerDeck(cardIDs: CardID[]): void {
     if (!this.trackerRoom) return
 
-    if (this.getRuntime()?.isDuanXian) {
+    if (this.gameState.isDuanXian) {
       this.controllerLogger.warn('断线重连状态，跳过 Room 牌堆初始化')
       this.controllerView.unmount()
       return
@@ -234,7 +214,7 @@ export class TrackerController {
     if (!this.trackerRoom) return
     // 玩家数据注册
     this.trackerRoom.registerPlayers(infos as SeatInfo[], currentUserID)
-    this.getRuntime()?.syncRoomSeats?.(this.trackerRoom)
+    this.gameState.syncRoomSeats(this.trackerRoom)
     this.controllerView.mount(this.trackerRoom)
     this.controllerView.scheduleRender()
   }
@@ -252,7 +232,7 @@ export class TrackerController {
 
     this.trackerRoom.setMySeatID(normalizedSeatID)
     this.trackerRoom.updateFixedViewIds()
-    this.getRuntime()?.syncRoomSeats?.(this.trackerRoom)
+    this.gameState.syncRoomSeats(this.trackerRoom)
     this.getSeatUIs()
     this.controllerView.scheduleRender()
   }
@@ -280,11 +260,11 @@ export class TrackerController {
       }
 
       this.trackerRoom.setFirstHand(seatID)
-      this.getRuntime()?.syncRoomSeats?.(this.trackerRoom)
+      this.gameState.syncRoomSeats(this.trackerRoom)
       this.getSeatUIs()
       this.controllerView.scheduleRender()
     } catch (e) {
-      this.onError('[Refactor] 先手同步失败:', e)
+      trackerLogger.error('先手同步失败', e)
     }
   }
 
@@ -414,11 +394,11 @@ export class TrackerController {
       observeDuoQiKnownCardIDs(readyRoom, event.cardIDs)
       this.controllerView.scheduleRender()
     } catch (e) {
-      this.controllerLogger.warn('移动同步异常，已跳过本次 tracker 更新', {
-        error: e,
-        raw: this.summarizeProtocolMove(raw)
-      })
-      this.onError('[Refactor] 移动同步失败:', e, raw)
+      trackerLogger.error(
+        '移动同步异常，已跳过本次 tracker 更新',
+        e,
+        this.summarizeProtocolMove(raw)
+      )
     }
   }
 
@@ -704,7 +684,7 @@ export class TrackerController {
       observeDuoQiKnownCardIDs(readyRoom, ids)
       this.controllerView.scheduleRender()
     } catch (e) {
-      this.onError('[Refactor] 明牌同步失败:', e, { target, cardIDs: ids })
+      trackerLogger.error('明牌同步失败', e, { target, cardIDs: ids })
     }
   }
 
@@ -978,11 +958,11 @@ export class TrackerController {
     try {
       this.controllerView.unmount()
       this.trackerRoom?.destroy()
-      this.getRuntime()?.bindRoom?.(null)
+      this.gameState.bindRoom(null)
       this.trackerRoom = null
       this.controllerLogger.info('Room 销毁')
     } catch (e) {
-      this.onError('[Refactor] Room 销毁失败:', e)
+      trackerLogger.error('Room 销毁失败', e)
     }
   }
 }

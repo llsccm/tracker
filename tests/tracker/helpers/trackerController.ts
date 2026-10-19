@@ -1,7 +1,17 @@
+import { vi } from 'vitest'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { TrackerController } from '@/tracker/runtime/trackerController'
 import type { RawMoveCardEvent, TrackerControllerOptions, TrackerView } from '@/tracker/types'
+import { trackerLogger } from '@/utils/logger'
 import { createNoopGameState } from './noopRuntime'
+
+/** 控制器错误统一写入模块 logger；测试用 spy 断言并静默输出。 */
+export function createErrorSpy() {
+  const spy = vi.spyOn(trackerLogger, 'error')
+  spy.mockClear()
+  spy.mockImplementation(() => {})
+  return spy
+}
 
 interface ViewSpy extends TrackerView {
   calls: {
@@ -33,15 +43,11 @@ export function createViewSpy(): ViewSpy {
 }
 
 export function createTrackerControllerHarness(options: TrackerControllerOptions = {}) {
-  const gameState = (options.gameState ?? createNoopGameState()) as ReturnType<
-    typeof createNoopGameState
-  >
-  const runtime = options.runtime ?? gameState
+  const gameState = options.gameState ?? createNoopGameState()
   const view = (options.view ?? createViewSpy()) as ViewSpy
   const controller = new TrackerController({
     ...options,
     gameState,
-    runtime,
     view
   })
 

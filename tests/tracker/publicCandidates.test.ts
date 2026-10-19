@@ -67,10 +67,7 @@ describe('公共候选传播', () => {
         })
       ])
       expect(
-        card
-          .getLocationCandidates()
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
+        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
       ).toEqual(
         [
           createLocationCandidateKey(publicLocation('pile', 'top', 1)),
@@ -111,10 +108,7 @@ describe('公共候选传播', () => {
       })
     ])
     expect(
-      card
-        .getLocationCandidates()
-        .map((candidate) => createLocationCandidateKey(candidate))
-        .sort()
+      card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
     ).toEqual(
       [pileBottom, hand1, hand2, hand3]
         .map((candidate) => createLocationCandidateKey(candidate))
@@ -151,10 +145,7 @@ describe('公共候选传播', () => {
       })
     ])
     expect(
-      card
-        .getLocationCandidates()
-        .map((candidate) => createLocationCandidateKey(candidate))
-        .sort()
+      card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
     ).toEqual([createLocationCandidateKey(pileTop), createLocationCandidateKey(targetHand)].sort())
   })
 
@@ -178,7 +169,7 @@ describe('公共候选传播', () => {
       })
     ])
     expect(
-      card.getLocationCandidates().map((candidate) => createLocationCandidateKey(candidate))
+      card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate))
     ).toEqual([createLocationCandidateKey(pileTop)])
   })
 
@@ -203,7 +194,7 @@ describe('公共候选传播', () => {
       })
     ])
     expect(
-      card.getLocationCandidates().map((candidate) => createLocationCandidateKey(candidate))
+      card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate))
     ).toEqual([createLocationCandidateKey(pileTop)])
   })
 
@@ -226,10 +217,7 @@ describe('公共候选传播', () => {
     group.resolve()
 
     expect(
-      card
-        .getLocationCandidates()
-        .map((candidate) => createLocationCandidateKey(candidate))
-        .sort()
+      card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
     ).toEqual(
       [
         createLocationCandidateKey(pileTop),
@@ -266,7 +254,7 @@ describe('公共候选传播', () => {
     expect(candidateCard.subZone).toBe('hand')
     expect(candidateCard.seats.has(1)).toBe(true)
     expect(candidateCard.publicCandidates).toEqual([])
-    expect(candidateCard.getLocationCandidates()).toEqual([])
+    expect(candidateCard.locationCandidates).toEqual([])
   })
 
   it('公共具体位置名额不被同区域确定牌提前占满', () => {
@@ -297,8 +285,7 @@ describe('公共候选传播', () => {
       })
     ])
     expect(
-      candidateCard
-        .getLocationCandidates()
+      candidateCard.locationCandidates
         .map((candidate) => createLocationCandidateKey(candidate))
         .sort()
     ).toEqual([createLocationCandidateKey(pileTop), createLocationCandidateKey(targetHand)].sort())

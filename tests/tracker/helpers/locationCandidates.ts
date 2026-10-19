@@ -59,9 +59,6 @@ export function outsideLocation(zone: PublicZoneName = 'outside'): LocationCandi
   }
 }
 
-export function locationKeys(card: Pick<Card, 'getLocationCandidates'>): string[] {
-  return card
-    .getLocationCandidates()
-    .map((candidate) => createLocationCandidateKey(candidate))
-    .sort()
+export function locationKeys(card: Pick<Card, 'locationCandidates'>): string[] {
+  return card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
 }

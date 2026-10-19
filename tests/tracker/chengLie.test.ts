@@ -1,14 +1,18 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { isAnonymous } from '@/tracker/Card'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import {
+  createErrorSpy,
+  createTrackerControllerHarness,
+  protocolMove
+} from './helpers/trackerController'
 
 describe('骋烈：其他视角的牌顶展示与暗取', () => {
   it.each([{ revealedIDs: [99, 36, 109] }, { revealedIDs: [99] }, { revealedIDs: [] }])(
     '牌顶已展示 $revealedIDs 时按实际端点取牌并保持身份账本一致',
     ({ revealedIDs }) => {
-      const onError = vi.fn()
-      const { controller } = createTrackerControllerHarness({ onError })
+      const errorSpy = createErrorSpy()
+      const { controller } = createTrackerControllerHarness()
       controller.initTrackerRoom()
       controller.registerTrackerPlayers(
         [0, 1, 6, 7].map((seat) => ({ SeatID: seat, ClientID: seat })),
@@ -99,7 +103,7 @@ describe('骋烈：其他视角的牌顶展示与暗取', () => {
       expect(room.getPlayer(0)!.observedHandCount).toBe(1)
       expect(room.hasSkillState('chengLieDiscardQueue')).toBe(false)
       expect(room.assertPileIdentityLedgerConsistency('3208:complete')).toEqual([])
-      expect(onError).not.toHaveBeenCalled()
+      expect(errorSpy).not.toHaveBeenCalled()
 
       if (revealedIDs.length > 0) {
         const identity = room.cardIndex.get(revealedIDs[0])!
@@ -120,7 +124,7 @@ describe('骋烈：其他视角的牌顶展示与暗取', () => {
         expect(room.suspendedKnownCards.has(identity)).toBe(false)
         expect(room.zones.get('discard')!.cards).toHaveLength(discardCount - 1)
         expect(room.assertPileIdentityLedgerConsistency('3208:revealed-again')).toEqual([])
-        expect(onError).not.toHaveBeenCalled()
+        expect(errorSpy).not.toHaveBeenCalled()
       }
 
       const returnedIDs = room.zones
@@ -144,7 +148,7 @@ describe('骋烈：其他视角的牌顶展示与暗取', () => {
         expect([...room.suspendedKnownCards].some((card) => card.id === id)).toBe(false)
       }
       expect(room.assertPileIdentityLedgerConsistency('3208:shuffle')).toEqual([])
-      expect(onError).not.toHaveBeenCalled()
+      expect(errorSpy).not.toHaveBeenCalled()
     }
   )
 })

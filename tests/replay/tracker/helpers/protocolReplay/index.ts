@@ -1,6 +1,8 @@
+import { vi } from 'vitest'
 import { GameState } from '@/tracker/Game'
 import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 import { TrackerController } from '@/tracker/runtime/trackerController'
+import { trackerLogger } from '@/utils/logger'
 import { ReplayAssertionRunner, type ReplayAssertionViolation } from './assertions'
 import { applyTrackerReplayProtocol } from './handlers'
 import { ReplayMetrics } from './metrics'
@@ -72,11 +74,7 @@ export class TrackerProtocolReplayer {
     this.gameState = new GameState()
     this.controller = new TrackerController({
       ...options.controllerOptions,
-      gameState: this.gameState,
-      runtime: this.gameState,
-      onError: (message, ...details) => {
-        throw new Error(formatControllerError(String(message), details))
-      }
+      gameState: this.gameState
     })
     this.context = {
       controller: this.controller,
@@ -123,6 +121,17 @@ export class TrackerProtocolReplayer {
     if (this.replayed) throw new Error('同一个 TrackerProtocolReplayer 只能执行一次回放')
     this.replayed = true
 
+    const errorSpy = vi.spyOn(trackerLogger, 'error').mockImplementation((message, ...details) => {
+      throw new Error(formatControllerError(String(message), details))
+    })
+    try {
+      return this.replayRecords(records)
+    } finally {
+      errorSpy.mockRestore()
+    }
+  }
+
+  private replayRecords(records: RecordedTrackerProtocol[]): TrackerProtocolReplayReport {
     const steps: TrackerProtocolReplayStep[] = []
     const counts: Record<TrackerProtocolReplayStatus, number> = {
       applied: 0,

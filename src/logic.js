@@ -386,6 +386,18 @@ export function logic(msg) {
 
         break
 
+      // 个人信息
+      case 'ClientUserbaseinfoRep':
+      case 'ClientUserdetailRep':
+        if (import.meta.env.DEV) console.info(msg)
+        if (!globalConfig.blockSkinStateSwitch) return
+        if (ProtoObj?.nickname_usertempid === user.userID) return
+        // 屏蔽动态三国秀 效果有点差
+        if (ProtoObj.baseinfos) ProtoObj.baseinfos.sanguoxiu_skin_state = false
+        if (msg.Info) msg.Info.IsUseDySkinShow = false
+
+        break
+
       case 'ClientTableinfoRep':
         wait(() => laya.blockPowerSlogan()).catch((err) => {
           console.error(err)

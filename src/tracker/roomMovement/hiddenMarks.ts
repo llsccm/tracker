@@ -5,12 +5,30 @@ import {
   getEquipmentMarkContainerByMarkSpellID
 } from '../candidate/equipmentMarkContainer'
 import { isHiddenMarkMove } from '../candidate/hiddenMarkMove'
-import { createLocationCandidateKey, toSubZoneCandidate } from '../candidate/locationCandidate'
+import {
+  createLocationCandidateKey,
+  toSubZoneCandidate,
+  type LocationCandidateInput
+} from '../candidate/locationCandidate'
 import { createSubZoneCandidateKey } from '../candidate/subZoneCandidate'
 import type { Card } from '../Card'
 import type { Room } from '../Room'
-import type { CardID, LocationCandidate, PlayerLocationCandidate, SeatID, SpellID } from '../types'
+import type {
+  CardID,
+  LocationCandidate,
+  PlayerLocationCandidate,
+  SeatID,
+  SpellID,
+  SubZoneCandidate
+} from '../types'
 import { getCardPlayerLocationCandidates, takeUnknownCardsFromPlayer } from './sourceQueries'
+import {
+  getEquipmentMarkRecordKey,
+  getEquipmentMarkSeatChange,
+  getObservedEquipmentMarkSnapshot,
+  resolveEquipmentContainerLocationCandidates,
+  type ObservedEquipmentMarkSnapshot
+} from './equipmentMarks'
 import {
   HIDDEN_MARK_STATE_KEY,
   type HiddenMarkRecord,
@@ -18,17 +36,23 @@ import {
   type RoomMoveContext
 } from './types'
 
-interface ObservedEquipmentMarkSnapshot {
-  markSpellID: SpellID
-  observedSeat: SeatID
-}
-
 /**
  * 维护暗置标记、木牛标记空间和候选确认，协调标记配额与匿名占位守恒。
  * 账本保存在本局 Room 的技能状态中；共享来源查询只负责读取，不反向依赖来源组件。
  */
 export class RoomMovementHiddenMarks {
   constructor(private readonly room: Room) {}
+
+  /** 只读解析装备容器的当前标记座位，不初始化暗置标记账本。 */
+  resolveEquipmentContainerLocationCandidates(
+    candidate: LocationCandidateInput
+  ): SubZoneCandidate[] {
+    return resolveEquipmentContainerLocationCandidates(
+      candidate,
+      this.room.cardIndex,
+      this.room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.muniuMarkSeat
+    )
+  }
 
   /**
    * 按标记账本的当前状态构造目标候选，不在账本中缓存可派生的位置。
@@ -52,34 +76,20 @@ export class RoomMovementHiddenMarks {
 
   /** 以实际 mark700 协议更新空间座位；跨座位时接管内部牌迁移。 */
   handleMuniuMarkMove(context: RoomMoveContext): boolean {
-    if (
-      context.toZone !== 'player' ||
-      context.subZone !== 'mark' ||
-      context.targetSeats.length !== 1 ||
-      context.cardCount <= 0 ||
-      !getEquipmentMarkContainerByMarkSpellID(context.spellID)
-    ) {
-      return false
-    }
+    if (context.cardCount <= 0) return false
+    const seatChange = getEquipmentMarkSeatChange(context)
+    if (!seatChange) return false
 
-    const targetSeat = context.targetSeats[0]
+    const { markSpellID, targetSeat, transferFromSeat } = seatChange
     const state = this.getHiddenMarkState()
     if (state.muniuMarkSeat !== targetSeat) {
       state.muniuMarkSeat = targetSeat
       this.room.markConstraintGroupsDirty('muniu:markSeat')
     }
 
-    const sourceSpellID = context.fromSpellID ?? context.spellID
-    if (
-      context.fromSubZone !== 'mark' ||
-      sourceSpellID !== context.spellID ||
-      !Number.isFinite(context.fromSeat) ||
-      context.fromSeat === targetSeat
-    ) {
-      return false
-    }
+    if (transferFromSeat === null) return false
 
-    this.moveMuniuMarkSpace(context.spellID, context.fromSeat, targetSeat)
+    this.moveMuniuMarkSpace(markSpellID, transferFromSeat, targetSeat)
     // 同一容器换座不会改变牌面可见性或身份；不能再按普通暗牌移动搬一次。
     context.skipUnknownMovement = true
     return true
@@ -217,8 +227,7 @@ export class RoomMovementHiddenMarks {
       )
       .forEach((candidate) => appendCandidate(candidate))
 
-    card
-      .getLocationCandidates()
+    card.locationCandidates
       .filter((candidate) => candidate.type !== 'player')
       .forEach((candidate) => appendCandidate(candidate))
 
@@ -270,11 +279,10 @@ export class RoomMovementHiddenMarks {
 
     const state = this.getHiddenMarkState()
     const spellID = context.spellID ?? null
-    const muniu = getEquipmentMarkContainerByMarkSpellID(spellID)
     // 只有木牛流马的标记空间随装备迁座；不同来源手牌仍分别记账。
-    const recordKey = muniu
-      ? `${sourceSeat}:muniu:${muniu.equipmentCardID}`
-      : [sourceSeat, targetSeat, spellID ?? 'none'].join(':')
+    const recordKey =
+      getEquipmentMarkRecordKey(sourceSeat, spellID) ??
+      [sourceSeat, targetSeat, spellID ?? 'none'].join(':')
 
     let record = state.records.get(recordKey)
     if (!record) {
@@ -496,7 +504,7 @@ export class RoomMovementHiddenMarks {
     if (candidate.type === 'container') {
       // 容器候选：身份确认后挂 container 候选；展示座位由 mark 空间观测决定。
       if (card.location === 'player' && !card.hasLocationCandidate?.(candidate)) {
-        const next = [...(card.getLocationCandidates?.() ?? []), candidate]
+        const next = [...(card.locationCandidates ?? []), candidate]
         changed = card.setLocationCandidates(next, reason) || changed
       }
     } else if (candidate.type === 'player') {
@@ -835,15 +843,10 @@ export class RoomMovementHiddenMarks {
       if (context.fromSubZone === 'mark') {
         const moveSpellID =
           context.fromSpellID !== undefined ? context.fromSpellID : (context.spellID ?? null)
-        const movesMuniuSpace =
-          context.toZone === 'player' &&
-          context.subZone === 'mark' &&
-          context.targetSeats.length === 1 &&
-          context.spellID === moveSpellID &&
-          getEquipmentMarkContainerByMarkSpellID(moveSpellID) !== null
+        const seatChange = getEquipmentMarkSeatChange(context, moveSpellID)
         // mark700 迁座已在候选传播阶段完成；随后揭示身份不能按旧 FromID 把账本迁回去。
-        const moveMarkSeat = movesMuniuSpace
-          ? context.targetSeats[0]
+        const moveMarkSeat = seatChange
+          ? seatChange.targetSeat
           : Number.isFinite(context.fromSeat)
             ? context.fromSeat
             : record.targetSeat
@@ -928,28 +931,7 @@ export class RoomMovementHiddenMarks {
    * 返回标记 ID 和观测承载座位；普通标记或不完整快照返回 null，不修改状态。
    */
   getObservedEquipmentMarkSnapshot(context: RoomMoveContext): ObservedEquipmentMarkSnapshot | null {
-    if (
-      context.toZone !== 'player' ||
-      context.fromSubZone !== 'mark' ||
-      context.subZone !== 'mark' ||
-      context.targetSeats.length !== 1 ||
-      context.unknownCount !== 0 ||
-      context.knownIDs.length !== context.cardCount
-    ) {
-      return null
-    }
-
-    const markSpellID = context.fromSpellID !== undefined ? context.fromSpellID : context.spellID
-    const container = getEquipmentMarkContainerByMarkSpellID(markSpellID)
-    if (!container) return null
-
-    const observedSeat = Number(context.targetSeats[0])
-    if (!Number.isFinite(observedSeat)) return null
-
-    return {
-      markSpellID,
-      observedSeat
-    }
+    return getObservedEquipmentMarkSnapshot(context)
   }
 
   /**

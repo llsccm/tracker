@@ -172,12 +172,17 @@ accountedPileCount
 同名原语调用。身份分区、实体池和 `PileIdentityLedger` 的权威来源未改变。新建实体统一经
 `Room.registerCardEntity()` 登记物理创建顺序，位置写入和身份事务仍由原调用流程负责。
 
-`RoomMovement.resolveKnownMoveCards()` 依次尝试：
+`RoomMovement.resolveKnownMoveCards()` 通过 `roomMovement/knownSources.ts` 分派 outside、公共端点和
+玩家子区来源，解析后统一恢复 suspended 并确认明牌。公共端点路径依次尝试：
 
 1. 来源端点中已经存在同 ID 实体时精确复用。
 2. 在本次协议 `cardCount` 覆盖的端点范围内选择匿名槽，并调用 `Room.materialize()`。
 3. 若身份是 suspended，恢复原身份并让匿名端点退出公共区。
 4. 端点确实没有合法物理槽时，才按外部来源或 known fallback 补建实体并记录诊断。
+
+后续落区由 `roomMovement/knownPlacement.ts` 分阶段完成：先准备有效玩家来源与空间账本，再逐牌
+置换来源、结算候选、移除旧约束、执行技能并绑定玩家目标；公共目标在修复旧公共槽后统一插入。
+各阶段仍复用 `roomMovement/sources.ts` 的占位置换规则，不能让同批已知牌互相充当回补替身。
 
 公共 known 物化不能：
 
@@ -215,12 +220,12 @@ accountedPileCount
 真实弃牌洗回由 `Room.shufflePile()` 处理，顺序与普通移动不同：
 
 1. 按协议 `CardCount` 确定目标物理张数，`PileIdentityLedger` 先原子提交旧 cohort 关闭和新批次建立。
-2. Room 根据已提交的 `PileIdentityShuffleTransition` 处理 `expiringIdentityIDs` 与
+2. Room 委托 `RoomIdentity` 根据已提交的 `PileIdentityShuffleTransition` 处理 `expiringIdentityIDs` 与
    `recycledIdentityIDs`。
-3. 旧 generation 尚未出现的身份转成 detached suspended 展示实体。
+3. `RoomIdentity` 将旧 generation 尚未出现的身份转成 detached suspended 展示实体。
 4. 洗回弃牌身份全部转入未定位分区，再由 `RoomPublicZones.resizeShuffledPile()` 按目标张数
    补足或裁减匿名槽，与剩余牌堆实体重建物理牌堆；裁减不删除候选身份。
-5. 收敛并执行 Room/ledger 最终一致性检查。
+5. `RoomIdentity` 将仍在牌堆中的 cohort 身份投影为匿名槽，Room 收敛并执行 Room/ledger 最终一致性检查。
 
 协议未给出 `CardCount` 时沿用本地枚举数量；显式 `0` 表示空牌堆。账本使用 Room 在洗牌前核对的
 回堆身份集合，覆盖可能残留已离堆身份的旧弃牌快照。已确认在玩家区或其它公共区的身份不能被重新洗回。
@@ -294,6 +299,7 @@ accountedPileCount
 - `tests/tracker/shuffleProtocolCount.test.ts`：匿名弃牌获得后的协议张数校正、候选保留、已知身份排除、零张及连续洗牌。
 - `tests/tracker/trackerController.test.ts`：协议端到端移动、游戏外实体、两阶段匿名揭示。
 - `tests/tracker/knownDiscardConfirm.test.ts`：known 缺口、正 ID 暗实体确认与诊断。
+- `tests/tracker/knownMoveStages.test.ts`：三路来源整批确认、协议身份顺序及逐牌技能/落区时序。
 - `tests/tracker/publicEndpointCards.test.ts`、`pileDisplayOrder.test.ts`：端点选择、物化与物理顺序。
 - `tests/tracker/traversalBaseline.test.ts`：匿名生产路径与历史已物化对照的遍历护栏。
 - `tests/contracts/pile-identity/`：长期纯模型与真实牌序 oracle。

@@ -6,16 +6,28 @@ export interface StorageAdapter {
 
 export type ConfigEntry = readonly [key: string, id: string, defaultValue: unknown]
 export type ConfigEffects = Record<string, ((value: unknown) => void) | undefined>
-export type ConfigStore = Record<PropertyKey, unknown>
 
-interface ConfigStoreOptions {
-  entries?: readonly ConfigEntry[]
+type WidenConfigValue<T> = T extends boolean
+  ? boolean
+  : T extends number
+    ? number
+    : T extends string
+      ? string
+      : T
+
+/** 由配置项元组推导出的配置对象类型，值类型取默认值宽化后的类型。 */
+export type ConfigStore<TEntries extends readonly ConfigEntry[] = readonly ConfigEntry[]> = {
+  -readonly [E in TEntries[number] as E[0]]-?: WidenConfigValue<E[2]>
+}
+
+interface ConfigStoreOptions<TEntries extends readonly ConfigEntry[] = readonly ConfigEntry[]> {
+  entries?: TEntries
   storage?: StorageAdapter | null
   eventTarget?: EventTarget | null
   effects?: ConfigEffects
 }
 
-export const ACTIVE_CONFIG_ENTRIES: readonly ConfigEntry[] = [
+export const ACTIVE_CONFIG_ENTRIES = [
   ['padding', 'PADDING', 0],
   ['seatUISwitch', 'SEAT_UI_SWITCH', true],
   ['rogueCitySwitch', 'ROGUE_CITY_SWITCH', true],
@@ -29,7 +41,7 @@ export const ACTIVE_CONFIG_ENTRIES: readonly ConfigEntry[] = [
   ['skipAdWindowSwitch', 'SKIP_AD_WINDOW_SWITCH', true],
   ['skipPackageWindowSwitch', 'SKIP_PACKAGE_WINDOW_SWITCH', false],
   ['blockMvpSettlementSwitch', 'BLOCK_MVP_SETTLEMENT_SWITCH', false]
-]
+] as const
 
 export function createMemoryStorageAdapter(seed: Record<string, unknown> = {}): StorageAdapter {
   const data = new Map(Object.entries(seed).map(([key, value]) => [key, JSON.stringify(value)]))
@@ -77,24 +89,26 @@ function writeStoredValue(storage: StorageAdapter, id: string, value: unknown): 
   }
 }
 
-export function createConfigStore({
-  entries = ACTIVE_CONFIG_ENTRIES,
+export function createConfigStore<
+  TEntries extends readonly ConfigEntry[] = typeof ACTIVE_CONFIG_ENTRIES
+>({
+  entries = ACTIVE_CONFIG_ENTRIES as unknown as TEntries,
   storage = null,
   eventTarget = null,
   effects = {}
-}: ConfigStoreOptions = {}): ConfigStore {
+}: ConfigStoreOptions<TEntries> = {}): ConfigStore<TEntries> {
   const resolvedStorage = storage ?? createMemoryStorageAdapter()
   const configMetaMap = new Map(
     entries.map(([key, id, defaultValue]) => [key, { id, defaultValue }])
   )
-  const initialData: ConfigStore = Object.fromEntries(
+  const initialData = Object.fromEntries(
     Array.from(configMetaMap.entries()).map(([key, { id, defaultValue }]) => [
       key,
       readStoredValue(resolvedStorage, id, defaultValue)
     ])
-  )
+  ) as Record<PropertyKey, unknown>
 
-  return new Proxy(initialData, {
+  const store = new Proxy(initialData, {
     get(target, property) {
       if (typeof property !== 'string') return target[property]
       const meta = configMetaMap.get(property)
@@ -132,4 +146,6 @@ export function createConfigStore({
       return true
     }
   })
+
+  return store as ConfigStore<TEntries>
 }
