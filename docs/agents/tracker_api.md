@@ -26,7 +26,7 @@ if (!room) return
 | 消费真实协议移动 | `tracker.syncTrackerMove(patched, raw)` | 直接消费完整 `patched`，`raw` 只作追溯；不再合并局部补丁，不要在 handler 中直接改牌。 |
 | 读取当前局 | `tracker.getReadyTrackerRoom()` | 未开局、已销毁、断线状态或牌堆未就绪时返回 `null`。 |
 | 写入技能确认的明牌 | `tracker.revealTrackerCards(target, cardIDs)` | 统一处理玩家区/公共区、物化和索引。 |
-| 按旧协议 Zone 写入明牌 | `tracker.revealTrackerCardsInZone(protocolZone, cardIDs)` | 先做 Zone 映射，再复用上面的明牌路径。 |
+| 按协议 Zone 写入明牌 | `tracker.revealTrackerCardsInZone(protocolZone, cardIDs)` | 先做 Zone 映射，再复用上面的明牌路径。 |
 | 直接编排测试或已归一化移动 | `room.moveCards(cardIDs, toZone, options)` | 所有普通移动的 Room 级主入口。 |
 
 ## PubGsCMoveCard 完整输入契约
@@ -77,9 +77,8 @@ if (!room) return
 
 ## 协议 CardID 输入约定
 
-技能/协议模块需要提取消息中的真实牌身份时，统一用 `getPositiveIDs()`
-（定义于 `src/tracker/helper/cardIDs.ts`，经 `src/tracker/skill/moveEventUtils.ts`
-重导出）：
+技能/协议模块需要提取消息中的真实牌身份时，统一从 `src/tracker/helper/cardIDs.ts`
+直接导入 `getPositiveIDs()`：
 
 - 宿主协议保证 CardID 为数字；`0` 表示未公开身份，正数表示真实身份。
 - `getPositiveIDs()` 过滤 `0`，得到去重后的真实身份列表，并保留每个 ID 首次出现的顺序。
@@ -224,9 +223,10 @@ tracker.revealTrackerCards(
 - `fromSeatID`/`fromSubZone` 用于“从另一名角色或标记区取牌”；来源未知时不要猜成 `pile`，让
   `syncTrackerMove()` 根据协议归一化。
 
-### 从旧协议 Zone 揭示
+### 从协议 Zone 揭示
 
-协议已经提供 `zone/id/pos` 时直接使用适配入口：
+协议已经提供 `zone/id/pos` 时直接使用适配入口。`zone`、`id` 必须是数字，`spellID` 可省略或传
+数字/`null`；不再接受旧 `zoneID` 字符串。公共牌堆的 `id` 使用 `255`：
 
 ```ts
 tracker.revealTrackerCardsInZone(

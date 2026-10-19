@@ -324,20 +324,14 @@ export function logic(msg) {
         // 昭然 769 我不知道干嘛
         break
 
+      // 转化卡牌
       case 'MsgNtfUseCardType':
-        handleUseCard(
-          {
-            SeatID: Number(msg.castSeatId),
-            useType: msg.useType,
-            isSend: msg.isSend,
-            spellID: msg.spellID ?? msg.spellId
-          },
-          { shouldDrawCard: false }
-        )
+        handleUseCard(msg)
         break
 
-      //使用卡牌
+      // 使用卡牌
       case 'PubGsCUseCard':
+        if (msg.isSend === 1) break
         handleUseCard(msg)
         break
 
@@ -389,11 +383,11 @@ export function logic(msg) {
       // 个人信息
       case 'ClientUserbaseinfoRep':
       case 'ClientUserdetailRep':
-        if (import.meta.env.DEV) console.info(msg)
+        // if (import.meta.env.DEV) console.info(msg)
         if (!globalConfig.blockSkinStateSwitch) return
         if (ProtoObj?.nickname_usertempid === user.userID) return
         // 屏蔽动态三国秀 效果有点差
-        if (ProtoObj.baseinfos) ProtoObj.baseinfos.sanguoxiu_skin_state = false
+        // if (ProtoObj.baseinfos) ProtoObj.baseinfos.sanguoxiu_skin_state = false
         if (msg.Info) msg.Info.IsUseDySkinShow = false
 
         break

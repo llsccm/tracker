@@ -194,21 +194,14 @@ export class RoomMovementKnownPlacement {
           fromSeat,
           fromSubZone,
           toZone,
-          sourceHandCards: this.room.cards
-            .filter(
-              (sourceCard) =>
-                sourceCard.location === 'player' &&
-                sourceCard.subZone === 'hand' &&
-                sourceCard.seats.has(fromSeat)
-            )
-            .map((sourceCard) => ({
-              cardID: sourceCard.id,
-              isKnown: sourceCard.isKnown,
-              suspended: sourceCard.suspended,
-              seats: Array.from(sourceCard.seats, Number),
-              hasLocationCandidates: sourceCard.hasLocationCandidates?.() ?? false,
-              hasSubZoneCandidates: sourceCard.hasSubZoneCandidates?.() ?? false
-            })),
+          sourceHandCards: getPlayerHandCardsBySeat(this.room, fromSeat).map((sourceCard) => ({
+            cardID: sourceCard.id,
+            isKnown: sourceCard.isKnown,
+            suspended: sourceCard.suspended,
+            seats: Array.from(sourceCard.seats, Number),
+            hasLocationCandidates: sourceCard.hasLocationCandidates?.() ?? false,
+            hasSubZoneCandidates: sourceCard.hasSubZoneCandidates?.() ?? false
+          })),
           sourceEvent
         })
       }

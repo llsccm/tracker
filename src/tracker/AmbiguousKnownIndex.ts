@@ -20,19 +20,11 @@ export interface AmbiguousKnownItem {
 }
 
 /**
- * 判断一张牌是否属于"已知但归属模糊"的牌：明牌且存在多座位、位置候选、子区候选或公共候选。
+ * 判断一张牌是否属于"已知但归属模糊"的牌：明牌且存在完整位置候选。
  * 供 AmbiguousKnownIndex 入库判定与 RoomConstraints 的脏标记判定共用，避免两处谓词漂移。
  */
 export function isAmbiguousKnownCard(card: Card): boolean {
-  const hasPlayerCandidates = card.location === 'player' && card.seats.size > 1
-  const hasLocationCandidates = card.hasLocationCandidates?.() === true
-  const hasSubZoneCandidates = card.hasSubZoneCandidates?.() === true
-  const hasPublicCandidates = card.publicCandidates?.length > 0
-
-  return (
-    card.isKnown === true &&
-    (hasPlayerCandidates || hasLocationCandidates || hasSubZoneCandidates || hasPublicCandidates)
-  )
+  return card.isKnown === true && card.hasLocationCandidates()
 }
 
 /**
@@ -173,22 +165,10 @@ export class AmbiguousKnownIndex {
 
         if (publicCandidate?.label) locations.push(publicCandidate.label)
       })
-    } else if (card.location === 'player' && card.hasSubZoneCandidates?.()) {
-      // 子区域候选优先展示完整位置，避免 seats.size === 1 时只显示“某玩家手牌”。
-      card.subZoneCandidates.forEach((candidate) => {
-        const prefix = this.room.formatSeatPrefix(candidate.seatID)
-        locations.push(`${prefix}${getSubZoneName(candidate.subZone)}`)
-      })
     } else if (card.location === 'player') {
       Array.from(card.seats).forEach((seatID) => {
         const prefix = this.room.formatSeatPrefix(seatID)
         locations.push(`${prefix}${zoneName}`)
-      })
-    }
-
-    if (!card.hasLocationCandidates?.()) {
-      card.publicCandidates?.forEach((candidate) => {
-        locations.push(candidate.label)
       })
     }
 

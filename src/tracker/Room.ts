@@ -821,8 +821,8 @@ export class Room extends RoomBase {
     return null
   }
 
-  createConstraintGroup(...args) {
-    return (this.constraints.createConstraintGroup as any)(...args)
+  createConstraintGroup(options: Parameters<RoomConstraints['createConstraintGroup']>[0] = {}) {
+    return this.constraints.createConstraintGroup(options)
   }
 
   /** 房间级收敛的稳定入口；求解、座位懒缓存与稳定态同步由 RoomConstraints 实现。 */

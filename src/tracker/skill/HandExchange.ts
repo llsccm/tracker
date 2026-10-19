@@ -37,13 +37,8 @@ import type {
   SubZone
 } from '../types'
 import { recordTraversal } from '../traversalStats'
-import {
-  getCount,
-  getPositiveIDs,
-  type MoveEventDraft,
-  nextGroupID,
-  patchEvent
-} from './moveEventUtils'
+import { getPositiveIDs } from '../helper/cardIDs'
+import { getCount, type MoveEventDraft, nextGroupID, patchEvent } from './moveEventUtils'
 
 /**
  * 当前一局 tracker 状态的共享 key。

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import {
@@ -14,6 +14,9 @@ import {
   publicLocation
 } from './helpers/locationCandidates'
 import { getUnknownPlayerSourceCards } from '@/tracker/roomMovement/sourceQueries'
+import { collectTraversalStats } from '@/tracker/traversalStats'
+
+afterEach(() => vi.restoreAllMocks())
 
 function moveKnownCardsToHand(room, cardIDs, seatID) {
   room.moveCards(cardIDs, 'player', {
@@ -57,6 +60,49 @@ function moveMuniuMarks(room, fromSeatID, seatID, count = 1) {
 }
 
 describe('隐藏标记区候选', () => {
+  it('暗置查询纳入刚入手明牌和仍在公共区的手牌候选，不全量过滤牌池', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4] })
+    const first = getCard(room, 1)!
+    const second = getCard(room, 2)!
+    const otherSeat = getCard(room, 3)!
+    room.clearCardsFromPublicZones([second, otherSeat])
+    second.bindCandidates([1], 'hand', null, { known: true })
+    const pileTop = publicLocation('pile', 'top', 2)
+    first.confirmKnown()
+    first.setLocationCandidates([playerLocation(1, 'hand'), pileTop])
+    otherSeat.bindCandidates([2], 'hand', null, { known: true })
+    // 玩家候选会把 location 归一为 player；公共区引用和候选仍可同时保留。
+    expect(first.location).toBe('player')
+    expect(room.zones.get('pile')!.cards).toContain(first)
+    const context = room.movement.createMoveContext([], 'player', {
+      fromSeatID: 1,
+      fromSubZone: 'hand',
+      toSeatID: 1,
+      subZone: 'mark',
+      spellID: 414,
+      cardCount: 1
+    })
+    const filter = vi.spyOn(room.cards, 'filter')
+
+    const { result, stats } = collectTraversalStats(() =>
+      room.movement.hiddenMarks.handleHiddenMarkMove(context)
+    )
+
+    expect(result).toBe(true)
+    const record = room
+      .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
+      .records.get('1:1:414')!
+    expect([...record.cards]).toEqual([first, second])
+    expect(record.knownMarkMax).toBe(1)
+    expect(context.skipUnknownMovement).toBe(true)
+    expect(first.hasSubZoneCandidate({ seatID: 1, subZone: 'mark', spellID: 414 })).toBe(true)
+    expect(first.hasLocationCandidate(pileTop)).toBe(true)
+    expect(second.hasSubZoneCandidate({ seatID: 1, subZone: 'hand', spellID: null })).toBe(true)
+    expect(otherSeat.hasLocationCandidates()).toBe(false)
+    expect(filter).not.toHaveBeenCalled()
+    expect(stats.sites.get('resolveConstraints:playerSnapshot')).toBeUndefined()
+  })
+
   it('归一化标记区回手牌事件时保留来源标记 ID', () => {
     const event = normalizeMoveEvent({
       MoveType: 19,

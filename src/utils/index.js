@@ -89,7 +89,9 @@ function getCardCnHtml(color, number) {
  * @returns {string} HTML 字符串
  */
 export function getCardFaceHtml(card = {}) {
-  return `${getCardCnHtml(card.color, card.number)}<span class="card-name">${String(card.name || '').substring(0, 2)}</span>`
+  // 技能牌没有点数，只渲染名字
+  const face = card.number ? getCardCnHtml(card.color, card.number) : ''
+  return `${face}<span class="card-name">${String(card.name || '').substring(0, 2)}</span>`
 }
 
 /** 根据花色编号获取 CSS 类名 */

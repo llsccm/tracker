@@ -64,7 +64,6 @@ export interface TrackerReplayConstraintSnapshot {
   entityIDs: number[]
   candidateSeats: number[]
   expectedSlotsBySeat: Record<string, number>
-  expectedSlotsBySubZone: Record<string, number>
   expectedSlotsByLocation: Record<string, number>
 }
 

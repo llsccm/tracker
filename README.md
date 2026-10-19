@@ -1,7 +1,7 @@
 # 三国杀小抄 Lite
 
 ![GitHub Release](https://img.shields.io/github/v/release/llsccm/tracker)
-<a href="https://deepwiki.com/llsccm/tracker"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/llsccm/tracker)
 
 一款记牌器
 
@@ -9,7 +9,13 @@ work in progress
 
 > 注意事项 ：work in progress
 
-### 开源许可
+## 安装方式
+
+1. 浏览器需先安装用户脚本管理器（如 [Tampermonkey](https://www.tampermonkey.net/)）。
+2. 点击下方链接安装最新版本脚本：
+   - [安装脚本 (daxiaochao.user.js)](https://github.com/llsccm/tracker/releases/latest/download/daxiaochao.user.js)
+
+## 开源许可
 
 本项目当前分发版本采用 [GPL-3.0-or-later](https://www.gnu.org/licenses/gpl-3.0.html)。
 

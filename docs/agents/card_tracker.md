@@ -81,8 +81,8 @@
 - `cards` 是原生 `Set<Card>`，使用 `.has()` / `.delete()` / `.size` 与迭代能力维护组内实体牌。
 - `candidateSeats` 只约束本组卡牌。
 - `expectedSlotsBySeat` 只做“某席位在本组内锁定数量达到期望值后，从本组其他候选牌剔除该席位”的收敛。
-- `expectedSlotsByLocation` 是完整位置层面的主数量约束，可约束玩家区、公共区与装备容器位置；迁移期会与旧 `expectedSlotsBySubZone` 保持兼容镜像，但容器候选没有子区镜像。
-- `expectedSlotsBySubZone` 做玩家子区域层面的数量约束，例如一组 4 张明牌中 `A 手牌 = 3`、`A 标记(某 spellID) = 1`；它不能被 `seats.size === 1` 替代。
+- `expectedSlotsByLocation` 是完整位置数量约束的唯一存储，统一表达玩家区、公共区与装备容器位置，不再维护子区槽位镜像。
+- 玩家子区名额也直接写入 `expectedSlotsByLocation`，例如一组 4 张明牌中 `A 手牌 = 3`、`A 标记(某 spellID) = 1`；它不能被 `seats.size === 1` 替代。
 - 不把“同组”解释为“同 owner”，避免多人分配、洗牌后明牌、交换临时区等场景过度收敛。
 
 ### 其它核心对象

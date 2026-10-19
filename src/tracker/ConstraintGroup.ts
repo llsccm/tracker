@@ -1,12 +1,8 @@
-import { createSubZoneCandidateKey, parseSubZoneCandidateKey } from './candidate/subZoneCandidate'
 import {
   createLocationCandidateKey,
-  fromSubZoneCandidate,
-  parseLocationCandidateKey,
-  toSubZoneCandidate
+  parseLocationCandidateKey
 } from './candidate/locationCandidate'
 import type { LocationCandidateInput } from './candidate/locationCandidate'
-import type { SubZoneCandidateInput } from './candidate/subZoneCandidate'
 import type { Card } from './Card'
 import type { MoveSourceEvent, SeatID } from './types'
 
@@ -14,12 +10,11 @@ type CountMapInput<Key extends string | number | object> =
   | Map<Key, number | string>
   | Record<string, number | string>
 
-interface ConstraintGroupOptions {
+export interface ConstraintGroupOptions {
   id?: string | number
   cards?: Card[]
   candidateSeats?: SeatID[]
   expectedSlotsBySeat?: CountMapInput<SeatID>
-  expectedSlotsBySubZone?: CountMapInput<string | SubZoneCandidateInput>
   expectedSlotsByLocation?: CountMapInput<string | LocationCandidateInput>
   known?: boolean
   sourceEvent?: MoveSourceEvent | string | null
@@ -30,30 +25,23 @@ interface ConstraintGroupOptions {
  *
  * expectedSlotsBySeat 约束“这组牌里有几张属于某个座位”。
  * expectedSlotsByLocation 约束“这组牌里有几张落在某个完整位置”。
- * expectedSlotsBySubZone 是迁移期兼容镜像；两类约束不能混用语义：
- * owner 确定不代表手牌/标记区位置确定。
+ * 两类约束不能混用语义：owner 确定不代表手牌/标记区位置确定。
  */
 export class ConstraintGroup {
   declare id: string | number | undefined
   declare cards: Set<Card>
   declare candidateSeats: Set<SeatID>
   declare expectedSlotsBySeat: Map<SeatID, number>
-  declare expectedSlotsBySubZone: Map<string, number>
   declare expectedSlotsByLocation: Map<string, number>
   declare known: boolean
   declare sourceEvent: MoveSourceEvent | string | null
 
   constructor(options: ConstraintGroupOptions = {}) {
-    const hasExpectedSlotsByLocation = Object.prototype.hasOwnProperty.call(
-      options,
-      'expectedSlotsByLocation'
-    )
     const {
       id,
       cards = [],
       candidateSeats = [],
       expectedSlotsBySeat = new Map(),
-      expectedSlotsBySubZone = new Map(),
       expectedSlotsByLocation = new Map(),
       known = false,
       sourceEvent = null
@@ -63,9 +51,7 @@ export class ConstraintGroup {
     this.cards = new Set(cards)
     this.candidateSeats = new Set(candidateSeats.map((seat) => Number(seat)))
     this.expectedSlotsBySeat = this.normalizeExpectedSlots(expectedSlotsBySeat)
-    this.expectedSlotsBySubZone = this.normalizeExpectedSubZoneSlots(expectedSlotsBySubZone)
     this.expectedSlotsByLocation = this.normalizeExpectedLocationSlots(expectedSlotsByLocation)
-    this.syncExpectedSlotCompatibility(hasExpectedSlotsByLocation ? 'location' : 'subZone')
     this.known = known
     this.sourceEvent = sourceEvent
   }
@@ -85,31 +71,6 @@ export class ConstraintGroup {
         Number(seat),
         Math.max(0, Number(count) || 0)
       ])
-    )
-  }
-
-  /**
-   * 规整完整位置的期望槽位数。
-   * key 由 seatID/subZone/spellID 三元组组成，例如 `1:mark:1234`。
-   */
-  normalizeExpectedSubZoneSlots(
-    expectedSlotsBySubZone: CountMapInput<string | SubZoneCandidateInput>
-  ): Map<string, number> {
-    const entries =
-      expectedSlotsBySubZone instanceof Map
-        ? Array.from(expectedSlotsBySubZone.entries())
-        : Object.entries(expectedSlotsBySubZone ?? {})
-
-    return new Map<string, number>(
-      entries
-        .map(([candidate, count]): [string, number] => {
-          const key =
-            typeof candidate === 'string'
-              ? createSubZoneCandidateKey(parseSubZoneCandidateKey(candidate))
-              : createSubZoneCandidateKey(candidate)
-          return [key, Math.max(0, Number(count) || 0)]
-        })
-        .filter(([key]) => key)
     )
   }
 
@@ -135,50 +96,6 @@ export class ConstraintGroup {
         })
         .filter(([key]) => key)
     )
-  }
-
-  /**
-   * 在迁移期保持 expectedSlotsBySubZone 与 expectedSlotsByLocation 双向镜像。
-   */
-  syncExpectedSlotCompatibility(source: 'location' | 'subZone' = 'location'): void {
-    const nextLocationSlots = new Map<string, number>()
-
-    if (source === 'subZone') {
-      this.expectedSlotsByLocation.forEach((count, key) => {
-        const candidate = parseLocationCandidateKey(key)
-        if (candidate?.type !== 'player') {
-          const locationKey = createLocationCandidateKey(candidate)
-          if (locationKey) nextLocationSlots.set(locationKey, count)
-        }
-      })
-
-      this.expectedSlotsBySubZone.forEach((count, key) => {
-        const locationCandidate = fromSubZoneCandidate(parseSubZoneCandidateKey(key))
-        const locationKey = createLocationCandidateKey(locationCandidate)
-        if (locationKey) nextLocationSlots.set(locationKey, count)
-      })
-    } else {
-      this.expectedSlotsByLocation.forEach((count, key) => {
-        const locationKey = createLocationCandidateKey(parseLocationCandidateKey(key))
-        if (locationKey) nextLocationSlots.set(locationKey, count)
-      })
-    }
-
-    this.expectedSlotsByLocation = nextLocationSlots
-
-    const nextSubZoneSlots = new Map<string, number>()
-
-    this.expectedSlotsByLocation.forEach((count, key) => {
-      const candidate = toSubZoneCandidate(parseLocationCandidateKey(key))
-      if (!candidate) return
-
-      const subZoneKey = createSubZoneCandidateKey(candidate)
-      if (subZoneKey) {
-        nextSubZoneSlots.set(subZoneKey, count)
-      }
-    })
-
-    this.expectedSlotsBySubZone = nextSubZoneSlots
   }
 
   addCards(cards: Card | Card[]): void {
@@ -247,8 +164,8 @@ export class ConstraintGroup {
       // “A 手牌 / A 标记 / B 手牌”等不同完整位置，seats 只是这些位置的座位投影：
       // 1. seats.size === 1 只代表 owner 已确定，不能据此把“A 手牌 / A 标记”计为锁定手牌；
       // 2. 若 A 的手牌名额已满，按 seat 删除 A 会同时误删“A 标记”，造成过度收敛。
-      // 因此带 subZoneCandidates 的牌必须跳过本层，由 expectedSlotsByLocation（或兼容的
-      // expectedSlotsBySubZone）按 seatID + subZone + spellID 的完整位置名额收敛。创建这类
+      // 因此带 subZoneCandidates 的牌必须跳过本层，由 expectedSlotsByLocation
+      // 按 seatID + subZone + spellID 的完整位置名额收敛。创建这类
       // 候选的调用方也必须提供对应的位置层约束，不能只设置 expectedSlotsBySeat，否则该牌
       // 会被本层有意跳过，又没有位置层负责消元。
       const groupCards = Array.from(this.cards).filter(
@@ -372,38 +289,27 @@ export class ConstraintGroup {
         return
       }
 
-      const candidate = toSubZoneCandidate(locationCandidate)
-      if (!candidate) return
+      if (locationCandidate.type !== 'player') return
+      const candidate = locationCandidate
 
-      const subZoneKey = createSubZoneCandidateKey(candidate)
       const exactCards = Array.from(this.cards).filter(
         (card) =>
           card.location === 'player' &&
           !card.hasLocationCandidates?.() &&
-          !card.hasSubZoneCandidates?.() &&
           card.seats.size === 1 &&
           card.seats.has(candidate.seatID) &&
           card.subZone === candidate.subZone &&
           (candidate.subZone !== 'mark' || card.spellID === candidate.spellID)
       )
 
-      const candidateCards = Array.from(this.cards).filter(
-        (card) =>
-          card.hasLocationCandidate?.(key) || (subZoneKey && card.hasSubZoneCandidate?.(subZoneKey))
-      )
+      const candidateCards = Array.from(this.cards).filter((card) => card.hasLocationCandidate(key))
 
       const remainingExpected = expectedCount - exactCards.length
 
       if (remainingExpected <= 0) {
         // 完整位置名额已被确定牌占满，仍带此候选的位置必须剔除。
         candidateCards.forEach((card) => {
-          if (card.hasLocationCandidate?.(key)) {
-            changed =
-              card.removeLocationCandidate(key, 'constraintGroup:expectedLocation') || changed
-          } else if (subZoneKey) {
-            changed =
-              card.removeSubZoneCandidate(subZoneKey, 'constraintGroup:expectedLocation') || changed
-          }
+          changed = card.removeLocationCandidate(key, 'constraintGroup:expectedLocation') || changed
           ownerSyncedCards.add(card)
         })
 
@@ -427,66 +333,14 @@ export class ConstraintGroup {
 
         if (constrainedCandidateCards.length === candidateCards.length) {
           candidateCards.forEach((card) => {
-            if (card.hasLocationCandidate?.(key)) {
-              changed =
-                card.resolveLocationCandidate(
-                  locationCandidate,
-                  'constraintGroup:expectedLocation'
-                ) || changed
-            } else {
-              changed =
-                card.resolveSubZoneCandidate(candidate, 'constraintGroup:expectedLocation') ||
-                changed
-            }
+            changed =
+              card.resolveLocationCandidate(
+                locationCandidate,
+                'constraintGroup:expectedLocation'
+              ) || changed
             ownerSyncedCards.add(card)
           })
         }
-      }
-    })
-
-    // 子区域约束只在完整位置层面收敛：
-    // 即使 card.seats.size 已经是 1，只要还有多个 subZoneCandidates，也不能算作锁定位置。
-    const fallbackExpectedSlotsBySubZone =
-      this.expectedSlotsByLocation.size > 0
-        ? new Map<string, number>()
-        : this.expectedSlotsBySubZone
-    fallbackExpectedSlotsBySubZone.forEach((expectedCount, key) => {
-      const candidate = parseSubZoneCandidateKey(key)
-      if (!candidate) return
-
-      const exactCards = Array.from(this.cards).filter(
-        (card) =>
-          card.location === 'player' &&
-          !card.hasSubZoneCandidates?.() &&
-          card.seats.size === 1 &&
-          card.seats.has(candidate.seatID) &&
-          card.subZone === candidate.subZone &&
-          (candidate.subZone !== 'mark' || card.spellID === candidate.spellID)
-      )
-
-      const candidateCards = Array.from(this.cards).filter((card) =>
-        card.hasSubZoneCandidate?.(key)
-      )
-
-      const remainingExpected = expectedCount - exactCards.length
-
-      if (remainingExpected <= 0) {
-        // 该完整位置名额已满，组内其他候选牌不可能再落到此位置。
-        candidateCards.forEach((card) => {
-          changed = card.removeSubZoneCandidate(key, 'constraintGroup:expectedSubZone') || changed
-          ownerSyncedCards.add(card)
-        })
-
-        return
-      }
-
-      if (candidateCards.length <= remainingExpected) {
-        // 候选数量刚好不足/等于剩余名额，则这些候选全部锁定到该完整位置。
-        candidateCards.forEach((card) => {
-          changed =
-            card.resolveSubZoneCandidate(candidate, 'constraintGroup:expectedSubZone') || changed
-          ownerSyncedCards.add(card)
-        })
       }
     })
 

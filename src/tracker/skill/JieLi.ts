@@ -18,13 +18,8 @@ import { POSITION_TOP } from '../candidate/cardPositions'
 import { createPublicCandidate } from '../candidate/publicCandidate'
 import { MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Room } from '../Room'
-import {
-  getCount,
-  getEventSourceCards,
-  getPositiveIDs,
-  patchEvent,
-  type MoveEventDraft
-} from './moveEventUtils'
+import { getPositiveIDs } from '../helper/cardIDs'
+import { getCount, getEventSourceCards, patchEvent, type MoveEventDraft } from './moveEventUtils'
 
 export const JIE_LI_SPELL_ID = 3483
 

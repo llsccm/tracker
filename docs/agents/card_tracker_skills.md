@@ -97,7 +97,7 @@
    `Room.readSkillState('hiddenMarkCandidates')` 访问统一状态仓库中的候选账本。
 3. 账本记录来源座位、当前投影目标座位、`spellID`、候选明牌、已确认手牌/标记牌，以及本次暗置的明牌落入标记区数量范围。这里的 `spellID` 表示标记空间 ID：协议 `zone 4` 按旧 `Zone` 规则优先取 `ZoneParam || SpellID`，`zone 8` 优先取 `SpellID || ZoneParam`；木牛流马（木马）的标记空间 ID 固定为 `700`。普通标记账本 ID 为 `sourceSeat:targetSeat:spellID`；唯一可迁座的木牛流马使用 `sourceSeat:muniu:161`，不同来源手牌分别记账，承载座位变化不改变账本或约束组 ID。
 4. 先将候选明牌投影为完整位置候选：保留原有 `A 手牌 / B 手牌` 等候选，再追加目标标记位置。普通标记追加 `目标座位 标记`；木马追加装备容器候选 `container:equipment:161:700`，再由索引按 mark700 协议记录的空间座位显示到玩家标记区。尚未观察到标记协议时，才以装备位置作初始兜底。这一步不会丢掉既有跨角色候选。
-5. 当范围 `knownMarkMin === knownMarkMax` 且候选全集只剩 `来源手牌 / 目标标记` 时，创建 `ConstraintGroup.expectedSlotsByLocation` 精确约束，并同步可镜像的 `expectedSlotsBySubZone`，支持 4 选 1、4 选 2、4 选 3 等 N 选 K。木马容器候选只参与 `expectedSlotsByLocation`，不生成 `expectedSlotsBySubZone` 镜像。
+5. 当范围 `knownMarkMin === knownMarkMax` 且候选全集只剩 `来源手牌 / 目标标记` 时，创建 `ConstraintGroup.expectedSlotsByLocation` 精确约束，支持 4 选 1、4 选 2、4 选 3 等 N 选 K。普通标记与木马容器均只维护完整位置名额，不再生成子区槽位镜像。
 6. 后续某张候选明牌明确从同一标记空间进入弃牌区时，确认它占用该标记区名额；明确从来源手牌移动时，确认它占用手牌名额。普通标记要求座位与标记 ID 同时匹配；木马标记 `700` 若 `markID` 一致但座位变化，会先把账本的当前投影座位重定向，再继续使用同一个装备容器候选收敛。装备本体 `6 -> 6` 不迁移内部牌；收到来源与目标标记 ID 都为 `700` 的跨座位 `mark -> mark` 协议后，才迁移标记实体、暗占位与候选账本，并同步精确约束的座位读面，不重命名或合并账本。`hiddenMarkCandidates.muniuMarkSeat` 记录该空间的显式观测座位，使两条协议之间的候选投影也留在旧座位。候选明牌与来源标记占位置换时，优先选用该候选所属账本的可用占位，避免消耗另一来源的占位后又触发本账本重复回收。
 7. 技能 `414` 的标记牌暗置回手牌时，返回协议可能使用 `3389` 作为 `SpellID`；同样由 `3389` 触发的标记也会以 `3389` 返回。因此从标记区按暗牌数量取源牌时，`414` 与 `3389` 作为兼容标记空间互扫，避免明牌仍残留在 `414` 标记区。
 8. 洗牌发现承担 cohort 未决身份的正 ID 暗标记实体时，会将同一实体原地匿名化为稳定负 `id/entityID`；标记位置、候选集合及 `hiddenMarkCandidates` 中的对象引用保持不变，不再暂停原实体或创建替身。

@@ -1,4 +1,4 @@
-import { CardConfig } from './config'
+import { CardConfig, SkillsConfig } from './config'
 import { clearElement } from './draw/drawHelpers'
 import { checkEllipsisOverflow, invalidateEllipsisOverflow } from './ui/overflowEllipsis'
 import { Game, UI } from './tracker'
@@ -12,27 +12,37 @@ export { drawYiCheng } from './draw/drawYiCheng'
 
 /**
  * 渲染最近一次使用/记录的手牌按钮。
- * 输入只使用物理牌 ID，展示元数据统一从 CardConfig 单例读取。
- * @param {number[]|string[]} shoupai
+ * 单张实体牌用 CardConfig 元数据渲染；多张或无实体牌时按技能名渲染。
+ * 没有可渲染内容时直接跳过，保留上一次的残影。
+ * @param {number[]} cardIDs
+ * @param {{ spellId?: number, color?: number }} [options] color: 1 红 2 黑 0 无色（按黑渲染）
  */
-export function drawCard(shoupai) {
+export function drawLastUseCard(cardIDs = [], { spellId, color } = {}) {
   const toBeAdd = document.getElementById('lastUseCard')
   if (!toBeAdd) return
 
-  const fragment = document.createDocumentFragment()
+  const ids = (cardIDs || []).filter((id) => id)
 
-  for (const id of shoupai) {
-    if (id == '0') continue
-    const button = document.createElement('button')
-    const card = CardConfig.GetInstance().getCard(id)
-    button.classList.add('shoupai')
-    button.classList.toggle('red-card', card.color <= 2)
-    button.innerHTML = getCardFaceHtml(card)
-    fragment.appendChild(button)
+  let card
+  let isRed
+  if (ids.length === 1) {
+    card = CardConfig.GetInstance().getCard(ids[0])
+    isRed = card?.color === 1 || card?.color === 2
+  } else {
+    // 多张转化牌或没有实体牌的虚拟牌：有技能 ID 时按技能名渲染
+    card = spellId ? SkillsConfig.GetInstance().getSpell(spellId) : null
+    isRed = color === 1
   }
+  if (!card) return
 
-  clearElement(toBeAdd)
-  toBeAdd.appendChild(fragment)
+  const button = document.createElement('button')
+  button.classList.add('shoupai')
+  button.classList.toggle('red-card', isRed)
+  button.innerHTML = getCardFaceHtml(card)
+
+  // 容器里还有 legend，只替换卡牌按钮
+  clearDirectCards(toBeAdd)
+  toBeAdd.appendChild(button)
 }
 
 let deckEdgeButtons = []
