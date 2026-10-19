@@ -1,4 +1,4 @@
-import { ConstraintGroup } from './ConstraintGroup'
+import { ConstraintGroup, type ConstraintGroupOptions } from './ConstraintGroup'
 import { collectHandSlotCardsBySeat, getHandSlotKindForSeat } from './candidate/handSlotCounts'
 import { recordTraversal } from './traversalStats'
 import { isAmbiguousKnownCard } from './AmbiguousKnownIndex'
@@ -63,15 +63,13 @@ interface ConstraintCardOptions {
   subZone?: SubZone
   spellID?: SpellID | null
   known?: boolean
-  [key: string]: unknown
 }
 
 interface ConstraintGroupCreateOptions extends ConstraintCardOptions {
   id?: string | number
   combinationID?: string | number
-  expectedSlotsBySeat?: Map<SeatID, number> | Record<string, number>
-  expectedSlotsBySubZone?: Map<string, number> | Record<string, number>
-  expectedSlotsByLocation?: Map<string, number> | Record<string, number>
+  expectedSlotsBySeat?: ConstraintGroupOptions['expectedSlotsBySeat']
+  expectedSlotsByLocation?: ConstraintGroupOptions['expectedSlotsByLocation']
   sourceEvent?: MoveSourceEvent | string | null
 }
 
@@ -286,7 +284,7 @@ export class RoomConstraints {
               if (
                 card.location === 'player' &&
                 card.subZone === 'hand' &&
-                // 完整位置候选由 expectedSlotsBySubZone 处理，不参与旧 seats 排除。
+                // 完整位置候选由 expectedSlotsByLocation 处理，不参与座位级排除。
                 !card.hasSubZoneCandidates?.() &&
                 card.seats.size > 1 &&
                 card.seats.has(seatID)
@@ -649,17 +647,9 @@ export class RoomConstraints {
                 Math.max(0, currentExpected - 1)
               )
             }
-
-            // 确认移动离开约束组时，同步扣减该牌已锁定的完整位置名额。
-            const subZoneKey = createSubZoneCandidateKey(resolvedCandidate)
-
-            if (subZoneKey && group.expectedSlotsBySubZone.has(subZoneKey)) {
-              const currentExpected = group.expectedSlotsBySubZone.get(subZoneKey)
-              group.expectedSlotsBySubZone.set(subZoneKey, Math.max(0, currentExpected - 1))
-            }
           }
 
-          // container 候选没有 subZone 镜像，但仍应扣减 expectedSlotsByLocation 名额。
+          // 玩家、公共区和 container 的已锁定位置统一扣减完整位置名额。
           const locationKey = createLocationCandidateKey(resolvedLocationCandidate)
           if (locationKey && group.expectedSlotsByLocation.has(locationKey)) {
             const currentExpected = group.expectedSlotsByLocation.get(locationKey)
@@ -854,36 +844,16 @@ export class RoomConstraints {
         }
       }
 
-      const hasExpectedSlotsBySubZone = Object.prototype.hasOwnProperty.call(
-        options,
-        'expectedSlotsBySubZone'
-      )
       const hasExpectedSlotsByLocation = Object.prototype.hasOwnProperty.call(
         options,
         'expectedSlotsByLocation'
       )
-      const previousExpectedSlotsBySubZone = new Map(group.expectedSlotsBySubZone)
-      const previousExpectedSlotsByLocation = new Map(group.expectedSlotsByLocation)
-
-      if (hasExpectedSlotsBySubZone) {
-        // 同一分组可能先记录 seats 约束，后续再补充子区域约束。
-        group.expectedSlotsBySubZone = group.normalizeExpectedSubZoneSlots(
-          options.expectedSlotsBySubZone
-        )
-      }
-
       if (hasExpectedSlotsByLocation) {
-        group.expectedSlotsByLocation = group.normalizeExpectedLocationSlots(
+        const nextExpectedSlotsByLocation = group.normalizeExpectedLocationSlots(
           options.expectedSlotsByLocation
         )
-      }
-
-      if (hasExpectedSlotsBySubZone || hasExpectedSlotsByLocation) {
-        group.syncExpectedSlotCompatibility(hasExpectedSlotsByLocation ? 'location' : 'subZone')
-        if (
-          !areNumberMapsEqual(previousExpectedSlotsBySubZone, group.expectedSlotsBySubZone) ||
-          !areNumberMapsEqual(previousExpectedSlotsByLocation, group.expectedSlotsByLocation)
-        ) {
+        if (!areNumberMapsEqual(group.expectedSlotsByLocation, nextExpectedSlotsByLocation)) {
+          group.expectedSlotsByLocation = nextExpectedSlotsByLocation
           structureChanged = true
         }
       }

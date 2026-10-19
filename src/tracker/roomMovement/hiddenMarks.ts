@@ -10,7 +10,6 @@ import {
   toSubZoneCandidate,
   type LocationCandidateInput
 } from '../candidate/locationCandidate'
-import { createSubZoneCandidateKey } from '../candidate/subZoneCandidate'
 import type { Card } from '../Card'
 import type { Room } from '../Room'
 import type {
@@ -649,7 +648,7 @@ export class RoomMovementHiddenMarks {
    *
    * 弱记录：只给卡牌追加“可能在标记区”的完整位置候选。
    * 强约束：当 min/max 相等且候选全集只剩来源手牌/目标标记时，
-   * 创建 expectedSlotsBySubZone，使 4 选 1、4 选 3 等 N 选 K 自动收敛。
+   * 创建 expectedSlotsByLocation，使 4 选 1、4 选 3 等 N 选 K 自动收敛。
    */
   private applyHiddenMarkProjection(record: HiddenMarkRecord): boolean {
     const activeCards = Array.from(record.cards).filter(
@@ -699,21 +698,8 @@ export class RoomMovementHiddenMarks {
       spellID: null
     }
     const markCandidate = this.createHiddenMarkTargetLocationCandidate(record)
-    const subZoneSlots = new Map<string, number>()
-    const handSubZoneCandidate = toSubZoneCandidate(handCandidate)
-    const handSubZoneKey = handSubZoneCandidate
-      ? createSubZoneCandidateKey(handSubZoneCandidate)
-      : ''
-    const markSubZoneCandidate = toSubZoneCandidate(markCandidate)
-    const markSubZoneKey = markSubZoneCandidate
-      ? createSubZoneCandidateKey(markSubZoneCandidate)
-      : ''
 
-    if (handSubZoneKey) subZoneSlots.set(handSubZoneKey, remainingHandCount)
-    // container 无法镜像成 subZone，只参与 expectedSlotsByLocation 精确约束。
-    if (markSubZoneKey) subZoneSlots.set(markSubZoneKey, remainingMarkCount)
-
-    // expectedSlotsByLocation 承载 N 选 K，subZone 只镜像可表达的位置：
+    // expectedSlotsByLocation 同时承载普通标记和装备容器的 N 选 K：
     // activeCards 中还应有 remainingHandCount 张在手牌，remainingMarkCount 张在标记区。
     this.room.createConstraintGroup({
       id: record.groupID,
@@ -723,7 +709,6 @@ export class RoomMovementHiddenMarks {
         [createLocationCandidateKey(handCandidate), remainingHandCount],
         [createLocationCandidateKey(markCandidate), remainingMarkCount]
       ]),
-      expectedSlotsBySubZone: subZoneSlots,
       known: true,
       sourceEvent: record.sourceEvent
     })

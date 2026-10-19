@@ -39,8 +39,7 @@ Room 仅保留该公开入口，实际不动点循环与稳定尾部在 `RoomCon
 - `Card.locationCandidates` 是完整位置候选的唯一主模型；`seats`、`subZoneCandidates` 与 `publicCandidates` 都是兼容投影。
 - `card.seats.size === 1` 只足以同步 `owner`。若仍存在 `A 手牌 / A 标记` 等多个完整位置候选，具体子区域尚未收敛。
 - `expectedSlotsBySeat` 只表达“本组有几张普通手牌属于某座位”，不能替代完整位置名额。
-- `expectedSlotsByLocation` 是玩家区、公共区与装备容器的主数量约束；只有候选全集已被该局部分组覆盖时，才能执行强锁推理。
-- `expectedSlotsBySubZone` 是迁移期兼容镜像；存在 `expectedSlotsByLocation` 时，以完整位置层为准。
+- `expectedSlotsByLocation` 是玩家区、公共区与装备容器数量约束的唯一存储，不再维护子区槽位镜像；只有候选全集已被该局部分组覆盖时，才能执行强锁推理。
 - 未调用 `syncObservedPlayerHandCount()` 的玩家没有手牌数事实；默认值或负向差量不能被解释为“观测到 0 张”。
 - 匿名实体只覆盖已知物理数量缺口，不代表某个未公开 CardID，也不能用于证明具体牌序或 owner。
 
@@ -69,8 +68,7 @@ flowchart TD
 1. `candidateSeats` 与卡牌现有座位候选取交集。
 2. `expectedSlotsBySeat` 处理没有完整子区域候选的普通手牌。
 3. `expectedSlotsByLocation` 处理玩家完整位置、公共位置与装备容器。
-4. 仅在没有完整位置主约束时，使用 `expectedSlotsBySubZone` 兼容路径。
-5. 对尚未由本轮位置操作同步 owner 的玩家区卡牌，再执行一次 owner 同步。
+4. 对尚未由本轮位置操作同步 owner 的玩家区卡牌，再执行一次 owner 同步。
 
 数量约束只有两类安全推理：
 

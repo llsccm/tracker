@@ -1,11 +1,5 @@
 import { collectHandSlotCardsBySeat } from './candidate/handSlotCounts'
-import {
-  createLocationCandidateKey,
-  fromSubZoneCandidate,
-  parseLocationCandidateKey,
-  toSubZoneCandidate
-} from './candidate/locationCandidate'
-import { parseSubZoneCandidateKey } from './candidate/subZoneCandidate'
+import { parseLocationCandidateKey, toSubZoneCandidate } from './candidate/locationCandidate'
 import type { Card } from './Card'
 import type { Room } from './Room'
 import type { SeatID } from './types'
@@ -160,28 +154,6 @@ export class Player {
       group.expectedSlotsByLocation.forEach((groupExpected, key) => {
         const candidate = toSubZoneCandidate(parseLocationCandidateKey(key))
         if (!candidate || candidate.seatID !== this.seatID || candidate.subZone !== 'hand') return
-
-        const groupCards: Card[] = []
-        for (const card of handCandidateCards) {
-          if (group.cards.has(card) && !countedCards.has(card)) {
-            groupCards.push(card)
-          }
-        }
-        if (groupCards.length === 0) return
-
-        expectedCount += Math.min(groupExpected, groupCards.length)
-        groupCards.forEach((card) => countedCards.add(card))
-      })
-    })
-
-    this.room.constraintGroups.forEach((group) => {
-      group.expectedSlotsBySubZone.forEach((groupExpected, key) => {
-        // 完整位置约束中的 hand 名额也要计入手牌候选槽位。
-        const candidate = parseSubZoneCandidateKey(key)
-        if (!candidate || candidate.seatID !== this.seatID || candidate.subZone !== 'hand') return
-
-        const locationKey = createLocationCandidateKey(fromSubZoneCandidate(candidate))
-        if (locationKey && group.expectedSlotsByLocation.has(locationKey)) return
 
         const groupCards: Card[] = []
         for (const card of handCandidateCards) {

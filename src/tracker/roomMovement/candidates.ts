@@ -474,8 +474,7 @@ export class RoomMovementCandidates {
       }
       if (!hasMatchingCard) return
 
-      const hasLocationConstraints =
-        group.expectedSlotsByLocation.size > 0 || group.expectedSlotsBySubZone.size > 0
+      const hasLocationConstraints = group.expectedSlotsByLocation.size > 0
       let groupChanged = false
 
       affectedSeats.forEach((seatID) => {
@@ -487,23 +486,15 @@ export class RoomMovementCandidates {
         })
         const handLocationKeyParts = handLocationKey.split(':')
         const locationPrefix = `${handLocationKeyParts.slice(0, -1).join(':')}:`
-        const subZonePrefix = `${handLocationKeyParts.slice(1, -1).join(':')}:`
         const locationKeys = Array.from(group.expectedSlotsByLocation.keys()).filter((key) =>
           key.startsWith(locationPrefix)
         )
-        const subZoneKeys = Array.from(group.expectedSlotsBySubZone.keys()).filter((key) =>
-          key.startsWith(subZonePrefix)
-        )
-        const hadHandLocationConstraint = locationKeys.length > 0 || subZoneKeys.length > 0
+        const hadHandLocationConstraint = locationKeys.length > 0
 
         locationKeys.forEach((key) => {
           if (group.expectedSlotsByLocation.delete(key)) groupChanged = true
         })
-        subZoneKeys.forEach((key) => {
-          if (group.expectedSlotsBySubZone.delete(key)) groupChanged = true
-        })
-
-        // expectedSlotsBySeat 是旧兼容层；只有它没有完整位置层时，或确认对应
+        // expectedSlotsBySeat 表示普通手牌槽位；只有它没有完整位置层时，或确认对应
         // hand 位置确实被清除时，才删除同席位的座位级槽位，避免误伤 mark 等子区。
         if (
           (hadHandLocationConstraint || !hasLocationConstraints) &&
@@ -515,13 +506,7 @@ export class RoomMovementCandidates {
 
       if (!groupChanged) return
 
-      // 位置层是主模型，重新镜像兼容的 subZone 读面，避免旧零名额残留。
-      group.syncExpectedSlotCompatibility('location')
-      if (
-        group.expectedSlotsByLocation.size === 0 &&
-        group.expectedSlotsBySubZone.size === 0 &&
-        group.expectedSlotsBySeat.size === 0
-      ) {
+      if (group.expectedSlotsByLocation.size === 0 && group.expectedSlotsBySeat.size === 0) {
         group.candidateSeats.clear()
         this.room.deleteConstraintGroup(groupID)
       }
