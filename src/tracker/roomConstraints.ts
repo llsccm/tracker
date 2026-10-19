@@ -5,8 +5,6 @@ import { isAmbiguousKnownCard } from './AmbiguousKnownIndex'
 import { createSubZoneCandidateKey } from './candidate/subZoneCandidate'
 import {
   createLocationCandidateKey,
-  fromSubZoneCandidate,
-  getPlayerLocationCandidates,
   parseLocationCandidateKey,
   toSubZoneCandidate
 } from './candidate/locationCandidate'
@@ -15,14 +13,7 @@ import { isAnonymous, type Card } from './Card'
 import type { Player } from './Player'
 import type { Room } from './Room'
 import type { RoomDiagnostics } from './room/diagnostics'
-import type {
-  LocationCandidate,
-  MoveSourceEvent,
-  SeatID,
-  SpellID,
-  SubZone,
-  SubZoneCandidate
-} from './types'
+import type { LocationCandidate, MoveSourceEvent, SeatID, SpellID, SubZone } from './types'
 
 const MAX_TRACKED_CANDIDATE_SEATS = 4
 
@@ -516,49 +507,17 @@ export class RoomConstraints {
    * 约束组移除实体牌时，尽量解析唯一完整位置；container 候选也保持为 location。
    */
   getResolvedExpectedLocationCandidate(card: Card): LocationCandidate | null {
-    if (card.hasLocationCandidates?.()) {
+    if (card.hasLocationCandidates()) {
       const locationCandidates = card.locationCandidates
-      if (locationCandidates.length === 1) return locationCandidates[0]
+      // owner 已确定也不能裁掉公共区、容器或同座位的其它子区候选。
+      return locationCandidates.length === 1 ? locationCandidates[0] : null
     }
 
-    const subZoneCandidate = this.getResolvedExpectedSubZoneCandidate(card)
-    return subZoneCandidate ? fromSubZoneCandidate(subZoneCandidate) : null
-  }
-
-  /**
-   * 约束组移除实体牌时，尽量把卡牌解析为唯一完整位置。
-   * 若仍有多个完整位置候选，则不能猜测扣减哪个 expected slot。
-   */
-  getResolvedExpectedSubZoneCandidate(card: Card): SubZoneCandidate | null {
-    if (card.location !== 'player' || card.seats.size !== 1) return null
-
-    const ownerSeat = Number(Array.from(card.seats)[0])
-
-    if (card.hasLocationCandidates?.()) {
-      const locationCandidates = card.locationCandidates
-      if (locationCandidates.length !== 1) return null
-
-      const playerCandidates = getPlayerLocationCandidates(locationCandidates).filter(
-        (candidate) => Number(candidate.seatID) === Number(ownerSeat)
-      )
-      if (playerCandidates.length !== 1) return null
-
-      return toSubZoneCandidate(playerCandidates[0])
-    }
-
-    if (card.hasSubZoneCandidates?.()) {
-      const ownerCandidates = card.subZoneCandidates.filter(
-        (candidate) => Number(candidate.seatID) === Number(ownerSeat)
-      )
-
-      if (ownerCandidates.length !== 1) return null
-      return ownerCandidates[0]
-    }
-
-    if (typeof card.subZone !== 'string') return null
+    if (card.location !== 'player' || card.owner === null || card.subZone === null) return null
 
     return {
-      seatID: ownerSeat,
+      type: 'player',
+      seatID: card.owner,
       subZone: card.subZone,
       spellID: card.spellID
     }

@@ -10,7 +10,8 @@ import { POSITION_TOP, insertCardsAtProtocolPosition } from '../candidate/cardPo
 import { createPublicCandidate } from '../candidate/publicCandidate'
 import { MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Room } from '../Room'
-import { getCount, getPositiveIDs, type MoveEventDraft, patchEvent } from './moveEventUtils'
+import { getPositiveIDs } from '../helper/cardIDs'
+import { getCount, type MoveEventDraft, patchEvent } from './moveEventUtils'
 
 export const GUAN_XU_STATE_KEY = 'guanXuExchange'
 

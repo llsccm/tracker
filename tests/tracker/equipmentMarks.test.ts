@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   getEquipmentMarkRecordKey,
   getEquipmentMarkSeatChange,
@@ -12,8 +12,11 @@ import {
 } from '@/tracker/roomMovement/types'
 import type { Room } from '@/tracker/Room'
 import type { CardID } from '@/tracker/types'
-import { createTestRoom } from './helpers/room'
+import { collectTraversalStats } from '@/tracker/traversalStats'
+import { createTestRoom, getCard } from './helpers/room'
 import { equipmentContainer, playerLocation } from './helpers/locationCandidates'
+
+afterEach(() => vi.restoreAllMocks())
 
 function createMarkContext(
   room: Room,
@@ -136,5 +139,32 @@ describe('装备标记容器只读规则', () => {
     const state = room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
     expect(state.muniuMarkSeat).toBe(6)
     expect(state.records.size).toBe(0)
+  })
+
+  it('迁座增量读取刚进入玩家区的明暗标记，不扫描全牌池或迁移其他标记', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4], seatIDs: [0, 6] })
+    const known = getCard(room, 1)!
+    const unknown = getCard(room, 2)!
+    const otherMark = getCard(room, 3)!
+    room.clearCardsFromPublicZones([known, unknown, otherMark])
+    known.bindCandidates([0], 'mark', 700, { known: true })
+    unknown.bindCandidates([0], 'mark', 700)
+    otherMark.bindCandidates([0], 'mark', 414, { known: true })
+    const context = createMarkContext(room)
+    const forEach = vi.spyOn(room.cards, 'forEach')
+
+    const { result, stats } = collectTraversalStats(() =>
+      room.movement.hiddenMarks.handleMuniuMarkMove(context)
+    )
+
+    expect(result).toBe(true)
+    expect(context.skipUnknownMovement).toBe(true)
+    expect(known.seats).toEqual(new Set([6]))
+    expect(unknown.seats).toEqual(new Set([6]))
+    expect(known.isKnown).toBe(true)
+    expect(unknown.isKnown).toBe(false)
+    expect(otherMark.seats).toEqual(new Set([0]))
+    expect(forEach).not.toHaveBeenCalled()
+    expect(stats.sites.get('resolveConstraints:playerSnapshot')).toBeUndefined()
   })
 })

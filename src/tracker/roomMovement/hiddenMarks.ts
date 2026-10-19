@@ -105,9 +105,8 @@ export class RoomMovementHiddenMarks {
     records.forEach((record) => this.retargetMuniuRecord(record, targetSeat))
 
     const movedMarkCardIDs: CardID[] = []
-    this.room.cards.forEach((card) => {
+    this.room.refreshPlayerSnapshot().forEach((card) => {
       if (
-        card.location !== 'player' ||
         card.subZone !== 'mark' ||
         card.spellID !== spellID ||
         !card.seats.has(fromSeat) ||
@@ -180,9 +179,8 @@ export class RoomMovementHiddenMarks {
    * 候选子区域牌只要仍包含“来源手牌”位置，也要纳入候选。
    */
   private getKnownHandCandidatesForHiddenMark(sourceSeat: SeatID): Card[] {
-    return this.room.cards.filter(
+    return this.room.refreshPlayerSnapshot().filter(
       (card) =>
-        card.location === 'player' &&
         card.isKnown === true &&
         card.suspended !== true &&
         card.seats.has(sourceSeat) &&
