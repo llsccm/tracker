@@ -11,7 +11,51 @@ import {
 } from './helpers/trackerController'
 import { getCard as getCardFixture } from './helpers/room'
 
+function verifyProtocolZoneInput(controller: TrackerController): void {
+  controller.revealTrackerCardsInZone({ zone: 1, id: 255 }, [1])
+  controller.revealTrackerCardsInZone({ zone: 4, id: 0, spellID: 0 }, [1])
+  // @ts-expect-error 不再接受旧 zoneID 字符串入口。
+  controller.revealTrackerCardsInZone({ zone: 1, id: 255, zoneID: '1-255' }, [1])
+  // @ts-expect-error 协议区域必须显式提供。
+  controller.revealTrackerCardsInZone({ id: 255 }, [1])
+  // @ts-expect-error 来源 ID 必须显式提供，公共牌堆使用 255。
+  controller.revealTrackerCardsInZone({ zone: 1 }, [1])
+  // @ts-expect-error 不再接受字符串形式的区域和座位。
+  controller.revealTrackerCardsInZone({ zone: '5', id: '0' }, [1])
+  // @ts-expect-error 标记技能 ID 必须是数字。
+  controller.revealTrackerCardsInZone({ zone: 4, id: 0, spellID: '700' }, [1])
+}
+
+void verifyProtocolZoneInput
+
 describe('TrackerController', () => {
+  it('结构化协议揭示保留零号座位、零号标记和普通手牌的空技能号', () => {
+    const { controller } = createTrackerControllerHarness()
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2])
+
+    controller.revealTrackerCardsInZone({ zone: 5, id: 0 }, [1])
+    controller.revealTrackerCardsInZone({ zone: 4, id: 0, spellID: 0 }, [2])
+
+    const room = controller.getTrackerRoom()!
+    expect(room.cardIndex.get(1)).toMatchObject({
+      location: 'player',
+      owner: 0,
+      subZone: 'hand',
+      spellID: null,
+      isKnown: true
+    })
+    expect(room.cardIndex.get(2)).toMatchObject({
+      location: 'player',
+      owner: 0,
+      subZone: 'mark',
+      spellID: 0,
+      isKnown: true
+    })
+    controller.destroyTrackerRoom()
+  })
+
   it('直接消费完整 patched，并保留独立 raw 引用，不重新拼接协议', () => {
     const { controller } = createTrackerControllerHarness()
     controller.initTrackerRoom()

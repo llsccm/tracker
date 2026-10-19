@@ -55,18 +55,10 @@ interface RevealTarget {
 }
 
 interface ProtocolZoneInput {
-  zoneID?: string
-  zone?: number | string
-  id?: number | string
-  spellID?: SpellID | string | null
-  pos?: PublicPosition
-}
-
-interface NormalizedProtocolZoneTarget {
   zone: number
   id: number
-  spellID: SpellID | null
-  position: PublicPosition
+  spellID?: SpellID | null
+  pos?: PublicPosition
 }
 
 const MOVE_EVENT_SUMMARY_OPTIONS = {
@@ -783,19 +775,19 @@ export class TrackerController {
    */
   revealTrackerCardsInZone(protocolZone: ProtocolZoneInput, cardIDs: CardID[] | CardID = []): void {
     const ids = this.normalizeIDs(cardIDs).filter((id) => id > 0)
-    const zoneInfo = this.normalizeProtocolZoneTarget(protocolZone)
+    const { zone, id, spellID = null, pos } = protocolZone
 
-    if (isProtocolPlayerZone(zoneInfo.zone) && zoneInfo.id !== 255) {
-      const subZone = getProtocolPlayerSubZone(zoneInfo.zone)
+    if (isProtocolPlayerZone(zone) && id !== 255) {
+      const subZone = getProtocolPlayerSubZone(zone)
       this.revealTrackerCards(
         {
           type: 'player',
-          seatID: zoneInfo.id,
-          fromSeatID: zoneInfo.id,
+          seatID: id,
+          fromSeatID: id,
           fromZone: null,
           fromSubZone: subZone,
           subZone,
-          spellID: zoneInfo.spellID,
+          spellID,
           sourceEvent: {
             type: 'revealCards',
             label: 'protocolZone.reveal',
@@ -810,12 +802,13 @@ export class TrackerController {
     this.revealTrackerCards(
       {
         type: 'public',
-        zoneName: getProtocolPublicZone(zoneInfo.zone, 'process'),
-        position: zoneInfo.position,
+        zoneName: getProtocolPublicZone(zone, 'process'),
+        // 协议端点直接透传；未指定时默认牌顶，不做顶底互换。
+        position: pos ?? POSITION_TOP,
         // 牌堆观看协议描述的是端点事实，不能只确认牌面而保留原随机位置。
-        reposition: zoneInfo.zone === 1,
+        reposition: zone === 1,
         // 未携带 pos 的牌堆观看结果按“第一张是牌顶”解释。
-        cardIDsTopFirst: zoneInfo.zone === 1 && protocolZone.pos == null,
+        cardIDsTopFirst: zone === 1 && pos == null,
         sourceEvent: {
           type: 'revealCards',
           label: 'protocolZone.reveal',
@@ -928,30 +921,6 @@ export class TrackerController {
     }
 
     return ids.map((id) => cardMap.get(id)).filter((card): card is Card => Boolean(card))
-  }
-
-  /**
-   * 兼容旧 zoneID 字符串和新版结构化 protocolZone。
-   * 协议 pos 与 Zone.add/remove 共用 POSITION_TOP / POSITION_BOTTOM 约定，
-   * 显式端点直接透传，不能再做顶底互换。
-   */
-  private normalizeProtocolZoneTarget(
-    protocolZone: ProtocolZoneInput = {}
-  ): NormalizedProtocolZoneTarget {
-    const parts = String(protocolZone.zoneID ?? '').split('-')
-    const zone = Number(protocolZone.zone ?? parts[0])
-    const id = Number(String(protocolZone.id ?? parts[1] ?? 255).split('-')[0])
-    const spellID = Number(parts[2] ?? protocolZone.spellID)
-    const normalizedZone = Number.isFinite(zone) ? zone : 5
-    // 未携带 pos 的看牌消息默认表示牌顶。
-    const position = protocolZone.pos ?? POSITION_TOP
-
-    return {
-      zone: normalizedZone,
-      id: Number.isFinite(id) ? id : 255,
-      spellID: Number.isFinite(spellID) ? spellID : null,
-      position
-    }
   }
 
   destroyTrackerRoom(): void {

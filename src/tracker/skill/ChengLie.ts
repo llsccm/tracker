@@ -2,14 +2,14 @@ import type { NormalizedMoveCardFields } from '../types'
 import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
 import { MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Room } from '../Room'
+import { getPositiveIDs } from '../helper/cardIDs'
 import { trackerLogger } from '@/utils/logger'
 import {
   getCount,
   hasPositiveID,
   nextGroupID,
   patchEvent,
-  type MoveEventDraft,
-  getPositiveIDs
+  type MoveEventDraft
 } from '../skill/moveEventUtils'
 import { CARD_INSTANCE_STATUS } from '../CardCounter'
 

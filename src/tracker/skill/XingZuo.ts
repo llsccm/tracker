@@ -4,13 +4,8 @@ import { createPublicCandidate } from '../candidate/publicCandidate'
 import { MOVE_TYPE } from '../MoveEventNormalizer'
 import type { Room } from '../Room'
 import type { SeatID } from '../types'
-import {
-  getCount,
-  getPositiveIDs,
-  hasPositiveID,
-  type MoveEventDraft,
-  patchEvent
-} from './moveEventUtils'
+import { getPositiveIDs } from '../helper/cardIDs'
+import { getCount, hasPositiveID, type MoveEventDraft, patchEvent } from './moveEventUtils'
 
 const XING_ZUO_SPELL_ID = 3776
 

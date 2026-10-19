@@ -127,9 +127,8 @@ export class RoomMovementSources {
     if (!(count > 0)) return playerCards
     const markSpellIDs = subZone === 'mark' ? getCompatibleMarkSpellIDs(spellID) : []
 
-    for (const card of this.room.cards) {
+    for (const card of this.room.refreshPlayerSnapshot()) {
       if (
-        card.location !== 'player' ||
         card.subZone !== subZone ||
         card.seats.has(seatID) !== true ||
         card.isKnown !== true ||
@@ -179,10 +178,6 @@ export class RoomMovementSources {
 
     if (card.hasLocationCandidate?.(candidate)) {
       return card.resolveLocationCandidate(candidate, 'move:sourcePlayerCandidate')
-    }
-
-    if (card.hasSubZoneCandidate?.(candidate)) {
-      return card.resolveSubZoneCandidate(candidate, 'move:sourcePlayerCandidate')
     }
 
     return false
@@ -513,11 +508,8 @@ export class RoomMovementSources {
   hasPublicCandidateAt(card: Card, zoneID: PublicZoneName | 'suspended'): boolean {
     if (!this.room.zones.has(zoneID as PublicZoneName)) return false
 
-    return (
-      card.publicCandidates?.some((candidate) => candidate.zone === zoneID) ||
-      card.locationCandidates.some(
-        (candidate) => candidate.type === 'public' && candidate.zone === zoneID
-      )
+    return card.locationCandidates.some(
+      (candidate) => candidate.type === 'public' && candidate.zone === zoneID
     )
   }
 

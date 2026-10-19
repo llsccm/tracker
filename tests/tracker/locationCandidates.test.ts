@@ -2,9 +2,46 @@ import { describe, expect, it } from 'vitest'
 import { ConstraintGroup } from '@/tracker/ConstraintGroup'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from './helpers/room'
-import { locationKeys, playerLocation, publicLocation } from './helpers/locationCandidates'
+import {
+  equipmentContainer,
+  locationKeys,
+  outsideLocation,
+  playerLocation,
+  publicLocation
+} from './helpers/locationCandidates'
 
 describe('完整位置候选回归', () => {
+  it('期望槽位解析区分已落定位置与同 owner 下仍未决的多个位置', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0] })
+    const card = getCard(room, 1)!
+    const hand = playerLocation(0, 'hand')
+    const mark = playerLocation(0, 'mark', 0)
+    expect(room.constraints.getResolvedExpectedLocationCandidate(card)).toBeNull()
+
+    card.bindCandidates([0], 'hand')
+    expect(room.constraints.getResolvedExpectedLocationCandidate(card)).toEqual(hand)
+    card.setLocationCandidates([hand, mark])
+    expect(card.owner).toBe(0)
+    expect(room.constraints.getResolvedExpectedLocationCandidate(card)).toBeNull()
+    card.resolveLocationCandidate(mark)
+    expect(room.constraints.getResolvedExpectedLocationCandidate(card)).toEqual(mark)
+    card.moveToPublicZone('discard')
+    expect(room.constraints.getResolvedExpectedLocationCandidate(card)).toBeNull()
+  })
+
+  it.each([
+    { name: '公共端点', candidate: publicLocation('pile', 'top', 2) },
+    { name: '装备容器', candidate: equipmentContainer(161, 700) },
+    { name: '场外位置', candidate: outsideLocation() }
+  ])('期望槽位解析直接保留唯一$name候选，不退化为玩家子区', ({ candidate }) => {
+    const { room } = createTestRoom({ cardIDs: [1] })
+    const card = getCard(room, 1)!
+    card.setLocationCandidates([candidate])
+    expect(room.constraints.getResolvedExpectedLocationCandidate(card)).toBe(
+      card.locationCandidates[0]
+    )
+  })
+
   it('owner 收敛后仍保留同一 owner 下的手牌/标记候选', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
     const card = getCard(room, 1)

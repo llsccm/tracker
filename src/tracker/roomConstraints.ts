@@ -1,12 +1,10 @@
-import { ConstraintGroup } from './ConstraintGroup'
+import { ConstraintGroup, type ConstraintGroupOptions } from './ConstraintGroup'
 import { collectHandSlotCardsBySeat, getHandSlotKindForSeat } from './candidate/handSlotCounts'
 import { recordTraversal } from './traversalStats'
 import { isAmbiguousKnownCard } from './AmbiguousKnownIndex'
 import { createSubZoneCandidateKey } from './candidate/subZoneCandidate'
 import {
   createLocationCandidateKey,
-  fromSubZoneCandidate,
-  getPlayerLocationCandidates,
   parseLocationCandidateKey,
   toSubZoneCandidate
 } from './candidate/locationCandidate'
@@ -15,14 +13,7 @@ import { isAnonymous, type Card } from './Card'
 import type { Player } from './Player'
 import type { Room } from './Room'
 import type { RoomDiagnostics } from './room/diagnostics'
-import type {
-  LocationCandidate,
-  MoveSourceEvent,
-  SeatID,
-  SpellID,
-  SubZone,
-  SubZoneCandidate
-} from './types'
+import type { LocationCandidate, MoveSourceEvent, SeatID, SpellID, SubZone } from './types'
 
 const MAX_TRACKED_CANDIDATE_SEATS = 4
 
@@ -72,15 +63,13 @@ interface ConstraintCardOptions {
   subZone?: SubZone
   spellID?: SpellID | null
   known?: boolean
-  [key: string]: unknown
 }
 
 interface ConstraintGroupCreateOptions extends ConstraintCardOptions {
   id?: string | number
   combinationID?: string | number
-  expectedSlotsBySeat?: Map<SeatID, number> | Record<string, number>
-  expectedSlotsBySubZone?: Map<string, number> | Record<string, number>
-  expectedSlotsByLocation?: Map<string, number> | Record<string, number>
+  expectedSlotsBySeat?: ConstraintGroupOptions['expectedSlotsBySeat']
+  expectedSlotsByLocation?: ConstraintGroupOptions['expectedSlotsByLocation']
   sourceEvent?: MoveSourceEvent | string | null
 }
 
@@ -295,7 +284,7 @@ export class RoomConstraints {
               if (
                 card.location === 'player' &&
                 card.subZone === 'hand' &&
-                // 完整位置候选由 expectedSlotsBySubZone 处理，不参与旧 seats 排除。
+                // 完整位置候选由 expectedSlotsByLocation 处理，不参与座位级排除。
                 !card.hasSubZoneCandidates?.() &&
                 card.seats.size > 1 &&
                 card.seats.has(seatID)
@@ -516,49 +505,17 @@ export class RoomConstraints {
    * 约束组移除实体牌时，尽量解析唯一完整位置；container 候选也保持为 location。
    */
   getResolvedExpectedLocationCandidate(card: Card): LocationCandidate | null {
-    if (card.hasLocationCandidates?.()) {
+    if (card.hasLocationCandidates()) {
       const locationCandidates = card.locationCandidates
-      if (locationCandidates.length === 1) return locationCandidates[0]
+      // owner 已确定也不能裁掉公共区、容器或同座位的其它子区候选。
+      return locationCandidates.length === 1 ? locationCandidates[0] : null
     }
 
-    const subZoneCandidate = this.getResolvedExpectedSubZoneCandidate(card)
-    return subZoneCandidate ? fromSubZoneCandidate(subZoneCandidate) : null
-  }
-
-  /**
-   * 约束组移除实体牌时，尽量把卡牌解析为唯一完整位置。
-   * 若仍有多个完整位置候选，则不能猜测扣减哪个 expected slot。
-   */
-  getResolvedExpectedSubZoneCandidate(card: Card): SubZoneCandidate | null {
-    if (card.location !== 'player' || card.seats.size !== 1) return null
-
-    const ownerSeat = Number(Array.from(card.seats)[0])
-
-    if (card.hasLocationCandidates?.()) {
-      const locationCandidates = card.locationCandidates
-      if (locationCandidates.length !== 1) return null
-
-      const playerCandidates = getPlayerLocationCandidates(locationCandidates).filter(
-        (candidate) => Number(candidate.seatID) === Number(ownerSeat)
-      )
-      if (playerCandidates.length !== 1) return null
-
-      return toSubZoneCandidate(playerCandidates[0])
-    }
-
-    if (card.hasSubZoneCandidates?.()) {
-      const ownerCandidates = card.subZoneCandidates.filter(
-        (candidate) => Number(candidate.seatID) === Number(ownerSeat)
-      )
-
-      if (ownerCandidates.length !== 1) return null
-      return ownerCandidates[0]
-    }
-
-    if (typeof card.subZone !== 'string') return null
+    if (card.location !== 'player' || card.owner === null || card.subZone === null) return null
 
     return {
-      seatID: ownerSeat,
+      type: 'player',
+      seatID: card.owner,
       subZone: card.subZone,
       spellID: card.spellID
     }
@@ -690,17 +647,9 @@ export class RoomConstraints {
                 Math.max(0, currentExpected - 1)
               )
             }
-
-            // 确认移动离开约束组时，同步扣减该牌已锁定的完整位置名额。
-            const subZoneKey = createSubZoneCandidateKey(resolvedCandidate)
-
-            if (subZoneKey && group.expectedSlotsBySubZone.has(subZoneKey)) {
-              const currentExpected = group.expectedSlotsBySubZone.get(subZoneKey)
-              group.expectedSlotsBySubZone.set(subZoneKey, Math.max(0, currentExpected - 1))
-            }
           }
 
-          // container 候选没有 subZone 镜像，但仍应扣减 expectedSlotsByLocation 名额。
+          // 玩家、公共区和 container 的已锁定位置统一扣减完整位置名额。
           const locationKey = createLocationCandidateKey(resolvedLocationCandidate)
           if (locationKey && group.expectedSlotsByLocation.has(locationKey)) {
             const currentExpected = group.expectedSlotsByLocation.get(locationKey)
@@ -895,36 +844,16 @@ export class RoomConstraints {
         }
       }
 
-      const hasExpectedSlotsBySubZone = Object.prototype.hasOwnProperty.call(
-        options,
-        'expectedSlotsBySubZone'
-      )
       const hasExpectedSlotsByLocation = Object.prototype.hasOwnProperty.call(
         options,
         'expectedSlotsByLocation'
       )
-      const previousExpectedSlotsBySubZone = new Map(group.expectedSlotsBySubZone)
-      const previousExpectedSlotsByLocation = new Map(group.expectedSlotsByLocation)
-
-      if (hasExpectedSlotsBySubZone) {
-        // 同一分组可能先记录 seats 约束，后续再补充子区域约束。
-        group.expectedSlotsBySubZone = group.normalizeExpectedSubZoneSlots(
-          options.expectedSlotsBySubZone
-        )
-      }
-
       if (hasExpectedSlotsByLocation) {
-        group.expectedSlotsByLocation = group.normalizeExpectedLocationSlots(
+        const nextExpectedSlotsByLocation = group.normalizeExpectedLocationSlots(
           options.expectedSlotsByLocation
         )
-      }
-
-      if (hasExpectedSlotsBySubZone || hasExpectedSlotsByLocation) {
-        group.syncExpectedSlotCompatibility(hasExpectedSlotsByLocation ? 'location' : 'subZone')
-        if (
-          !areNumberMapsEqual(previousExpectedSlotsBySubZone, group.expectedSlotsBySubZone) ||
-          !areNumberMapsEqual(previousExpectedSlotsByLocation, group.expectedSlotsByLocation)
-        ) {
+        if (!areNumberMapsEqual(group.expectedSlotsByLocation, nextExpectedSlotsByLocation)) {
+          group.expectedSlotsByLocation = nextExpectedSlotsByLocation
           structureChanged = true
         }
       }

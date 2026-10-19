@@ -1,7 +1,8 @@
 import type { NormalizedMoveCardFields } from '../types'
 import { trackerLogger } from '@/utils/logger'
 import type { Room } from '../Room'
-import { getCount, getPositiveIDs, getRaw, type MoveEventDraft } from './moveEventUtils'
+import { getPositiveIDs } from '../helper/cardIDs'
+import { getCount, getRaw, type MoveEventDraft } from './moveEventUtils'
 
 const QIAO_ZHI_SPELL_ID = 3544
 const QIAO_ZHI_SELECTION_STATE_KEY = 'qiaozhiSelection'

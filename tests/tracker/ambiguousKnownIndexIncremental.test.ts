@@ -1,15 +1,55 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { isAmbiguousKnownCard } from '@/tracker/AmbiguousKnownIndex'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from './helpers/room'
 import { expectAmbiguousKnownIndexMatchesRebuild } from './helpers/ambiguousKnownIndex'
-import { equipmentContainer, playerLocation, publicLocation } from './helpers/locationCandidates'
+import {
+  equipmentContainer,
+  outsideLocation,
+  playerLocation,
+  publicLocation
+} from './helpers/locationCandidates'
+
+afterEach(() => vi.restoreAllMocks())
 
 function rebuildAmbiguousIndex(room) {
   room.ambiguousKnownIndex.rebuild(Array.from(room.constraintGroups.values()))
 }
 
 describe('AmbiguousKnownIndex 增量维护（Step 6）', () => {
+  it.each([
+    { name: '确定手牌', candidates: [], expected: false },
+    {
+      name: '跨座位手牌',
+      candidates: [playerLocation(1, 'hand'), playerLocation(2, 'hand')],
+      expected: true
+    },
+    {
+      name: '同座位跨子区',
+      candidates: [playerLocation(1, 'hand'), playerLocation(1, 'mark', 700)],
+      expected: true
+    },
+    { name: '公共端点', candidates: [publicLocation('pile', 'top', 2)], expected: true },
+    { name: '装备容器', candidates: [equipmentContainer(161, 700)], expected: true },
+    { name: '场外候选', candidates: [outsideLocation()], expected: true }
+  ])('$name 仅按完整位置主模型判定明牌模糊状态，不构造兼容投影', ({ candidates, expected }) => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
+    const card = getCard(room, 1)!
+    card.bindCandidates([1], 'hand', null, { known: true })
+    card.setLocationCandidates(candidates)
+    const seats = vi.spyOn(card, 'seats', 'get')
+    const subZoneCandidates = vi.spyOn(card, 'subZoneCandidates', 'get')
+    const publicCandidates = vi.spyOn(card, 'publicCandidates', 'get')
+
+    expect(isAmbiguousKnownCard(card)).toBe(expected)
+    card.isKnown = false
+    expect(isAmbiguousKnownCard(card)).toBe(false)
+    expect(seats).not.toHaveBeenCalled()
+    expect(subZoneCandidates).not.toHaveBeenCalled()
+    expect(publicCandidates).not.toHaveBeenCalled()
+  })
+
   it('多座位候选明牌收敛为确定手牌：单牌增量删除条目', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1, 2] })
     const card = getCard(room, 1)

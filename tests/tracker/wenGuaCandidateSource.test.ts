@@ -106,7 +106,6 @@ describe('问卦候选来源筛选', () => {
         expect(group.expectedSlotsBySeat.has(1)).toBe(false)
         expect(group.expectedSlotsBySeat.has(4)).toBe(false)
         expect(group.expectedSlotsByLocation.size).toBe(0)
-        expect(group.expectedSlotsBySubZone.size).toBe(0)
       })
       expect(room.getPlayer(1)!.observedHandCount).toBe(2)
       expect(room.getPlayer(4)!.observedHandCount).toBe(2)

@@ -127,6 +127,3 @@ function getUnknownPlayerCards(
 export function getTopFirstCards<T>(cards: readonly T[] = []): T[] {
   return cards.slice().reverse()
 }
-
-/** 兼容既有技能导入；通用实现位于 tracker helper，避免核心模块反向依赖 skill。 */
-export { getPositiveIDs } from '../helper/cardIDs'

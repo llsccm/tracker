@@ -2,7 +2,8 @@ import { protocolMove } from './helpers/trackerController'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 
-import { getPositiveIDs, patchEvent, type MoveEventDraft } from '@/tracker/skill/moveEventUtils'
+import { getPositiveIDs } from '@/tracker/helper/cardIDs'
+import { patchEvent, type MoveEventDraft } from '@/tracker/skill/moveEventUtils'
 
 function verifyPatchEventTypes(event: MoveEventDraft): void {
   patchEvent(event, { options: { sourceCards: [] } })

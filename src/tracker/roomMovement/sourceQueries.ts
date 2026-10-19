@@ -126,9 +126,9 @@ export function takeUnknownCardsFromPlayer(
  * 收集某座位当前仍在手牌区的实体牌，包含明牌、暗牌和候选明牌。
  */
 export function getPlayerHandCardsBySeat(room: Room, seatID: SeatID): Card[] {
-  return room.cards.filter(
-    (card) => card.location === 'player' && card.subZone === 'hand' && card.seats.has(seatID)
-  )
+  return room
+    .refreshPlayerSnapshot()
+    .filter((card) => card.subZone === 'hand' && card.seats.has(seatID))
 }
 
 /**
