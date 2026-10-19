@@ -176,6 +176,7 @@ export class RoomMovementHiddenMarks {
   /**
    * 取得来源手牌中仍可能参与暗置的明牌。
    * 候选子区域牌只要仍包含“来源手牌”位置，也要纳入候选。
+   * Card 会将带玩家候选的实体归一到 player，即使仍保留公共 Zone 引用，也能进入快照。
    */
   private getKnownHandCandidatesForHiddenMark(sourceSeat: SeatID): Card[] {
     return this.room.refreshPlayerSnapshot().filter(
