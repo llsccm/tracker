@@ -5,7 +5,7 @@ import { Game } from '@/tracker'
 
 export function handleUseCard(msg) {
   const { CardID, spellID, useType } = msg
-  if (import.meta.env.DEV) console.info(msg)
+  // if (import.meta.env.DEV) console.info(msg)
   // PubGsCUseCard : spellID CardID
   // MsgNtfUseCardType : spellId cardIds color spellType
   // spellType 0: 无属性 6: 火 7: 雷 11: 冰
