@@ -47,7 +47,6 @@ export interface ReplayConstraintProvenance {
   cardIDs: number[]
   candidateSeats: number[]
   expectedSlotsBySeat: Record<string, number>
-  expectedSlotsBySubZone: Record<string, number>
   expectedSlotsByLocation: Record<string, number>
 }
 
@@ -386,7 +385,6 @@ function createProvenance(
     cardIDs: Array.from(group.cards, (card) => card.id).sort((left, right) => left - right),
     candidateSeats: Array.from(group.candidateSeats).sort((left, right) => left - right),
     expectedSlotsBySeat: mapNumberEntries(group.expectedSlotsBySeat),
-    expectedSlotsBySubZone: mapNumberEntries(group.expectedSlotsBySubZone),
     expectedSlotsByLocation: mapNumberEntries(group.expectedSlotsByLocation)
   }
 }
@@ -396,7 +394,6 @@ function createGroupSignature(group: ConstraintGroup): string {
     Array.from(group.cards, (card) => card.entityID).sort((left, right) => left - right),
     Array.from(group.candidateSeats).sort((left, right) => left - right),
     mapNumberEntries(group.expectedSlotsBySeat),
-    mapNumberEntries(group.expectedSlotsBySubZone),
     mapNumberEntries(group.expectedSlotsByLocation)
   ])
 }
