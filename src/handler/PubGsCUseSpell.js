@@ -1,5 +1,4 @@
 import { CardConfig } from '@/config'
-import { drawCard } from '@/draw'
 import { laya } from '@/runtime/gameAdapter'
 import { Game } from '@/tracker'
 import { recordDuoQiActivation } from '@/tracker/skill/DuoQi'
@@ -11,9 +10,10 @@ import { setSuitRecord } from '@/utils'
 export function handleUseSpell(msg) {
   const { SeatID, SpellID, CardIDs = [] } = msg
 
-  if (Game.myID === SeatID && CardIDs.length === 1) {
-    drawCard(CardIDs)
-  }
+  // 此处是技能消耗的卡牌 不能视为使用
+  // if (Game.myID === SeatID && CardIDs.length === 1) {
+  //   drawLastUseCard(CardIDs)
+  // }
 
   recordDuoQiActivation(Game, msg)
 
