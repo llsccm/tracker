@@ -1,12 +1,14 @@
 import { trackerLogger } from '@/utils/logger'
+import { getCompatibleMarkSpellIDs } from '../candidate/markSpellID'
 import { createLocationCandidateKey, fromPublicCandidate } from '../candidate/locationCandidate'
 import { createPublicCandidate, normalizePublicPosition } from '../candidate/publicCandidate'
 import type { Card } from '../Card'
-import type { PlayerLocationCandidate, PublicLocationCandidate, SeatID } from '../types'
+import type { PlayerLocationCandidate, PublicLocationCandidate, SeatID, SpellID } from '../types'
 import type { Room } from '../Room'
 import { getKnownHandCardsBySeat, getPlayerHandCardsBySeat } from './sourceQueries'
 import {
   PAIDUI_POSITIONS,
+  type MarkToHandCandidatesOptions,
   type MoveTargetZone,
   type PublicCandidatesToHandOptions,
   type RandomHandToPublicOptions,
@@ -190,12 +192,7 @@ export class RoomMovementCandidates {
     // 期望数量只适用于上一事件，必须先失效，否则旧组的 `target=0`
     // 会在收敛时删除本次新加入的目标候选。
     this.invalidateHandTransferConstraintsForCards(sourceCandidateCards, fromSeat, targetSeat)
-    this.expandConstraintGroupsForCards(sourceCandidateCards, targetSeat)
-
-    // 暗牌候选会被提升为 hand 完整位置候选（locationCandidates + subZoneCandidates）。
-    // 此时 expectedSlotsBySeat 的座位层消除会刻意跳过带 subZoneCandidates 的牌、交由位置层处理，
-    // 但本组过去只声明了座位层约束，位置层为空——于是目标槽位清零后，暗实体仍留着不可能的
-    // 座位候选（如 seat3 满员后 130/131 仍是 {2,3}）。这里镜像一份 hand 位置约束补上该缺口。
+    // 完整 hand 位置名额负责明暗实体的同一套数量约束。
     const fromHandKey = createLocationCandidateKey({
       type: 'player',
       seatID: fromSeat,
@@ -215,10 +212,6 @@ export class RoomMovementCandidates {
     this.room.createConstraintGroup({
       cards: sourceCandidateCards,
       candidateSeats,
-      expectedSlotsBySeat: new Map([
-        [fromSeat, sourceTotal - count],
-        [targetSeat, count]
-      ]),
       expectedSlotsByLocation: new Map([
         [fromHandKey, sourceTotal - count],
         [targetHandKey, count]
@@ -248,6 +241,86 @@ export class RoomMovementCandidates {
     })
 
     return sourceCandidateCards
+  }
+
+  /**
+   * 标记区可见牌多于协议暗牌张数时，建立“标记区 / 目标手牌”双边候选。
+   *
+   * 典型场景：标记区 2 张明牌，其中 1 张被暗置交给其他玩家手牌。协议只给张数，
+   * 无法确定是哪一张，用第一张明牌冒充被交出的牌会把随机猜测固化成身份互换。
+   * 参与牌保留原物理投影，完整位置候选表达不确定性，数量约束负责后续收敛。
+   * @returns 是否已接管本次暗牌移动。
+   */
+  markMarkToHandCandidates({
+    fromSeat,
+    fromSpellID,
+    toSeat,
+    count,
+    sourceEvent
+  }: MarkToHandCandidatesOptions): boolean {
+    if (!(count > 0) || fromSeat === null || toSeat === null) return false
+    if (fromSpellID === null || fromSpellID === undefined) return false
+
+    const markCards = getVisibleMarkSpaceCards(this.room, fromSeat, fromSpellID)
+    // 只有可见牌多于协议张数时才是“多选一”；唯一解仍由来源取牌直接搬走。
+    if (markCards.length <= count) return false
+
+    const markCandidate: PlayerLocationCandidate = {
+      type: 'player',
+      seatID: fromSeat,
+      subZone: 'mark',
+      spellID: fromSpellID
+    }
+    const handCandidate: PlayerLocationCandidate = {
+      type: 'player',
+      seatID: toSeat,
+      subZone: 'hand',
+      spellID: null
+    }
+    const markKey = createLocationCandidateKey(markCandidate)
+    const handKey = createLocationCandidateKey(handCandidate)
+
+    // 先按移动前的确定位置扣减旧组名额，再扩展候选；扩展后已无法辨认原来的槽位。
+    this.room.removeCardsFromConstraintGroups(markCards)
+
+    markCards.forEach((card) => {
+      const otherCandidates = card.locationCandidates.filter((candidate) => {
+        const key = createLocationCandidateKey(candidate)
+        return key !== markKey && key !== handKey
+      })
+      card.setLocationCandidates(
+        [...otherCandidates, markCandidate, handCandidate],
+        'markMarkToHandCandidates'
+      )
+    })
+
+    // 全部参与牌共同竞争两个位置：标记区留 N-K 张，目标手牌得 K 张。
+    // 候选数一开始大于名额，不会触发强锁；某张牌离场、名额恰好等于剩余候选数时才收敛。
+    this.room.createConstraintGroup({
+      cards: markCards,
+      candidateSeats: Array.from(new Set([fromSeat, toSeat])),
+      expectedSlotsByLocation: new Map([
+        [markKey, markCards.length - count],
+        [handKey, count]
+      ]),
+      known: true,
+      sourceEvent: sourceEvent ?? { type: 'markMarkToHandCandidates' }
+    })
+
+    trackerLogger.info('标记区可见牌多于暗牌张数，建立标记/手牌双边候选', {
+      fromSeat,
+      fromSpellID,
+      toSeat,
+      count,
+      cardIDs: markCards.map((card) => card.id),
+      markSlots: markCards.length - count,
+      handSlots: count,
+      locationCandidates: markCards.map((card) =>
+        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate))
+      )
+    })
+
+    return true
   }
 
   /**
@@ -404,12 +477,9 @@ export class RoomMovementCandidates {
       )
     })
 
-    this.expandConstraintGroupsForCards(affectedCards, targetSeat)
-
     this.room.createConstraintGroup({
       cards: affectedCards,
       candidateSeats: Array.from(new Set(affectedCards.flatMap((card) => Array.from(card.seats)))),
-      expectedSlotsBySeat: new Map([[Number(targetSeat), Math.min(count, affectedCards.length)]]),
       expectedSlotsByLocation: new Map([
         [createLocationCandidateKey(targetHandCandidate), Math.min(count, affectedCards.length)]
       ]),
@@ -431,22 +501,6 @@ export class RoomMovementCandidates {
     })
 
     return affectedCards
-  }
-
-  /**
-   * 扩展包含指定卡牌的既有约束组候选席位，避免新传播座位被旧组裁掉。
-   */
-  private expandConstraintGroupsForCards(cards: Card[], seatID: SeatID): void {
-    const cardSet = new Set(cards)
-
-    this.room.constraintGroups.forEach((group) => {
-      if (group.candidateSeats.size === 0) return
-
-      const hasCard = Array.from(group.cards as Set<Card>).some((card) => cardSet.has(card))
-      if (hasCard) {
-        group.candidateSeats.add(Number(seatID))
-      }
-    })
   }
 
   /**
@@ -474,7 +528,6 @@ export class RoomMovementCandidates {
       }
       if (!hasMatchingCard) return
 
-      const hasLocationConstraints = group.expectedSlotsByLocation.size > 0
       let groupChanged = false
 
       affectedSeats.forEach((seatID) => {
@@ -489,25 +542,15 @@ export class RoomMovementCandidates {
         const locationKeys = Array.from(group.expectedSlotsByLocation.keys()).filter((key) =>
           key.startsWith(locationPrefix)
         )
-        const hadHandLocationConstraint = locationKeys.length > 0
 
         locationKeys.forEach((key) => {
           if (group.expectedSlotsByLocation.delete(key)) groupChanged = true
         })
-        // expectedSlotsBySeat 表示普通手牌槽位；只有它没有完整位置层时，或确认对应
-        // hand 位置确实被清除时，才删除同席位的座位级槽位，避免误伤 mark 等子区。
-        if (
-          (hadHandLocationConstraint || !hasLocationConstraints) &&
-          group.expectedSlotsBySeat.delete(seatID)
-        ) {
-          groupChanged = true
-        }
       })
 
       if (!groupChanged) return
 
-      if (group.expectedSlotsByLocation.size === 0 && group.expectedSlotsBySeat.size === 0) {
-        group.candidateSeats.clear()
+      if (group.expectedSlotsByLocation.size === 0) {
         this.room.deleteConstraintGroup(groupID)
       }
       changed = true
@@ -517,4 +560,23 @@ export class RoomMovementCandidates {
       this.room.markConstraintGroupsDirty('invalidateHandTransferConstraintsForCards')
     }
   }
+}
+
+/** 收集某标记空间内仍在玩家区、可展示身份且未交给账本管理的牌。 */
+function getVisibleMarkSpaceCards(room: Room, seatID: SeatID, spellID: SpellID): Card[] {
+  const markSpellIDs = getCompatibleMarkSpellIDs(spellID)
+  return room
+    .refreshPlayerSnapshot()
+    .filter(
+      (card) =>
+        card.location === 'player' &&
+        card.subZone === 'mark' &&
+        card.isKnown === true &&
+        card.suspended !== true &&
+        card.seats.size === 1 &&
+        card.seats.has(seatID) &&
+        !card.hasSubZoneCandidates?.() &&
+        (markSpellIDs.length === 0 ||
+          (card.spellID !== null && markSpellIDs.includes(card.spellID)))
+    )
 }

@@ -173,9 +173,9 @@ describe('下书', () => {
       // 通用转移会失效旧组中已被取走的 7 号位手牌名额，但保留 6 号位原有约束；
       // 新建的转移组再负责“3 号位恰有 5 张”这一事实，无需下书手工重建旧组。
       const existingGroup = room.constraintGroups.get('xia-shu-existing-candidate-group')
-      expect(existingGroup?.expectedSlotsBySeat.get(7)).toBeUndefined()
-      expect(existingGroup?.expectedSlotsBySeat.get(3)).toBeUndefined()
-      expect(existingGroup?.expectedSlotsBySeat.get(6)).toBe(1)
+      expect(existingGroup?.expectedSlotsByLocation.get('player:7:hand:none')).toBeUndefined()
+      expect(existingGroup?.expectedSlotsByLocation.get('player:3:hand:none')).toBeUndefined()
+      expect(existingGroup?.expectedSlotsByLocation.get('player:6:hand:none')).toBe(1)
       expect(existingGroup?.expectedSlotsByLocation.get(targetHandKey)).toBeUndefined()
       expect(existingGroup?.expectedSlotsByLocation.get(actorHandKey)).toBeUndefined()
       expect(existingGroup?.expectedSlotsByLocation.get(otherHandKey)).toBe(1)
@@ -184,8 +184,8 @@ describe('下书', () => {
         (group) =>
           (group.sourceEvent as { type?: string } | null)?.type === 'test:xiaShu-hidden-transfer'
       )
-      expect(transferGroup?.expectedSlotsBySeat.get(7)).toBe(0)
-      expect(transferGroup?.expectedSlotsBySeat.get(3)).toBe(5)
+      expect(transferGroup?.expectedSlotsByLocation.get('player:7:hand:none')).toBe(0)
+      expect(transferGroup?.expectedSlotsByLocation.get('player:3:hand:none')).toBe(5)
       expect(transferGroup?.expectedSlotsByLocation.get(targetHandKey)).toBe(0)
       expect(transferGroup?.expectedSlotsByLocation.get(actorHandKey)).toBe(5)
       expect(Game.getSpellState(361)).toBeUndefined()

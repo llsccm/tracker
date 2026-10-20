@@ -156,6 +156,10 @@ export class RoomMovementKnownPlacement {
   ): void {
     const { fromSeat, fromSubZone, knownCards, sourceEvent, toZone } = context
     const { swappedCardIDs, playerSourceSwapAttempts, playerSourceContext } = placement
+    // 可见子区的明牌被转移到别的玩家区时不需要占位替身：直接对齐到协议来源，
+    // 多余的匿名手牌由 reconcileAnonymousHandCards 按观测数量回收。
+    if (this.sources.alignVisibleSubZoneTransfer(card, playerSourceContext)) return
+
     const locationBeforeSwap = card.location
     const placeholder = this.sources.swapKnownCardWithPlayerSourcePlaceholder(
       card,

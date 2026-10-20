@@ -1,13 +1,7 @@
-import { collectHandSlotCardsBySeat } from './candidate/handSlotCounts'
-import { parseLocationCandidateKey, toSubZoneCandidate } from './candidate/locationCandidate'
+import { computeHandSlotAllocation, type HandSlotAllocation } from './candidate/handSlotUsage'
 import type { Card } from './Card'
 import type { Room } from './Room'
 import type { SeatID } from './types'
-
-interface HandCountInput {
-  knownCount?: number
-  candidateCount?: number
-}
 
 /**
  * 重构版玩家类
@@ -81,94 +75,34 @@ export class Player {
   }
 
   /**
-   * 根据观测到的真实总手牌数与确定普通明牌数量重算暗牌额度。
+   * 消费统一分配结果，刷新扣除确定明牌与候选明牌容量后的未知额度。
    * @returns 是否发生变化
    */
-  refreshUnknownCardCount(counts: HandCountInput | null = null): boolean {
+  refreshUnknownCardCount(allocation?: HandSlotAllocation): boolean {
     if (!this.hasObservedHandCount) return false
-
-    const resolvedCounts = counts ?? this.collectHandSlotCountInput()
-    const knownCount = resolvedCounts.knownCount ?? 0
-    const candidateCount = resolvedCounts.candidateCount ?? 0
-    const nextUnknownCount = Math.max(0, this.observedHandCount - knownCount - candidateCount)
+    const nextUnknownCount = (allocation ?? this.getHandSlotAllocation()).unknownCardCount!
     const changed = this.unknownCardCount !== nextUnknownCount
     this.unknownCardCount = nextUnknownCount
     return changed
   }
 
-  private collectHandSlotCountInput(): HandCountInput {
-    // 兜底路径一次性取 known/candidate，避免 getKnown/getCandidate 各自全量扫描。
-    const handSlotCards = collectHandSlotCardsBySeat(this.room.cards, [this.seatID]).get(
-      this.seatID
-    )
-    const candidateCards = handSlotCards?.candidateCards ?? []
-    return {
-      knownCount: handSlotCards?.knownCards.length ?? 0,
-      candidateCount: this.getCandidateHandSlotCount(candidateCards)
-    }
+  private getHandSlotAllocation(): HandSlotAllocation {
+    return computeHandSlotAllocation(this.room, [this.seatID]).get(this.seatID)!
   }
 
   /**
    * 计算当前玩家确定普通明牌占用的手牌槽位数量。
    */
   getKnownHandSlotCount(): number {
-    const handSlotCards = collectHandSlotCardsBySeat(this.room.cards, [this.seatID]).get(
-      this.seatID
-    )
-    return handSlotCards?.knownCards.length ?? 0
+    return this.getHandSlotAllocation().exactKnownCount
   }
 
   /**
    * 计算当前玩家手牌中由模糊明牌占用的期望槽位数量。
-   * 优先采用局部分组的 expectedSlotsBySeat；没有显式期望时退化为候选明牌数量。
+   * 使用各组扣除确定牌后的剩余名额；未被数量约束覆盖的候选不补造槽位。
    */
-  getCandidateHandSlotCount(candidateCards: Card[] | null = null): number {
-    const handSlotCards =
-      candidateCards === null
-        ? collectHandSlotCardsBySeat(this.room.cards, [this.seatID]).get(this.seatID)
-        : null
-    const handCandidateCards = candidateCards ?? handSlotCards?.candidateCards ?? []
-
-    if (handCandidateCards.length === 0) return 0
-
-    const countedCards = new Set<Card>()
-    let expectedCount = 0
-
-    this.room.constraintGroups.forEach((group) => {
-      if (!group.expectedSlotsBySeat.has(this.seatID)) return
-
-      const groupCards: Card[] = []
-      for (const card of handCandidateCards) {
-        if (group.cards.has(card) && !countedCards.has(card)) {
-          groupCards.push(card)
-        }
-      }
-      if (groupCards.length === 0) return
-
-      const groupExpected = group.expectedSlotsBySeat.get(this.seatID)
-      expectedCount += Math.min(groupExpected, groupCards.length)
-      groupCards.forEach((card) => countedCards.add(card))
-    })
-
-    this.room.constraintGroups.forEach((group) => {
-      group.expectedSlotsByLocation.forEach((groupExpected, key) => {
-        const candidate = toSubZoneCandidate(parseLocationCandidateKey(key))
-        if (!candidate || candidate.seatID !== this.seatID || candidate.subZone !== 'hand') return
-
-        const groupCards: Card[] = []
-        for (const card of handCandidateCards) {
-          if (group.cards.has(card) && !countedCards.has(card)) {
-            groupCards.push(card)
-          }
-        }
-        if (groupCards.length === 0) return
-
-        expectedCount += Math.min(groupExpected, groupCards.length)
-        groupCards.forEach((card) => countedCards.add(card))
-      })
-    })
-
-    return expectedCount
+  getCandidateHandSlotCount(): number {
+    return this.getHandSlotAllocation().candidateKnownUpperBound
   }
 
   /**

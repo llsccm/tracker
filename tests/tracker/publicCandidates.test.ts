@@ -6,6 +6,30 @@ import { createTestRoom, getCard } from './helpers/room'
 import { playerHand, publicLocation } from './helpers/locationCandidates'
 
 describe('公共候选传播', () => {
+  it('公共候选进入新座位不需要扩写历史组的座位快照', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [1, 3] })
+    const cards = [1, 2].map((id) => getCard(room, id)!)
+    const sourceHand = playerHand(1)
+    const targetHand = playerHand(3)
+    const pileTop = publicLocation('pile', 'top', 2)
+    cards.forEach((card) => {
+      card.confirmKnown()
+      card.setLocationCandidates([sourceHand, pileTop])
+    })
+    const oldGroup = room.createConstraintGroup({ cards, candidateSeats: [1] })
+    room.movement.candidates.propagatePublicCandidatesToHand({
+      fromZone: 'pile',
+      fromPosition: POSITION_TOP,
+      toZone: 'player',
+      targetSeat: 3,
+      subZone: 'hand',
+      count: 1
+    })
+    room.resolveConstraints()
+    expect(oldGroup.candidateSeats).toEqual(new Set([1]))
+    cards.forEach((card) => expect(card.hasLocationCandidate(targetHand)).toBe(true))
+  })
+
   it('暗手牌置于牌堆顶时显示牌顶候选文案', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [1] })
     const knownCandidate = getCard(room, 1)

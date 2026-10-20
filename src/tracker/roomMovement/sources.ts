@@ -127,6 +127,7 @@ export class RoomMovementSources {
     if (!(count > 0)) return playerCards
     const markSpellIDs = subZone === 'mark' ? getCompatibleMarkSpellIDs(spellID) : []
 
+    // 标记区到手牌的多选已由候选层接管；其余路径仍须按张数消费来源实体。
     for (const card of this.room.refreshPlayerSnapshot()) {
       if (
         card.subZone !== subZone ||
@@ -326,6 +327,57 @@ export class RoomMovementSources {
     })
 
     return placeholder
+  }
+
+  /**
+   * 可见子区（标记/装备/判定）中的明牌被协议声明为来自另一个位置的玩家区时，直接迁移投影。
+   *
+   * 这些子区没有暗牌数量对账，明牌就是区域内唯一的物理实体；若继续走占位置换，替身占位
+   * 会继承旧的标记/装备位置，成为等洗牌才会消失的幽灵暗位。手牌来源仍保留原置换语义，
+   * 因为手牌数量由 reconcileAnonymousHandCards 之外的槽位守恒链路依赖。
+   * @returns 是否已就地对齐；true 时调用方不应再做置换。
+   */
+  alignVisibleSubZoneTransfer(card: Card, context: RoomMoveContext): boolean {
+    const { fromSeat, fromSubZone } = context
+    if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone) {
+      return false
+    }
+
+    const sourceSubZone = card.subZone
+    if (
+      card.location !== 'player' ||
+      card.isKnown !== true ||
+      card.seats.size !== 1 ||
+      sourceSubZone === null ||
+      sourceSubZone === 'hand' ||
+      card.hasLocationCandidates?.()
+    ) {
+      return false
+    }
+
+    if (card.seats.has(fromSeat) && sourceSubZone === fromSubZone) return false
+
+    card.subZone = fromSubZone
+    card.spellID = fromSubZone === 'mark' ? this.getSourceSpellID(context) : null
+    card.setSeats([fromSeat], 'alignVisibleSubZoneTransfer')
+    this.room.markCounterDirty(card)
+    this.room.notifyCardChanged(card, {
+      type: 'card-bound',
+      subZone: fromSubZone,
+      spellID: card.spellID
+    })
+    trackerLogger.info('可见子区明牌已就地对齐到协议来源', {
+      reason: 'alignVisibleSubZoneTransfer',
+      cardID: card.id,
+      entityID: card.entityID,
+      fromSubZone: sourceSubZone,
+      toSeat: fromSeat,
+      toSubZone: fromSubZone,
+      spellID: card.spellID,
+      sourceEvent: context.sourceEvent
+    })
+
+    return true
   }
 
   /**

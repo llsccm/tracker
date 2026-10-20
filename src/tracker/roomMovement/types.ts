@@ -168,6 +168,17 @@ export interface RandomHandTransferOptions {
   sourceEvent?: MoveSourceEvent
 }
 
+export interface MarkToHandCandidatesOptions {
+  /** 标记区所在座位；缺省时不接管，保留默认暗牌移动。 */
+  fromSeat: SeatID | null
+  /** 标记空间 ID；缺省时不接管，避免跨空间误合并候选。 */
+  fromSpellID: SpellID | null
+  /** 接收手牌座位；缺省时不接管。 */
+  toSeat: SeatID | null
+  count: number
+  sourceEvent?: MoveSourceEvent
+}
+
 export interface RandomHandToPublicOptions {
   fromSeat: SeatID | null
   toZone: PublicZoneName

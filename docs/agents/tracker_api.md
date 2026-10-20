@@ -109,9 +109,12 @@ if (!room) return
 ### 计数与“已知”不要混淆
 
 - `player.observedHandCount` 是协议或移动事件给出的手牌总数，不是从现有 `Card` 反推的结果。
-- `player.unknownCardCount` 是收敛后仍需要匿名槽覆盖的数量。
-- `player.getKnownHandSlotCount()` 和 `player.getCandidateHandSlotCount()` 返回的是占用槽位数，不是
-  `Card[]` 长度；候选分组可能一张实体占用多个逻辑槽位。
+- `player.unknownCardCount` 是观测总数扣除确定明牌和候选明牌容量上界后的未知额度，可能已由暗实体覆盖。
+- `player.getKnownHandSlotCount()` 返回确定明牌数量；`player.getCandidateHandSlotCount()` 返回单座位候选
+  明牌容量上界，同一身份在该座位最多计一次，不能把各座位上界相加当作全局确定身份数。
+- `computeHandSlotAllocation(room)`（`src/tracker/candidate/handSlotUsage.ts`）一次返回各座位的确定明暗占用、
+  候选容量、暗实体覆盖、展示额度和匿名补缺；匿名补位使用它的结果，不再另写数量算法。
+  未观测总数或无法安全对账时，匿名补缺为 `null`，以 `canReconcileAnonymous` 判断是否可以补位。
 - `knownHandCards`、`candidateHandCards` 和 `locationIndex` 会在 `resolveConstraints()` 后同步。刚调用底层
   `bindCandidates()` 后若要立即读取稳定投影，应显式调用 `room.resolveConstraints()`。
 - `room.getPlayer(seatID)` 在座位尚未注册时实际可能返回 `undefined`，调用方应保留可选链/判空。
