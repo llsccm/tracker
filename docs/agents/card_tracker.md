@@ -79,8 +79,8 @@
 
 - 表达一次移动、分配、展示或模糊明牌事件形成的局部候选包。
 - `cards` 是原生 `Set<Card>`，使用 `.has()` / `.delete()` / `.size` 与迭代能力维护组内实体牌。
-- `candidateSeats` 只约束本组卡牌。
-- `expectedSlotsBySeat` 只做“某席位在本组内锁定数量达到期望值后，从本组其他候选牌剔除该席位”的收敛。
+- `candidateSeats` 是分组涉及座位的历史快照，不裁剪卡牌当前候选；不再需要通过扩写旧组座位来保住新候选。
+- `expectedSlotsBySeat` 仅作建组/更新入参糖，立即映射为普通手牌完整位置；同座位已有完整 hand 名额时优先使用完整输入，不保留第二份存储。
 - `expectedSlotsByLocation` 是完整位置数量约束的唯一存储，统一表达玩家区、公共区与装备容器位置，不再维护子区槽位镜像。
 - 玩家子区名额也直接写入 `expectedSlotsByLocation`，例如一组 4 张明牌中 `A 手牌 = 3`、`A 标记(某 spellID) = 1`；它不能被 `seats.size === 1` 替代。
 - 不把“同组”解释为“同 owner”，避免多人分配、洗牌后明牌、交换临时区等场景过度收敛。
@@ -225,6 +225,25 @@
 - 修改文档无需运行构建测试。
 - 修改记忆库后运行 `serena memories check`。
 - 修改记牌器核心代码后运行 `pnpm test:tracker`、`pnpm typecheck:tracker`、`pnpm lint` 与 `pnpm build`；涉及发布、打包配置或高风险核心协议路径时再运行 `pnpm build:prod`。
+
+### 候选与位置语义改动的准入检查
+
+新增或扩展位置候选、`seats` 投影、子区归属之前，先列出**全部写入者**再动手：
+
+- 建立/追加：`Card.setLocationCandidates`、`addSeat`、`bindCandidates`、`Room.createConstraintGroup`。
+- 投影/收缩：`Card.setSeats`、`storeLocationCandidates`、`ConstraintGroup.resolve`。
+- 回收：`Room.removeCardsFromConstraintGroups`、`reconcileAnonymousHandCards`、`suspendKnownCard`。
+
+`ConstraintGroup.candidateSeats` 不再参与裁剪，但旧数量约束仍可能与新移动冲突。
+改动前必须确认哪些既有组已持有这批牌、哪些 `expectedSlotsByLocation` / 兼容手牌名额
+已经过期。确定位置上的牌离组时，先按原位置扣减旧名额，再写入新候选；只失效部分位置
+时保留其它位置约束。补充“旧组 + 新候选”和“旧组仍有其它牌”的回归，避免依赖干净场面。
+
+位置写入通过 `Card.setLocationCandidates()` / `resolveLocationCandidate()` 提交，
+投影同步不调用 `setSeats()` 反向改写候选。手牌计数与约束消元共享
+`candidate/constraintSlots.ts` 的确定牌、候选牌及剩余名额摘要；候选容量与暗实体覆盖由
+`candidate/handSlotUsage.ts` 的 `computeHandSlotAllocation()` 计算，Player 展示额度与匿名实体
+补位共用同一份分配结果，不在 Player 或 Room 中另写名额解释。
 
 ---
 

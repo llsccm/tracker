@@ -164,9 +164,9 @@ Room 保留原有移动阶段顺序与最终收敛边界。RoomMovement 本身�
 ### 约束收敛与稳定尾部
 
 `Room.resolveConstraints()` 保留为稳定公开入口，直接委托 `RoomConstraints.resolveConstraints()`。
-不动点循环和 `collectPlayerHandSlotCounts()`、`createHandSlotCountResolver()`、
-`reconcileAnonymousHandCards()` 三个私有辅助方法集中在 `roomConstraints.ts`；手牌槽摘要类型和
-E1/E2 座位懒缓存不再由 Room 实现，缓存只在单次求解内存活。
+不动点循环和消费分配结果的 `reconcileAnonymousHandCards()` 集中在 `roomConstraints.ts`；
+手牌分配统一由 `candidate/handSlotUsage.ts` 的 `computeHandSlotAllocation()` 计算。
+E1/E2 座位缓存不由 Room 实现，只在单次求解内存活。
 Room 仍持有权威状态、`resolveTouchedSeats`、收敛轮数与脏事件，DEV 诊断实例通过入口按需传入，
 不公开诊断字段，也不在约束模块复制状态。
 

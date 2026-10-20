@@ -28,6 +28,14 @@ describe('真实录制回放：连续整手转移 + 中途揭示', () => {
     if (!report.success) throw new Error(formatTrackerProtocolReplayReport(report))
     expect(report.diagnostics.violations).toEqual([])
     expect(report.diagnostics.stoppedAtSeq).toBe(111)
+    const sharedGroup = report.finalState.room?.constraints.find(
+      (group) =>
+        WATCHED_CARDS.every((cardID) => group.cardIDs.includes(cardID)) &&
+        group.expectedSlotsByLocation['player:2:hand:none'] > 0 &&
+        group.expectedSlotsByLocation['player:7:hand:none'] > 0
+    )
+    expect(sharedGroup).toBeDefined()
+    expect(sharedGroup).not.toHaveProperty('expectedSlotsBySeat')
   })
 
   it('watch 报告只输出相关卡牌的因果链而不展开整局牌池', () => {
@@ -58,6 +66,14 @@ describe('真实录制回放：连续整手转移 + 中途揭示', () => {
     expect(closure?.cardIDs).toEqual([10])
     expect(closure?.changes.length).toBeGreaterThan(0)
     expect(closure?.protocols.length).toBeGreaterThan(0)
+    const liveGroups = closure!.constraintGroups.filter((group) => group.invalidatedAtSeq === null)
+    expect(liveGroups.length).toBeGreaterThan(0)
+    liveGroups.forEach((group) => {
+      const snapshot = report.finalState.room?.constraints.find((item) => item.id === group.id)
+      expect(snapshot).toBeDefined()
+      expect(group.expectedSlotsByLocation).toEqual(snapshot!.expectedSlotsByLocation)
+      expect(group).not.toHaveProperty('expectedSlotsBySeat')
+    })
   })
 
   it('fast / watch / deep 三档的最终状态一致', () => {

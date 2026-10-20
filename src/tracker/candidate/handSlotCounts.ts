@@ -7,6 +7,7 @@ export type HandSlotKind = 'known' | 'candidate'
 export interface HandSlotCards {
   knownCards: Card[]
   candidateCards: Card[]
+  exactHiddenCards: Card[]
 }
 
 /**
@@ -58,12 +59,21 @@ export function collectHandSlotCardsBySeat(
   for (const seatID of seatIDs) {
     cardsBySeat.set(Number(seatID), {
       knownCards: [],
-      candidateCards: []
+      candidateCards: [],
+      exactHiddenCards: []
     })
   }
 
   for (const card of cards) {
-    if (card.location !== 'player' || card.isKnown !== true) continue
+    if (card.location !== 'player' || card.suspended) continue
+
+    if (!card.isKnown) {
+      // 同一 owner 下仍有 hand/mark 等候选时，不是确定暗手牌。
+      if (!card.hasLocationCandidates() && card.subZone === 'hand' && card.owner !== null) {
+        cardsBySeat.get(card.owner)?.exactHiddenCards.push(card)
+      }
+      continue
+    }
 
     const hasLocationCandidates = card.hasLocationCandidates?.() === true
     const hasSubZoneCandidates = card.hasSubZoneCandidates?.() === true

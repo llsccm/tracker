@@ -74,6 +74,19 @@ export class RoomMovement {
     // 暗置标记区候选会接管默认暗牌移动，避免明牌身份被未知占位吞掉。
     if (this.hiddenMarks.handleHiddenMarkMove(context)) return
 
+    // 标记区可见牌多于协议暗牌张数时，挑一张会固化身份，改为标记/手牌双边候选。
+    if (
+      this.candidates.markMarkToHandCandidates({
+        fromSeat: context.fromSubZone === 'mark' ? context.fromSeat : null,
+        fromSpellID: context.fromSpellID ?? context.spellID ?? null,
+        toSeat: context.targetHandSeat,
+        count: context.unknownCount,
+        sourceEvent: context.sourceEvent
+      })
+    ) {
+      context.skipUnknownMovement = true
+    }
+
     if (
       forceRandomHandTransferCandidates ||
       this.candidates.shouldPropagateRandomHandTransferCandidates({

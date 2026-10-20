@@ -143,7 +143,24 @@ export class RoomMovementSources {
       }
 
       playerCards.push(card)
-      if (playerCards.length >= count) break
+      // 多取一张即可判定“可见牌多于协议张数”，不必为诊断扫描整份玩家区快照。
+      if (playerCards.length > count) break
+    }
+
+    if (playerCards.length > count) {
+      // 可见牌多于协议张数时无法判断具体哪几张被移走。确定性地返回前 count 张会把随机
+      // 猜测固化成身份互换（标记区留下幽灵牌、手牌出现错误明牌），因此这里只做唯一解补足，
+      // 多选一交由候选建模或匿名占位兜底。
+      trackerLogger.warn('玩家子区可见牌多于移动张数，跳过确定性取牌', {
+        reason: 'takeKnownCardsFromPlayerSubZone:ambiguousVisibleCards',
+        seatID,
+        subZone,
+        spellID,
+        requestedCount: count,
+        visibleCardCountAtLeast: playerCards.length,
+        visibleCardIDs: playerCards.map((card) => card.id)
+      })
+      return []
     }
 
     return playerCards
@@ -326,6 +343,57 @@ export class RoomMovementSources {
     })
 
     return placeholder
+  }
+
+  /**
+   * 可见子区（标记/装备/判定）中的明牌被协议声明为来自另一个位置的玩家区时，直接迁移投影。
+   *
+   * 这些子区没有暗牌数量对账，明牌就是区域内唯一的物理实体；若继续走占位置换，替身占位
+   * 会继承旧的标记/装备位置，成为等洗牌才会消失的幽灵暗位。手牌来源仍保留原置换语义，
+   * 因为手牌数量由 reconcileAnonymousHandCards 之外的槽位守恒链路依赖。
+   * @returns 是否已就地对齐；true 时调用方不应再做置换。
+   */
+  alignVisibleSubZoneTransfer(card: Card, context: RoomMoveContext): boolean {
+    const { fromSeat, fromSubZone } = context
+    if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone) {
+      return false
+    }
+
+    const sourceSubZone = card.subZone
+    if (
+      card.location !== 'player' ||
+      card.isKnown !== true ||
+      card.seats.size !== 1 ||
+      sourceSubZone === null ||
+      sourceSubZone === 'hand' ||
+      card.hasLocationCandidates?.()
+    ) {
+      return false
+    }
+
+    if (card.seats.has(fromSeat) && sourceSubZone === fromSubZone) return false
+
+    card.subZone = fromSubZone
+    card.spellID = fromSubZone === 'mark' ? this.getSourceSpellID(context) : null
+    card.setSeats([fromSeat], 'alignVisibleSubZoneTransfer')
+    this.room.markCounterDirty(card)
+    this.room.notifyCardChanged(card, {
+      type: 'card-bound',
+      subZone: fromSubZone,
+      spellID: card.spellID
+    })
+    trackerLogger.info('可见子区明牌已就地对齐到协议来源', {
+      reason: 'alignVisibleSubZoneTransfer',
+      cardID: card.id,
+      entityID: card.entityID,
+      fromSubZone: sourceSubZone,
+      toSeat: fromSeat,
+      toSubZone: fromSubZone,
+      spellID: card.spellID,
+      sourceEvent: context.sourceEvent
+    })
+
+    return true
   }
 
   /**
