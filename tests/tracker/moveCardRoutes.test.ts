@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import type { UnassignedMarkSpaceState } from '@/tracker/roomMovement/types'
@@ -117,7 +116,8 @@ describe('Room.moveCards 组合路线', () => {
 
     const pileCards = room.zones.get('pile').cards
 
-    expect(room.cards.every(isAnonymous)).toBe(true)
+    // 回牌堆必须复用原占位实体，不能额外创建匿名回退实体。
+    expect(room.cards).toHaveLength(6)
     expect(markPlaceholders.filter((card) => pileCards.includes(card))).toHaveLength(4)
     const remainingMarkPlaceholders = markPlaceholders.filter((card) => card.location === 'player')
     expect(remainingMarkPlaceholders).toHaveLength(1)
@@ -159,7 +159,8 @@ describe('Room.moveCards 组合路线', () => {
 
     const pileCards = room.zones.get('pile').cards
 
-    expect(room.cards.every(isAnonymous)).toBe(true)
+    // 回牌堆必须复用原占位实体，不能额外创建匿名回退实体。
+    expect(room.cards).toHaveLength(5)
     expect(spell35Cards.filter((card) => pileCards.includes(card))).toHaveLength(1)
     expect(spell36Cards.some((card) => pileCards.includes(card))).toBe(false)
     expect(markSpaceState.spaces.get(35)).toHaveLength(1)
