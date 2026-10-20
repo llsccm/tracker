@@ -6,15 +6,11 @@ import handleShengMo from './skills/ShengMo'
 import handleXiaShu from './skills/XiaShu'
 import handleZeXing from './skills/ZeXing'
 import handleZuoLian from './skills/ZuoLian'
-// import handleFanJian from './skills/Spell713'
 
 export const spellEffectHandlers = new Map([
-  // [713, handleFanJian],
   [361, handleXiaShu],
   [441, handleChengXiang],
   [3492, handleChengXiang],
-  // [3033, handleJiZhan],
-  // [3329, handleHeZhong],
   [3488, handleZuoLian],
   [3157, handleQingYiLianJu],
   [3511, handleQingYiLianJu],

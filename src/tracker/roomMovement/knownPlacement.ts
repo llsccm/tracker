@@ -154,7 +154,7 @@ export class RoomMovementKnownPlacement {
     context: RoomMoveContext,
     placement: KnownMovePlacement
   ): void {
-    const { fromSeat, fromSubZone, knownCards, sourceEvent, toZone } = context
+    const { fromSeat, fromSubZone, sourceEvent, toZone } = context
     const { swappedCardIDs, playerSourceSwapAttempts, playerSourceContext } = placement
     // 可见子区的明牌被转移到别的玩家区时不需要占位替身：直接对齐到协议来源，
     // 多余的匿名手牌由 reconcileAnonymousHandCards 按观测数量回收。
@@ -167,18 +167,17 @@ export class RoomMovementKnownPlacement {
     )
     let fallbackPlaceholder: Card | null = null
     if (!placeholder && fromSubZone === 'hand') {
-      fallbackPlaceholder = this.sources.swapCardWithUnknown(card, playerSourceContext, knownCards)
       const canDeferToKnownSourcePlaceholder =
-        context.sourceHandTotalObserved && context.sourceHandTotalBefore <= context.handMoveCount
-      const createdSourcePlaceholder =
-        !fallbackPlaceholder && !canDeferToKnownSourcePlaceholder
-          ? this.sources.createPlayerSourcePlaceholderForKnownCard(card, playerSourceContext)
-          : null
-      if (!fallbackPlaceholder && createdSourcePlaceholder) {
-        fallbackPlaceholder = this.sources.swapCardWithUnknown(
+        context.sourceHandTotalObserved &&
+        context.sourceHandTotalBefore <= context.handMoveCount &&
+        toZone !== 'player'
+      const createdSourcePlaceholder = !canDeferToKnownSourcePlaceholder
+        ? this.sources.createPlayerSourcePlaceholderForKnownCard(card, playerSourceContext)
+        : null
+      if (createdSourcePlaceholder) {
+        fallbackPlaceholder = this.sources.swapKnownCardWithPlayerSourcePlaceholder(
           card,
-          playerSourceContext,
-          knownCards
+          playerSourceContext
         )
       }
       if (!fallbackPlaceholder && createdSourcePlaceholder) {
@@ -237,7 +236,7 @@ export class RoomMovementKnownPlacement {
   finishMove(context: RoomMoveContext, placement: KnownMovePlacement): void {
     const {
       combinationID,
-      expectedSlotsBySeat,
+      expectedSlotsByLocation,
       knownCards,
       position,
       sourceEvent,
@@ -254,7 +253,7 @@ export class RoomMovementKnownPlacement {
         id: combinationID,
         cards: knownCards,
         candidateSeats: targetSeats,
-        expectedSlotsBySeat,
+        expectedSlotsByLocation,
         known: true,
         sourceEvent: sourceEvent ?? { type: 'moveCards' }
       })

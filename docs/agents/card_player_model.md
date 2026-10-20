@@ -52,13 +52,12 @@
 | `subZoneCandidates` | 玩家完整位置候选的只读投影 |
 | `publicCandidates` | 牌堆顶/底等公共不确定位置的只读投影 |
 | `suspended` | 候选范围过宽时暂停追踪的展示标记 |
-| `combinationID` | 最近一次局部分组的展示/迁移标签，不是推理事实 |
+| `getPossibleLocations()` | 只读展开未决候选或确定位置；暂停追踪时为空，不反向写入投影 |
 
 ### 候选主模型
 
 - 外部写入候选推荐只使用 `setLocationCandidates()`、`setSeats()` 和
-  `resolveLocationCandidate()`；`bindCandidates()` 与 `setSubZoneCandidates()` 仅供
-  内部委托使用，不应列为通用外部写入口。
+  `resolveLocationCandidate()`；`bindCandidates()` 仅供内部委托使用，不应列为通用外部写入口。
 - `locationCandidates`、`seats`、`subZoneCandidates`、`publicCandidates` 均不允许
   在外部直接修改。
 - `seats.size === 1` 只表示 owner 确定；`A 手牌 / A 标记` 仍可能在子区域层未收敛。
@@ -76,7 +75,7 @@
 - `bindCandidates()` / `bindTo()`：绑定玩家区和候选/确定席位；`bindTo()` 默认确认明牌。
 - `resolveLocationCandidate()`：候选只剩一个玩家位置时落定 `location`、`subZone` 与
   `spellID`。
-- `moveToPublicZone()`：清空玩家区候选、`seats`、`combinationID` 与 `spellID`；移入
+- `moveToPublicZone()`：清空玩家区候选、`seats` 与 `spellID`；移入
   `exile` / `outside` 时重置 `isKnown`。
 - `reset()`：恢复初始牌堆状态并清空时间戳与候选。
 

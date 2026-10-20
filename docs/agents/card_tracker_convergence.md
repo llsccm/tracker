@@ -39,7 +39,7 @@ DEV 诊断实例由 Room 按需传入，诊断抽样与最终校验的执行顺�
 
 - `Card.locationCandidates` 是完整位置候选的唯一主模型；`seats`、`subZoneCandidates` 与 `publicCandidates` 都是兼容投影。
 - `card.seats.size === 1` 只足以同步 `owner`。若仍存在 `A 手牌 / A 标记` 等多个完整位置候选，具体子区域尚未收敛。
-- `expectedSlotsBySeat` 仅作为建组/更新入参糖，立即映射为 `player:<seat>:hand:none`；同座位已有完整 hand 名额时不叠加，不保留座位名额存储。
+- 建组、更新和移动统一接受 `expectedSlotsByLocation`；普通手牌使用 `player:<seat>:hand:none`，不再接受座位名额输入糖。
 - `expectedSlotsByLocation` 是玩家区、公共区与装备容器数量约束的唯一存储，不再维护子区槽位镜像；只有候选全集已被该局部分组覆盖时，才能执行强锁推理。
 - 未调用 `syncObservedPlayerHandCount()` 的玩家没有手牌数事实；默认值或负向差量不能被解释为“观测到 0 张”。
 - 匿名实体只覆盖已知物理数量缺口，不代表某个未公开 CardID，也不能用于证明具体牌序或 owner。
@@ -67,7 +67,7 @@ flowchart TD
 `ConstraintGroup.resolve()` 按以下层次处理本组卡牌：
 
 1. `candidateSeats` 仅记录分组创建/更新时的座位，不裁剪当前候选，也不随新移动扩写旧组。
-2. 只读取 `expectedSlotsByLocation`；建组和更新阶段已经转换座位名额输入，运行时不再合并两份存储。
+2. 只读取 `expectedSlotsByLocation`；省略更新项保持原名额，传空 Map 清空，传入集合整体替换。
 3. `getConstraintSlotState()` 统一读取该位置的确定牌、候选牌和剩余名额，再按数量执行消元。
 4. 对尚未由本轮位置操作同步 owner 的玩家区卡牌，再执行一次 owner 同步。
 
@@ -78,7 +78,8 @@ flowchart TD
 
 公共位置按完整 key 匹配，不能用同一公共区中的任意确定牌提前占满牌顶/范围名额。装备容器候选收敛后仍保持 container 语义，展示座位优先取 mark 协议已观测的空间座位；尚未观测时才以装备位置兜底。装备本体移动不提前迁移内部牌或候选投影。
 
-`combinationID` 是展示与迁移标签，不是推理事实。同一张牌可属于多个约束组，标签被后处理组覆盖时不能让 `changed` 变为 `true`。
+同一张牌可属于多个约束组，成员关系仅由各组的 `cards` 集合保存，置换时迁移所有实际成员关系。
+实体单值分组标签已删除；协议 `combinationID` 仍可作为本次约束组的 ID。
 
 组内名额具有事件时效：随机手牌转移使来源/目标的旧手牌名额失效，其它位置名额继续保留；
 确定位置上的牌离组应在扩展候选之前扣减原位置名额。禁止用扩大 `candidateSeats` 代替数量约束失效处理。
@@ -173,7 +174,7 @@ URL 参数 `debugAssert=1` 会恢复逐次检查，`debugAssert=0` 会关闭收�
 
 | 现象 | 优先检查 |
 | --- | --- |
-| 收敛轮数持续升高或命中上限 | setter 是否重复返回 `true`；`combinationID` 或多座位重投影是否误当成状态变化 |
+| 收敛轮数持续升高或命中上限 | setter 是否重复返回 `true`；重复建组或多座位重投影是否误当成状态变化 |
 | owner 正确但手牌/标记位置错误 | 是否把 `seats.size === 1` 当成完整位置；是否缺少 `expectedSlotsByLocation` |
 | 某座位第二轮没有重新计算 | 候选变更事件是否携带 `previousSeats`；owner 前后座位是否进入 `resolveTouchedSeats` |
 | 已满手牌误删标记或容器候选 | 约束三是否只删除目标座位的 hand 候选；是否错误退化为 seat 级删除 |

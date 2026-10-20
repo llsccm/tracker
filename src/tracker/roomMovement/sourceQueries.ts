@@ -1,4 +1,4 @@
-import { fromSubZoneCandidate, getPlayerLocationCandidates } from '../candidate/locationCandidate'
+import { getPlayerLocationCandidates } from '../candidate/locationCandidate'
 import { getCompatibleMarkSpellIDs } from '../candidate/markSpellID'
 import type { Card } from '../Card'
 import type { Room } from '../Room'
@@ -7,36 +7,21 @@ import type { PlayerLocationCandidate, SeatID, SpellID, SubZone, SubZoneCandidat
 // 只读取当前 Room / Card，不保存快照或推断状态；供来源、候选和暗置标记组件共用。
 
 /**
- * 读取兼容的玩家子区候选；无显式子区候选时，按当前玩家区投影展开席位。
- * 不修改牌实体，非玩家区且无子区候选时返回空数组。
+ * 将当前可能玩家位置投影为子区读面，不从 seats 反向拼装候选。
  */
 export function getCardSubZoneCandidates(card: Card): SubZoneCandidate[] {
-  if (card.hasSubZoneCandidates?.()) {
-    return card.subZoneCandidates
-  }
-
-  if (card.location !== 'player') return []
-
-  const subZone = card.subZone ?? 'hand'
-  return Array.from(card.seats).map((seatID) => ({
-    seatID: Number(seatID),
+  return getCardPlayerLocationCandidates(card).map(({ seatID, subZone, spellID }) => ({
+    seatID,
     subZone,
-    spellID: subZone === 'mark' ? card.spellID : null
+    spellID
   }))
 }
 
 /**
- * 以完整位置候选为主模型，只筛出其中的玩家位置；不能用席位投影覆盖容器或公共候选。
- * 仅在没有完整位置候选时回退到兼容子区投影。
+ * 筛出未决候选或确定事实中的玩家位置，不把容器或公共位置猜成玩家位置。
  */
 export function getCardPlayerLocationCandidates(card: Card): PlayerLocationCandidate[] {
-  if (card.hasLocationCandidates?.()) {
-    return getPlayerLocationCandidates(card.locationCandidates)
-  }
-
-  return getCardSubZoneCandidates(card)
-    .map((candidate) => fromSubZoneCandidate(candidate))
-    .filter((candidate): candidate is PlayerLocationCandidate => Boolean(candidate))
+  return getPlayerLocationCandidates(card.getPossibleLocations())
 }
 
 /**
@@ -69,19 +54,14 @@ export function getUnknownPlayerSourceCards(
 
     if (card.isKnown === true || card.suspended === true) continue
 
-    const hasSourceProjection =
-      card.location === 'player' &&
-      card.subZone === subZone &&
-      card.seats.has(seatID) === true &&
-      matchesSpellID(card.spellID)
     const hasSourceCandidate = getCardPlayerLocationCandidates(card).some(
       (candidate) =>
-        Number(candidate.seatID) === Number(seatID) &&
+        candidate.seatID === seatID &&
         candidate.subZone === subZone &&
         matchesSpellID(candidate.spellID)
     )
 
-    if (!hasSourceProjection && !hasSourceCandidate) continue
+    if (!hasSourceCandidate) continue
 
     const isExactSource = isExactUnknownPlayerSourceCard(card, seatID)
     if (isExactSource) exactCards.push(card)
@@ -100,10 +80,8 @@ export function isExactUnknownPlayerSourceCard(card: Card, seatID: SeatID): bool
     card.location === 'player' &&
     card.isKnown !== true &&
     card.suspended !== true &&
-    card.resolvedSeat === Number(seatID) &&
-    card.seats.size === 1 &&
-    !card.hasLocationCandidates?.() &&
-    !card.hasSubZoneCandidates?.()
+    card.owner === seatID &&
+    !card.hasLocationCandidates()
   )
 }
 

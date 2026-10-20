@@ -31,18 +31,11 @@ export function getConstraintSlotState(
       continue
     }
 
-    const exactKey =
-      card.location === 'player'
-        ? card.owner !== null && card.subZone !== null
-          ? createLocationCandidateKey({
-              type: 'player',
-              seatID: card.owner,
-              subZone: card.subZone,
-              spellID: card.spellID
-            })
-          : ''
-        : createLocationCandidateKey({ type: 'public', zone: card.location })
-    if (exactKey === key) exactCards.push(card)
+    if (
+      card.getPossibleLocations().some((candidate) => createLocationCandidateKey(candidate) === key)
+    ) {
+      exactCards.push(card)
+    }
   }
   return {
     location,

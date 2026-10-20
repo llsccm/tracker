@@ -154,7 +154,7 @@ describe('完整位置候选回归', () => {
     )
   })
 
-  it('重叠约束组切换 combinationID 不驱动 resolve 重循环', () => {
+  it('重叠约束组重复 apply 不驱动 resolve 重循环', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
     const card = getCard(room, 1)
     const firstGroup = new ConstraintGroup({ id: 'test:overlap-a', cards: [card] })
@@ -163,7 +163,7 @@ describe('完整位置候选回归', () => {
     firstGroup.apply()
     secondGroup.apply()
 
-    // 回归：同一张牌可同时属于多个组，combinationID 只能作为标签，不能成为收敛状态。
+    // 同一张牌可同时属于多个组，重复 apply 不能报告虚假的状态变化。
     expect(firstGroup.resolve()).toBe(false)
   })
 

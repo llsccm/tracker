@@ -13,7 +13,6 @@ export interface ReplayWatchedCardState {
   subZone: string | null
   seats: number[]
   candidates: string[]
-  combinationID: string | number | null
   isKnown: boolean
   suspended: boolean
   description: string
@@ -355,7 +354,6 @@ export function createWatchedCardState(card: Card, room: Room): ReplayWatchedCar
       .map((candidate) => createLocationCandidateKey(candidate))
       .filter(Boolean)
       .sort(),
-    combinationID: card.combinationID ?? null,
     isKnown: card.isKnown,
     suspended: card.suspended,
     description: card.getLocationDescription(),
@@ -427,7 +425,6 @@ function isSameWatchedState(left: ReplayWatchedCardState, right: ReplayWatchedCa
     left.subZone === right.subZone &&
     left.isKnown === right.isKnown &&
     left.suspended === right.suspended &&
-    left.combinationID === right.combinationID &&
     sameStrings(left.candidates, right.candidates) &&
     sameNumbers(left.seats, right.seats) &&
     sameStrings(left.constraintGroupIDs, right.constraintGroupIDs)

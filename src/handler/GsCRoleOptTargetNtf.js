@@ -13,7 +13,6 @@ import { clearJieLiState, recordJieLiContext } from '../tracker/skill/JieLi'
 import { laya } from '@/runtime/gameAdapter'
 import { wait } from '@/utils'
 import { handleXiaShuTargetNotice } from './skills/XiaShu'
-// import handleYanXi from './handleYanXi'
 
 function revealPlayerHandCards(seatID, cardIDs, options = {}) {
   tracker.revealTrackerCards({ type: 'player', seatID, ...options }, cardIDs)
@@ -147,15 +146,6 @@ export function handleRoleOptTargetNtf(msg) {
       // }
 
       break
-
-    // 王元姬 识人 宴戏
-    // case 7016:
-    // case 7017:
-    //   if (Params?.length > 0 && (SrcSeatID == Game.myID || import.meta.env.DEV)) {
-    //     handleYanXi(SpellID, Param, Params)
-    //   }
-
-    //   break
 
     // 吕凯 图南 观看牌堆顶一张牌
     case 943:

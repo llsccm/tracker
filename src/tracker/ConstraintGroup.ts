@@ -16,8 +16,6 @@ export interface ConstraintGroupOptions {
   cards?: Card[]
   /** 分组涉及的座位快照，仅用于建立/描述分组，不限制牌的当前候选全集。 */
   candidateSeats?: SeatID[]
-  /** 仅入参糖：建组/更新时转换为普通手牌完整位置名额，不保留座位名额存储。 */
-  expectedSlotsBySeat?: CountMapInput<SeatID>
   expectedSlotsByLocation?: CountMapInput<string | LocationCandidateInput>
   known?: boolean
   sourceEvent?: MoveSourceEvent | string | null
@@ -26,7 +24,6 @@ export interface ConstraintGroupOptions {
 /**
  * 局部约束组，表达一次移动、分配或模糊明牌事件形成的候选包。
  *
- * expectedSlotsBySeat 仅作为普通手牌位置名额的入参糖。
  * expectedSlotsByLocation 约束“这组牌里有几张落在某个完整位置”。
  * 运行时只保存完整位置名额；owner 确定不代表手牌/标记区位置确定。
  */
@@ -44,56 +41,11 @@ export class ConstraintGroup {
     this.id = id
     this.cards = new Set(cards)
     this.candidateSeats = new Set(candidateSeats.map((seat) => Number(seat)))
-    this.expectedSlotsByLocation = this.normalizeSlotOptions(options)
+    this.expectedSlotsByLocation = this.normalizeExpectedLocationSlots(
+      options.expectedSlotsByLocation ?? new Map()
+    )
     this.known = known
     this.sourceEvent = sourceEvent
-  }
-
-  normalizeSlotOptions(
-    options: Pick<ConstraintGroupOptions, 'expectedSlotsBySeat' | 'expectedSlotsByLocation'>,
-    previous: ReadonlyMap<string, number> = new Map()
-  ): Map<string, number> {
-    const hasLocations = options.expectedSlotsByLocation !== undefined
-    const locations = hasLocations
-      ? this.normalizeExpectedLocationSlots(options.expectedSlotsByLocation ?? new Map())
-      : new Map(previous)
-    if (options.expectedSlotsBySeat === undefined) return locations
-
-    // 单独更新座位糖等价于替换普通 hand:none 名额，保留标记、公共区和其它完整 hand key。
-    if (!hasLocations) {
-      for (const key of locations.keys()) {
-        const candidate = parseLocationCandidateKey(key)
-        if (
-          candidate?.type === 'player' &&
-          candidate.subZone === 'hand' &&
-          candidate.spellID === null
-        ) {
-          locations.delete(key)
-        }
-      }
-    }
-    const handSeats = new Set<SeatID>()
-    for (const key of locations.keys()) {
-      const candidate = parseLocationCandidateKey(key)
-      if (candidate?.type === 'player' && candidate.subZone === 'hand')
-        handSeats.add(candidate.seatID)
-    }
-    const seatSlots = options.expectedSlotsBySeat ?? new Map()
-    const entries = seatSlots instanceof Map ? seatSlots.entries() : Object.entries(seatSlots)
-    for (const [seat, count] of entries) {
-      const seatID = Number(seat)
-      if (handSeats.has(seatID)) continue
-      locations.set(
-        createLocationCandidateKey({
-          type: 'player',
-          seatID,
-          subZone: 'hand',
-          spellID: null
-        }),
-        Math.max(0, Number(count) || 0)
-      )
-    }
-    return locations
   }
 
   /**
@@ -125,7 +77,6 @@ export class ConstraintGroup {
     nextCards.forEach((card) => {
       if (card) {
         this.cards.add(card)
-        card.combinationID = this.id
       }
     })
   }
@@ -138,12 +89,6 @@ export class ConstraintGroup {
     let changed = false
 
     this.cards.forEach((card) => {
-      // combinationID 是展示/迁移用的最近分组标签；同一张牌可同时属于多个约束组，
-      // 不能让这个单值标签在组间来回覆盖时驱动收敛继续循环。
-      if (card.combinationID !== this.id) {
-        card.combinationID = this.id
-      }
-
       if (this.known && !card.isKnown) {
         card.confirmKnown()
         changed = true
@@ -156,7 +101,6 @@ export class ConstraintGroup {
   /**
    * 只在当前局部分组内按完整位置名额消元。
    * candidateSeats 是历史座位快照，不能裁剪后续事件添加的完整位置候选。
-   * expectedSlotsBySeat 在入参处已转换为完整手牌位置，不参与运行时消元。
    * @returns 是否发生变化
    */
   resolve(): boolean {

@@ -86,9 +86,11 @@ describe('CardLocationIndex 增量维护', () => {
 
   it('保持桶内 room.cards 顺序：乱序摸入后仍按实体顺序排列', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5], seatIDs: [1, 2] })
+    const earlier = getCard(room, 2)
+    const later = getCard(room, 4)
     room.locationIndex.rebuild(room)
 
-    // 先摸 4（下标 3）再摸 2（下标 1），桶内应仍是 [2, 4]
+    // 先移动后创建的实体，桶内仍按物理实体创建顺序排列。
     ;[4, 2].forEach((id) => {
       const card = getCard(room, id)
       room.zones.get('pile').removeCard(card)
@@ -96,7 +98,7 @@ describe('CardLocationIndex 增量维护', () => {
     })
     room.locationIndex.applyDirtyCardEvents(room)
 
-    expect(room.locationIndex.knownHandBySeat.get(1)).toEqual([getCard(room, 2), getCard(room, 4)])
+    expect(room.locationIndex.knownHandBySeat.get(1)).toEqual([earlier, later])
     expectLocationIndexMatchesRebuild(room)
   })
 

@@ -82,8 +82,6 @@ export class Card extends BaseCard {
   /** 唯一候选存储；写入时冻结，读面可安全共享，不另存兼容投影。 */
   private _locationCandidates: readonly Readonly<LocationCandidate>[] = Object.freeze([])
   declare suspended: boolean
-  /** 嵌套组合指纹 */
-  declare combinationID: string | number | null
 
   /**
    * @param id - 卡牌 ID
@@ -113,7 +111,6 @@ export class Card extends BaseCard {
     this.suspended = false // 候选席位过度发散时暂停追踪
 
     // 3. 嵌套组合指纹 (同生共死关系)
-    this.combinationID = null // 局部约束组 ID，用于记录这张牌参与的最近一次模糊分组
   }
 
   /**
@@ -484,6 +481,15 @@ export class Card extends BaseCard {
   /**
    * 从当前旧状态构造完整位置候选，供迁移期增量更新使用。
    */
+  /** 只读展开当前可能位置：未决候选优先，否则返回确定位置；不写回候选或投影。 */
+  getPossibleLocations(): readonly LocationCandidate[] {
+    if (this.suspended || this.location === 'suspended') return []
+    if (this.locationCandidates.length > 0) return this.locationCandidates
+    if (this.location === 'player') return this.getResolvedLocationCandidates()
+    const candidate = normalizeLocationCandidate({ type: 'public', zone: this.location })
+    return candidate ? [candidate] : []
+  }
+
   private getResolvedLocationCandidates(): LocationCandidate[] {
     if (this.location !== 'player' || this.owner === null) return []
     const candidate = fromSubZoneCandidate({
@@ -642,43 +648,6 @@ export class Card extends BaseCard {
   }
 
   /**
-   * 设置完整位置候选集合。
-   * @returns 是否发生变化
-   */
-  setSubZoneCandidates(
-    candidates: SubZoneCandidateInput[] = [],
-    reason = 'setSubZoneCandidates'
-  ): boolean {
-    const retainedCandidates = this.locationCandidates.filter(
-      (candidate) => candidate.type !== 'player'
-    )
-    const playerCandidates = candidates.map((candidate) => fromSubZoneCandidate(candidate))
-    return this.setLocationCandidates(
-      [...retainedCandidates, ...playerCandidates].filter(Boolean),
-      reason
-    )
-  }
-
-  addSubZoneCandidate(candidate: SubZoneCandidateInput, reason = 'addSubZoneCandidate'): boolean {
-    return this.setSubZoneCandidates([...this.subZoneCandidates, candidate], reason)
-  }
-
-  /**
-   * 移除一个完整位置候选；若只剩一个候选，则自动落定到该位置。
-   */
-  removeSubZoneCandidate(
-    candidate: SubZoneCandidateInput | string,
-    reason = 'removeSubZoneCandidate'
-  ): boolean {
-    const key = typeof candidate === 'string' ? candidate : createSubZoneCandidateKey(candidate)
-    if (!key) return false
-    const target = this.locationCandidates.find(
-      (item) => item.type === 'player' && createSubZoneCandidateKey(item) === key
-    )
-    return target ? this.removeLocationCandidate(target, reason) : false
-  }
-
-  /**
    * 清空子区域候选。通常用于明确移动到公共区或已确定绑定到某个子区域。
    */
   clearSubZoneCandidates(reason = 'clearSubZoneCandidates'): boolean {
@@ -763,7 +732,6 @@ export class Card extends BaseCard {
     const seatsChanged = this.clearSeats(`moveToPublicZone:${destination}`)
     this.location = destination
     this.subZone = null
-    this.combinationID = null
     this.spellID = null
     const candidatesChanged = this.clearSubZoneCandidates(`moveToPublicZone:${destination}`)
     this.storeLocationCandidates([])
@@ -864,7 +832,6 @@ export class Card extends BaseCard {
     this.location = 'pile'
     this.subZone = null
     this.isKnown = false
-    this.combinationID = null
     this.spellID = null
     this.storeLocationCandidates([])
     this.suspended = false

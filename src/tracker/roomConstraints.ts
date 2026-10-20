@@ -61,7 +61,6 @@ interface ConstraintCardOptions {
 interface ConstraintGroupCreateOptions extends ConstraintCardOptions {
   id?: string | number
   combinationID?: string | number
-  expectedSlotsBySeat?: ConstraintGroupOptions['expectedSlotsBySeat']
   expectedSlotsByLocation?: ConstraintGroupOptions['expectedSlotsByLocation']
   sourceEvent?: MoveSourceEvent | string | null
 }
@@ -367,7 +366,6 @@ export class RoomConstraints {
 
       group.cards.delete(previousCard)
       group.cards.add(nextCard)
-      nextCard.combinationID = group.id ?? previousCard.combinationID
       changed = true
     })
 
@@ -580,13 +578,9 @@ export class RoomConstraints {
         }
       }
 
-      if (
-        options.expectedSlotsBySeat !== undefined ||
-        options.expectedSlotsByLocation !== undefined
-      ) {
-        const nextExpectedSlotsByLocation = group.normalizeSlotOptions(
-          options,
-          group.expectedSlotsByLocation
+      if (options.expectedSlotsByLocation !== undefined) {
+        const nextExpectedSlotsByLocation = group.normalizeExpectedLocationSlots(
+          options.expectedSlotsByLocation
         )
         if (!areNumberMapsEqual(group.expectedSlotsByLocation, nextExpectedSlotsByLocation)) {
           group.expectedSlotsByLocation = nextExpectedSlotsByLocation
@@ -655,7 +649,6 @@ export class RoomConstraints {
     this.removeCardsFromConstraintGroups([card])
     card.clearSeats(`suspendKnownCard:${reason}`)
     card.setLocationCandidates([], `suspendKnownCard:${reason}:candidates`)
-    card.combinationID = null
     card.location = 'suspended'
     card.subZone = null
     card.suspended = true

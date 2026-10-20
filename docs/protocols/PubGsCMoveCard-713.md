@@ -64,6 +64,6 @@ ToZoneParam: 0
 
 ## 与现有解码逻辑的差异
 
-`src/handler/skills/Spell713.ts` 中的列表解码逻辑只处理 `MoveType=21` 且 `CardCount === CardIDs.length - 2` 的消息，并将 `CardIDs` 首项作为待剔除下标。本文三条样例均为 `CardCount === CardIDs.length`，因此该解码条件不适用于这组消息。`src/handler/spellEffects.js` 中该技能处理器的注册当前处于注释状态。
+本文三条样例均为 `CardCount === CardIDs.length`，列表直接表示 CardID，不应把首项作为待剔除下标。此前未接入的首项下标解码处理器已删除，当前沿用通用移动与揭示流程。
 
 本文描述的是上述抓包中实际出现的协议字段与顺序，不将解码器预期的下标编码格式外推到本样例。

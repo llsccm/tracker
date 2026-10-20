@@ -77,6 +77,37 @@ function expectIdentityLedgerIntact(room: Room, expectedIdentityIDs: CardID[]): 
 }
 
 describe('身份账本守恒', () => {
+  it('直接洗牌也诊断遗漏的明牌账本事实，补齐事实后初洗保持一致', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [1] })
+    const card = room.materialize(1, room.zones.get('pile')!.cards[0])!
+    room.clearCardsFromPublicZones([card])
+    card.bindCandidates([1], 'hand', null, { known: true })
+    // 显式模拟物理状态已更新、账本事务遗漏；不得因直接调用 Room 而跳过最终校验。
+    const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
+    try {
+      room.shufflePile({ cardCount: 1 })
+      expect(warnSpy).toHaveBeenCalledWith(
+        '牌堆身份账本异常',
+        expect.objectContaining({
+          context: 'move:shuffleDiscardIntoPile',
+          reason: 'cohort-identity-missing-from-room-partition',
+          cardID: 1
+        })
+      )
+
+      room.applyPileIdentityReveal([1])
+      warnSpy.mockClear()
+      room.shufflePile({ cardCount: 1 })
+      expect(warnSpy).not.toHaveBeenCalled()
+      expect(card.location).toBe('player')
+      expect(card.isKnown).toBe(true)
+      expect(room.suspendedKnownCards.size).toBe(0)
+      expect(room.assertPileIdentityLedgerConsistency('test:direct-shuffle')).toEqual([])
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   it('正式牌堆身份断言拒绝正 ID 暗牌堆实体', () => {
     const { room } = createTestRoom({
       cardIDs: [1, 2, 3],

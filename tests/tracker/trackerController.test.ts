@@ -81,6 +81,73 @@ describe('TrackerController', () => {
     expect(patched.CardIDs).toEqual([2])
   })
 
+  it.each([
+    { zone: 6, subZone: 'equip' },
+    { zone: 7, subZone: 'judge' },
+    { zone: 4, subZone: 'mark' }
+  ])('协议手牌来源与确定 $subZone 冲突时告警但不校正', ({ zone, subZone }) => {
+    const warn = vi.fn()
+    const { controller } = createTrackerControllerHarness({ logger: { warn } })
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2, 3])
+    controller.revealTrackerCardsInZone({ zone: 5, id: 3 }, [2, 3])
+    controller.revealTrackerCardsInZone({ zone, id: 3, spellID: 700 }, [1])
+    const room = controller.getTrackerRoom()!
+    const moveSpy = vi.spyOn(room, 'moveCards')
+    warn.mockClear()
+    const move = Object.freeze(protocolMove({ FromZone: 5, FromID: 3, ToZone: 2 }))
+
+    controller.syncTrackerMove(move)
+
+    expect(warn).toHaveBeenCalledOnce()
+    expect(warn).toHaveBeenCalledWith(
+      '协议手牌来源与本地确定子区冲突，仍按协议处理',
+      expect.objectContaining({
+        cardID: 1,
+        fromSeatID: 3,
+        fromSubZone: 'hand',
+        localSubZone: subZone
+      })
+    )
+    expect(moveSpy).toHaveBeenCalledWith(
+      [1],
+      'discard',
+      expect.objectContaining({ fromSeatID: 3, fromSubZone: 'hand' })
+    )
+    expect(room.cardIndex.get(1)?.location).toBe('discard')
+    expect(move.FromZone).toBe(5)
+  })
+
+  it.each([false, true])('真实手牌来源有完整位置候选=%s 时不误告警或校正', (ambiguous) => {
+    const warn = vi.fn()
+    const { controller } = createTrackerControllerHarness({ logger: { warn } })
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2])
+    controller.revealTrackerCardsInZone({ zone: ambiguous ? 4 : 5, id: 3, spellID: 700 }, [1])
+    const room = controller.getTrackerRoom()!
+    const card = room.cardIndex.get(1)!
+    if (ambiguous) {
+      card.setLocationCandidates([
+        { type: 'player', seatID: 3, subZone: 'mark', spellID: 700 },
+        { type: 'player', seatID: 3, subZone: 'hand' }
+      ])
+    }
+    const moveSpy = vi.spyOn(room, 'moveCards')
+    warn.mockClear()
+
+    controller.syncTrackerMove(protocolMove({ FromZone: 5, FromID: 3, ToZone: 2 }))
+
+    expect(warn).not.toHaveBeenCalled()
+    expect(moveSpy).toHaveBeenCalledWith(
+      [1],
+      'discard',
+      expect.objectContaining({ fromSeatID: 3, fromSubZone: 'hand' })
+    )
+    expect(card.location).toBe('discard')
+  })
+
   it('临时隐藏和恢复座位保留手牌事实，重复状态不产生卡牌变更', () => {
     const { controller } = createTrackerControllerHarness()
     controller.initTrackerRoom()
