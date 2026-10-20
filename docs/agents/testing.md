@@ -216,6 +216,8 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
   `exchange` 等非牌堆公共区在无 CardIDs 时仍须按端点移除实际实体，包括已知牌。
 - Room/ledger 事务完成后，cohort 身份必须恰好位于 `unlocatedIdentities` 或
   `suspendedKnownCards`，不能缺失或同时存在于两边。
+- 直接调用 Room 的洗牌测试也执行最终身份校验；直接准备实体的夹具必须提交对应明牌/移动账本事实，
+  历史正 ID 暗实体对照不能豁免已公开身份的账本更新。
 
 纯模型的历史推演与 oracle 边界仍归档于
 本地 [`plans/pile-generation-identity-pool-plan.md`](../../plans/pile-generation-identity-pool-plan.md)。

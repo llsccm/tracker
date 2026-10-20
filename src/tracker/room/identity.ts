@@ -330,25 +330,12 @@ export class RoomIdentity {
       const [targetZoneID, targetZone] = targetZoneEntry
       room.removeCardsFromConstraintGroups([target])
       room.constraints.replaceCardInConstraintGroups(existing, target)
-      existing.setLocationCandidates([], 'materialize:interop:known')
       existing.moveToPublicZone(targetZoneID)
       targetZone.replaceCard(target, existing)
 
+      target.bindCandidates(oldSeats, oldSubZone, oldSpellID, { known: false })
       if (oldLocationCandidates.length > 0) {
-        target.location = 'player'
-        target.subZone = oldSubZone
-        target.spellID = oldSpellID
-        target.suspended = false
         target.setLocationCandidates(oldLocationCandidates, 'materialize:interop:placeholder')
-        target.setSeats(oldSeats, 'materialize:interop:placeholder')
-        room.markCounterDirty(target)
-        room.notifyCardChanged(target, {
-          type: 'card-bound',
-          subZone: oldSubZone,
-          spellID: oldSpellID
-        })
-      } else {
-        target.bindCandidates(oldSeats, oldSubZone, oldSpellID, { known: false })
       }
 
       room.movement.hiddenMarks.replaceHiddenMarkPlaceholder(existing, target)
@@ -491,10 +478,6 @@ export class RoomIdentity {
       if (existing && (existing.suspended === true || room.suspendedKnownCards.has(existing))) {
         return
       }
-
-      // 已经通过协议公开的身份不属于“尚未出现”。正常生产事务中 ledger 已把它移出 cohort；
-      // 该分支同时让直接调用 Room 的测试/兼容路径不会把可见实体错误暂停。
-      if (existing?.isKnown === true) return
 
       if (existing) {
         const releasedIdentityID = room.anonymizeLocatedIdentity(

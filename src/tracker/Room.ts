@@ -665,7 +665,6 @@ export class Room extends RoomBase {
     const hasProtocolPileCount = Number.isFinite(normalizedCardCount) && normalizedCardCount >= 0
     const remainingPileCards = [...pile.cards]
     const recycledCards = [...discard.cards]
-    const hasAuthoritativeIdentityMove = options.identityMove !== undefined
     const projectedPileCount = remainingPileCards.length + recycledCards.length
     const targetPileCount = hasProtocolPileCount ? normalizedCardCount : projectedPileCount
     const knownRemainingPileCards = remainingPileCards.filter(
@@ -782,9 +781,7 @@ export class Room extends RoomBase {
     // 账本已经在物理事务前滚动；这里完成实体投影、收敛与最终态校验，事务中间态不告警。
     this.identity.anonymizePileCohortIdentityEntities(identityContext)
     this.resolveConstraints()
-    // 直接调用 Room 的历史测试可能绕过此前移动的账本事件；只有 Controller 提供完整事件时，
-    // 才能要求 Room 分区与账本在本次事务末尾严格一致。
-    if (hasAuthoritativeIdentityMove) this.assertPileIdentityLedgerConsistency(identityContext)
+    this.assertPileIdentityLedgerConsistency(identityContext)
   }
 
   private applyPileIdentityShuffleBeforePhysicalMove(

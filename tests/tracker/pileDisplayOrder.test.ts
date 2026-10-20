@@ -31,13 +31,39 @@ function getCards(room: Room, ids: number[]) {
 
 function recycleIdsToDiscard(room: Room, ids: number[]) {
   const pile = getPile(room)
+  const pileCountBefore = pile.cards.length
   const discard = getDiscard(room)
   const cards = getCards(room, ids)
   cards.forEach((card) => {
     pile.removeCard(card)
     discard.add(card)
   })
+  room.pileIdentityLedger.applyMove({
+    eventType: 'moveKnown',
+    fromZone: 1,
+    toZone: 2,
+    cardIDs: ids,
+    cardCount: cards.length,
+    pileCountBefore,
+    pileCountAfter: pile.cards.length,
+    discardCountAfter: discard.cards.length
+  })
   return cards
+}
+
+/** 同步本用例直接准备的明暗手牌，暗槽只提交数量，不绑定其历史正 ID。 */
+function recordHandSetup(room: Room, knownIDs: number[], count: number) {
+  const pileCountAfter = getPile(room).cards.length
+  room.pileIdentityLedger.applyMove({
+    eventType: 'moveKnown',
+    fromZone: 1,
+    toZone: 5,
+    cardIDs: knownIDs,
+    cardCount: count,
+    pileCountBefore: pileCountAfter + count,
+    pileCountAfter,
+    discardCountAfter: getDiscard(room).cards.length
+  })
 }
 
 function removeIdsFromPile(room: Room, ids: number[]) {
@@ -343,7 +369,16 @@ describe('牌堆展示顺序', () => {
       seatIDs: [1],
       materializeDeckIdentities: false
     })
-    const [hiddenHandCard] = bindHiddenHands(room, [4], 1, false)
+    const hiddenHandCard = takeAnonymousCard(room)
+    hiddenHandCard.bindCandidates([1], 'hand')
+    room.applyPileIdentityMove({
+      eventType: 'move',
+      fromZone: 1,
+      toZone: 5,
+      cardIDs: [],
+      cardCount: 1,
+      pileCountBefore: 4
+    })
     room.getPlayer(1).syncObservedHandCount(1)
 
     withWarnSpy((warnSpy) => {
@@ -357,7 +392,7 @@ describe('牌堆展示顺序', () => {
     expect(hiddenHandCard.suspended).toBe(false)
     expect(getSuspendedIdentityIDs(room)).toEqual([])
     expect(getPublicFieldCandidateCards(room)).not.toContain(hiddenHandCard)
-    expect(room.counter.cardInstances[hiddenHandCard.id].status).toBe(CARD_INSTANCE_STATUS.UNKNOWN)
+    expect(room.counter.cardInstances[4].status).toBe(CARD_INSTANCE_STATUS.UNKNOWN)
     expectConsistentPublicZones(room)
   })
 
@@ -374,6 +409,7 @@ describe('牌堆展示顺序', () => {
     pile.removeCard(knownHandCard)
     pile.removeCard(suspendedHandIdentity)
     knownHandCard.bindCandidates([4], 'hand', null, { known: true })
+    recordHandSetup(room, [113], 2)
     // 模拟真实复现日志：洗牌时 137 的本地暗槽位错误地记录在 seat 0，
     // 但 4 号的观测手牌数为 2，除明牌 113 外还需要 1 个暗手牌槽位。
     suspendedHandIdentity.isKnown = false
@@ -461,6 +497,7 @@ describe('牌堆展示顺序', () => {
     pile.removeCard(knownHandCard)
     pile.removeCard(suspendedHandIdentity)
     knownHandCard.bindCandidates([4], 'hand', null, { known: true })
+    recordHandSetup(room, [113], 2)
     suspendedHandIdentity.isKnown = false
     suspendedHandIdentity.bindCandidates([4], 'hand', null, { known: false })
     room.getPlayer(4).syncObservedHandCount(2)
@@ -522,6 +559,7 @@ describe('牌堆展示顺序', () => {
     getPile(room).removeCard(visibleHandCard)
     getPile(room).removeCard(hiddenHandPlaceholder)
     visibleHandCard.bindCandidates([1], 'hand', null, { known: true })
+    recordHandSetup(room, [4], 2)
     hiddenHandPlaceholder.isKnown = false
     hiddenHandPlaceholder.bindCandidates([1], 'hand', null, { known: false })
     room.getPlayer(1).syncObservedHandCount(2)
@@ -562,6 +600,7 @@ describe('牌堆展示顺序', () => {
     getPile(room).removeCard(visibleHandCard)
     getPile(room).removeCard(hiddenMarkPlaceholder)
     visibleHandCard.bindCandidates([1], 'hand', null, { known: true })
+    recordHandSetup(room, [4], 2)
     hiddenMarkPlaceholder.isKnown = false
     hiddenMarkPlaceholder.bindCandidates([1], 'hand', null, { known: false })
     room.getPlayer(1).syncObservedHandCount(2)
@@ -676,6 +715,7 @@ describe('牌堆展示顺序', () => {
       card.bindCandidates([7], 'hand', null, { known: false })
     })
     room.getPlayer(7).syncObservedHandCount(3)
+    recordHandSetup(room, [1], 3)
 
     room.moveCards([0, 0], 'player', {
       toSeatID: 7,
