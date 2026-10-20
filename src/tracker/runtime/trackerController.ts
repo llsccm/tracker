@@ -291,20 +291,19 @@ export class TrackerController {
       if (deferGuiFuMove(readyRoom, raw, patched)) return
       const normalizedEvent = normalizeMoveEvent(patched, raw)
 
-      // normalizedEvent 只代表协议文本；下一步还要根据当前卡牌状态修正来源子区。
+      // 来源区域由协议给出；本地代表子区可能仍为 mark，不能覆盖 hand/mark 完整位置候选。
       this.controllerLogger.debug(
         '移动事件归一化',
         summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS)
       )
 
-      const stateEvent = this.normalizeEventWithTrackerState(normalizedEvent)
       // 技能处理器
-      const event = readyRoom.decorateMoveEvent(stateEvent)
+      const event = readyRoom.decorateMoveEvent(normalizedEvent)
       const pileCountBefore = readyRoom.zones.get('pile')?.cards.length ?? 0
       const knownPileDrawCards = this.collectRegularDrawKnownPileCards(readyRoom, patched, event)
 
       this.controllerLogger.debug('移动事件装饰完成', {
-        before: summarizeMoveEvent(stateEvent, MOVE_EVENT_SUMMARY_OPTIONS),
+        before: summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS),
         after: summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
       })
 
@@ -817,43 +816,6 @@ export class TrackerController {
       },
       ids
     )
-  }
-
-  /**
-   * 根据当前 Room 中已知卡牌位置修正移动来源子区。
-   * 协议有时把装备/判定/标记区移动写成手牌来源；若不修正，会错误扣减手牌额度。
-   */
-  private normalizeEventWithTrackerState(event: NormalizedMoveEvent): NormalizedMoveEvent {
-    const readyRoom = this.getReadyTrackerRoom()
-    if (!readyRoom || event.options.fromSubZone !== 'hand') return event
-
-    const fromSeat = Number(event.options.fromSeatID)
-    if (Number.isNaN(fromSeat)) return event
-
-    const actualSubZones = new Set(
-      readyRoom
-        .findCardsByIDs(event.cardIDs)
-        .filter(
-          (card) =>
-            card.location === 'player' &&
-            card.seats.has(fromSeat) &&
-            card.subZone &&
-            card.subZone !== 'hand'
-        )
-        .map((card) => card.subZone)
-    )
-
-    if (actualSubZones.size !== 1) return event
-
-    const fromSubZone = Array.from(actualSubZones)[0]
-    return {
-      ...event,
-      options: {
-        ...event.options,
-        fromSubZone,
-        subZone: event.toZone === 'player' ? event.options.subZone : fromSubZone
-      }
-    }
   }
 
   private normalizeIDs(cardIDs: readonly CardID[] | CardID = []): CardID[] {

@@ -195,16 +195,19 @@ export class RoomMovementSources {
       return false
     }
 
-    // 手牌来源只认 hand；同座 mark（木马）不是 hand 来源。
-    // 若协议声明 hand 却把 mark 实体当 hand，会把木马槽误当成出牌实体。
+    // 逐个完整位置匹配来源。代表子区和 seats 不能交叉组合成不存在的玩家位置；
+    // “0 号标记 / 3 号手牌”既能承接 3 号手牌揭示，也不会冒充 3 号标记来源。
     return (
       card.location === 'player' &&
-      card.subZone === fromSubZone &&
-      card.seats.has(fromSeat) &&
-      (fromSubZone !== 'mark' ||
-        sourceSpellID === null ||
-        sourceSpellID === undefined ||
-        card.spellID === sourceSpellID)
+      getCardPlayerLocationCandidates(card).some(
+        (candidate) =>
+          candidate.seatID === fromSeat &&
+          candidate.subZone === fromSubZone &&
+          (fromSubZone !== 'mark' ||
+            sourceSpellID === null ||
+            sourceSpellID === undefined ||
+            candidate.spellID === sourceSpellID)
+      )
     )
   }
 

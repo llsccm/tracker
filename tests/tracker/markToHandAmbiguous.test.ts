@@ -1,9 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { isAnonymous } from '@/tracker/Card'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
 import { getPlayerHandCardsBySeat } from '@/tracker/roomMovement/sourceQueries'
 import { createTestRoom, getCard } from './helpers/room'
+import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { trackerLogger } from '@/utils/logger'
 
 /** 复现“第三视角观测标记区暗牌进入手牌”的原始协议。 */
 function moveHiddenMarkToHand(
@@ -35,6 +38,108 @@ function bindMarkCards(room: Room, cardIDs: number[], seatID: number, spellID: n
 }
 
 describe('标记区暗牌进入手牌', () => {
+  it.each([{ discardIDs: [92, 111, 96] }, { discardIDs: [96, 92, 111] }])(
+    '控制器按手牌协议弃置标记候选与匿名手牌，不受揭示顺序影响：$discardIDs',
+    ({ discardIDs }) => {
+      const { controller } = createTrackerControllerHarness()
+      controller.initTrackerRoom()
+      controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }, { SeatID: 3 }], 100)
+      // 97 仅作为第二张标记明牌的夹具身份；其余 ID 来自问题协议。
+      controller.initTrackerDeck([92, 111, 96, 97, 31275])
+      const room = controller.getTrackerRoom()!
+      const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
+      try {
+        controller.syncTrackerMove(
+          protocolMove({
+            CardIDs: [96, 97],
+            CardCount: 2,
+            ToZone: 4,
+            ToID: 0,
+            ToZoneParam: 3657,
+            SpellID: 3657,
+            MoveType: 19
+          })
+        )
+        controller.syncTrackerMove(protocolMove({ CardIDs: [], CardCount: 2, ToID: 3 }))
+        controller.syncTrackerMove(protocolMove({ CardIDs: [31275], ToZone: 6, ToID: 3 }))
+        const anonymousHand = getPlayerHandCardsBySeat(room, 3).filter(isAnonymous)
+        expect(anonymousHand).toHaveLength(2)
+        controller.syncTrackerMove(
+          protocolMove({
+            CardIDs: [],
+            CardCount: 1,
+            FromID: 0,
+            FromZone: 4,
+            FromZoneParam: 3657,
+            FromPosition: 65282,
+            MoveType: 27,
+            SpellID: 3658,
+            ToID: 3
+          })
+        )
+        const candidate = room.cardIndex.get(96)!
+        expect(candidate.subZone).toBe('mark')
+        expect(candidate.getPossibleLocations()).toEqual(
+          expect.arrayContaining([
+            { type: 'player', seatID: 0, subZone: 'mark', spellID: 3657 },
+            { type: 'player', seatID: 3, subZone: 'hand', spellID: null }
+          ])
+        )
+        expect(room.getPlayer(3).observedHandCount).toBe(3)
+
+        controller.syncTrackerMove(
+          protocolMove({
+            CardIDs: [31275],
+            FromID: 3,
+            FromZone: 6,
+            FromPosition: 65282,
+            MoveType: 4,
+            ToID: 255,
+            ToZone: 12
+          })
+        )
+        expect(room.getPlayer(3).observedHandCount).toBe(3)
+        const entityCountBefore = room.cards.length
+        controller.syncTrackerMove(
+          protocolMove({
+            CardIDs: discardIDs,
+            CardCount: 3,
+            FromID: 3,
+            FromZone: 5,
+            FromPosition: 65282,
+            MoveType: 4,
+            ToID: 255,
+            ToZone: 2
+          })
+        )
+
+        expect(room.cards).toHaveLength(entityCountBefore)
+        expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual(discardIDs)
+        expect(anonymousHand).toContain(room.cardIndex.get(92))
+        expect(anonymousHand).toContain(room.cardIndex.get(111))
+        expect(room.getPlayer(3).observedHandCount).toBe(0)
+        expect(getPlayerHandCardsBySeat(room, 3)).toEqual([])
+        expect(room.cardIndex.get(97)).toMatchObject({
+          location: 'player',
+          owner: 0,
+          subZone: 'mark',
+          spellID: 3657
+        })
+        expect(
+          room.locationIndex.markBySeatAndSpell
+            .get(0)
+            ?.get(3657)
+            ?.map((card) => card.id)
+        ).toEqual([97])
+        expect(room.assertPileIdentityLedgerConsistency('test:mark-to-hand-discard')).toEqual([])
+        expect(warnSpy).not.toHaveBeenCalled()
+      } finally {
+        warnSpy.mockRestore()
+        controller.destroyTrackerRoom()
+      }
+    }
+  )
+
   it('可见牌多于协议张数时建立标记/手牌双边候选', () => {
     const { room } = createTestRoom({ cardIDs: [11, 12], seatIDs: [0, 3] })
     const [firstMark, secondMark] = bindMarkCards(room, [11, 12], 0, 3657)
