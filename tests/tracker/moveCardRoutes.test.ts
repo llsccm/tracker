@@ -117,7 +117,7 @@ describe('Room.moveCards 组合路线', () => {
 
     const pileCards = room.zones.get('pile').cards
 
-    expect(room.cards.filter((card) => isAnonymous(card))).toHaveLength(0)
+    expect(room.cards.every(isAnonymous)).toBe(true)
     expect(markPlaceholders.filter((card) => pileCards.includes(card))).toHaveLength(4)
     const remainingMarkPlaceholders = markPlaceholders.filter((card) => card.location === 'player')
     expect(remainingMarkPlaceholders).toHaveLength(1)
@@ -159,7 +159,7 @@ describe('Room.moveCards 组合路线', () => {
 
     const pileCards = room.zones.get('pile').cards
 
-    expect(room.cards.filter((card) => isAnonymous(card))).toHaveLength(0)
+    expect(room.cards.every(isAnonymous)).toBe(true)
     expect(spell35Cards.filter((card) => pileCards.includes(card))).toHaveLength(1)
     expect(spell36Cards.some((card) => pileCards.includes(card))).toBe(false)
     expect(markSpaceState.spaces.get(35)).toHaveLength(1)

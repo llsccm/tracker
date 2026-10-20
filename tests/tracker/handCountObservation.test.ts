@@ -4,14 +4,19 @@ import { trackerLogger } from '@/utils/logger'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { computeHandSlotAllocation } from '@/tracker/candidate/handSlotUsage'
 import type { RoomMoveContext } from '@/tracker/roomMovement/types'
-import { createTestRoom, getCard } from './helpers/room'
+import { createTestRoom, getCard, takeAnonymousCard } from './helpers/room'
 import { playerLocation } from './helpers/locationCandidates'
 import { getPlayerHandCardsBySeat } from '@/tracker/roomMovement/sourceQueries'
 
 describe('玩家手牌数观测', () => {
   it('暗实体覆盖也扣除跨组限制后的明牌容量，不重复补建实体', () => {
     const { room } = createTestRoom({ cardIDs: [11, 12, 13, 14], seatIDs: [1] })
-    const cards = [11, 12, 13, 14].map((id) => getCard(room, id)!)
+    const cards = [
+      getCard(room, 11)!,
+      getCard(room, 12)!,
+      takeAnonymousCard(room),
+      takeAnonymousCard(room)
+    ]
     const hand = playerLocation(1, 'hand')
     const mark = playerLocation(1, 'mark', 700)
     room.clearCardsFromPublicZones(cards)
@@ -30,12 +35,12 @@ describe('玩家手牌数观测', () => {
     })
     room.resolveConstraints()
     expect(room.playerCardsSnapshot).toHaveLength(4)
-    expect(room.cards.some((card) => isAnonymous(card))).toBe(false)
+    expect(room.cards.filter(isAnonymous)).toHaveLength(2)
   })
 
   it.each([false, true])('共享暗实体无法满足全部名额时暂停补位（逆序建组：%s）', (reverse) => {
     const { room } = createTestRoom({ cardIDs: [11], seatIDs: [1, 2] })
-    const card = getCard(room, 11)!
+    const card = takeAnonymousCard(room)
     room.clearCardsFromPublicZones([card])
     card.bindCandidates([1, 2], 'hand')
     const seats = reverse ? [2, 1] : [1, 2]
@@ -62,7 +67,13 @@ describe('玩家手牌数观测', () => {
 
   it('统一分配同时给出确定明暗占用、候选上界和匿名缺口，并保留未观测语义', () => {
     const { room } = createTestRoom({ cardIDs: [11, 12, 13, 14, 15], seatIDs: [1, 2] })
-    const cards = [11, 12, 13, 14, 15].map((id) => getCard(room, id)!)
+    const cards = [
+      getCard(room, 11)!,
+      takeAnonymousCard(room),
+      getCard(room, 13)!,
+      takeAnonymousCard(room),
+      takeAnonymousCard(room)
+    ]
     room.clearCardsFromPublicZones(cards)
     cards[0].bindCandidates([1], 'hand', null, { known: true })
     cards[1].bindCandidates([1], 'hand')
@@ -88,7 +99,7 @@ describe('玩家手牌数观测', () => {
       anonymousExcessCount: null,
       canReconcileAnonymous: false
     })
-    expect(unobserved.exactHiddenCards.map((card) => card.id)).toEqual([12])
+    expect(unobserved.exactHiddenCards).toEqual([cards[1]])
     player.syncObservedHandCount(5)
     const allocation = computeHandSlotAllocation(room, [1]).get(1)!
     expect(allocation).toMatchObject({
@@ -108,7 +119,7 @@ describe('玩家手牌数观测', () => {
     expect(room.playerCardsSnapshot).toHaveLength(6)
     expect(
       room.cards.filter((card) => isAnonymous(card) && card.location === 'player')
-    ).toHaveLength(1)
+    ).toHaveLength(4)
     expect(computeHandSlotAllocation(room, [1]).get(1)?.anonymousMissingCount).toBe(0)
   })
 
@@ -372,7 +383,7 @@ describe('玩家手牌数观测', () => {
 
   it('共享部分暗实体的约束包保留不同座位的可行覆盖', () => {
     const { room } = createTestRoom({ cardIDs: [130, 131, 132], seatIDs: [1, 2, 3] })
-    const [first, shared, third] = [130, 131, 132].map((id) => getCard(room, id))
+    const [first, shared, third] = Array.from({ length: 3 }, () => takeAnonymousCard(room))
     const seat1Hand = playerLocation(1, 'hand')
     const seat2Hand = playerLocation(2, 'hand')
 
@@ -409,8 +420,8 @@ describe('玩家手牌数观测', () => {
 
   it('同一席位的多个手牌位置约束合并全部暗实体候选', () => {
     const { room } = createTestRoom({ cardIDs: [130, 131], seatIDs: [1, 2] })
-    const first = getCard(room, 130)
-    const second = getCard(room, 131)
+    const first = takeAnonymousCard(room)
+    const second = takeAnonymousCard(room)
     const firstHand = playerLocation(1, 'hand', 100)
     const secondHand = playerLocation(1, 'hand', 200)
     const otherHand = playerLocation(2, 'hand')
@@ -583,7 +594,7 @@ describe('玩家手牌数观测', () => {
   it('模糊身份迁移约束组后保留新组合标签', () => {
     const { room } = createTestRoom({ cardIDs: [29, 130], seatIDs: [1, 2] })
     const candidateCard = getCard(room, 29)
-    const placeholder = getCard(room, 130)
+    const placeholder = takeAnonymousCard(room)
     const sourceHand = playerLocation(1, 'hand')
     const otherHand = playerLocation(2, 'hand')
     const context = {
@@ -594,6 +605,7 @@ describe('玩家手牌数观测', () => {
     } as RoomMoveContext
 
     room.clearCardsFromPublicZones([candidateCard, placeholder])
+    candidateCard.isKnown = false
     candidateCard.setLocationCandidates([sourceHand, otherHand])
     placeholder.bindCandidates([1], 'hand', null, { known: false })
     const group = room.createConstraintGroup({

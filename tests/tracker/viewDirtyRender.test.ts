@@ -98,14 +98,14 @@ describe('视图 dirty 渲染状态', () => {
     }
   ])('受影响座位：$name', ({ seatIDs, prepare, assert }) => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs })
-    const card = room.cardIndex.get(1)!
+    const card = room.cards[0]
     prepare(room, card)
     assert(collectDirtyRenderState(room))
   })
 
   it('收集脏状态不会在渲染完成前提前消费事件', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
-    const card = room.cardIndex.get(1)!
+    const card = room.cards[0]
 
     card.bindTo([1], 'hand')
 
@@ -124,8 +124,8 @@ describe('视图 dirty 渲染状态', () => {
 
   it('按收集快照完成渲染时不会消费渲染期间新增的脏事件', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [1, 2] })
-    const firstCard = room.cardIndex.get(1)!
-    const secondCard = room.cardIndex.get(2)!
+    const firstCard = room.cards[0]
+    const secondCard = room.cards[1]
 
     firstCard.bindTo([1], 'hand')
     const state = collectDirtyRenderState(room)
@@ -140,8 +140,8 @@ describe('视图 dirty 渲染状态', () => {
 
   it('dirty event 日志被裁剪时触发全玩家手牌兜底刷新', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [1, 2] })
-    const firstCard = room.cardIndex.get(1)!
-    const secondCard = room.cardIndex.get(2)!
+    const firstCard = room.cards[0]
+    const secondCard = room.cards[1]
 
     firstCard.bindTo([1], 'hand')
     secondCard.bindTo([2], 'hand')

@@ -75,6 +75,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
 
   it('公共 known 不覆盖正 ID 暗牌顶，缺失实体走诊断兜底', () => {
     const { room } = createTestRoom({
+      materializeDeckIdentities: true,
       cardIDs: [1, 2, 3, 4, 5],
       seatIDs: [1]
     })
@@ -425,6 +426,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
 
   it('洗牌时将 cohort 暗标记实体原地匿名化', () => {
     const { room } = createTestRoom({
+      materializeDeckIdentities: true,
       cardIDs: [1, 2, 3, 4, 5],
       seatIDs: [1]
     })

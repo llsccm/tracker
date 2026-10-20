@@ -21,12 +21,20 @@ describe('getPublicEndpointCards 位置归一化', () => {
   it('Zone.add 对普通数值 ToPosition 按底到顶的零基插槽插入', () => {
     const { room } = createTestRoom({ cardIDs: [11, 12, 13, 14] })
     const pile = room.zones.get('pile')!
+    const originalCards = [...pile.cards]
     const insertedCards = room.createExternalCards([91, 92], 2)
 
     pile.add(insertedCards, 2)
 
     // 批量位置与 POSITION_BOTTOM 语义一致：协议数组末张更靠近牌底。
-    expect(pile.cards.map((card) => card.id)).toEqual([11, 12, 92, 91, 13, 14])
+    expect(pile.cards).toEqual([
+      originalCards[0],
+      originalCards[1],
+      insertedCards[1],
+      insertedCards[0],
+      originalCards[2],
+      originalCards[3]
+    ])
   })
 
   it('数值常量与 bottom 字符串都走牌底，不误入牌顶', () => {
@@ -73,9 +81,7 @@ describe('getPublicEndpointCards 位置归一化', () => {
   })
 
   it('materializeAtPublicEndpoint 不覆盖其它正 ID 暗端点', () => {
-    const { room } = createTestRoom({
-      cardIDs: [31, 32]
-    })
+    const { room } = createTestRoom({ materializeDeckIdentities: true, cardIDs: [31, 32] })
     const pile = room.zones.get('pile')!
     const hiddenEndpoint = pile.cards.at(-1)!
     room.anonymizeLocatedIdentity(room.cardIndex.get(31)!, 'test:phase5-unlocated-endpoint', {
@@ -94,9 +100,7 @@ describe('getPublicEndpointCards 位置归一化', () => {
   })
 
   it('materializeAtPublicEndpoint 直接确认端点中的同 ID 实体', () => {
-    const { room } = createTestRoom({
-      cardIDs: [31, 32]
-    })
+    const { room } = createTestRoom({ materializeDeckIdentities: true, cardIDs: [31, 32] })
     const pile = room.zones.get('pile')!
     const hiddenEndpoint = pile.cards.at(-1)!
 
@@ -115,10 +119,10 @@ describe('getPublicEndpointCards 位置归一化', () => {
       cardIDs: [41, 42, 43]
     })
     const pile = room.zones.get('pile')!
-    const suspendedIdentity = room.cardIndex.get(41)!
+    const suspendedIdentity = room.materialize(41, pile.cards[0])!
     pile.removeCard(suspendedIdentity)
     room.constraints.suspendKnownCard(suspendedIdentity, 'test:phase5-public-reveal')
-    const anonymousTarget = room.cardIndex.get(43)!
+    const anonymousTarget = pile.cards.at(-1)!
     room.anonymizeLocatedIdentity(anonymousTarget, 'test:phase5-suspended-target', {
       preservePlacement: true
     })

@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { getPublicFieldCandidateCards } from '@/tracker/view/publicFieldCandidates'
-import { createTestRoom } from './helpers/room'
+import { createTestRoom, getCard } from './helpers/room'
 
 describe('公共区模糊明牌候选', () => {
   it('索引缺项时合并当前手牌候选扫描结果', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [1, 2] })
-    const indexedCard = room.cardIndex.get(1)!
-    const missingCard = room.cardIndex.get(2)!
+    const indexedCard = getCard(room, 1)
+    const missingCard = getCard(room, 2)
 
     indexedCard.bindCandidates([1, 2], 'hand', null, { known: true })
     room.ambiguousKnownIndex.rebuild()
@@ -18,7 +18,7 @@ describe('公共区模糊明牌候选', () => {
 
   it('索引过期时移除已经进入弃牌堆的候选', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
-    const card = room.cardIndex.get(1)!
+    const card = getCard(room, 1)
 
     card.bindCandidates([1, 2], 'hand', null, { known: true })
     room.ambiguousKnownIndex.rebuild()
@@ -29,7 +29,7 @@ describe('公共区模糊明牌候选', () => {
 
   it('索引完整时不全量扫描房间卡牌池', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
-    const card = room.cardIndex.get(1)!
+    const card = getCard(room, 1)
 
     card.bindCandidates([1, 2], 'hand', null, { known: true })
     room.ambiguousKnownIndex.rebuild()
@@ -45,8 +45,8 @@ describe('公共区模糊明牌候选', () => {
 
   it('脏牌事件日志被裁剪时兜底扫描 dirtyCards', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [1, 2] })
-    const indexedCard = room.cardIndex.get(1)!
-    const missingCard = room.cardIndex.get(2)!
+    const indexedCard = getCard(room, 1)
+    const missingCard = getCard(room, 2)
 
     indexedCard.bindCandidates([1, 2], 'hand', null, { known: true })
     room.ambiguousKnownIndex.rebuild()
@@ -58,7 +58,7 @@ describe('公共区模糊明牌候选', () => {
 
   it('销毁房间时清理脏牌事件日志', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
-    const card = room.cardIndex.get(1)!
+    const card = getCard(room, 1)
 
     card.bindCandidates([1, 2], 'hand', null, { known: true })
     expect(room.dirtyCards.size).toBeGreaterThan(0)

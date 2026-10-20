@@ -13,7 +13,7 @@ import {
 import type { Room } from '@/tracker/Room'
 import type { CardID } from '@/tracker/types'
 import { collectTraversalStats } from '@/tracker/traversalStats'
-import { createTestRoom, getCard } from './helpers/room'
+import { createTestRoom, getCard, takeAnonymousCard } from './helpers/room'
 import { equipmentContainer, playerLocation } from './helpers/locationCandidates'
 
 afterEach(() => vi.restoreAllMocks())
@@ -144,7 +144,7 @@ describe('装备标记容器只读规则', () => {
   it('迁座增量读取刚进入玩家区的明暗标记，不扫描全牌池或迁移其他标记', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4], seatIDs: [0, 6] })
     const known = getCard(room, 1)!
-    const unknown = getCard(room, 2)!
+    const unknown = takeAnonymousCard(room)
     const otherMark = getCard(room, 3)!
     room.clearCardsFromPublicZones([known, unknown, otherMark])
     known.bindCandidates([0], 'mark', 700, { known: true })

@@ -6,7 +6,8 @@ import {
   type HiddenMarkState,
   type RoomMoveContext
 } from '@/tracker/roomMovement/types'
-import { createTestRoom, getCard } from './helpers/room'
+import { createTestRoom, getCard, takeAnonymousCard } from './helpers/room'
+import { isAnonymous } from '@/tracker/Card'
 import {
   equipmentContainer,
   outsideLocation,
@@ -127,7 +128,7 @@ describe('隐藏标记区候选', () => {
   it('414 标记区全暗回手牌时兼容 3389 返回事件', () => {
     const { room } = createTestRoom({ cardIDs: [136, 137, 138, 139], seatIDs: [6] })
     const knownCard = getCard(room, 136)
-    const hiddenCards = [137, 138, 139].map((id) => getCard(room, id))
+    const hiddenCards = room.zones.get('pile')!.cards.filter(isAnonymous)
 
     room.moveCards([136], 'player', {
       toSeatID: 6,
@@ -232,7 +233,7 @@ describe('隐藏标记区候选', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [6, 7] })
     const candidateCard = getCard(room, 1)
     const knownCard = getCard(room, 2)
-    const placeholder = getCard(room, 3)
+    const placeholder = takeAnonymousCard(room)
     const sourceMark = playerLocation(6, 'mark', 414)
     const otherHand = playerLocation(7, 'hand')
     const context = {
@@ -271,8 +272,8 @@ describe('隐藏标记区候选', () => {
 
   it('玩家暗标记来源保留 spell ID 数组中的全部兼容值', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [6] })
-    const first = getCard(room, 1)
-    const second = getCard(room, 2)
+    const first = takeAnonymousCard(room)
+    const second = takeAnonymousCard(room)
 
     room.clearCardsFromPublicZones([first, second])
     first.bindCandidates([6], 'mark', 100, { known: false })
@@ -283,9 +284,9 @@ describe('隐藏标记区候选', () => {
 
   it('混合完整位置候选即使投影为空也可作为玩家标记来源', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [6, 7] })
-    const mixedCandidate = getCard(room, 1)
-    const exactSource = getCard(room, 2)
-    const incompatibleCandidate = getCard(room, 3)
+    const mixedCandidate = takeAnonymousCard(room)
+    const exactSource = takeAnonymousCard(room)
+    const incompatibleCandidate = takeAnonymousCard(room)
     const otherHand = playerLocation(7, 'hand')
 
     mixedCandidate.setLocationCandidates([playerLocation(6, 'mark', 414), otherHand])
@@ -428,7 +429,6 @@ describe('隐藏标记区候选', () => {
   it('木马一明一暗暗放入标记区时只创建弱候选', () => {
     const { room } = createTestRoom({ cardIDs: [161, 1, 2], seatIDs: [1] })
     const knownCard = getCard(room, 1)
-    const hiddenCard = getCard(room, 2)
     const hand = playerLocation(1, 'hand')
     const mark = equipmentContainer(161, 700)
 
@@ -454,6 +454,9 @@ describe('隐藏标记区候选', () => {
       count: 1,
       spellID: 700
     })
+    const hiddenCard = room.playerCardsSnapshot.find(
+      (card) => isAnonymous(card) && card.subZone === 'mark'
+    )!
 
     const state = room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
     const record = state.records.get('1:muniu:161')!
@@ -587,9 +590,9 @@ describe('隐藏标记区候选', () => {
   })
 
   it('木马候选明牌从标记区打出时用暗占位替回手牌', () => {
-    const { room } = createTestRoom({ cardIDs: [152, 153], seatIDs: [4] })
+    const { room } = createTestRoom({ cardIDs: [161, 152, 153], seatIDs: [4] })
+    getCard(room, 161)
     const knownCard = getCard(room, 152)
-    const placeholderCard = getCard(room, 153)
     const hand = playerLocation(4, 'hand')
     const mark = equipmentContainer(161, 700)
 
@@ -615,6 +618,9 @@ describe('隐藏标记区候选', () => {
       count: 1,
       spellID: 700
     })
+    const placeholderCard = room.playerCardsSnapshot.find(
+      (card) => isAnonymous(card) && card.subZone === 'mark'
+    )!
 
     const pileCountBefore = room.zones.get('pile').cards.length
 
@@ -643,7 +649,6 @@ describe('隐藏标记区候选', () => {
   it('木马暗占位对应牌堆明牌时回补占位保持牌堆数量', () => {
     const { room } = createTestRoom({ cardIDs: [152, 153], seatIDs: [4] })
     const knownCard = getCard(room, 152)
-    const placeholderCard = getCard(room, 153)
 
     room.moveCards([0], 'player', {
       toSeatID: 4,
@@ -658,6 +663,9 @@ describe('隐藏标记区候选', () => {
       count: 1,
       spellID: 700
     })
+    const placeholderCard = room.playerCardsSnapshot.find(
+      (card) => isAnonymous(card) && card.subZone === 'mark'
+    )!
 
     const pileCountBefore = room.zones.get('pile').cards.length
 
@@ -683,7 +691,6 @@ describe('隐藏标记区候选', () => {
     const { room } = createTestRoom({ cardIDs: [161, 152, 153], seatIDs: [4, 5] })
     const muniu = getCard(room, 161)
     const knownCard = getCard(room, 152)
-    const placeholderCard = getCard(room, 153)
     const hand = playerLocation(4, 'hand')
     const mark = equipmentContainer(161, 700)
 
@@ -709,6 +716,9 @@ describe('隐藏标记区候选', () => {
       count: 1,
       spellID: 700
     })
+    const placeholderCard = room.playerCardsSnapshot.find(
+      (card) => isAnonymous(card) && card.subZone === 'mark'
+    )!
 
     expect(
       knownCard.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
@@ -996,9 +1006,8 @@ describe('隐藏标记区候选', () => {
   })
 
   it('主视角看到木马内候选牌和暗牌时收敛为确定标记牌', () => {
-    const { room } = createTestRoom({ cardIDs: [161, 152, 153], seatIDs: [4] })
+    const { room } = createTestRoom({ cardIDs: [161, 152, 153, 154], seatIDs: [4] })
     const candidateCard = getCard(room, 152)
-    const hiddenCard = getCard(room, 153)
     const hand = playerLocation(4, 'hand')
     const mark = equipmentContainer(161, 700)
 
@@ -1011,27 +1020,31 @@ describe('隐藏标记区候选', () => {
       sourceEvent: { type: 'test:muniu-equip' }
     })
     moveKnownCardsToHand(room, [152], 4)
-    room.moveCards([0], 'player', {
+    room.moveCards([0, 0], 'player', {
       toSeatID: 4,
       subZone: 'hand',
       fromZone: 'pile',
-      cardCount: 1,
+      cardCount: 2,
       sourceEvent: { type: 'test:unknown-hand' }
     })
-    room.players.get(4).syncObservedHandCount(2)
+    room.players.get(4).syncObservedHandCount(3)
     moveHiddenHandToMark(room, {
       seatID: 4,
-      count: 1,
+      count: 2,
       spellID: 700
     })
+    const placeholders = room.playerCardsSnapshot.filter(
+      (card) => isAnonymous(card) && card.subZone === 'mark'
+    )
+    const entityCountBefore = room.cards.length
 
     expect(
       candidateCard.locationCandidates
         .map((candidate) => createLocationCandidateKey(candidate))
         .sort()
     ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
-    expect(hiddenCard.isKnown).toBe(false)
-    expect(hiddenCard.subZone).toBe('mark')
+    expect(placeholders).toHaveLength(2)
+    expect(room.cardIndex.has(153)).toBe(false)
 
     room.moveCards([152, 153], 'player', {
       toSeatID: 4,
@@ -1048,8 +1061,14 @@ describe('隐藏标记区候选', () => {
       room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)?.records.has('4:muniu:161') ??
         false
     ).toBe(false)
-    //
-    ;[candidateCard, hiddenCard].forEach((card) => {
+    // 候选身份占用一个标记名额时会将其匿名占位挤回手牌；另一个槽才物化为 153。
+    const revealedCard = room.cardIndex.get(153)!
+    expect(placeholders).toContain(revealedCard)
+    expect(room.cards).toHaveLength(entityCountBefore)
+    const remainingHand = room.playerCardsSnapshot.filter((card) => card.subZone === 'hand')
+    expect(remainingHand).toHaveLength(1)
+    expect(remainingHand.every(isAnonymous)).toBe(true)
+    ;[candidateCard, revealedCard].forEach((card) => {
       expect(card.location).toBe('player')
       expect(card.subZone).toBe('mark')
       expect(card.spellID).toBe(700)
