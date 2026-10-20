@@ -16,7 +16,7 @@ export class RoomMovementUnknownPlacement {
   move(context: RoomMoveContext): void {
     const {
       combinationID,
-      expectedSlotsBySeat,
+      expectedSlotsByLocation,
       fromSeat,
       fromSubZone,
       fromSpellID,
@@ -86,7 +86,7 @@ export class RoomMovementUnknownPlacement {
           id: combinationID,
           cards: movedUnknownCards,
           candidateSeats: targetSeats,
-          expectedSlotsBySeat,
+          expectedSlotsByLocation,
           known: false,
           sourceEvent: sourceEvent ?? { type: 'moveCards:unknown' }
         })

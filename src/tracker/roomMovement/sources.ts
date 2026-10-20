@@ -395,7 +395,6 @@ export class RoomMovementSources {
     const oldLocation = card.location
     const oldSubZone = card.subZone
     const oldSeats = new Set(Array.from(card.seats, Number))
-    const oldCombinationID = card.combinationID
     const oldSpellID = card.spellID
     const oldLocationCandidates = card.locationCandidates
     const oldSuspended = card.suspended
@@ -409,10 +408,9 @@ export class RoomMovementSources {
     // 否则多席位暗实体仍是未解析状态，组内对应位置名额不会随实体离开而扣减。
     this.resolveSourcePlayerCandidate(placeholder, context)
     this.room.removeCardsFromConstraintGroups([placeholder])
-    // 后续是否恢复旧标签必须依据实际迁移结果，不能只看是否进入身份保留分支。
-    const migratedConstraintGroups =
-      preserveAmbiguousIdentity &&
+    if (preserveAmbiguousIdentity) {
       this.room.constraints.replaceCardInConstraintGroups(card, placeholder)
+    }
 
     card.location = 'player'
     card.subZone = fromSubZone
@@ -421,7 +419,6 @@ export class RoomMovementSources {
     card.suspended = false
     card.confirmKnown()
     card.setSeats([fromSeat], 'swapKnownCardWithPlayerSourcePlaceholder:knownCard')
-    card.combinationID = null
     this.room.markCounterDirty(card)
 
     if (preserveAmbiguousIdentity) {
@@ -433,8 +430,6 @@ export class RoomMovementSources {
         oldLocationCandidates,
         'swapKnownCardWithPlayerSourcePlaceholder:preserveAmbiguousIdentity'
       )
-      // 迁移成功时 replaceCardInConstraintGroups 已写入新组标签，不能再被旧单值标签覆盖。
-      if (!migratedConstraintGroups) placeholder.combinationID = oldCombinationID
       this.room.markCounterDirty(placeholder)
     } else if (replacementCandidate) {
       const oldPublicZone = this.room.zones.get(oldLocation as PublicZoneName)
@@ -469,7 +464,6 @@ export class RoomMovementSources {
       )
       placeholder.suspended = false
       placeholder.setSeats(oldSeats, 'swapKnownCardWithPlayerSourcePlaceholder:placeholder')
-      placeholder.combinationID = oldCombinationID
       this.room.markCounterDirty(placeholder)
     } else {
       this.restoreUnknownPlaceholderToPreviousPublicLocation(
@@ -639,14 +633,12 @@ export class RoomMovementSources {
 
     const oldSubZone = card.subZone
     const oldSeats = new Set(Array.from(card.seats, Number))
-    const oldCombinationID = card.combinationID
     const oldSpellID = card.spellID
 
     replacement.isKnown = false
     replacement.setLocationCandidates([], 'swapKnownCardWithPublicSourcePlaceholder:candidates')
     replacement.suspended = false
     replacement.bindCandidates(Array.from(oldSeats), oldSubZone, oldSpellID, { known: false })
-    replacement.combinationID = oldCombinationID
 
     this.hiddenMarks.replaceHiddenMarkPlaceholder(card, replacement)
 
@@ -826,7 +818,6 @@ export class RoomMovementSources {
     const oldLocation = card.location
     const oldSubZone = card.subZone
     const oldSeats = new Set(Array.from(card.seats, Number))
-    const oldCombinationID = card.combinationID
     const oldSpellID = card.spellID
     const keepPlaceholderAtPreviousPublicPosition = this.hasPublicCandidateAt(card, oldLocation)
 
@@ -842,7 +833,6 @@ export class RoomMovementSources {
     card.subZone = 'hand'
     card.isKnown = true
     card.setSeats([fromSeat], 'swapCardWithUnknown:knownCard')
-    card.combinationID = null
     card.spellID = null
     this.room.markCounterDirty(card)
 
@@ -850,7 +840,6 @@ export class RoomMovementSources {
     unknownCard.location = oldLocation
     unknownCard.subZone = oldSubZone
     unknownCard.setSeats(oldSeats, 'swapCardWithUnknown:unknownCard')
-    unknownCard.combinationID = oldCombinationID
     unknownCard.spellID = oldSpellID
     this.room.markCounterDirty(unknownCard)
 

@@ -70,10 +70,6 @@ describe('下书', () => {
         id: 'xia-shu-existing-candidate-group',
         cards: candidateCardIDs.map((cardID) => getCard(room, cardID)),
         candidateSeats: [7, 6],
-        expectedSlotsBySeat: new Map([
-          [7, 1],
-          [6, 1]
-        ]),
         expectedSlotsByLocation: new Map([
           [targetHandKey, 1],
           [otherHandKey, 1]

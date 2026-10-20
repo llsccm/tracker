@@ -185,7 +185,6 @@ function settleHiddenGain(event: MoveEventDraft, room: Room): void {
     room.removeCardsFromConstraintGroups([card])
     room.clearCardsFromPublicZones([card])
     card.bindTo(state.targetSeatID!, 'hand', null)
-    card.combinationID = null
   })
   room.resolveConstraints()
 

@@ -237,7 +237,7 @@ export class RoomMovementKnownPlacement {
   finishMove(context: RoomMoveContext, placement: KnownMovePlacement): void {
     const {
       combinationID,
-      expectedSlotsBySeat,
+      expectedSlotsByLocation,
       knownCards,
       position,
       sourceEvent,
@@ -254,7 +254,7 @@ export class RoomMovementKnownPlacement {
         id: combinationID,
         cards: knownCards,
         candidateSeats: targetSeats,
-        expectedSlotsBySeat,
+        expectedSlotsByLocation,
         known: true,
         sourceEvent: sourceEvent ?? { type: 'moveCards' }
       })

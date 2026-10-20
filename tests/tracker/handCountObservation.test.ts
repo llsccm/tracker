@@ -22,8 +22,14 @@ describe('玩家手牌数观测', () => {
     room.clearCardsFromPublicZones(cards)
     cards.forEach((card) => card.setLocationCandidates([hand, mark]))
     cards.slice(0, 2).forEach((card) => card.confirmKnown())
-    room.createConstraintGroup({ cards, expectedSlotsBySeat: new Map([[1, 3]]) })
-    room.createConstraintGroup({ cards: cards.slice(0, 2), expectedSlotsBySeat: new Map([[1, 1]]) })
+    room.createConstraintGroup({
+      cards,
+      expectedSlotsByLocation: new Map([[playerLocation(1, 'hand'), 3]])
+    })
+    room.createConstraintGroup({
+      cards: cards.slice(0, 2),
+      expectedSlotsByLocation: new Map([[playerLocation(1, 'hand'), 1]])
+    })
     room.getPlayer(1)!.syncObservedHandCount(3)
 
     expect(computeHandSlotAllocation(room).get(1)).toMatchObject({
@@ -47,7 +53,7 @@ describe('玩家手牌数观测', () => {
     seats.forEach((seatID) =>
       room.createConstraintGroup({
         cards: [card],
-        expectedSlotsBySeat: new Map([[seatID, 1]])
+        expectedSlotsByLocation: new Map([[playerLocation(seatID, 'hand'), 1]])
       })
     )
     seats.forEach((seatID) => room.getPlayer(seatID)!.syncObservedHandCount(1))
@@ -591,7 +597,7 @@ describe('玩家手牌数观测', () => {
     expect(sourcePlayer.observedHandCount).toBe(2)
   })
 
-  it('模糊身份迁移约束组后保留新组合标签', () => {
+  it('模糊身份置换后迁移所有实际约束组成员', () => {
     const { room } = createTestRoom({ cardIDs: [29, 130], seatIDs: [1, 2] })
     const candidateCard = getCard(room, 29)
     const placeholder = takeAnonymousCard(room)
@@ -612,14 +618,17 @@ describe('玩家手牌数观测', () => {
       id: 'migrated-group',
       cards: [candidateCard]
     })
-    // combinationID 是最近标签，可能落后于实体实际参与的约束组。
-    candidateCard.combinationID = 'stale-group'
+    const overlappingGroup = room.createConstraintGroup({
+      id: 'overlapping-migrated-group',
+      cards: [candidateCard]
+    })
 
     expect(
       room.movement.sources.swapKnownCardWithPlayerSourcePlaceholder(candidateCard, context)
     ).toBe(placeholder)
     expect(group.cards.has(candidateCard)).toBe(false)
     expect(group.cards.has(placeholder)).toBe(true)
-    expect(placeholder.combinationID).toBe('migrated-group')
+    expect(overlappingGroup.cards.has(placeholder)).toBe(true)
+    expect(overlappingGroup.cards.has(candidateCard)).toBe(false)
   })
 })

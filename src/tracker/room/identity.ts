@@ -128,7 +128,6 @@ export class RoomIdentity {
     card.isKnown = false
     card.suspended = false
     if (!preservePlacement) {
-      card.combinationID = null
       card.spellID = null
       // 必须走候选写路径：直接清空 locationCandidates 不会同步 clear owner，
       // seats 在 location 仍为 player 时会回退到旧座位投影。
@@ -323,7 +322,6 @@ export class RoomIdentity {
       const oldSubZone = existing.subZone ?? 'hand'
       const oldSeats = Array.from(existing.seats, Number)
       const oldSpellID = existing.spellID
-      const oldCombinationID = existing.combinationID
       const oldLocationCandidates = existing.locationCandidates
       const targetZoneEntry = this.findPublicZoneEntry(target)
 
@@ -333,7 +331,6 @@ export class RoomIdentity {
       room.removeCardsFromConstraintGroups([target])
       room.constraints.replaceCardInConstraintGroups(existing, target)
       existing.setLocationCandidates([], 'materialize:interop:known')
-      existing.combinationID = null
       existing.moveToPublicZone(targetZoneID)
       targetZone.replaceCard(target, existing)
 
@@ -344,7 +341,6 @@ export class RoomIdentity {
         target.suspended = false
         target.setLocationCandidates(oldLocationCandidates, 'materialize:interop:placeholder')
         target.setSeats(oldSeats, 'materialize:interop:placeholder')
-        target.combinationID = oldCombinationID
         room.markCounterDirty(target)
         room.notifyCardChanged(target, {
           type: 'card-bound',
@@ -353,7 +349,6 @@ export class RoomIdentity {
         })
       } else {
         target.bindCandidates(oldSeats, oldSubZone, oldSpellID, { known: false })
-        target.combinationID = oldCombinationID
       }
 
       room.movement.hiddenMarks.replaceHiddenMarkPlaceholder(existing, target)

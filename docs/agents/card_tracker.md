@@ -80,7 +80,8 @@
 - 表达一次移动、分配、展示或模糊明牌事件形成的局部候选包。
 - `cards` 是原生 `Set<Card>`，使用 `.has()` / `.delete()` / `.size` 与迭代能力维护组内实体牌。
 - `candidateSeats` 是分组涉及座位的历史快照，不裁剪卡牌当前候选；不再需要通过扩写旧组座位来保住新候选。
-- `expectedSlotsBySeat` 仅作建组/更新入参糖，立即映射为普通手牌完整位置；同座位已有完整 hand 名额时优先使用完整输入，不保留第二份存储。
+- 建组、更新和移动只接受 `expectedSlotsByLocation`，手牌也显式传入完整玩家位置。
+- 卡牌可同时参与多个 `ConstraintGroup.cards` 集合，不再持有单值分组标签；协议 `combinationID` 仅用于命名本次约束组。
 - `expectedSlotsByLocation` 是完整位置数量约束的唯一存储，统一表达玩家区、公共区与装备容器位置，不再维护子区槽位镜像。
 - 玩家子区名额也直接写入 `expectedSlotsByLocation`，例如一组 4 张明牌中 `A 手牌 = 3`、`A 标记(某 spellID) = 1`；它不能被 `seats.size === 1` 替代。
 - 不把“同组”解释为“同 owner”，避免多人分配、洗牌后明牌、交换临时区等场景过度收敛。
