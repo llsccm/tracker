@@ -37,10 +37,9 @@
     - `PubGsCMoveCard.js`：移动协议预处理与同步到 `tracker`。
     - `gameFlowState.js`：开局发牌/摸牌局流副作用与权道展示等。
     - `specialZones.js` / `spellEffects.js`：特殊区域与技能辅助副作用。
-    - `skills/`（如 `JiaoYu.ts`、`XiaShu.ts`）：从 `spellEffects` 拆出的技能特化处理；`HeZhong.js`、`JiZhan.js`、`YanXi.js` 已弃用并保留原文件。
+    - `skills/`（如 `JiaoYu.ts`、`XiaShu.ts`）：从 `spellEffects` 拆出的技能特化处理；未接入的旧和衷、吉占、宴戏及反间处理器已删除。
     - `GsCRoleOptTargetNtf.js`：角色操作目标通知（严教、宜城、裴秀相关等）。
     - `RogueLike.js`：山河图消息与提示。
-    - `legacyMoveCard.js`：遗留链表记牌器辅助，**不经** `index.js` 导出，不可当作运行路径。
     - `index.js`：主动导出入口。
   - `src/tracker/`：当前主动记牌器与运行时状态核心；详细边界见 [`card_tracker.md`](card_tracker.md)：
     - `index.ts`：仅导出 `globalConfig`、`globalState`、`rogueMap`、`UI`、`user`、`Game`。

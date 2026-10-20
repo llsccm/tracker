@@ -642,43 +642,6 @@ export class Card extends BaseCard {
   }
 
   /**
-   * 设置完整位置候选集合。
-   * @returns 是否发生变化
-   */
-  setSubZoneCandidates(
-    candidates: SubZoneCandidateInput[] = [],
-    reason = 'setSubZoneCandidates'
-  ): boolean {
-    const retainedCandidates = this.locationCandidates.filter(
-      (candidate) => candidate.type !== 'player'
-    )
-    const playerCandidates = candidates.map((candidate) => fromSubZoneCandidate(candidate))
-    return this.setLocationCandidates(
-      [...retainedCandidates, ...playerCandidates].filter(Boolean),
-      reason
-    )
-  }
-
-  addSubZoneCandidate(candidate: SubZoneCandidateInput, reason = 'addSubZoneCandidate'): boolean {
-    return this.setSubZoneCandidates([...this.subZoneCandidates, candidate], reason)
-  }
-
-  /**
-   * 移除一个完整位置候选；若只剩一个候选，则自动落定到该位置。
-   */
-  removeSubZoneCandidate(
-    candidate: SubZoneCandidateInput | string,
-    reason = 'removeSubZoneCandidate'
-  ): boolean {
-    const key = typeof candidate === 'string' ? candidate : createSubZoneCandidateKey(candidate)
-    if (!key) return false
-    const target = this.locationCandidates.find(
-      (item) => item.type === 'player' && createSubZoneCandidateKey(item) === key
-    )
-    return target ? this.removeLocationCandidate(target, reason) : false
-  }
-
-  /**
    * 清空子区域候选。通常用于明确移动到公共区或已确定绑定到某个子区域。
    */
   clearSubZoneCandidates(reason = 'clearSubZoneCandidates'): boolean {

@@ -1,6 +1,6 @@
 import { UI } from './state'
 import { trackerLogger } from '@/utils/logger'
-import { getDisplayIdLabel, ORDER_LABELS } from './helper/seatLabel'
+import { ORDER_LABELS } from './helper/seatLabel'
 import type { Player } from './Player'
 import type { Room } from './Room'
 import type { SeatID } from './types'
@@ -166,14 +166,6 @@ export class GameState {
   /** 注册武将更新后的运行时展示回调。 */
   setGeneralChangeListener(listener: GeneralChangeListener | null): void {
     this.generalChangeListener = listener
-  }
-
-  // 座位名 只是兼容糜竺
-  name(seatID: SeatID): string {
-    const displayID = this.room?.getDisplayID(seatID)
-    if (!displayID) return ''
-
-    return getDisplayIdLabel(displayID, this.orderLabels)
   }
 
   /** 判断当前一局的指定命名空间是否已经保存状态。 */

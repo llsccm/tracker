@@ -142,8 +142,8 @@ tracker 状态；所需事实应由后续协议重新建立。
 | `3750`          | 谋许攸【迁附】                 | 控顶阶段的 CardID 顺序，供后续暗牌回堆移动回填      | `src/handler/PubGsCUseSpell.js`、`src/handler/skills/QianFu.ts`；回堆回填后删除，统一生命周期兜底清空          |
 | `4022`          | 裴秀【尽览】及地图/手牌镜像 UI | 地图协议、路线求解、预设路径和手牌花色镜像状态      | `src/handler/GsCUpdateRoleDataExNtf.js`、`src/ui/PeiXiuHandMirror.js`；进入裴秀选技能阶段或统一生命周期时删除 |
 
-`src/handler/skills/YanXi.js` 仍包含 `getSpellState()` 读取，但对应 `7016/7017` 注册当前已注释，
-不计入主动运行清单。`src/logic.js` 中注释掉的 `hpColor` 旧逻辑同样不计入。
+宴戏由 `src/tracker/skill/YanXi.ts` 使用 `tracker` scope 维护，旧 handler 已删除。
+`src/logic.js` 中注释掉的 `hpColor` 旧逻辑不计入主动运行清单。
 
 ## 新增状态检查清单
 

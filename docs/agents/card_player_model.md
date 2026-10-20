@@ -57,8 +57,7 @@
 ### 候选主模型
 
 - 外部写入候选推荐只使用 `setLocationCandidates()`、`setSeats()` 和
-  `resolveLocationCandidate()`；`bindCandidates()` 与 `setSubZoneCandidates()` 仅供
-  内部委托使用，不应列为通用外部写入口。
+  `resolveLocationCandidate()`；`bindCandidates()` 仅供内部委托使用，不应列为通用外部写入口。
 - `locationCandidates`、`seats`、`subZoneCandidates`、`publicCandidates` 均不允许
   在外部直接修改。
 - `seats.size === 1` 只表示 owner 确定；`A 手牌 / A 标记` 仍可能在子区域层未收敛。

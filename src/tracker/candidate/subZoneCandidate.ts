@@ -51,28 +51,6 @@ export function createSubZoneCandidateKey(candidate: SubZoneCandidateInput = {})
 }
 
 /**
- * 将候选位置 key 还原为三元组对象。
- */
-export function parseSubZoneCandidateKey(key: string): SubZoneCandidate | null {
-  const [seatID, subZone, spellID] = String(key).split(':')
-  return normalizeSubZoneCandidate({
-    seatID: Number(seatID),
-    subZone,
-    spellID: spellID === '' ? null : spellID
-  })
-}
-
-/**
- * 比较两个候选位置是否完全相同。
- */
-export function isSameSubZoneCandidate(
-  left: SubZoneCandidateInput,
-  right: SubZoneCandidateInput
-): boolean {
-  return createSubZoneCandidateKey(left) === createSubZoneCandidateKey(right)
-}
-
-/**
  * 子区域展示名，供悬浮提示与位置描述复用。
  */
 export function getSubZoneName(subZone: SubZone): string {

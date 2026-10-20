@@ -285,8 +285,8 @@ publicCandidateReveal: { zone: 'pile', position: 'top', count: N }
 ## 读取与修改公共区
 
 - 读取某区实体：`room.getPublicZone('discard').cards`。
-- 读取某区正 ID：`room.publicZones.getPublicZoneCardIDs('discard')`；牌堆快捷入口是
-  `room.publicZones.getPileCardIDs()`。
+- 读取某区正 ID：`room.getPublicZone('discard').cards.filter((card) => card.id > 0).map((card) => card.id)`。
+  牌堆包含匿名槽，正 ID 列表不代表全部剩余身份，不能用它计算完整牌堆分布。
 - 读取某张牌的位置摘要：`room.publicZones.getCardLocationInfo(cardID)`。
 - 普通移动：`room.moveCards()`；它会处理来源端点、匿名槽、候选传播、约束和索引。
 - 只有整区初始化/洗牌才使用 `zone.replaceAll(cards)`；低层 `zone.add(cards, position)` 只适合已知的

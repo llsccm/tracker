@@ -534,7 +534,7 @@ export class Room extends RoomBase {
     return this.identity.createExternalCards(cardIDs, count)
   }
 
-  // 公共区主入口与兼容查询；低频查询辅助位于 roomPublicZones.js。
+  // 公共区主入口；低频查询辅助位于 roomPublicZones.ts。
   clearCardsFromPublicZones(cards: Card[] = []) {
     return this.publicZones.clearCardsFromPublicZones(cards)
   }

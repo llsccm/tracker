@@ -20,7 +20,7 @@
 ## 当前定位
 
 - `src/tracker/` 是当前主动运行的记牌器与运行时状态核心；`Room` 是单局状态源，`src/tracker/view/` 直接渲染主面板节点，并通过 `CardLocationIndex` 读取公共区与玩家区域投影。
-- `src/handler/legacyMoveCard.js` 仍保留指向旧链表模型的历史代码，但**没有**经 `src/handler/index.js` 主动导出；不要把它视为可用运行路径。
+- 旧链表记牌器及其 `legacyMoveCard` 辅助已删除；没有并行的旧记牌器运行路径。
 - `src/handler/PubGsCMoveCard.js` 以只读 `raw` 与独立 `patched` 分离原始协议和修正；入口过滤、位置归一化、局流及技能补丁完成后统一提交，仅允许修正 `CardIDs`、`FromPosition`、`ToPosition`。最终事件归一化留在 Controller；真正的卡牌状态移动通过 `src/tracker/runtime/browser.ts`（再导出 `bridge.ts`）提供的 `tracker`（实现位于 `runtime/trackerController.ts`）同步到当前 `Room`。
 - `src/tracker/index.ts` 仅导出共享运行时状态（`globalConfig`、`globalState`、`rogueMap`、`UI`）、`user` 与 `Game`；底层核心对象从各自子模块直接导入。
 
@@ -57,7 +57,7 @@
 - 移动上下文快照由无状态的 `roomMovement/context.ts` 构造；未知身份的来源取牌与目标落区阶段由 `roomMovement/unknownPlacement.ts` 实现，RoomMovement 保留调用入口与阶段顺序。
 - 装备容器座位、迁座、稳定记录键和完整快照规则在 `roomMovement/equipmentMarks.ts`；该模块只读输入，暗置标记组件继续负责唯一账本、占位与收敛协调，不建立独立木牛状态。
 - `RoomConstraints` 位于 `src/tracker/roomConstraints.ts`，集中实现不动点收敛、E1/E2 手牌槽懒缓存、匿名手牌实体对账、约束组维护、实体牌解析及稳定态的索引/视图组/计数器同步。Room 保留 `resolveConstraints()` 公开入口和状态所有权，DEV 诊断按需传入。
-- `RoomPublicZones` 位于 `src/tracker/roomPublicZones.ts`，负责公共区一致性检查、公共区牌序读取、玩家手牌 ID 查询以及旧辅助兼容的 zoneID 读面。
+- `RoomPublicZones` 位于 `src/tracker/roomPublicZones.ts`，负责公共区一致性检查、洗牌槽位校准及玩家手牌 ID 查询。公共区牌序直接读取 `Room.getPublicZone()` 返回的 `Zone.cards`。
 - `RoomDiagnostics` 位于 `src/tracker/room/diagnostics.ts`，负责 DEV 身份/槽位与身份账本守恒、玩家快照和影子索引检查、抽样门控及收敛轮数告警；Room 的公开断言 API 保持不变。
 - `protocolZones.ts` 负责把协议区域编号映射为新版公共区与玩家子区；`MoveEventNormalizer` 只做分类与字段映射，不直接修改 `Room` 状态。`FromID` / `ToID` 的含义依赖具体 `FromZone` / `ToZone`，不能一律当作座位 ID：例如 `FromZone=8` 弹窗标记回牌堆时，`FromID` 可能是技能/标记空间 ID；`FromZone=1` 牌堆来源时，`FromID=255` 可能只是牌堆/无座位占位。
 - `Room.moveCards()`、`Room.resolveConstraints()`、`Room.shufflePile()`、`Room.getPublicZone()` 是高频核心入口，应优先留在 `Room` 中；新增内部辅助方法时优先放入对应行为模块，再由 `Room` 暴露必要的薄入口。
@@ -171,7 +171,7 @@
 
 - 尚未完整恢复旧版 `cardManager.pack()` 链表推理承载的所有不确定性语义；宴戏、权变、诫厉等技能仍需要用新版 `ConstraintGroup` 做进一步精细化。
 - 诫厉协议已对视角分流：发动者的 `GsCRoleOptTargetNtf` 携带完整牌堆/手牌 ID，目标与其它座位只有 `Params=[pileCount]`。生产目标用 Type 53 只定位自己被换走手牌的回堆槽，其它槽位保持匿名；发动者只走默认移动。第三方视角不消费牌 ID、不移动物理实体，仅在完整交换链结算后把目标手牌明牌扩展为“原位置 / 牌堆顶前 pileCount 张”弱候选；开发模式只允许目标视角做完整身份调试。
-- 主动运行路径不再依赖 `cardManager.findKZ()`；遗留文件中残留的旧 `cardManager` / `Zone` 引用需要后续清理或删除。
+- 主动运行路径不再依赖 `cardManager.findKZ()`；旧链表辅助与未接入技能文件已清理。
 - 技能处理器目前仍是偏单牌回调，可能需要向批量拦截器演进。
 - 已有 `pnpm test:tracker` 的 Node/Vitest 回归覆盖导入边界、Controller、位置候选、公共候选、位置索引、暗置标记、脏渲染与遍历基线等；仍需补齐更多 `Room.moveCards()` 组合路线与浏览器运行时验证。
 - `CardLocationIndex`、`Room.notifyCardChanged()` 与 `view/dirtyRenderState.ts` 已接入：面板与玩家手牌可按脏集合局部重绘；仍可继续收紧边界场景与高频刷新策略。

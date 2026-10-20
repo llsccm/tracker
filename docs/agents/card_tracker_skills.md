@@ -67,7 +67,7 @@
 - 三条原始消息及可确认的字段含义见 `docs/protocols/PubGsCMoveCard-713.md`。
 - 样例先由 5 号同区展示 `119`，再以 `MoveType=27` 移交给 1 号，最后由 1 号同区展示五张牌；展示列表包含 `119`。
 - 样例中的 `MoveType=21` 都是 `5 -> 5` 同区展示；`MoveType=27` 是 `5 -> 5` 的跨座位移交，不应仅凭 Zone 相同视作无操作。
-- `src/handler/skills/Spell713.ts` 的首项下标解码要求 `CardCount === CardIDs.length - 2`，与本样例的等长列表不符；技能处理器在 `src/handler/spellEffects.js` 中当前未注册。
+- 未接入的旧反间首项下标解码已删除；本样例是等长 CardID 列表，直接由当前移动与揭示流程处理。
 
 ## 问卦候选来源筛选（SpellID=780）
 
