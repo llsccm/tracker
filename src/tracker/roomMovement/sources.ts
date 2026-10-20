@@ -127,6 +127,7 @@ export class RoomMovementSources {
     if (!(count > 0)) return playerCards
     const markSpellIDs = subZone === 'mark' ? getCompatibleMarkSpellIDs(spellID) : []
 
+    // 标记区到手牌的多选已由候选层接管；其余路径仍须按张数消费来源实体。
     for (const card of this.room.refreshPlayerSnapshot()) {
       if (
         card.subZone !== subZone ||
@@ -143,24 +144,7 @@ export class RoomMovementSources {
       }
 
       playerCards.push(card)
-      // 多取一张即可判定“可见牌多于协议张数”，不必为诊断扫描整份玩家区快照。
-      if (playerCards.length > count) break
-    }
-
-    if (playerCards.length > count) {
-      // 可见牌多于协议张数时无法判断具体哪几张被移走。确定性地返回前 count 张会把随机
-      // 猜测固化成身份互换（标记区留下幽灵牌、手牌出现错误明牌），因此这里只做唯一解补足，
-      // 多选一交由候选建模或匿名占位兜底。
-      trackerLogger.warn('玩家子区可见牌多于移动张数，跳过确定性取牌', {
-        reason: 'takeKnownCardsFromPlayerSubZone:ambiguousVisibleCards',
-        seatID,
-        subZone,
-        spellID,
-        requestedCount: count,
-        visibleCardCountAtLeast: playerCards.length,
-        visibleCardIDs: playerCards.map((card) => card.id)
-      })
-      return []
+      if (playerCards.length >= count) break
     }
 
     return playerCards
