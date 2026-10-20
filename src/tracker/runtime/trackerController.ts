@@ -292,6 +292,30 @@ export class TrackerController {
       const normalizedEvent = normalizeMoveEvent(patched, raw)
 
       // 来源区域由协议给出；本地代表子区可能仍为 mark，不能覆盖 hand/mark 完整位置候选。
+      if (normalizedEvent.options.fromSubZone === 'hand') {
+        normalizedEvent.cardIDs.forEach((cardID) => {
+          const card = readyRoom.cardIndex.get(cardID)
+          if (
+            !card ||
+            card.suspended ||
+            card.hasLocationCandidates() ||
+            card.resolvedSeat !== normalizedEvent.options.fromSeatID ||
+            !['equip', 'judge', 'mark'].includes(card.subZone)
+          ) {
+            return
+          }
+
+          this.controllerLogger.warn('协议手牌来源与本地确定子区冲突，仍按协议处理', {
+            cardID,
+            fromSeatID: normalizedEvent.options.fromSeatID,
+            fromSubZone: normalizedEvent.options.fromSubZone,
+            localSubZone: card.subZone,
+            localSpellID: card.spellID,
+            raw: this.summarizeProtocolMove(raw),
+            patched: this.summarizeProtocolMove(patched)
+          })
+        })
+      }
       this.controllerLogger.debug(
         '移动事件归一化',
         summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS)

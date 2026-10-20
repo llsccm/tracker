@@ -168,7 +168,9 @@ export class RoomMovementKnownPlacement {
     let fallbackPlaceholder: Card | null = null
     if (!placeholder && fromSubZone === 'hand') {
       const canDeferToKnownSourcePlaceholder =
-        context.sourceHandTotalObserved && context.sourceHandTotalBefore <= context.handMoveCount
+        context.sourceHandTotalObserved &&
+        context.sourceHandTotalBefore <= context.handMoveCount &&
+        toZone !== 'player'
       const createdSourcePlaceholder = !canDeferToKnownSourcePlaceholder
         ? this.sources.createPlayerSourcePlaceholderForKnownCard(card, playerSourceContext)
         : null
