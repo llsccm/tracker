@@ -157,7 +157,9 @@ export interface MoveOptions {
   /** 匿名化失败时取消本次移动，避免技能候选与身份账本失配。 */
   requireAnonymizeSuccess?: boolean
   /** 协议未公开 CardIDs，但技能已可靠确定的身份账本移动。 */
-  pileIdentityCardIDs?: CardID[]
+  pileIdentityCardIDs?: readonly CardID[]
+  /** 协议事件的身份事实；直调 Room 时由移动上下文推导。 */
+  pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
   sourceCards?: Card[]
   /** 空集合表示不传播已知牌候选；省略时沿用当前来源手牌集合。 */
   publicCandidateSource?: PublicCandidateSource

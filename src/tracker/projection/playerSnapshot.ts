@@ -25,14 +25,18 @@ export class PlayerSnapshot {
   /** 由 Room 在实体追加时登记；身份变化不影响物理实体的创建顺序。 */
   registerCard(card: Card, index: number): void {
     this.order.set(card, index)
+    if (this.members.has(card)) {
+      this.snapshot.splice(this.snapshot.indexOf(card), 1)
+      this.insertOrdered(card)
+    }
   }
 
   rebuild(): Card[] {
     const room = this.room
-    recordTraversal('resolveConstraints:playerSnapshot', room.cards.length)
+    recordTraversal('resolveConstraints:playerSnapshot', room.trackedCards.length)
     this.reset()
-    room.cards.forEach((card, index) => {
-      this.registerCard(card, index)
+    room.trackedCards.forEach((card, index) => {
+      this.registerCard(card, room.getDetachedCardOrder(card) ?? index)
       if (card.location === 'player') {
         this.snapshot.push(card)
         this.members.add(card)

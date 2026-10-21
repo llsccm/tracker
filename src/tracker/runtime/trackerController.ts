@@ -4,12 +4,7 @@ import { createPublicCandidate } from '../candidate/publicCandidate'
 import type { Card } from '@/tracker/model/Card'
 import { Game, type GameState } from '../Game'
 import { summarizeMoveEvent } from '../helper/moveSummary'
-import {
-  getProtocolMoveSpecialLabel,
-  MOVE_TYPE,
-  normalizeMoveEvent
-} from '../protocol/MoveEventNormalizer'
-import type { PileIdentityLedgerMove } from '../PileIdentityLedger'
+import { getProtocolMoveSpecialLabel, normalizeMoveEvent } from '../protocol/MoveEventNormalizer'
 import {
   getProtocolMarkSpellID,
   getProtocolPlayerSubZone,
@@ -327,8 +322,6 @@ export class TrackerController {
 
       // 技能处理器
       const event = readyRoom.decorateMoveEvent(normalizedEvent)
-      const pileCountBefore = readyRoom.zones.get('pile')?.cards.length ?? 0
-      const knownPileDrawCards = this.collectRegularDrawKnownPileCards(readyRoom, patched, event)
 
       this.controllerLogger.debug('移动事件装饰完成', {
         before: summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS),
@@ -367,21 +360,8 @@ export class TrackerController {
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
 
-        // 洗牌闭世代依赖账本提交结果，因此把同一条身份事件交给 Room，在物理区重建前提交；
-        // 其它移动仍保持“先移动实体、再写账本”的普通后置流程。
-        // 注意：createPileIdentityMove 在 readyRoom.shufflePile 之前调用，因此
-        // visiblePileIdentityIDsAfter 及依赖 pileCountAfter 的取值都是事务开始、洗牌前的可见状态。
-        const pileIdentityMove = this.createPileIdentityMove(
-          patched,
-          event,
-          readyRoom,
-          pileCountBefore,
-          knownPileDrawCards
-        )
-
         readyRoom.shufflePile({
-          cardCount: event.cardCount,
-          identityMove: pileIdentityMove
+          cardCount: event.cardCount
         })
 
         this.controllerView.scheduleRender()
@@ -392,7 +372,10 @@ export class TrackerController {
           '移动事件分支: moveCards',
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
-        const moveCompleted = readyRoom.moveCards(event.cardIDs, event.toZone, event.options)
+        const moveCompleted = readyRoom.moveCards(event.cardIDs, event.toZone, {
+          ...event.options,
+          pileIdentityEvent: event
+        })
         if (!moveCompleted) {
           this.controllerLogger.warn('移动来源解析失败，已取消本次 tracker 移动', {
             cardIDs: event.cardIDs
@@ -402,14 +385,6 @@ export class TrackerController {
         commitDuoQiMove(readyRoom, event)
       }
 
-      const pileIdentityMove = this.createPileIdentityMove(
-        patched,
-        event,
-        readyRoom,
-        pileCountBefore,
-        knownPileDrawCards
-      )
-      readyRoom.applyPileIdentityMove(pileIdentityMove)
       observeDuoQiKnownCardIDs(readyRoom, event.cardIDs)
       this.controllerView.scheduleRender()
     } catch (e) {
@@ -421,86 +396,14 @@ export class TrackerController {
     }
   }
 
-  /** 把规范化后的协议移动转换为生产身份账本事件。 */
-  private createPileIdentityMove(
-    event: RawMoveCardEvent,
-    normalizedEvent: NormalizedMoveEvent,
-    room: Room,
-    pileCountBefore: number,
-    knownPileDrawCards: readonly Card[]
-  ): Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'> {
-    const fromZone = event.FromZone == null ? null : Number(event.FromZone)
-    const cardIDs = this.normalizeIDs(normalizedEvent.options.pileIdentityCardIDs ?? event.CardIDs)
-    const pileCountAfter = room.zones.get('pile')?.cards.length ?? 0
-    const knownPileIdentityIDsConsumed = knownPileDrawCards
-      .filter((card) => card.location !== 'pile' && card.id > 0)
-      .map((card) => card.id)
-    const actualPileConsumptionCount = Math.max(0, pileCountBefore - pileCountAfter)
-    const anonymousPileConsumptionCount =
-      fromZone === 1 && cardIDs.length === 0
-        ? Math.max(0, actualPileConsumptionCount - knownPileIdentityIDsConsumed.length)
-        : undefined
-    const visiblePileIdentityIDsAfter = this.collectVisiblePileTopIdentityIDs(room)
-
-    return {
-      eventType: normalizedEvent.type,
-      fromZone,
-      toZone: event.ToZone == null ? null : Number(event.ToZone),
-      cardIDs,
-      cardCount: normalizedEvent.cardCount,
-      pileCountBefore,
-      anonymousPileConsumptionCount,
-      knownPileIdentityIDsConsumed,
-      visiblePileIdentityIDsAfter,
-      fromPosition: normalizedEvent.options.fromPosition,
-      toPosition: normalizedEvent.options.position,
-      moveType: normalizedEvent.moveType,
-      spellID: event.SpellID
-    }
-  }
-
-  private collectRegularDrawKnownPileCards(
-    room: Room,
-    event: RawMoveCardEvent,
-    normalizedEvent: NormalizedMoveEvent
-  ): Card[] {
-    if (
-      Number(event.FromZone) !== 1 ||
-      this.normalizeIDs(event.CardIDs).length > 0 ||
-      Number(normalizedEvent.moveType) !== MOVE_TYPE.DRAW
-    ) {
-      return []
-    }
-
-    const pileCards = room.zones.get('pile')?.cards ?? []
-    const count = Math.min(Math.max(0, normalizedEvent.cardCount), pileCards.length)
-    const sourceCards =
-      normalizedEvent.options.fromPosition === POSITION_BOTTOM
-        ? pileCards.slice(0, count)
-        : pileCards.slice(-count)
-    return sourceCards.filter((card) => card.id > 0 && card.isKnown === true)
-  }
-
-  private collectVisiblePileTopIdentityIDs(room: Room): CardID[] {
-    const pileCards = room.zones.get('pile')?.cards ?? []
-    const visibleCardIDs: CardID[] = []
-    for (let index = pileCards.length - 1; index >= 0; index -= 1) {
-      const card = pileCards[index]
-      if (card?.isKnown !== true || card.id <= 0) break
-      visibleCardIDs.push(card.id)
-    }
-    return this.normalizeIDs(visibleCardIDs)
-  }
-
   /**
    * 记录公共区范围揭示。
    * 与普通 showCards 不同，这里只确认身份属于某个端点范围，不占用或重排具体公共区槽位。
    *
    * 实体与身份处理原则：
    * - 优先复用已物化的实体（`cardIndex`）。
-   * - 范围揭示不占用或重排具体公共区匿名槽；未定位身份通过场外占位物化，
-   *   以保留可见身份及其公共区范围候选。
-   * - 身份物化失败时直接跳过该 ID 并保留警告日志。
+   * - 未定位身份由 Room 创建 detached 载体，不增加物理容量，也不重排匿名槽。
+   * - 后续精确揭示或移动由 Room 在真实匿名槽上物化，并回收临时载体。
    */
   private revealPublicCandidateCards(event: NormalizedMoveEvent): void {
     const readyRoom = this.getReadyTrackerRoom()
@@ -513,34 +416,7 @@ export class TrackerController {
     )
     if (ids.length === 0 || !locationCandidate) return
 
-    const cards = ids
-      .map((id) => {
-        const existing = readyRoom.cardIndex.get(id)
-        if (existing) {
-          existing.confirmKnown()
-          return existing
-        }
-
-        // 场外实体只承载已公开身份；原匿名牌堆槽继续承担牌堆数量和顺序。
-        const [target] = readyRoom.createExternalCards([], 1)
-        const materialized = readyRoom.materialize(id, target)
-
-        if (!materialized) {
-          this.controllerLogger.warn('公共区范围揭示身份无法物化，已跳过', {
-            id,
-            zone: reveal.zone,
-            position: locationCandidate.position
-          })
-        }
-
-        return materialized
-      })
-      .filter((card): card is Card => Boolean(card))
-
-    cards.forEach((card) => {
-      card.setLocationCandidates([locationCandidate], 'revealPublicCandidate')
-    })
-    readyRoom.resolveConstraints()
+    const cards = readyRoom.revealPublicCandidates(ids, locationCandidate)
 
     this.controllerLogger.info('公共区范围揭示完成', {
       ids,
@@ -644,6 +520,7 @@ export class TrackerController {
       reposition: shouldRepositionPile,
       cardIDsTopFirst: shouldRepositionPile && position === POSITION_TOP
     })
+    readyRoom.applyPileIdentityReveal(ids)
   }
 
   /**
@@ -885,10 +762,15 @@ export class TrackerController {
       readyRoom.materializeAtPublicEndpoint(ids, target.zoneName, target.position)
     }
 
-    const existingCards = readyRoom.findCardsByIDs(ids)
+    const existingCards = readyRoom
+      .findCardsByIDs(ids)
+      .filter((card) => !readyRoom.detachedKnownCards.has(card))
     const existingIDs = new Set(existingCards.map((card) => card.id))
     const missingIDs = ids.filter(
-      (id) => !existingIDs.has(id) && !readyRoom.unlocatedIdentities.has(id)
+      (id) =>
+        !existingIDs.has(id) &&
+        !readyRoom.unlocatedIdentities.has(id) &&
+        !readyRoom.cardIndex.has(id)
     )
     const createdCards =
       missingIDs.length > 0 ? readyRoom.createExternalCards(missingIDs, missingIDs.length) : []

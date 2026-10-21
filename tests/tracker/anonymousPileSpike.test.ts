@@ -113,11 +113,13 @@ describe('阶段 1 匿名牌堆 spike', () => {
     expect(fallbackCard?.isKnown).toBe(true)
     expect(pile.cards).toHaveLength(5)
     expect(pile.cards.at(-1)).toBe(hiddenTopCard)
-    expect(hiddenTopCard.id).toBe(displacedIdentityID)
+    // known 解析没有覆盖端点；随后完整 Room 事务把旧 cohort 身份投影回匿名槽。
+    expect(hiddenTopCard.isAnonymous).toBe(true)
     expect(hiddenTopCard.isKnown).toBe(false)
-    expect(room.cardIndex.get(displacedIdentityID)).toBe(hiddenTopCard)
+    expect(room.cardIndex.has(displacedIdentityID)).toBe(false)
+    expect(room.unlocatedIdentities.has(displacedIdentityID)).toBe(true)
     expect(room.suspendedKnownCards.size).toBe(0)
-    expect(room.unlocatedIdentities).toEqual(new Set())
+    expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3, 5]))
   })
 
   it('游戏外匿名手牌首次揭示时扩展并物化身份全集', () => {

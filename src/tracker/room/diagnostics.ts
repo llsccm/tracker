@@ -106,12 +106,12 @@ export class RoomDiagnostics {
 
   assertConservation(context = ''): void {
     const room = this.room
-    const cardsSet = new Set(room.cards)
+    const cardsSet = new Set(room.trackedCards)
     const entityOwnerByID = new Map<number, Card>()
     const realCardsByID = new Map<number, Card[]>()
     const identityIssues: Record<string, unknown>[] = []
 
-    room.cards.forEach((card) => {
+    room.trackedCards.forEach((card) => {
       const previousEntity = entityOwnerByID.get(card.entityID)
       if (previousEntity) {
         identityIssues.push({
@@ -216,7 +216,7 @@ export class RoomDiagnostics {
 
   assertPlayerSnapshotConsistency(playerCards: Card[]): void {
     const room = this.room
-    const freshPlayerCards = room.cards.filter((card) => card.location === 'player')
+    const freshPlayerCards = room.trackedCards.filter((card) => card.location === 'player')
     const consistent =
       freshPlayerCards.length === playerCards.length &&
       freshPlayerCards.every((card, index) => playerCards[index] === card)

@@ -62,6 +62,8 @@ export function createMoveContext(
     fromSeat !== null && !Number.isNaN(fromSeat) ? room.getPlayer(fromSeat) : null
 
   const context: RoomMoveContext = {
+    pileIdentityCardIDs: opt.pileIdentityCardIDs,
+    pileIdentityEvent: opt.pileIdentityEvent,
     cardIDs,
     toZone,
     toSeatID,

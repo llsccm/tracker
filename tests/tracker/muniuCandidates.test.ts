@@ -510,6 +510,7 @@ describe('木牛流马候选与收敛', () => {
         const slot = pile.cards.find((card) => card.id < 0)
         if (slot) room.materialize(cardID, slot)
       })
+      room.applyPileIdentityReveal([161, 85, 119, 43])
       const visibleIDs = [24, 70]
       const candidateCards = [85, 119, 43].map((id) => getCard(room, id))
       const hand = playerLocation(6, 'hand')

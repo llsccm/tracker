@@ -296,6 +296,18 @@ export class RoomConstraints {
       if (!player.hasObservedHandCount) return
       const allocation = allocations.get(seatID)
       if (!allocation?.canReconcileAnonymous) return
+      const materializationTargets = allocation.exactHiddenCards.filter((card) => card.isAnonymous)
+      let materialized = false
+      for (const identity of allocation.detachedKnownCards) {
+        const target = materializationTargets.shift()
+        if (!target) break
+        room.materialize(identity.id, target)
+        room.applyPileIdentityReveal([identity.id])
+        created.push(target)
+        materialized = true
+      }
+      // 身份接管改变了明暗分配；下一轮重新计算后再补位，不能消费旧分配结果。
+      if (materialized) return
       const missingCount = allocation.anonymousMissingCount!
 
       if (missingCount > 0) {
@@ -629,7 +641,7 @@ export class RoomConstraints {
     )
   }
 
-  suspendOverbroadKnownCards(cards: Iterable<Card> = this.room.cards): void {
+  suspendOverbroadKnownCards(cards: Iterable<Card> = this.room.trackedCards): void {
     for (const card of cards) {
       if (this.isOverbroadKnownCard(card)) {
         this.suspendKnownCard(card, 'candidateSeats>=4')

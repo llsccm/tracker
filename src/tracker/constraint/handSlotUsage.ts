@@ -18,6 +18,8 @@ export interface HandSlotAllocation {
   ambiguousHiddenCoveredCount: number
   candidateKnownCards: Card[]
   exactHiddenCards: Card[]
+  /** 已落定手牌位置、等待接管匿名物理槽的范围身份。 */
+  detachedKnownCards: Card[]
   /** 未观测手牌总数时，展示额度未知；不能安全对账时，补位数量也为 null。 */
   unknownCardCount: number | null
   anonymousMissingCount: number | null
@@ -65,6 +67,14 @@ export function computeHandSlotAllocation(
     const exactKnownCount = cards.knownCards.length
     const exactHiddenCount = cards.exactHiddenCards.length
     const candidateKnownUpperBound = countKnownSlots(seatID, cards.candidateCards)
+    const detachedKnownCards = cards.knownCards.filter((card) => room.detachedKnownCards.has(card))
+    const physicalCandidateCards = cards.candidateCards.filter(
+      (card) => !room.detachedKnownCards.has(card)
+    )
+    const physicalCandidateUpperBound =
+      physicalCandidateCards.length === cards.candidateCards.length
+        ? candidateKnownUpperBound
+        : countKnownSlots(seatID, physicalCandidateCards)
     const ambiguousHiddenCoveredCount = hiddenCoverage.coveredBySeat.get(seatID) ?? 0
     const unknownCardCount = player.hasObservedHandCount
       ? Math.max(0, player.observedHandCount - exactKnownCount - candidateKnownUpperBound)
@@ -74,9 +84,18 @@ export function computeHandSlotAllocation(
       unknownCardCount !== null &&
       !hiddenCoverage.unresolvedSeats.has(seatID) &&
       (cards.candidateCards.length === 0 || candidateKnownUpperBound > 0)
+    // detached 身份可以占展示名额，但不承担物理槽；候选上界与实体补缺分别按同一组约束求值。
+    const physicalUnknownCount = player.hasObservedHandCount
+      ? Math.max(
+          0,
+          player.observedHandCount -
+            (exactKnownCount - detachedKnownCards.length) -
+            physicalCandidateUpperBound
+        )
+      : null
     const anonymousBalance = !canReconcileAnonymous
       ? null
-      : unknownCardCount! - exactHiddenCount - ambiguousHiddenCoveredCount
+      : physicalUnknownCount! - exactHiddenCount - ambiguousHiddenCoveredCount
     allocations.set(seatID, {
       exactKnownCount,
       exactHiddenCount,
@@ -84,6 +103,7 @@ export function computeHandSlotAllocation(
       ambiguousHiddenCoveredCount,
       candidateKnownCards: cards.candidateCards,
       exactHiddenCards: cards.exactHiddenCards,
+      detachedKnownCards,
       unknownCardCount,
       anonymousMissingCount: anonymousBalance === null ? null : Math.max(0, anonymousBalance),
       anonymousExcessCount: anonymousBalance === null ? null : Math.max(0, -anonymousBalance),
