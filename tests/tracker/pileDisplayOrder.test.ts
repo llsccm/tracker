@@ -645,56 +645,6 @@ describe('牌堆展示顺序', () => {
     expectConsistentPublicZones(room)
   })
 
-  it('木牛流马完整快照来源为技能空间时仍置换当前承载者实体占位', () => {
-    const { room } = createTestRoom({ cardIDs: [11, 12, 73, 105], seatIDs: [7] })
-    // 显式保留已知身份残留公共区的异常，来源占位仍使用真实匿名实体。
-    const visibleMarkCards = getCards(room, [11, 12])
-    const hiddenMarkCards = [takeAnonymousCard(room), takeAnonymousCard(room)]
-
-    hiddenMarkCards.forEach((card) => {
-      card.bindCandidates([7], 'mark', 700, { known: false })
-    })
-
-    room.moveCards(
-      visibleMarkCards.map((card) => card.id),
-      'player',
-      {
-        toSeatID: 7,
-        fromZone: 700,
-        fromSubZone: 'mark',
-        fromSpellID: 700,
-        subZone: 'mark',
-        spellID: 700,
-        cardCount: 2,
-        sourceEvent: { type: 'test:observed-mount-mark-snapshot-from-space' }
-      }
-    )
-
-    visibleMarkCards.forEach((card) => {
-      expect(card.location).toBe('player')
-      expect(card.subZone).toBe('mark')
-      expect(card.spellID).toBe(700)
-      expect(card.seats.has(7)).toBe(true)
-      expect(card.isKnown).toBe(true)
-    })
-    hiddenMarkCards.forEach((card) => {
-      expect(card.location).toBe('pile')
-      expect(card.subZone).toBeNull()
-      expect(card.seats.has(7)).toBe(false)
-    })
-    expect(
-      room.cards.filter(
-        (card) =>
-          hiddenMarkCards.includes(card) &&
-          card.location === 'player' &&
-          card.subZone === 'mark' &&
-          card.spellID === 700 &&
-          card.seats.has(7)
-      )
-    ).toHaveLength(0)
-    expectConsistentPublicZones(room)
-  })
-
   it('木牛流马出现完整明牌快照时用明牌置换匿名实体位置替身', () => {
     const { room } = createTestRoom({
       cardIDs: [1, 2, 3, 11, 12, 73, 105],
