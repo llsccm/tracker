@@ -166,8 +166,8 @@ ToZone: 10
 ## 代码位置
 
 - 目标通知与牌堆/手牌明牌：`src/handler/GsCRoleOptTargetNtf.js`
-- 观虚端点归一化：`src/tracker/runtime/protocolRules.ts` 的 `normalizeTrackerMovePosition`
-- 同区展示识别：`src/tracker/MoveEventNormalizer.ts` 的 `isSameZoneShowEvent`
+- 观虚端点归一化：`src/tracker/protocol/protocolRules.ts` 的 `normalizeTrackerMovePosition`
+- 同区展示识别：`src/tracker/protocol/MoveEventNormalizer.ts` 的 `isSameZoneShowEvent`
 - 公共区展示与玩家占用身份回收：`src/tracker/runtime/trackerController.ts`
 - 目标视角交换桶：`src/tracker/skill/GuanXu.ts`
 - 回归测试：

@@ -1,5 +1,5 @@
 import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
-import { MOVE_TYPE } from '../MoveEventNormalizer'
+import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
 import type { CardID, SeatID } from '../types'
 import { hasPositiveID, patchEvent, type MoveEventDraft } from './moveEventUtils'

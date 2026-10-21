@@ -1,5 +1,5 @@
-import { isAmbiguousKnownCard } from '../AmbiguousKnownIndex'
-import type { Card } from '../Card'
+import { isAmbiguousKnownCard } from '../projection/AmbiguousKnownIndex'
+import type { Card } from '@/tracker/model'
 import type { Room } from '../Room'
 
 // 视图私有消费状态：不清理 Room.dirtyCards，只记录本视图处理到哪一次卡牌变更。

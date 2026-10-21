@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isAnonymous, type Card } from '@/tracker/Card'
+import type { Card } from '@/tracker/model/Card'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { TIAN_HOU_STATE_KEY } from '@/tracker/skill/TianHou'
 import { locationKeys, playerHand, publicLocation } from './helpers/locationCandidates'
@@ -36,7 +36,10 @@ describe('周群天候其他视角换牌候选', () => {
 
     const room = controller.getTrackerRoom()!
     const knownCards = knownIDs.map((id) => getCard(room, id)!)
-    const hiddenCards = room.zones.get('pile')!.cards.filter(isAnonymous).slice(0, hiddenCount)
+    const hiddenCards = room.zones
+      .get('pile')!
+      .cards.filter((card) => card.isAnonymous)
+      .slice(0, hiddenCount)
 
     room.clearCardsFromPublicZones([...knownCards, ...hiddenCards])
     knownCards.forEach((card) => card.bindCandidates([actorSeat], 'hand', null, { known: true }))

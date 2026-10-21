@@ -13,10 +13,10 @@
  * 目标视角的生产路径会短暂保存“协议牌 ID -> 匿名物理槽”映射，它只用于计算
  * 目标手牌的回堆位置，不进入 Card/cardIndex/PileIdentityLedger，结算后立即清理。
  */
-import type { Card } from '../Card'
+import type { Card } from '@/tracker/model/Card'
 import { POSITION_TOP } from '../candidate/cardPositions'
 import { createPublicCandidate } from '../candidate/publicCandidate'
-import { MOVE_TYPE } from '../MoveEventNormalizer'
+import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
 import { getPositiveIDs } from '../helper/cardIDs'
 import { getCount, getEventSourceCards, patchEvent, type MoveEventDraft } from './moveEventUtils'

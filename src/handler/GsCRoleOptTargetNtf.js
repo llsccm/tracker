@@ -8,7 +8,7 @@ import {
   FULL_HAND_ROLE_OPT_SPELL_IDS,
   PARTIAL_HAND_ROLE_OPT_SPELL_IDS,
   shouldRevealAsFullHand
-} from '../tracker/runtime/protocolRules'
+} from '../tracker/protocol/protocolRules'
 import { clearJieLiState, recordJieLiContext } from '../tracker/skill/JieLi'
 import { laya } from '@/runtime/gameAdapter'
 import { wait } from '@/utils'

@@ -1,4 +1,4 @@
-import type { RoomMoveContext } from '../roomMovement/types'
+import type { RoomMoveContext } from '../room/index'
 import type { NormalizedMoveEvent } from '../types'
 
 interface MoveSummaryOptions {

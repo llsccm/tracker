@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
-import { registerDefaultMoveEventHandlers } from '@/tracker/runtime/moveEventHandlers'
+import { registerDefaultMoveEventHandlers } from '@/tracker/skill/registerHandlers'
 import { createTestRoom, getCard } from './helpers/room'
 
 function createRoomWithDiscard(cardNames: string[]) {

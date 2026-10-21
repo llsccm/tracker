@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { POSITION_BOTTOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { isAnonymous, type Card } from '@/tracker/Card'
-import { CARD_INSTANCE_STATUS } from '@/tracker/CardCounter'
+import type { Card } from '@/tracker/model/Card'
+import { CARD_INSTANCE_STATUS } from '@/tracker/projection/CardCounter'
 import type { Room } from '@/tracker/Room'
-import { getPileDisplayCards } from '@/tracker/helper/pileOrder'
-import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/roomMovement/types'
+import { getPileDisplayCards } from '@/tracker/view/pileOrder'
+import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/room/movement/types'
 import { getPublicFieldCandidateCards } from '@/tracker/view/publicFieldCandidates'
 import { trackerLogger } from '@/utils/logger'
 import { createTestRoom, getSuspendedIdentityIDs, takeAnonymousCard } from './helpers/room'
@@ -22,7 +22,7 @@ function getCards(room: Room, ids: number[]) {
     const existing = room.cardIndex.get(id)
     if (existing) return existing
 
-    const target = getPile(room).cards.find(isAnonymous)
+    const target = getPile(room).cards.find((card) => card.isAnonymous)
     const materialized = room.materialize(id, target ?? null)
     if (!materialized) throw new Error(`无法为测试物化牌堆身份 ${id}`)
     return materialized
@@ -107,7 +107,7 @@ function expectConsistentPublicZones(room: Room) {
 function playerHandPlaceholders(room: Room, seatID?: number) {
   return room.cards.filter(
     (card) =>
-      isAnonymous(card) &&
+      card.isAnonymous &&
       card.location === 'player' &&
       card.subZone === 'hand' &&
       (seatID === undefined || card.seats.has(seatID))
@@ -120,7 +120,7 @@ describe('牌堆展示顺序', () => {
     const pileCards = getPile(room).cards
 
     expect(pileCards).toHaveLength(3)
-    expect(pileCards.every(isAnonymous)).toBe(true)
+    expect(pileCards.every((card) => card.isAnonymous)).toBe(true)
     expect(new Set(pileCards.map((card) => card.entityID)).size).toBe(3)
     expect(pileCards).not.toBe(room.cards)
   })
@@ -212,7 +212,7 @@ describe('牌堆展示顺序', () => {
 
     expect(pile.cards).toEqual([...recycledCards, ...remainingPileCards])
     expect(getPileDisplayCards(pile.cards).slice(0, displayBefore.length)).toEqual(displayBefore)
-    expect(pile.cards.every(isAnonymous)).toBe(true)
+    expect(pile.cards.every((card) => card.isAnonymous)).toBe(true)
     expect(getDiscard(room).cards).toEqual([])
     expect(getSuspendedIdentityIDs(room)).toEqual([1, 3, 4, 5])
     expectConsistentPublicZones(room)
@@ -231,7 +231,7 @@ describe('牌堆展示顺序', () => {
 
     expect(pile.cards).toEqual([...recycledCards, ...remainingPileCards])
     expect(pile.cards).toHaveLength(5)
-    expect(pile.cards.every(isAnonymous)).toBe(true)
+    expect(pile.cards.every((card) => card.isAnonymous)).toBe(true)
     expect(getDiscard(room).cards).toEqual([])
     expect(getSuspendedIdentityIDs(room)).toEqual([3, 4, 5])
     expectConsistentPublicZones(room)
@@ -254,7 +254,7 @@ describe('牌堆展示顺序', () => {
     const visibleTopAfter = getPileDisplayCards(pile.cards).slice(0, 3)
     expect(visibleTopAfter).toEqual(visibleTopBefore)
     expect(visibleTopAfter.every((card) => card.isKnown)).toBe(true)
-    expect(recycledCards.every(isAnonymous)).toBe(true)
+    expect(recycledCards.every((card) => card.isAnonymous)).toBe(true)
     expect(getDiscard(room).cards).toEqual([])
     expectConsistentPublicZones(room)
   })
@@ -281,7 +281,7 @@ describe('牌堆展示顺序', () => {
     expect(topKnownCard.isKnown).toBe(true)
     pile.cards
       .filter((card) => card !== bottomKnownCard && card !== topKnownCard)
-      .forEach((card) => expect(card).toSatisfy(isAnonymous))
+      .forEach((card) => expect(card).toSatisfy((card) => card.isAnonymous))
     expect(getSuspendedIdentityIDs(room)).toEqual([4, 5, 6])
     expectConsistentPublicZones(room)
   })
@@ -318,9 +318,9 @@ describe('牌堆展示顺序', () => {
       expect(warnSpy).not.toHaveBeenCalled()
 
       expect(getPile(room).cards).toHaveLength(cardCount)
-      expect(getPile(room).cards.every(isAnonymous)).toBe(true)
+      expect(getPile(room).cards.every((card) => card.isAnonymous)).toBe(true)
       hiddenHandCards.forEach((card) => {
-        expect(card).toSatisfy(isAnonymous)
+        expect(card).toSatisfy((card) => card.isAnonymous)
         expect(card.location).toBe('player')
         expect(card.subZone).toBe('hand')
         expect(card.seats.has(1)).toBe(true)
@@ -349,7 +349,7 @@ describe('牌堆展示顺序', () => {
       room.shufflePile({ cardCount: 5 })
 
       expect(pile.cards).toHaveLength(5)
-      expect(pile.cards.every(isAnonymous)).toBe(true)
+      expect(pile.cards.every((card) => card.isAnonymous)).toBe(true)
       expect(room.deckIdentities).toEqual(new Set([1, 2, 3]))
       expect(warnSpy).toHaveBeenCalledWith(
         expect.any(String),
@@ -425,11 +425,11 @@ describe('牌堆展示顺序', () => {
     })
 
     const seat0Placeholder = room.cards.find(
-      (card) => isAnonymous(card) && card.location === 'player' && card.seats.has(0)
+      (card) => card.isAnonymous && card.location === 'player' && card.seats.has(0)
     )
     const seat4Placeholder = room.cards.find(
       (card) =>
-        isAnonymous(card) &&
+        card.isAnonymous &&
         card.location === 'player' &&
         card.subZone === 'hand' &&
         card.seats.has(4)
@@ -437,7 +437,7 @@ describe('牌堆展示顺序', () => {
     expect(seat0Placeholder).toBeTruthy()
     expect(seat4Placeholder).toBeTruthy()
     expect(seat0Placeholder).toBe(suspendedHandIdentity)
-    expect(suspendedHandIdentity).toSatisfy(isAnonymous)
+    expect(suspendedHandIdentity).toSatisfy((card) => card.isAnonymous)
     expect(suspendedHandIdentity.location).toBe('player')
     expect(suspendedHandIdentity.subZone).toBe('hand')
     expect(suspendedHandIdentity.seats.has(0)).toBe(true)
@@ -476,7 +476,7 @@ describe('牌堆展示顺序', () => {
       expect(revealedIdentity.suspended).toBe(false)
       expect(knownHandCard.location).toBe('process')
       expect(seat4Placeholder!.location).toBe('outside')
-      expect(suspendedHandIdentity).toSatisfy(isAnonymous)
+      expect(suspendedHandIdentity).toSatisfy((card) => card.isAnonymous)
       expect(suspendedHandIdentity.location).toBe('player')
       expect(suspendedHandIdentity.seats.has(0)).toBe(true)
       expect(getSuspendedIdentityIDs(room)).toEqual([2, 3])
@@ -505,10 +505,10 @@ describe('牌堆展示顺序', () => {
     room.shufflePile({ cardCount: 3 })
 
     const preservedPlaceholder = room.cards.find(
-      (card) => isAnonymous(card) && card.location === 'player' && card.subZone === 'hand'
+      (card) => card.isAnonymous && card.location === 'player' && card.subZone === 'hand'
     )
     expect(preservedPlaceholder).toBe(suspendedHandIdentity)
-    expect(suspendedHandIdentity).toSatisfy(isAnonymous)
+    expect(suspendedHandIdentity).toSatisfy((card) => card.isAnonymous)
     expect(suspendedHandIdentity.location).toBe('player')
     expect(suspendedHandIdentity.isKnown).toBe(false)
     expect(getSuspendedIdentityIDs(room)).toEqual([2, 3, 137])
@@ -567,11 +567,11 @@ describe('牌堆展示顺序', () => {
     room.shufflePile({ cardCount: 3 })
 
     expect(getPile(room).cards).toHaveLength(3)
-    expect(getPile(room).cards.every(isAnonymous)).toBe(true)
+    expect(getPile(room).cards.every((card) => card.isAnonymous)).toBe(true)
     expect(getDiscard(room).cards).toEqual([])
     expect(visibleHandCard.location).toBe('player')
     expect(visibleHandCard.suspended).toBe(false)
-    expect(hiddenHandPlaceholder).toSatisfy(isAnonymous)
+    expect(hiddenHandPlaceholder).toSatisfy((card) => card.isAnonymous)
     expect(hiddenHandPlaceholder.location).toBe('player')
     expect(hiddenHandPlaceholder.subZone).toBe('hand')
     expect(hiddenHandPlaceholder.seats.has(1)).toBe(true)
@@ -585,7 +585,7 @@ describe('牌堆展示顺序', () => {
     expect(getSuspendedIdentityIDs(room)).toEqual([2, 3, 5])
     expectConsistentPublicZones(room)
     expect(recycledCard.location).toBe('pile')
-    expect(recycledCard).toSatisfy(isAnonymous)
+    expect(recycledCard).toSatisfy((card) => card.isAnonymous)
   })
 
   it('洗牌匿名化暗标记正 ID 时保留同一实体与候选记录', () => {
@@ -632,7 +632,7 @@ describe('牌堆展示顺序', () => {
     expect(updatedRecord.placeholderCards.has(hiddenMarkPlaceholder)).toBe(true)
     expect(placeholderCards).toHaveLength(1)
     expect(currentPlaceholder).toBe(hiddenMarkPlaceholder)
-    expect(isAnonymous(currentPlaceholder)).toBe(true)
+    expect(currentPlaceholder.isAnonymous).toBe(true)
     expect(currentPlaceholder.location).toBe('player')
     expect(currentPlaceholder.subZone).toBe('mark')
     expect(currentPlaceholder.spellID).toBe(700)
@@ -641,7 +641,7 @@ describe('牌堆展示顺序', () => {
     expect(hiddenMarkPlaceholder.suspended).toBe(false)
     expect(getPublicFieldCandidateCards(room)).not.toContain(hiddenMarkPlaceholder)
     expect(getSuspendedIdentityIDs(room)).toEqual([2, 3, 5])
-    expect(getPile(room).cards.every(isAnonymous)).toBe(true)
+    expect(getPile(room).cards.every((card) => card.isAnonymous)).toBe(true)
     expectConsistentPublicZones(room)
   })
 
@@ -682,7 +682,7 @@ describe('牌堆展示顺序', () => {
 
     const preservedMarkPlaceholders = room.cards.filter(
       (card) =>
-        isAnonymous(card) &&
+        card.isAnonymous &&
         card.location === 'player' &&
         card.subZone === 'mark' &&
         card.spellID === 700 &&
@@ -690,7 +690,7 @@ describe('牌堆展示顺序', () => {
     )
     expect(preservedMarkPlaceholders).toHaveLength(2)
     hiddenMarkCards.forEach((card) => {
-      expect(card).toSatisfy(isAnonymous)
+      expect(card).toSatisfy((card) => card.isAnonymous)
       expect(card.location).toBe('player')
       expect(card.subZone).toBe('mark')
       expect(card.spellID).toBe(700)
@@ -715,7 +715,7 @@ describe('牌堆展示顺序', () => {
     expect(
       room.cards.filter(
         (card) =>
-          isAnonymous(card) &&
+          card.isAnonymous &&
           card.location === 'player' &&
           card.subZone === 'mark' &&
           card.spellID === 700 &&
@@ -775,7 +775,7 @@ describe('牌堆展示顺序', () => {
     ).toBe(true)
     placeholders.forEach((card) => {
       expect(card.location).toBe('process')
-      expect(isAnonymous(card)).toBe(false)
+      expect(card.isAnonymous).toBe(false)
       expect(pile.cards).not.toContain(card)
     })
     expect(pile.cards.slice(-3).map((card) => card.id)).toEqual([4, 5, 6])
@@ -985,7 +985,7 @@ describe('牌堆展示顺序', () => {
     expect(pile.cards).not.toContain(knownCard)
     expect(pile.cards).not.toContain(knownHandCard)
     expect(fallbackPlaceholder).toBeTruthy()
-    expect(fallbackPlaceholder).toSatisfy(isAnonymous)
+    expect(fallbackPlaceholder).toSatisfy((card) => card.isAnonymous)
     expect(fallbackPlaceholder?.location).toBe('pile')
     expect(knownHandCard.location).toBe('player')
     expect(knownHandCard.subZone).toBe('hand')

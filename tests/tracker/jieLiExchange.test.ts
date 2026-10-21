@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
-import { MOVE_TYPE } from '@/tracker/MoveEventNormalizer'
+import { MOVE_TYPE } from '@/tracker/protocol/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
 import { JIE_LI_SPELL_ID, recordJieLiContext, recordJieLiSelection } from '@/tracker/skill/JieLi'
 import { locationKeys, playerHand, publicLocation } from './helpers/locationCandidates'

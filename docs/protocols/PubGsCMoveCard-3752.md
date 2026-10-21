@@ -50,6 +50,6 @@
 ## 代码与验证
 
 - 技能装饰：`src/tracker/skill/FenChao.ts` 的 `decorateFenChao`。
-- 默认注册：`src/tracker/runtime/moveEventHandlers.ts` 的 `registerDefaultMoveEventHandlers`。
+- 默认注册：`src/tracker/skill/registerHandlers.ts` 的 `registerDefaultMoveEventHandlers`。
 - 回归：`tests/tracker/fenChao.test.ts`。
 - 协议索引：[README.md](README.md)。

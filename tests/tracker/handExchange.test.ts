@@ -1,6 +1,5 @@
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { describe, expect, it } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import { HAND_EXCHANGE_STATE_KEY } from '@/tracker/skill/HandExchange'
 import type { Room } from '@/tracker/Room'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
@@ -21,7 +20,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
   function getCard(room: Room, id: number) {
     const existing = room.cardIndex.get(id)
     if (existing) return existing
-    const target = room.zones.get('pile')!.cards.find(isAnonymous) ?? null
+    const target = room.zones.get('pile')!.cards.find((card) => card.isAnonymous) ?? null
     return room.materialize(id, target)!
   }
 
@@ -975,7 +974,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(getCard(room, revealedPlaceholderID).isKnown).toBe(true)
     expect(getCard(room, 641).seats).toEqual(new Set([1]))
     expect(getCard(room, 642).seats).toEqual(new Set([3]))
-    expect(isAnonymous(placeholder)).toBe(false)
+    expect(placeholder.isAnonymous).toBe(false)
     expect(placeholder.id).toBe(revealedPlaceholderID)
     expect(placeholder.isKnown).toBe(true)
     expect(placeholder.seats).toEqual(new Set([1]))

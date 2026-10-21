@@ -61,7 +61,7 @@
 | ------------------------ | --------------------------------------- | ------------------------------------------------------- |
 | `GsCRoleOptTargetNtf`    | `src/handler/GsCRoleOptTargetNtf.js`    | `tracker.revealTrackerCards` / `Room.ensureSkillState`  |
 | `GsCUpdateRoleDataExNtf` | `src/handler/GsCUpdateRoleDataExNtf.js` | OPT_DATA_ADD_SPELL_EFFECT 8 / 巧织 3544 / 诡伏 3709 / 裴秀 4022 状态更新 |
-| `PubGsCMoveCard`         | `src/handler/PubGsCMoveCard.js`         | `src/tracker/MoveEventNormalizer.ts` → `Room.moveCards` |
+| `PubGsCMoveCard`         | `src/handler/PubGsCMoveCard.js`         | `src/tracker/protocol/MoveEventNormalizer.ts` → `Room.moveCards` |
 | 整手交换                 | 经 `decorateGenericMove`                | `src/tracker/skill/HandExchange.ts`                     |
 | 骋烈其他视角           | 经 `SpellID=3208` 装饰                  | `src/tracker/skill/ChengLie.ts` 的 `decorateChengLieMove` |
 | 诫厉目标视角交换         | 经 `SpellID=3483` 装饰                  | `src/tracker/skill/JieLi.ts`                            |

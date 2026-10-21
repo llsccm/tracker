@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import { createTestRoom, getCard } from './helpers/room'
 
 describe('已知牌来源与落区阶段顺序', () => {
@@ -101,7 +100,7 @@ describe('已知牌来源与落区阶段顺序', () => {
     const replacement = pile.cards.find((card) => !originalPileCards.has(card))
     expect(pile.cards).toHaveLength(pileCountBefore)
     expect(pile.cards).not.toContain(publicKnownCard)
-    expect(replacement).toSatisfy(isAnonymous)
+    expect(replacement).toSatisfy((card) => card.isAnonymous)
     expect(replacement?.location).toBe('pile')
     expect(room.getPlayerHandCardIDs(2)).toEqual([1, 2])
     expect(room.getPlayerHandCardIDs(1)).toEqual([])

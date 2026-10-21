@@ -1,6 +1,6 @@
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import type { LocationCandidateInput } from '@/tracker/candidate/locationCandidate'
-import type { Card } from '@/tracker/Card'
+import type { Card } from '@/tracker/model/Card'
 import type {
   CardID,
   PublicPosition,

@@ -11,9 +11,9 @@
  * - 协议已给出正 CardID，或没有符合的火杀/雷杀时，保留默认移动路径。
  */
 import { POSITION_RANDOM } from '../candidate/cardPositions'
-import type { Card } from '../Card'
-import { MOVE_TYPE } from '../MoveEventNormalizer'
-import { PROTOCOL_ZONE } from '../protocolZones'
+import type { Card } from '@/tracker/model/Card'
+import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
+import { PROTOCOL_ZONE } from '../protocol/protocolZones'
 import type { Room } from '../Room'
 import {
   getCount,

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import {
   createErrorSpy,
@@ -86,7 +85,7 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
       expect(room.getPlayer(7)!.knownHandCards).toEqual([])
       expect(room.zones.get('exchange')!.cards).toEqual([])
       expect(pile.cards.slice(4)).toEqual(remainingPile)
-      expect(pile.cards.slice(0, 4).every(isAnonymous)).toBe(true)
+      expect(pile.cards.slice(0, 4).every((card) => card.isAnonymous)).toBe(true)
       expect(room.cards).toHaveLength(entityCount)
       expect(room.hasSkillState(3776)).toBe(false)
       expect(room.hasSkillState('handExchangeBatches')).toBe(false)
@@ -112,7 +111,12 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
         expect.objectContaining({ zone: 'pile', position: 'bottom', count: 4 })
       ])
     }
-    expect(room.zones.get('pile')!.cards.slice(0, 4).filter(isAnonymous)).toHaveLength(2)
+    expect(
+      room.zones
+        .get('pile')!
+        .cards.slice(0, 4)
+        .filter((card) => card.isAnonymous)
+    ).toHaveLength(2)
     expect(room.zones.get('exchange')!.cards).toEqual([])
     expect(room.assertPileIdentityLedgerConsistency('3776:known-return')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()

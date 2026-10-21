@@ -1,5 +1,5 @@
-import { CARD_INSTANCE_STATUS } from '../CardCounter'
-import type { Card } from '../Card'
+import { CARD_INSTANCE_STATUS } from '../projection/CardCounter'
+import type { Card } from '@/tracker/model/Card'
 import type { Room } from '../Room'
 import type { CardID, NormalizedMoveEvent, SeatID, SubZone } from '../types'
 

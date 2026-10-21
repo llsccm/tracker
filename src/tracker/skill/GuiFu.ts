@@ -1,6 +1,6 @@
 import type { Room } from '../Room'
-import { MOVE_TYPE } from '../MoveEventNormalizer'
-import { GUI_FU_ROLE_DATA_ID } from '../runtime/protocolRules'
+import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
+import { GUI_FU_ROLE_DATA_ID } from '../protocol/protocolRules'
 import type { CardID, NormalizedMoveCardFields, RawMoveCardEvent, SeatID } from '../types'
 import { trackerLogger } from '@/utils/logger'
 

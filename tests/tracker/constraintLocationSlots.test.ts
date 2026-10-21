@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ConstraintGroup } from '@/tracker/ConstraintGroup'
+import { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
 import type { Room } from '@/tracker/Room'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from './helpers/room'

@@ -1,7 +1,7 @@
 import { CardConfig } from '@/config'
 import { createQueryButton } from './cardButton'
-import { CARD_INSTANCE_STATUSES } from '../CardCounter'
-import type { CardInstance } from '../CardCounter'
+import { CARD_INSTANCE_STATUSES } from '../projection/CardCounter'
+import type { CardInstance } from '../projection/CardCounter'
 import type { Room } from '../Room'
 
 /**

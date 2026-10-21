@@ -20,7 +20,7 @@
 `Room.resolveConstraints()` 的职责，是在当前协议事实、候选位置、局部数量约束和观测手牌数之间求出一个稳定状态。稳定状态意味着再执行一轮不会继续改变候选、owner、匿名手牌实体或相关派生计数。
 
 Room 仅保留该公开入口，实际不动点循环与稳定尾部在 `RoomConstraints.resolveConstraints()` 中实现。
-手牌分配统一通过 `candidate/handSlotUsage.ts` 的 `computeHandSlotAllocation()` 读取；
+手牌分配统一通过 `constraint/handSlotUsage.ts` 的 `computeHandSlotAllocation()` 读取；
 `reconcileAnonymousHandCards()` 只消费分配结果，不再另行扫描卡牌或计算缺口。
 E1/E2 缓存只在单次收敛内存活。Room 继续持有牌局事实、触碰座位集合、脏事件和轮数统计；
 DEV 诊断实例由 Room 按需传入，诊断抽样与最终校验的执行顺序不变。
@@ -94,8 +94,8 @@ flowchart TD
 
 三类约束完成后，`reconcileAnonymousHandCards()` 根据观测手牌数、确定明牌和模糊明牌槽位补建或释放匿名手牌实体。实体数量变化会改变玩家区快照，必须把本轮标记为有变化并重新执行全部约束。
 
-名额解析的共同读面是 `candidate/constraintSlots.ts`；手牌分配唯一入口是
-`candidate/handSlotUsage.ts` 的 `computeHandSlotAllocation()`。它一次归组确定明牌、确定暗牌
+名额解析的共同读面是 `constraint/constraintSlots.ts`；手牌分配唯一入口是
+`constraint/handSlotUsage.ts` 的 `computeHandSlotAllocation()`。它一次归组确定明牌、确定暗牌
 及候选明牌，并输出展示额度、暗实体覆盖和匿名补缺：
 
 - 先从组内名额扣除已确定位置的实体，不能把它们再次算作候选额度。
@@ -114,7 +114,7 @@ flowchart TD
 
 收敛循环使用三类增量机制：
 
-- **A2：玩家区增量快照**。`Room.refreshPlayerSnapshot()` 委托 `room/playerSnapshot.ts` 按 `dirtyCardEvents` 游标维护快照；数组、成员集合、游标和顺序表只在该模块内保存，Room 的 `playerCardsSnapshot` 是只读 getter。事件断档时回退全量重建，开发构建由 `assertPlayerSnapshotConsistency()` 校验。新实体通过 `Room.registerCardEntity()` 预先登记创建顺序，首次入手无需 `Room.cards.indexOf()`。
+- **A2：玩家区增量快照**。`Room.refreshPlayerSnapshot()` 委托 `projection/playerSnapshot.ts` 按 `dirtyCardEvents` 游标维护快照；数组、成员集合、游标和顺序表只在该模块内保存，Room 的 `playerCardsSnapshot` 是只读 getter。事件断档时回退全量重建，开发构建由 `assertPlayerSnapshotConsistency()` 校验。新实体通过 `Room.registerCardEntity()` 预先登记创建顺序，首次入手无需 `Room.cards.indexOf()`。
 - **E1：手牌分配按座位缓存**。首轮批量计算有观测手牌数的座位，后续轮次沿共享约束组传播触碰座位，批量重算依赖闭包；缓存只在单次 `resolveConstraints()` 内有效。
 - **E2：跳过无关座位**。首轮处理全部已观测玩家，后续轮次跳过触碰座位依赖闭包以外的玩家。暗实体匹配仍消费完整组集合，不能因本轮只重算部分座位而改变结果。
 

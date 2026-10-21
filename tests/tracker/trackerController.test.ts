@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/roomMovement/types'
+import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/room/movement/types'
 import { TrackerController } from '@/tracker/runtime/trackerController'
 import {
   createErrorSpy,
@@ -286,7 +285,7 @@ describe('TrackerController', () => {
     const room = controller.getTrackerRoom()
     const pile = room.zones.get('pile')
     const exchange = room.zones.get('exchange')
-    const randomPileSlot = pile.cards.find(isAnonymous)
+    const randomPileSlot = pile.cards.find((card) => card.isAnonymous)
     const entityCountBefore = room.cards.length
 
     controller.syncTrackerMove(
@@ -532,7 +531,7 @@ describe('TrackerController', () => {
     expect(
       room.cards.filter(
         (card) =>
-          isAnonymous(card) &&
+          card.isAnonymous &&
           card.location === 'player' &&
           card.subZone === 'hand' &&
           card.seats.has(1)
@@ -641,7 +640,7 @@ describe('TrackerController', () => {
     expect(
       room.cards.filter(
         (card) =>
-          isAnonymous(card) &&
+          card.isAnonymous &&
           card.location === 'player' &&
           card.subZone === 'hand' &&
           card.seats.has(3)
@@ -685,7 +684,7 @@ describe('TrackerController', () => {
     expect(pile.cards).toHaveLength(5)
     expect(pile.cards[0]?.id).toBe(occupiedID)
     expect(bottomPlaceholder.location).toBe('player')
-    expect(isAnonymous(bottomPlaceholder)).toBe(true)
+    expect(bottomPlaceholder.isAnonymous).toBe(true)
     expect(bottomPlaceholder.seats).toEqual(new Set([3]))
     expect(topKnownCards.map((card) => card.location)).toEqual(['pile', 'pile'])
     expect(topKnownCards.every((card) => card.isKnown)).toBe(true)
@@ -735,7 +734,7 @@ describe('TrackerController', () => {
     expect(
       room.cards.filter(
         (card) =>
-          isAnonymous(card) &&
+          card.isAnonymous &&
           card.location === 'player' &&
           card.subZone === 'hand' &&
           card.seats.has(3)
@@ -1050,7 +1049,7 @@ describe('TrackerController', () => {
     const room = controller.getTrackerRoom()
     const [placeholder] = room.zones.get('exile')!.cards
     expect(placeholder).toBeDefined()
-    expect(isAnonymous(placeholder)).toBe(true)
+    expect(placeholder.isAnonymous).toBe(true)
 
     controller.syncTrackerMove(
       protocolMove({
@@ -1112,7 +1111,7 @@ describe('TrackerController', () => {
     expect(
       room.cards.filter(
         (card) =>
-          isAnonymous(card) &&
+          card.isAnonymous &&
           card.location === 'player' &&
           card.subZone === 'hand' &&
           card.seats.has(0)
@@ -1267,7 +1266,7 @@ describe('TrackerController', () => {
     expect(
       room.cards.filter(
         (card) =>
-          isAnonymous(card) &&
+          card.isAnonymous &&
           card.location === 'player' &&
           card.subZone === 'hand' &&
           card.seats.has(1)
@@ -1295,7 +1294,7 @@ describe('TrackerController', () => {
     expect(
       room.cards.filter(
         (card) =>
-          isAnonymous(card) &&
+          card.isAnonymous &&
           card.location === 'player' &&
           card.subZone === 'hand' &&
           card.seats.has(1)
@@ -1501,7 +1500,7 @@ describe('TrackerController', () => {
       room.cards
         .filter(
           (card) =>
-            isAnonymous(card) &&
+            card.isAnonymous &&
             card.location === 'player' &&
             card.subZone === 'hand' &&
             card.seats.has(2)

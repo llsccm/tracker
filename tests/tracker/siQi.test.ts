@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import { POSITION_BOTTOM, POSITION_RANDOM } from '@/tracker/candidate/cardPositions'
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { Room } from '@/tracker/Room'
-import { registerDefaultMoveEventHandlers } from '@/tracker/runtime/moveEventHandlers'
+import { registerDefaultMoveEventHandlers } from '@/tracker/skill/registerHandlers'
 
 function createSiQiEvent(cardCount: number) {
   return normalizeMoveEvent({

@@ -4,7 +4,7 @@ import {
   hasMixedTrackerMoveVisibility,
   normalizeTrackerMovePosition,
   shouldIgnoreTrackerMove
-} from '../tracker/runtime/protocolRules'
+} from '../tracker/protocol/protocolRules'
 import { handleGameFlowState } from './gameFlowState'
 import { handleSpecialZones } from './specialZones'
 import { applySpellEffect } from './spellEffects'

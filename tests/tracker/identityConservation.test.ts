@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import type { Room } from '@/tracker/Room'
 import type { CardID } from '@/tracker/types'
 import { trackerLogger } from '@/utils/logger'
@@ -114,7 +113,7 @@ describe('身份账本守恒', () => {
       materializeDeckIdentities: false
     })
     const pile = room.zones.get('pile')!
-    const card = room.materialize(1, pile.cards.find(isAnonymous)!)!
+    const card = room.materialize(1, pile.cards.find((card) => card.isAnonymous)!)!
     room.applyPileIdentityReveal([1], 'pile')
     card.isKnown = false
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
@@ -203,10 +202,13 @@ describe('身份账本守恒', () => {
     const pile = room.zones.get('pile')!
 
     // 让一张牌以正 ID 暗槽形态留在牌堆：物化身份后再隐藏牌面。
-    const target = pile.cards.find(isAnonymous)!
+    const target = pile.cards.find((card) => card.isAnonymous)!
+    expect([target.hasRealIdentity, target.isAnonymous]).toEqual([false, true])
     const placeholder = room.materialize(1, target)!
     placeholder.isKnown = false
 
+    expect(placeholder).toBe(target)
+    expect([target.hasRealIdentity, target.isAnonymous]).toEqual([true, false])
     expect(placeholder.id).toBe(1)
     expect(room.cardIndex.has(1)).toBe(true)
     expect(room.unlocatedIdentities.has(1)).toBe(false)
@@ -221,7 +223,7 @@ describe('身份账本守恒', () => {
     expect(room.unlocatedIdentities.has(1)).toBe(true)
     expect(room.deckIdentities.has(1)).toBe(true)
     expect(placeholder.location).toBe('outside')
-    expect(placeholder).toSatisfy(isAnonymous)
+    expect([target.hasRealIdentity, target.isAnonymous]).toEqual([false, true])
 
     expectIdentityLedgerIntact(room, [1, 2, 3, 4])
     expectConservationClean(room, 'test:release-placeholder')
@@ -234,7 +236,7 @@ describe('身份账本守恒', () => {
       materializeDeckIdentities: false
     })
     const pile = room.zones.get('pile')!
-    const card = room.materialize(1, pile.cards.find(isAnonymous)!)!
+    const card = room.materialize(1, pile.cards.find((card) => card.isAnonymous)!)!
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
 
     try {
@@ -255,7 +257,7 @@ describe('身份账本守恒', () => {
       materializeDeckIdentities: false
     })
     const pile = room.zones.get('pile')!
-    const card = room.materialize(1, pile.cards.find(isAnonymous)!)!
+    const card = room.materialize(1, pile.cards.find((card) => card.isAnonymous)!)!
     card.isKnown = false
     const anonymizeSpy = vi.spyOn(room, 'anonymizeLocatedIdentity').mockReturnValue(null)
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
@@ -283,7 +285,7 @@ describe('身份账本守恒', () => {
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
 
     try {
-      const target = pile.cards.find(isAnonymous)!
+      const target = pile.cards.find((card) => card.isAnonymous)!
       const card = room.materialize(1, target)!
 
       const released = room.anonymizeLocatedIdentity(card, 'test:primitive')
@@ -296,7 +298,7 @@ describe('身份账本守恒', () => {
       expect(room.cardIndex.has(1)).toBe(false)
       expect(room.unlocatedIdentities.has(1)).toBe(true)
       expect(room.deckIdentities.has(1)).toBe(true)
-      expect(card).toSatisfy(isAnonymous)
+      expect(card).toSatisfy((card) => card.isAnonymous)
 
       expectIdentityLedgerIntact(room, [1, 2, 3, 4])
     } finally {
@@ -313,7 +315,7 @@ describe('身份账本守恒', () => {
     const pile = room.zones.get('pile')!
 
     // 匿名槽本就没有真实身份可解绑。
-    const anonymousSlot = pile.cards.find(isAnonymous)!
+    const anonymousSlot = pile.cards.find((card) => card.isAnonymous)!
     const before = {
       cardIndexSize: room.cardIndex.size,
       unlocated: Array.from(room.unlocatedIdentities).sort((a, b) => a - b),
@@ -336,7 +338,7 @@ describe('身份账本守恒', () => {
     })
     const pile = room.zones.get('pile')!
 
-    const target = pile.cards.find(isAnonymous)!
+    const target = pile.cards.find((card) => card.isAnonymous)!
     const placeholder = room.materialize(1, target)!
     placeholder.isKnown = false
 
@@ -379,7 +381,7 @@ describe('身份账本守恒', () => {
     room.shufflePile({ cardCount: 4 })
 
     const hiddenSlot = pile.cards.at(-1)!
-    expect(hiddenSlot).toSatisfy(isAnonymous)
+    expect(hiddenSlot).toSatisfy((card) => card.isAnonymous)
     const suspendedIdentity = room.cardIndex.get(4)!
     expect(suspendedIdentity).toMatchObject({
       location: 'suspended',
@@ -400,7 +402,7 @@ describe('身份账本守恒', () => {
     expect(room.cardIndex.get(4)).toBe(suspendedIdentity)
     expect(suspendedIdentity.location).toBe('player')
     expect(suspendedIdentity.suspended).toBe(false)
-    expect(hiddenSlot).toSatisfy(isAnonymous)
+    expect(hiddenSlot).toSatisfy((card) => card.isAnonymous)
     expect(hiddenSlot.location).toBe('outside')
     expectIdentityLedgerIntact(room, [1, 2, 3, 4, 5, 6])
     expectConservationClean(room, 'test:reuse-hidden-slot')

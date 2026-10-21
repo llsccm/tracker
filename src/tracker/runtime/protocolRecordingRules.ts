@@ -1,4 +1,4 @@
-import { GUI_FU_ROLE_DATA_ID } from './protocolRules'
+import { GUI_FU_ROLE_DATA_ID } from '../protocol/protocolRules'
 
 export interface ProjectedTrackerProtocol {
   className: string

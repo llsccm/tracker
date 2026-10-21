@@ -10,11 +10,11 @@
  * 不提供它在三张中的具体序号。
  */
 import { trackerLogger } from '@/utils/logger'
-import type { Card } from '../Card'
+import type { Card } from '@/tracker/model/Card'
 import { POSITION_RANDOM, POSITION_TOP } from '../candidate/cardPositions'
 import { createLocationCandidateKey } from '../candidate/locationCandidate'
 import { createPublicCandidate } from '../candidate/publicCandidate'
-import { isPileSingleCardShow, MOVE_TYPE } from '../MoveEventNormalizer'
+import { isPileSingleCardShow, MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
 import { recordTraversal } from '../traversalStats'
 import type { PlayerLocationCandidate, SeatID } from '../types'

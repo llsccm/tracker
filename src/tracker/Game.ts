@@ -1,7 +1,7 @@
 import { UI } from './state'
 import { trackerLogger } from '@/utils/logger'
 import { ORDER_LABELS } from './helper/seatLabel'
-import type { Player } from './Player'
+import type { Player } from './model/Player'
 import type { Room } from './Room'
 import type { SeatID } from './types'
 

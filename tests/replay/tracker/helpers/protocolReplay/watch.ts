@@ -1,6 +1,6 @@
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
-import type { Card } from '@/tracker/Card'
-import type { ConstraintGroup } from '@/tracker/ConstraintGroup'
+import type { Card } from '@/tracker/model/Card'
+import type { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
 import type { Room } from '@/tracker/Room'
 import { NOOP_REPLAY_METRICS, type ReplayMetricsSink } from './metrics'
 import { normalizePositive } from './normalize'

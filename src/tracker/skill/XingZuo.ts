@@ -1,7 +1,7 @@
-import { isAnonymous, type Card } from '../Card'
+import type { Card } from '@/tracker/model/Card'
 import { POSITION_BOTTOM } from '../candidate/cardPositions'
 import { createPublicCandidate } from '../candidate/publicCandidate'
-import { MOVE_TYPE } from '../MoveEventNormalizer'
+import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
 import type { SeatID } from '../types'
 import { getPositiveIDs } from '../helper/cardIDs'
@@ -104,7 +104,7 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
 
 function patchBatchCards(event: MoveEventDraft, room: Room, cards: Card[]): MoveEventDraft {
   const protocolIDs = getPositiveIDs(event.cardIDs)
-  const anonymousCards = cards.filter(isAnonymous)
+  const anonymousCards = cards.filter((card) => card.isAnonymous)
   const targets = protocolIDs.map(
     (id) => cards.find((card) => card.id === id) ?? anonymousCards.shift()
   )

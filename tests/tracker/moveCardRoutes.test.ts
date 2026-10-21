@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
-import type { UnassignedMarkSpaceState } from '@/tracker/roomMovement/types'
+import type { UnassignedMarkSpaceState } from '@/tracker/room/movement/types'
 import { createTestRoom, getCard } from './helpers/room'
 import { locationKeys, playerHand, publicLocation } from './helpers/locationCandidates'
 

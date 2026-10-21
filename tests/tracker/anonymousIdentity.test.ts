@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Card, hasRealIdentity, isAnonymous } from '@/tracker/Card'
+import { Card } from '@/tracker/model/Card'
 import { trackerLogger } from '@/utils/logger'
 import { createTestRoom, getCard } from './helpers/room'
 
@@ -10,12 +10,12 @@ describe('阶段 0 匿名身份与守恒观测', () => {
     const placeholders = room.createExternalCards([], 3)
     const anonymousIDs = placeholders.map((card) => card.id)
 
-    expect(placeholders.every(isAnonymous)).toBe(true)
+    expect(placeholders.every((card) => card.isAnonymous)).toBe(true)
     expect(placeholders.every((card) => card.id === card.entityID && card.id < 0)).toBe(true)
     expect(new Set(anonymousIDs).size).toBe(placeholders.length)
     expect(placeholders.every((card) => !room.cardIndex.has(card.id))).toBe(true)
-    expect(hasRealIdentity(getCard(room, 1))).toBe(true)
-    expect(isAnonymous(getCard(room, 1))).toBe(false)
+    expect(getCard(room, 1).hasRealIdentity).toBe(true)
+    expect(getCard(room, 1).isAnonymous).toBe(false)
   })
 
   it('健康房间的守恒观测不告警', () => {

@@ -15,7 +15,7 @@ import {
   finishDirtyRender,
   markFullPlayerRender
 } from './dirtyRenderState'
-import type { Player } from '../Player'
+import type { Player } from '@/tracker/model'
 import type { Room } from '../Room'
 
 let currentRoom: Room | null = null

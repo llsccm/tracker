@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import { POSITION_RANDOM } from '@/tracker/candidate/cardPositions'
 import type { Room } from '@/tracker/Room'
 import {
@@ -64,7 +63,7 @@ describe('洗牌使用协议张数并保留身份候选', () => {
     controller.syncTrackerMove(shuffleMove(5))
 
     expectConsistentPile(room, 5)
-    expect(room.zones.get('pile')!.cards.every(isAnonymous)).toBe(true)
+    expect(room.zones.get('pile')!.cards.every((card) => card.isAnonymous)).toBe(true)
     expect(room.players.get(3)!.cards).toEqual(handBefore)
     expect(room.pileIdentityLedger.getSnapshot().cohort).toMatchObject({
       generation: 1,
@@ -156,7 +155,7 @@ describe('洗牌使用协议张数并保留身份候选', () => {
     controller.syncTrackerMove(shuffleMove(1))
 
     expectConsistentPile(room, 1)
-    expect(room.zones.get('pile')!.cards.every(isAnonymous)).toBe(true)
+    expect(room.zones.get('pile')!.cards.every((card) => card.isAnonymous)).toBe(true)
     expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
       knownPileIdentityIDs: [],
       cohort: { groups: [{ cardIDs: CARD_IDS, remainingPileCount: 1, kind: 'partial' }] }
@@ -180,8 +179,8 @@ describe('洗牌使用协议张数并保留身份候选', () => {
     controller.syncTrackerMove(shuffleMove(5))
 
     expectConsistentPile(room, 5)
-    expect(room.players.get(1)!.cards.filter(isAnonymous)).toHaveLength(1)
-    expect(room.players.get(3)!.cards.filter(isAnonymous)).toHaveLength(4)
+    expect(room.players.get(1)!.cards.filter((card) => card.isAnonymous)).toHaveLength(1)
+    expect(room.players.get(3)!.cards.filter((card) => card.isAnonymous)).toHaveLength(4)
     expect(errorSpy).not.toHaveBeenCalled()
   })
 })

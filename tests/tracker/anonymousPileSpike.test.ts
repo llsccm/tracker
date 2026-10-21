@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
-import { CARD_INSTANCE_STATUS } from '@/tracker/CardCounter'
-import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/roomMovement/types'
+import { CARD_INSTANCE_STATUS } from '@/tracker/projection/CardCounter'
+import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/room/movement/types'
 import { getPublicFieldCandidateCards } from '@/tracker/view/publicFieldCandidates'
 import { trackerLogger } from '@/utils/logger'
 import { expectLocationIndexMatchesRebuild } from './helpers/locationIndex'
@@ -17,7 +16,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
     const pile = room.zones.get('pile')!
 
     expect(pile.cards).toHaveLength(3)
-    expect(pile.cards.every(isAnonymous)).toBe(true)
+    expect(pile.cards.every((card) => card.isAnonymous)).toBe(true)
     expect(new Set(pile.cards.map((card) => card.entityID)).size).toBe(3)
     expect(room.cardIndex.size).toBe(0)
     expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3]))
@@ -42,7 +41,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
       (card) => card.location === 'player' && card.subZone === 'hand'
     )
     expect(hiddenHand).toHaveLength(2)
-    expect(hiddenHand.every(isAnonymous)).toBe(true)
+    expect(hiddenHand.every((card) => card.isAnonymous)).toBe(true)
     expect(room.zones.get('pile')!.cards).toHaveLength(2)
     expect(room.cardIndex.size).toBe(0)
     expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3, 4]))
@@ -194,7 +193,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
       sourceEvent: { type: 'stage1:discard-before-shuffle' }
     })
 
-    const playerSlots = room.cards.filter((card) => isAnonymous(card) && card.location === 'player')
+    const playerSlots = room.cards.filter((card) => card.isAnonymous && card.location === 'player')
     const remainingPileSlot = pile.cards[0]
     const playerSlotEntityIDs = playerSlots.map((card) => card.entityID)
 
@@ -223,7 +222,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
     expect(discard.cards).toEqual([])
     expect(pile.cards).toHaveLength(4)
     expect(pile.cards).toContain(remainingPileSlot)
-    expect(pile.cards.every(isAnonymous)).toBe(true)
+    expect(pile.cards.every((card) => card.isAnonymous)).toBe(true)
     expect(playerSlots.map((card) => card.entityID)).toEqual(playerSlotEntityIDs)
     playerSlots.forEach((card) => {
       expect(card.location).toBe('player')
@@ -253,7 +252,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
       sourceEvent: { type: 'stage1:discard-before-shuffle' }
     })
     room.shufflePile({ cardCount: 4 })
-    expect(pile.cards.every(isAnonymous)).toBe(true)
+    expect(pile.cards.every((card) => card.isAnonymous)).toBe(true)
     expect(getSuspendedIdentityIDs(room)).toEqual([4, 5, 6])
 
     room.moveCards([4], 'player', {
@@ -370,8 +369,8 @@ describe('阶段 1 匿名牌堆 spike', () => {
 
     expect(hiddenPileCard.entityID).toBe(hiddenPileEntityID)
     expect(hiddenPileCard.location).toBe('player')
-    expect(hiddenPileCard).toSatisfy(isAnonymous)
-    expect(pile.cards.every(isAnonymous)).toBe(true)
+    expect(hiddenPileCard).toSatisfy((card) => card.isAnonymous)
+    expect(pile.cards.every((card) => card.isAnonymous)).toBe(true)
     expect(room.cardIndex.has(4)).toBe(false)
     expect(room.unlocatedIdentities).toEqual(new Set([4]))
   })
@@ -411,12 +410,12 @@ describe('阶段 1 匿名牌堆 spike', () => {
     expect(revealedIdentity).not.toBe(hiddenPileCard)
     expect(revealedIdentity.location).toBe('discard')
     expect(revealedIdentity.isKnown).toBe(true)
-    expect(hiddenPileCard).toSatisfy(isAnonymous)
+    expect(hiddenPileCard).toSatisfy((card) => card.isAnonymous)
     expect(hiddenPileCard.location).toBe('outside')
 
     room.shufflePile({ cardCount: pile.cards.length + discard.cards.length })
 
-    expect(revealedIdentity).toSatisfy(isAnonymous)
+    expect(revealedIdentity).toSatisfy((card) => card.isAnonymous)
     expect(revealedIdentity.location).toBe('pile')
     expect(getSuspendedIdentityIDs(room)).toEqual([1, 2, 3])
     expect(room.cardIndex.size).toBe(3)
@@ -491,7 +490,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
         .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
         .records.get('1:muniu:161')!
       expect(recordAfter.placeholderCards.has(hiddenMarkCard)).toBe(true)
-      expect(hiddenMarkCard).toSatisfy(isAnonymous)
+      expect(hiddenMarkCard).toSatisfy((card) => card.isAnonymous)
       expect(hiddenMarkCard.location).toBe('player')
       expect(hiddenMarkCard.subZone).toBe('mark')
       expect(hiddenMarkCard.spellID).toBe(700)

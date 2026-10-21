@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
-import { getPlayerHandCardsBySeat } from '@/tracker/roomMovement/sourceQueries'
+import { getPlayerHandCardsBySeat } from '@/tracker/room/movement/sourceQueries'
 import { createTestRoom, getCard } from './helpers/room'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
 import { trackerLogger } from '@/utils/logger'
@@ -62,7 +61,7 @@ describe('标记区暗牌进入手牌', () => {
         )
         controller.syncTrackerMove(protocolMove({ CardIDs: [], CardCount: 2, ToID: 3 }))
         controller.syncTrackerMove(protocolMove({ CardIDs: [31275], ToZone: 6, ToID: 3 }))
-        const anonymousHand = getPlayerHandCardsBySeat(room, 3).filter(isAnonymous)
+        const anonymousHand = getPlayerHandCardsBySeat(room, 3).filter((card) => card.isAnonymous)
         expect(anonymousHand).toHaveLength(2)
         controller.syncTrackerMove(
           protocolMove({

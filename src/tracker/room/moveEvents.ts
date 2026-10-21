@@ -1,6 +1,6 @@
-import type { Card } from '../Card'
+import type { Card } from '@/tracker/model'
 import type { Room } from '../Room'
-import type { SeatInput } from '../roomMovement/types'
+import type { SeatInput } from './movement/types'
 import type { MoveOptions, NormalizedMoveEvent, SpellID } from '../types'
 import { summarizeMoveEvent } from '../helper/moveSummary'
 import { trackerLogger } from '@/utils/logger'

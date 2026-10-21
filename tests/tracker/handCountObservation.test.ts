@@ -1,12 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import { trackerLogger } from '@/utils/logger'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
-import { computeHandSlotAllocation } from '@/tracker/candidate/handSlotUsage'
-import type { RoomMoveContext } from '@/tracker/roomMovement/types'
+import { computeHandSlotAllocation } from '@/tracker/constraint/handSlotUsage'
+import type { RoomMoveContext } from '@/tracker/room/index'
 import { createTestRoom, getCard, takeAnonymousCard } from './helpers/room'
 import { playerLocation } from './helpers/locationCandidates'
-import { getPlayerHandCardsBySeat } from '@/tracker/roomMovement/sourceQueries'
+import { getPlayerHandCardsBySeat } from '@/tracker/room/movement/sourceQueries'
 
 describe('玩家手牌数观测', () => {
   it('暗实体覆盖也扣除跨组限制后的明牌容量，不重复补建实体', () => {
@@ -41,7 +40,7 @@ describe('玩家手牌数观测', () => {
     })
     room.resolveConstraints()
     expect(room.playerCardsSnapshot).toHaveLength(4)
-    expect(room.cards.filter(isAnonymous)).toHaveLength(2)
+    expect(room.cards.filter((card) => card.isAnonymous)).toHaveLength(2)
   })
 
   it.each([false, true])('共享暗实体无法满足全部名额时暂停补位（逆序建组：%s）', (reverse) => {
@@ -124,7 +123,7 @@ describe('玩家手牌数观测', () => {
     room.resolveConstraints()
     expect(room.playerCardsSnapshot).toHaveLength(6)
     expect(
-      room.cards.filter((card) => isAnonymous(card) && card.location === 'player')
+      room.cards.filter((card) => card.isAnonymous && card.location === 'player')
     ).toHaveLength(4)
     expect(computeHandSlotAllocation(room, [1]).get(1)?.anonymousMissingCount).toBe(0)
   })
@@ -310,7 +309,7 @@ describe('玩家手牌数观测', () => {
     const playerCards = room.cards.filter((card) => card.location === 'player')
     expect(playerCards).toHaveLength(4)
     expect(playerCards).toEqual(expect.arrayContaining(sourceCards))
-    expect(room.cards.some((card) => isAnonymous(card))).toBe(false)
+    expect(room.cards.some((card) => card.isAnonymous)).toBe(false)
     expect(room.getPlayer(1).unknownCardCount).toBe(0)
     expect(room.getPlayer(2).unknownCardCount).toBe(2)
   })
@@ -464,7 +463,7 @@ describe('玩家手牌数观测', () => {
 
     const anonymousCard = room.cards.find(
       (card) =>
-        isAnonymous(card) &&
+        card.isAnonymous &&
         card.location === 'player' &&
         card.subZone === 'hand' &&
         card.seats.has(2)
@@ -501,7 +500,7 @@ describe('玩家手牌数观测', () => {
     room.resolveConstraints()
 
     const anonymousCards = room.cards.filter(
-      (card) => isAnonymous(card) && card.location === 'player' && card.seats.has(2)
+      (card) => card.isAnonymous && card.location === 'player' && card.seats.has(2)
     )
     expect(anonymousCards).toHaveLength(2)
     expect(new Set(anonymousCards.map((card) => card.entityID)).size).toBe(2)
@@ -511,7 +510,7 @@ describe('玩家手牌数观测', () => {
     room.resolveConstraints()
 
     const resolvedEntityIDs = room.cards
-      .filter((card) => isAnonymous(card) && card.location === 'player' && card.seats.has(2))
+      .filter((card) => card.isAnonymous && card.location === 'player' && card.seats.has(2))
       .map((card) => card.entityID)
       .sort()
     expect(resolvedEntityIDs).toEqual(originalEntityIDs)
@@ -528,16 +527,16 @@ describe('玩家手牌数观测', () => {
     room.resolveConstraints()
 
     const originalEntityIDs = room.cards
-      .filter((card) => isAnonymous(card) && card.location === 'player')
+      .filter((card) => card.isAnonymous && card.location === 'player')
       .map((card) => card.entityID)
     player.syncObservedHandCount(2)
     room.resolveConstraints()
 
     const activeAnonymousCards = room.cards.filter(
-      (card) => isAnonymous(card) && card.location === 'player' && card.seats.has(2)
+      (card) => card.isAnonymous && card.location === 'player' && card.seats.has(2)
     )
     const releasedAnonymousCards = room.cards.filter(
-      (card) => isAnonymous(card) && card.location === 'outside'
+      (card) => card.isAnonymous && card.location === 'outside'
     )
     expect(activeAnonymousCards).toHaveLength(1)
     expect(releasedAnonymousCards).toHaveLength(1)
@@ -561,9 +560,7 @@ describe('玩家手牌数观测', () => {
     room.resolveConstraints()
 
     expect(
-      room.cards.some(
-        (card) => isAnonymous(card) && card.location === 'player' && card.seats.has(2)
-      )
+      room.cards.some((card) => card.isAnonymous && card.location === 'player' && card.seats.has(2))
     ).toBe(false)
 
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
@@ -589,7 +586,7 @@ describe('玩家手牌数观测', () => {
     }
 
     const anonymousReplacement = room.cards.find(
-      (card) => isAnonymous(card) && card.location === 'pile'
+      (card) => card.isAnonymous && card.location === 'pile'
     )
     expect(revealedCard.location).toBe('process')
     expect(anonymousReplacement).toBeDefined()

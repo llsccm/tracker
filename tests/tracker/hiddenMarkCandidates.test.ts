@@ -1,15 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import {
   HIDDEN_MARK_STATE_KEY,
   type HiddenMarkState,
   type RoomMoveContext
-} from '@/tracker/roomMovement/types'
+} from '@/tracker/room/movement/types'
 import { createTestRoom, getCard, takeAnonymousCard } from './helpers/room'
-import { isAnonymous } from '@/tracker/Card'
 import { outsideLocation, playerLocation, publicLocation } from './helpers/locationCandidates'
-import { getUnknownPlayerSourceCards } from '@/tracker/roomMovement/sourceQueries'
+import { getUnknownPlayerSourceCards } from '@/tracker/room/movement/sourceQueries'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import { moveHiddenHandToMark, moveKnownCardsToHand } from './helpers/hiddenMarks'
 
@@ -83,7 +82,7 @@ describe('隐藏标记区候选', () => {
   it('414 标记区全暗回手牌时兼容 3389 返回事件', () => {
     const { room } = createTestRoom({ cardIDs: [136, 137, 138, 139], seatIDs: [6] })
     const knownCard = getCard(room, 136)
-    const hiddenCards = room.zones.get('pile')!.cards.filter(isAnonymous)
+    const hiddenCards = room.zones.get('pile')!.cards.filter((card) => card.isAnonymous)
 
     room.moveCards([136], 'player', {
       toSeatID: 6,

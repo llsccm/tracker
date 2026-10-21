@@ -6,7 +6,7 @@ import {
 } from '@/tracker/view/dirtyRenderState'
 import { createTestRoom } from './helpers/room'
 import type { Room } from '@/tracker/Room'
-import type { Card } from '@/tracker/Card'
+import type { Card } from '@/tracker/model/Card'
 
 describe('视图 dirty 渲染状态', () => {
   it('无新脏事件且 viewDirty=false 时返回空渲染计划', () => {

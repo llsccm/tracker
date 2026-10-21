@@ -1,4 +1,4 @@
-import type { Card } from '../Card'
+import type { Card } from '@/tracker/model'
 import type { DirtyCardEvent, Room } from '../Room'
 import type { SeatID } from '../types'
 

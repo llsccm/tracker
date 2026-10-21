@@ -10,7 +10,7 @@
 `RawMoveCardEvent.ToPosition` 是移动协议的通用目标位置字段，不绑定任何技能：
 
 1. `src/handler/PubGsCMoveCard.js` 只在已知协议特例中修正该值，并把最终值交给 tracker。
-2. `src/tracker/MoveEventNormalizer.ts` 将其保留为 `MoveOptions.position`。
+2. `src/tracker/protocol/MoveEventNormalizer.ts` 将其保留为 `MoveOptions.position`。
 3. `Room.moveCards()` 最终把该位置交给公共 `Zone.add()`。
 
 移动协议输入摘要同时保留原始 `ToPosition`，便于核对预处理前后的字段值。
@@ -42,7 +42,7 @@
 | 浑天仪 3694：外部牌加入 | 不影响目标语义 | 特殊值经入口修正为 65282 | 随机入堆，实体匿名化 |
 | 手气卡：手牌重新混入 | 不影响目标语义 | 经入口修正为 65282 | 随机入堆，实体匿名化 |
 
-位置特例统一由 src/tracker/runtime/protocolRules.ts 的 normalizeTrackerMovePosition 修正；
+位置特例统一由 src/tracker/protocol/protocolRules.ts 的 normalizeTrackerMovePosition 修正；
 Controller 接收修正后的 patched 协议以及只读 raw 快照。直接调用 Controller 的测试也应遵守
 这一边界。FromZone=0 的外部来源由通用区域映射处理，浑天仪和手气卡无需在
 decorateGenericMove 中重复设置来源、位置或匿名化开关。

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
-import { registerDefaultMoveEventHandlers } from '../../src/tracker/runtime/moveEventHandlers'
+import { registerDefaultMoveEventHandlers } from '../../src/tracker/skill/registerHandlers'
 import decorateQiaoZhi from '../../src/tracker/skill/QiaoZhi'
 
 function createLegacyQiaoZhiHarness() {

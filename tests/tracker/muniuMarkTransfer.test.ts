@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
 import type { RawMoveCardEvent } from '@/tracker/types'
-import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/roomMovement/types'
+import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/room/movement/types'
 import { createTestRoom } from './helpers/room'
 
 const putIntoMuniu: RawMoveCardEvent = {

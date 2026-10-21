@@ -1,5 +1,5 @@
 import { expect } from 'vitest'
-import { CardLocationIndex } from '@/tracker/CardLocationIndex'
+import { CardLocationIndex } from '@/tracker/projection/CardLocationIndex'
 import type { Room } from '@/tracker/Room'
 
 /**

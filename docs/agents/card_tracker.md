@@ -48,18 +48,18 @@
 
 ### `Room` 行为模块
 
-- `PlayerSnapshot` 位于 `src/tracker/room/playerSnapshot.ts`，独占玩家快照缓存；新实体通过 `Room.registerCardEntity()` 同时登记快照及区域索引顺序。
+- `PlayerSnapshot` 位于 `src/tracker/projection/playerSnapshot.ts`，独占玩家快照缓存；新实体通过 `Room.registerCardEntity()` 同时登记快照及区域索引顺序。
 - `RoomMoveEvents` 位于 `src/tracker/room/moveEvents.ts`，维护按局隔离的处理器注册表、领域输入补齐及有序装饰链。
 - `RoomIdentity` 位于 `src/tracker/room/identity.ts`，实现物化、匿名化、移动身份批处理、已有身份接管和外部实体创建；Room 保留身份账本事务与稳定入口。
 
-- `RoomMovement` 位于 `src/tracker/roomMovement.ts`，通过组合 `RoomMovementSources`、`RoomMovementCandidates`、`RoomMovementHiddenMarks` 实现移动阶段；共享读取集中在 `roomMovement/sourceQueries.ts`，不再使用纵向多层继承。Room 保留阶段顺序与收敛边界，详见 [`room.md`](room.md)。
-- 已知牌三路来源解析与统一确认在 `roomMovement/knownSources.ts`，逐牌来源校正、落区和旧公共槽回补在 `roomMovement/knownPlacement.ts`；RoomMovement 的两个已知牌入口仅保留阶段编排，不缓存批次状态或重复实现来源置换。
-- 移动上下文快照由无状态的 `roomMovement/context.ts` 构造；未知身份的来源取牌与目标落区阶段由 `roomMovement/unknownPlacement.ts` 实现，RoomMovement 保留调用入口与阶段顺序。
-- 装备容器座位、迁座、稳定记录键和完整快照规则在 `roomMovement/equipmentMarks.ts`；该模块只读输入，暗置标记组件继续负责唯一账本、占位与收敛协调，不建立独立木牛状态。
-- `RoomConstraints` 位于 `src/tracker/roomConstraints.ts`，集中实现不动点收敛、E1/E2 手牌槽懒缓存、匿名手牌实体对账、约束组维护、实体牌解析及稳定态的索引/视图组/计数器同步。Room 保留 `resolveConstraints()` 公开入口和状态所有权，DEV 诊断按需传入。
-- `RoomPublicZones` 位于 `src/tracker/roomPublicZones.ts`，负责公共区一致性检查、洗牌槽位校准及玩家手牌 ID 查询。公共区牌序直接读取 `Room.getPublicZone()` 返回的 `Zone.cards`。
+- `RoomMovement` 位于 `src/tracker/room/movement/RoomMovement.ts`，通过组合 `RoomMovementSources`、`RoomMovementCandidates`、`RoomMovementHiddenMarks` 实现移动阶段；共享读取集中在 `room/movement/sourceQueries.ts`，不再使用纵向多层继承。Room 保留阶段顺序与收敛边界，详见 [`room.md`](room.md)。
+- 已知牌三路来源解析与统一确认在 `room/movement/knownSources.ts`，逐牌来源校正、落区和旧公共槽回补在 `room/movement/knownPlacement.ts`；RoomMovement 的两个已知牌入口仅保留阶段编排，不缓存批次状态或重复实现来源置换。
+- 移动上下文快照由无状态的 `room/movement/context.ts` 构造；未知身份的来源取牌与目标落区阶段由 `room/movement/unknownPlacement.ts` 实现，RoomMovement 保留调用入口与阶段顺序。
+- 装备容器座位、迁座、稳定记录键和完整快照规则在 `room/movement/equipmentMarks.ts`；该模块只读输入，暗置标记组件继续负责唯一账本、占位与收敛协调，不建立独立木牛状态。
+- `RoomConstraints` 位于 `src/tracker/room/constraints.ts`，集中实现不动点收敛、E1/E2 手牌槽懒缓存、匿名手牌实体对账、约束组维护、实体牌解析及稳定态的索引/视图组/计数器同步。Room 保留 `resolveConstraints()` 公开入口和状态所有权，DEV 诊断按需传入。
+- `RoomPublicZones` 位于 `src/tracker/room/publicZones.ts`，负责公共区一致性检查、洗牌槽位校准及玩家手牌 ID 查询。公共区牌序直接读取 `Room.getPublicZone()` 返回的 `Zone.cards`。
 - `RoomDiagnostics` 位于 `src/tracker/room/diagnostics.ts`，负责 DEV 身份/槽位与身份账本守恒、玩家快照和影子索引检查、抽样门控及收敛轮数告警；Room 的公开断言 API 保持不变。
-- `protocolZones.ts` 负责把协议区域编号映射为新版公共区与玩家子区；`MoveEventNormalizer` 只做分类与字段映射，不直接修改 `Room` 状态。`FromID` / `ToID` 的含义依赖具体 `FromZone` / `ToZone`，不能一律当作座位 ID：例如 `FromZone=8` 弹窗标记回牌堆时，`FromID` 可能是技能/标记空间 ID；`FromZone=1` 牌堆来源时，`FromID=255` 可能只是牌堆/无座位占位。
+- `protocol/protocolZones.ts` 负责把协议区域编号映射为新版公共区与玩家子区；`MoveEventNormalizer` 只做分类与字段映射，不直接修改 `Room` 状态。`FromID` / `ToID` 的含义依赖具体 `FromZone` / `ToZone`，不能一律当作座位 ID：例如 `FromZone=8` 弹窗标记回牌堆时，`FromID` 可能是技能/标记空间 ID；`FromZone=1` 牌堆来源时，`FromID=255` 可能只是牌堆/无座位占位。
 - `Room.moveCards()`、`Room.resolveConstraints()`、`Room.shufflePile()`、`Room.getPublicZone()` 是高频核心入口，应优先留在 `Room` 中；新增内部辅助方法时优先放入对应行为模块，再由 `Room` 暴露必要的薄入口。
 
 ### `Card` / `Player` / `Zone`
@@ -91,9 +91,9 @@
 - `AmbiguousKnownIndex`：替代旧 `Zone.obj.unknown` 的部分展示语义，跟踪跨座位候选、完整位置候选、装备容器候选与公共候选的明牌；用于 `Card.getLocationDescription()` 的优先反查。已改为增量维护：通过事件流游标进行单牌增量更新，仅在约束组结构变化（`Room.constraintGroupsDirty === true`）时回退全量 `rebuild()`。容器候选展示时按当前装备承载座位展开。
 - `CardLocationIndex`：提供确定手牌、候选手牌、装备、判定、标记与公共区分组；`RoomConstraints.syncViewGroups()` 和公共区视图读取该索引，避免渲染阶段现场高频分类。已改为增量维护：消费 `dirtyCardEvents` 事件流游标进行投影增量更新，公共区变化通过 `Room.dirtyPublicZones` 变更集局部重算。在游标断档时自动回退全量 `rebuild()`。装备容器候选会先投影成当前承载座位的标记区，再进入玩家视图。
 - `CardCounter`：基于 `Room.cards` 生成 `CardInstance` 查询副本，建立名称、花色、点数、类型倒排索引，并根据 `Card.location` 同步牌堆、玩家、弃牌、销毁四类状态。状态桶已从全量 `update()` 改为增量同步：`Room.markCounterDirty()` / `CardCounter.markDirty()` 收集状态变化牌，getter 在无新变化时复用干净缓存；`createExternalCards()` 会显式注册新牌并推进连续已注册的尾部游标，避免后续更新再次扫描同一批实体。
-- `MoveEventNormalizer`：将原始 `PubGsCMoveCard` 字段归一为标准事件包，依赖 `protocolZones.ts` 处理 `FromZone`、`ToZone`、玩家子区与 `CardIDs` 等字段；`MoveType=18` 按来源标记“从牌堆获取牌”或“从弃牌堆获取牌”。
+- `MoveEventNormalizer`：将原始 `PubGsCMoveCard` 字段归一为标准事件包，依赖 `protocol/protocolZones.ts` 处理 `FromZone`、`ToZone`、玩家子区与 `CardIDs` 等字段；`MoveType=18` 按来源标记“从牌堆获取牌”或“从弃牌堆获取牌”。
 - `Game.ts`：`GameState` 承载纯对局状态与生命周期，`Game` 是浏览器运行时单例实例。
-- `src/tracker/runtime/bridge.ts` + `browser.ts`：装配并导出 `tracker` 单例（`TrackerController`）；浏览器代码通常从 `runtime/browser` 导入。单局构建、移动同步（`syncTrackerMove`）、明牌输入（`revealTrackerCards`，含界强识 `fullHand`）与视图调度的实现位于 `runtime/trackerController.ts`；随机手牌转移等候选构建位于 `roomMovement/candidates.ts`。
+- `src/tracker/runtime/bridge.ts` + `browser.ts`：装配并导出 `tracker` 单例（`TrackerController`）；浏览器代码通常从 `runtime/browser` 导入。单局构建、移动同步（`syncTrackerMove`）、明牌输入（`revealTrackerCards`，含界强识 `fullHand`）与视图调度的实现位于 `runtime/trackerController.ts`；随机手牌转移等候选构建位于 `room/movement/candidates.ts`。
 - `src/tracker/view/`：直接操作主文档节点渲染统计、公共区、玩家手牌、查询面板和按钮；`dirtyRenderState.ts` 按脏集合局部重绘，`trackerVisibility` 控制显隐。
 
 ---
@@ -243,8 +243,8 @@
 
 位置写入通过 `Card.setLocationCandidates()` / `resolveLocationCandidate()` 提交，
 投影同步不调用 `setSeats()` 反向改写候选。手牌计数与约束消元共享
-`candidate/constraintSlots.ts` 的确定牌、候选牌及剩余名额摘要；候选容量与暗实体覆盖由
-`candidate/handSlotUsage.ts` 的 `computeHandSlotAllocation()` 计算，Player 展示额度与匿名实体
+`constraint/constraintSlots.ts` 的确定牌、候选牌及剩余名额摘要；候选容量与暗实体覆盖由
+`constraint/handSlotUsage.ts` 的 `computeHandSlotAllocation()` 计算，Player 展示额度与匿名实体
 补位共用同一份分配结果，不在 Player 或 Room 中另写名额解释。
 
 ---

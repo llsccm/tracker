@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CardConfig } from '@/config/CardConfig'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import type { RawMoveCardEvent } from '@/tracker/types'
 import { getCard } from './helpers/room'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'

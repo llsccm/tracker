@@ -11,7 +11,7 @@ import {
   isPileSingleCardShow,
   normalizeMoveEvent,
   validateMoveEvent
-} from '@/tracker/MoveEventNormalizer'
+} from '@/tracker/protocol/MoveEventNormalizer'
 
 describe('MoveEventNormalizer 当前行为', () => {
   it('九条实际移动消息均满足完整契约，保留顺序、数量和数值哨兵', () => {

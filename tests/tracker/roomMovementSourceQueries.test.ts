@@ -4,8 +4,8 @@ import {
   getPlayerHandCardsBySeat,
   getUnknownPlayerSourceCards,
   takeUnknownCardsFromPlayer
-} from '@/tracker/roomMovement/sourceQueries'
-import { HIDDEN_MARK_STATE_KEY } from '@/tracker/roomMovement/types'
+} from '@/tracker/room/movement/sourceQueries'
+import { HIDDEN_MARK_STATE_KEY } from '@/tracker/room/movement/types'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import { playerLocation, publicLocation } from './helpers/locationCandidates'
 import { createTestRoom, getCard, takeAnonymousCard } from './helpers/room'

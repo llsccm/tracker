@@ -1,32 +1,38 @@
-import { Card } from './Card'
-import { Player } from './Player'
-import { Zone } from './Zone'
-import { CardCounter } from './CardCounter'
+import { trackerLogger } from '@/utils/logger'
 import { POSITION_RANDOM } from './candidate/cardPositions'
+import type { LocationCandidateInput } from './candidate/locationCandidate'
+import { normalizePublicPosition } from './candidate/publicCandidate'
+import type { ConstraintGroup } from './constraint/ConstraintGroup'
 import { GameState } from './Game'
-import { AmbiguousKnownIndex } from './AmbiguousKnownIndex'
-import { CardLocationIndex } from './CardLocationIndex'
+import { summarizeMoveContext } from './helper/moveSummary'
+import { Card, Player, Zone } from './model'
 import {
   PileIdentityLedger,
-  type PileIdentityConsistencyIssue,
   type AmbiguousDiscardRecycleGroup,
+  type PileIdentityConsistencyIssue,
   type PileIdentityLedgerMove,
   type PileIdentityRevealLocation,
   type PileIdentityShuffleTransition
 } from './PileIdentityLedger'
-import { normalizePublicPosition } from './candidate/publicCandidate'
-import { summarizeMoveContext } from './helper/moveSummary'
-import { RoomConstraints } from './roomConstraints'
-import { RoomBase } from './room/RoomBase'
-import { PlayerSnapshot } from './room/playerSnapshot'
-import { RoomMoveEvents, type MoveEventHandler, type SkillHandler } from './room/moveEvents'
-import { RoomIdentity, type AnonymizeLocatedIdentityOptions } from './room/identity'
-import { RoomDiagnostics } from './room/diagnostics'
-import { RoomMovement } from './roomMovement'
-import { type PlayerHandCardIDOptions, RoomPublicZones } from './roomPublicZones'
-import type { LocationCandidateInput } from './candidate/locationCandidate'
-import { trackerLogger } from '@/utils/logger'
-import type { ConstraintGroup } from './ConstraintGroup'
+import { AmbiguousKnownIndex } from './projection/AmbiguousKnownIndex'
+import { CardCounter } from './projection/CardCounter'
+import { CardLocationIndex } from './projection/CardLocationIndex'
+import { PlayerSnapshot } from './projection/playerSnapshot'
+import {
+  RoomBase,
+  RoomConstraints,
+  RoomDiagnostics,
+  RoomIdentity,
+  RoomMoveEvents,
+  RoomMovement,
+  RoomPublicZones
+} from './room/index'
+import type {
+  AnonymizeLocatedIdentityOptions,
+  MoveEventHandler,
+  PlayerHandCardIDOptions,
+  SkillHandler
+} from './room/index'
 import type {
   CardID,
   MoveOptions,
@@ -534,7 +540,7 @@ export class Room extends RoomBase {
     return this.identity.createExternalCards(cardIDs, count)
   }
 
-  // 公共区主入口；低频查询辅助位于 roomPublicZones.ts。
+  // 公共区主入口；低频查询辅助位于 room/publicZones.ts。
   clearCardsFromPublicZones(cards: Card[] = []) {
     return this.publicZones.clearCardsFromPublicZones(cards)
   }
@@ -566,7 +572,7 @@ export class Room extends RoomBase {
     return this.publicZones.getPlayerHandCardIDs(seatID, options)
   }
 
-  // 约束收敛主入口与辅助方法；低频约束辅助位于 roomConstraints.js。
+  // 约束收敛主入口与辅助方法；低频约束辅助位于 room/constraints.ts。
   removeCardsFromConstraintGroups(cards: Card[] = []) {
     return this.constraints.removeCardsFromConstraintGroups(cards)
   }

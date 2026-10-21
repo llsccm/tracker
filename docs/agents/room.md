@@ -28,6 +28,9 @@
   `tracker.getReadyTrackerRoom()` 获取已完成牌堆初始化的实例。
 - 测试优先使用 `tests/tracker/helpers/room.ts` 的 `createTestRoom()`，避免重复手写初始化步骤。
 - `Room` 持有单局事实、身份分区、约束与派生索引；状态写入统一经 Controller 或 Room 公开入口。
+- `src/tracker/room/index.ts` 显式导出行为类及对外类型，供目录外调用方统一导入；接口与类型别名使用
+  `export type`，定义仍留在所属模块。目录内部继续就近导入定义文件，移动阶段的内部辅助类型保留在 `movement/types.ts`。
+  聚合入口显式写为 `@/tracker/room/index` 或相对路径 `./room/index`，与单局容器 `src/tracker/Room.ts` 的入口区分。
 - `Room` 单层继承 `room/RoomBase.ts`，由基础类提供座位、视角、对局上下文和技能状态访问入口。
   这些字段仍属于同一个 Room 实例；玩家注册、视图脏通知、GameState 绑定和销毁协调保留在 Room。
 - `RoomMovement`、`RoomConstraints`、`RoomPublicZones` 与 `RoomIdentity` 只持有 Room 引用并执行分阶段行为，
@@ -115,7 +118,7 @@ handler 中直接修改 `Card`、`Zone` 或玩家投影；`TrackerController` / 
 6. 调用 `resolveConstraints()`，稳定所有派生状态并执行守恒检查。
 
 移动的端点取牌、公共候选、随机手牌转移和已知/匿名置换细节，应继续下钻到
-`src/tracker/roomMovement.ts`、`src/tracker/roomMovement/` 及对应协议/技能文档。
+`src/tracker/room/movement/RoomMovement.ts`、`src/tracker/room/movement/` 及对应协议/技能文档。
 
 ### RoomMovement 内部组合
 
@@ -123,15 +126,15 @@ handler 中直接修改 `Card`、`Zone` 或玩家投影；`TrackerController` / 
 
 | 组件 / 文件 | 职责与依赖 |
 | --- | --- |
-| `createMoveContext()` / `roomMovement/context.ts` | 无状态地解析移动参数并快照移动前来源手牌事实；不持有缓存，独立于协议事件归一化 |
-| `RoomMovementSources` / `roomMovement/sources.ts` | 来源定位、取牌、占位置换和手牌差量；仅通过 `HiddenMarkPlaceholderAccess` 调用标记占位查找、移除与替换 |
-| `RoomMovementUnknownPlacement` / `roomMovement/unknownPlacement.ts` | 未知身份移动阶段；保留玩家目标与公共目标各自的缺口处理语义，不假设未知来源实体必为匿名牌 |
-| `RoomMovementKnownSources` / `roomMovement/knownSources.ts` | outside、公共端点、玩家子区三路已知牌解析与整批身份确认；复用 Room 身份原语与来源查询 |
-| `RoomMovementKnownPlacement` / `roomMovement/knownPlacement.ts` | 已知牌来源校正、逐牌技能/落区与旧公共槽回补；复用来源置换和标记组件，不复制规则 |
-| `RoomMovementCandidates` / `roomMovement/candidates.ts` | 随机手牌转移、公共候选传播和局部约束维护；不持有来源或标记组件 |
-| `RoomMovementHiddenMarks` / `roomMovement/hiddenMarks.ts` | 暗置标记、装备容器位置解析、木牛与标记槽守恒；通过共享查询取得来源占位，不反向依赖来源组件 |
-| `roomMovement/equipmentMarks.ts` | 装备容器座位投影、目标/迁座识别、稳定记录键与全明快照判定；只读传入的实体索引、观测座位和移动上下文，不访问标记账本 |
-| `roomMovement/sourceQueries.ts` | 无状态的候选读取、手牌查询与未知来源筛选；精确来源优先，同类实体保持原有顺序 |
+| `createMoveContext()` / `room/movement/context.ts` | 无状态地解析移动参数并快照移动前来源手牌事实；不持有缓存，独立于协议事件归一化 |
+| `RoomMovementSources` / `room/movement/sources.ts` | 来源定位、取牌、占位置换和手牌差量；仅通过 `HiddenMarkPlaceholderAccess` 调用标记占位查找、移除与替换 |
+| `RoomMovementUnknownPlacement` / `room/movement/unknownPlacement.ts` | 未知身份移动阶段；保留玩家目标与公共目标各自的缺口处理语义，不假设未知来源实体必为匿名牌 |
+| `RoomMovementKnownSources` / `room/movement/knownSources.ts` | outside、公共端点、玩家子区三路已知牌解析与整批身份确认；复用 Room 身份原语与来源查询 |
+| `RoomMovementKnownPlacement` / `room/movement/knownPlacement.ts` | 已知牌来源校正、逐牌技能/落区与旧公共槽回补；复用来源置换和标记组件，不复制规则 |
+| `RoomMovementCandidates` / `room/movement/candidates.ts` | 随机手牌转移、公共候选传播和局部约束维护；不持有来源或标记组件 |
+| `RoomMovementHiddenMarks` / `room/movement/hiddenMarks.ts` | 暗置标记、装备容器位置解析、木牛与标记槽守恒；通过共享查询取得来源占位，不反向依赖来源组件 |
+| `room/movement/equipmentMarks.ts` | 装备容器座位投影、目标/迁座识别、稳定记录键与全明快照判定；只读传入的实体索引、观测座位和移动上下文，不访问标记账本 |
+| `room/movement/sourceQueries.ts` | 无状态的候选读取、手牌查询与未知来源筛选；精确来源优先，同类实体保持原有顺序 |
 
 所有组件仍写入同一个 Room；标记账本仍通过 `Room.ensureSkillState()` 保存在按局隔离的 GameState 中。
 共享查询实时读取 Room / Card，不保存快照，不移动实体，也不初始化标记账本。
@@ -154,7 +157,7 @@ Room 保留原有移动阶段顺序与最终收敛边界。RoomMovement 本身�
 - `room.movement.sources`：来源操作与手牌差量。
 - `room.movement.candidates`：随机转移与公共区候选传播。
 - `room.movement.hiddenMarks`：标记揭示、占位迁移与守恒协调。
-- 纯读取直接从 `roomMovement/sourceQueries.ts` 导入，显式传入 Room。
+- 纯读取直接从 `room/movement/sourceQueries.ts` 导入，显式传入 Room。
 
 `RoomMovementUnknownPlacement` 与两个已知牌组件一样由 RoomMovement 私有持有，只能经
 `moveUnknownCardsForContext()` 阶段入口调用。
@@ -164,8 +167,8 @@ Room 保留原有移动阶段顺序与最终收敛边界。RoomMovement 本身�
 ### 约束收敛与稳定尾部
 
 `Room.resolveConstraints()` 保留为稳定公开入口，直接委托 `RoomConstraints.resolveConstraints()`。
-不动点循环和消费分配结果的 `reconcileAnonymousHandCards()` 集中在 `roomConstraints.ts`；
-手牌分配统一由 `candidate/handSlotUsage.ts` 的 `computeHandSlotAllocation()` 计算。
+不动点循环和消费分配结果的 `reconcileAnonymousHandCards()` 集中在 `room/constraints.ts`；
+手牌分配统一由 `constraint/handSlotUsage.ts` 的 `computeHandSlotAllocation()` 计算。
 E1/E2 座位缓存不由 Room 实现，只在单次求解内存活。
 Room 仍持有权威状态、`resolveTouchedSeats`、收敛轮数与脏事件，DEV 诊断实例通过入口按需传入，
 不公开诊断字段，也不在约束模块复制状态。
@@ -222,17 +225,17 @@ cohort 身份到匿名实体的投影，并协调洗回身份匿名化和物理�
 | --- | --- | --- |
 | 协议预处理、位置规范化、`CardIDs` 修正、技能副作用 | `src/handler/PubGsCMoveCard.js` | 统一处理原始协议字段并桥接归一化移动 |
 | 归一化移动同步、Room 创建/销毁与运行时同步 | `src/tracker/runtime/bridge.ts`、`trackerController.ts` | 连接 handler、Room 与生命周期 |
-| `moveCards()` 某个低频阶段或来源取牌规则 | `roomMovement.ts` / `roomMovement/*` | 保持 Room 中的高频主流程短而稳定 |
-| 不动点收敛、手牌槽缓存、匿名手牌对账、约束组与稳定态同步 | `roomConstraints.ts` | 集中维护求解和稳定投影规则；Room 保留公开收敛入口与状态所有权 |
-| 公共区查询、牌序读面、一致性诊断 | `roomPublicZones.ts` | 避免在 Room 重复实现 Zone 遍历 |
+| `moveCards()` 某个低频阶段或来源取牌规则 | `room/movement/RoomMovement.ts` / `room/movement/*` | 保持 Room 中的高频主流程短而稳定 |
+| 不动点收敛、手牌槽缓存、匿名手牌对账、约束组与稳定态同步 | `room/constraints.ts` | 集中维护求解和稳定投影规则；Room 保留公开收敛入口与状态所有权 |
+| 公共区查询、牌序读面、一致性诊断 | `room/publicZones.ts` | 避免在 Room 重复实现 Zone 遍历 |
 | 座位/视角字段与查询、GameState 上下文、技能状态访问 | `room/RoomBase.ts` | 单层基础类，不依赖完整 Room；不创建独立技能状态仓库 |
-| 玩家区快照、事件游标、实体创建顺序 | `room/playerSnapshot.ts` | 唯一派生缓存，Room 保留查询和刷新入口 |
+| 玩家区快照、事件游标、实体创建顺序 | `projection/playerSnapshot.ts` | 唯一派生缓存，Room 保留查询和刷新入口 |
 | 处理器注册、移动事件装饰及输入类型 | `room/moveEvents.ts` | 注册表按局隔离，输出规范化事件 |
 | 身份物化、匿名化、外部/suspended 实体创建与世代身份投影 | `room/identity.ts` | Room 保留状态所有权、账本事务协调、公开原语及成功解绑后的诊断；不复制身份账本 |
 | DEV 身份/槽位守恒、玩家快照、影子索引断言与收敛告警 | `room/diagnostics.ts` | 只读检查，保留 Room 公开薄入口；抽样计数随初始化/销毁重置 |
 | 稳定且高频的单局公开入口 | `Room.ts` 的薄门面 | 便于调用方检索与引用追踪 |
 | 技能专属事件装饰与临时账本 | `src/tracker/skill/` + GameState `tracker` 状态 | 技能状态按局隔离，Room 仅提供领域访问入口 |
-| 牌实体、玩家事实或公共区模型语义 | `Card.ts` / `Player.ts` / `Zone.ts` | 由对应模型维护自身不变量 |
+| 牌实体、玩家事实或公共区模型语义 | `model/Card.ts` / `model/Player.ts` / `model/Zone.ts` | 由对应模型维护自身不变量 |
 | DOM、挂载、渲染合并与显隐 | `src/tracker/view/` / `src/ui/` | Room 只记录可供视图消费的状态与脏事件 |
 
 `RoomIdentity.anonymizeMoveSourceCards()` 负责模糊来源实体的整批预检与身份解绑，
@@ -280,15 +283,15 @@ Room 继续负责相应的 `PileIdentityLedger` 事务和阶段顺序。
 
 - `src/tracker/Room.ts`：稳定门面、单局状态、生命周期与高频主流程。
 - `src/tracker/room/RoomBase.ts`：座位、视角和对局上下文基础类；提供继承的技能状态访问方法。
-- `src/tracker/roomMovement.ts`、`src/tracker/roomMovement/`：移动阶段实现。
-- `src/tracker/roomConstraints.ts`：约束、暂停追踪与玩家视图组同步。
-- `src/tracker/roomPublicZones.ts`：公共区查询与一致性诊断。
+- `src/tracker/room/movement/RoomMovement.ts`、`src/tracker/room/movement/`：移动阶段实现。
+- `src/tracker/room/constraints.ts`：约束、暂停追踪与玩家视图组同步。
+- `src/tracker/room/publicZones.ts`：公共区查询与一致性诊断。
 - `src/tracker/room/diagnostics.ts`：DEV 断言、影子索引抽样与收敛轮数告警。
-- `src/tracker/room/playerSnapshot.ts`：玩家区增量快照及顺序缓存。
+- `src/tracker/projection/playerSnapshot.ts`：玩家区增量快照及顺序缓存。
 - `src/tracker/room/moveEvents.ts`：处理器注册、装饰顺序与事件类型契约。
 - `src/tracker/room/identity.ts`：物化、匿名化、已有身份接管及外部实体创建。
 - `src/tracker/runtime/trackerController.ts`：Room 创建、协议同步、揭示、渲染调度与销毁。
-- `src/tracker/Card.ts`、`Player.ts`、`Zone.ts`：Room 持有的核心领域模型。
+- `src/tracker/model/Card.ts`、`model/Player.ts`、`model/Zone.ts`：Room 持有的核心领域模型。
 - `src/tracker/PileIdentityLedger.ts`：匿名牌堆身份事务权威。
 
 修改 Room 或其行为模块后，按 [`testing.md`](testing.md) 运行 tracker 回归、类型检查、lint 与 build；

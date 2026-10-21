@@ -5,8 +5,8 @@ import {
   renderPlayerHand,
   subscribeRenderedMainHandCardIDs
 } from '@/tracker/view/PlayerHandView'
-import type { Card } from '@/tracker/Card'
-import type { Player } from '@/tracker/Player'
+import type { Card } from '@/tracker/model/Card'
+import type { Player } from '@/tracker/model/Player'
 
 const DIRECT_RENDER_SELECTOR = ':scope > .shoupai, :scope > .markedCard'
 const RENDER_KEY_ATTRIBUTE = 'data-tracker-render-key'

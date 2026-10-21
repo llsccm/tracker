@@ -2,7 +2,7 @@ import type { Room } from '@/tracker/Room'
 import type { NormalizedMoveEvent } from '@/tracker/types'
 import { protocolMove } from './helpers/trackerController'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { trackerLogger } from '@/utils/logger'
 import { createTestRoom } from './helpers/room'
 

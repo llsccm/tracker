@@ -1,7 +1,7 @@
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import type { GameState } from '@/tracker/Game'
 import type { Room } from '@/tracker/Room'
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 import {
   FULL_HAND_ROLE_OPT_SPELL_IDS,
@@ -10,7 +10,7 @@ import {
   PARTIAL_HAND_ROLE_OPT_SPELL_IDS,
   shouldIgnoreTrackerMove,
   shouldRevealAsFullHand
-} from '@/tracker/runtime/protocolRules'
+} from '@/tracker/protocol/protocolRules'
 import { parseGuiFuCardIDs } from '@/handler/skills/GuiFu'
 import {
   initializeDuoQiState,
