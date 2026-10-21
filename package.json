@@ -1,9 +1,18 @@
 {
   "name": "daxiaochao",
+  "version": "1.0.0",
+  "description": "三国杀记牌器用户脚本",
   "author": "yimadaOrz",
   "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/llsccm/tracker.git"
+  },
+  "homepage": "https://github.com/llsccm/tracker#readme",
+  "bugs": {
+    "url": "https://github.com/llsccm/tracker/issues"
+  },
   "private": true,
-  "version": "1.0.0",
   "packageManager": "pnpm@10.33.4",
   "type": "module",
   "scripts": {
