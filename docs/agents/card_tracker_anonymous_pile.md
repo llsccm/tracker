@@ -172,7 +172,7 @@ accountedPileCount
 同名原语调用。身份分区、实体池和 `PileIdentityLedger` 的权威来源未改变。新建实体统一经
 `Room.registerCardEntity()` 登记物理创建顺序，位置写入和身份事务仍由原调用流程负责。
 
-`RoomMovement.resolveKnownMoveCards()` 通过 `roomMovement/knownSources.ts` 分派 outside、公共端点和
+`RoomMovement.resolveKnownMoveCards()` 通过 `room/movement/knownSources.ts` 分派 outside、公共端点和
 玩家子区来源，解析后统一恢复 suspended 并确认明牌。公共端点路径依次尝试：
 
 1. 来源端点中已经存在同 ID 实体时精确复用。
@@ -180,9 +180,9 @@ accountedPileCount
 3. 若身份是 suspended，恢复原身份并让匿名端点退出公共区。
 4. 端点确实没有合法物理槽时，才按外部来源或 known fallback 补建实体并记录诊断。
 
-后续落区由 `roomMovement/knownPlacement.ts` 分阶段完成：先准备有效玩家来源与空间账本，再逐牌
+后续落区由 `room/movement/knownPlacement.ts` 分阶段完成：先准备有效玩家来源与空间账本，再逐牌
 置换来源、结算候选、移除旧约束、执行技能并绑定玩家目标；公共目标在修复旧公共槽后统一插入。
-各阶段仍复用 `roomMovement/sources.ts` 的占位置换规则，不能让同批已知牌互相充当回补替身。
+各阶段仍复用 `room/movement/sources.ts` 的占位置换规则，不能让同批已知牌互相充当回补替身。
 
 公共 known 物化不能：
 

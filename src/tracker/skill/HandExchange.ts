@@ -25,9 +25,9 @@
  * 4. 逻辑暂存的候选牌 location 记为 'exchange'，但刻意不加入 zones.get('exchange')；
  *    因此按 Zone 成员统计的口径不会计入它们，按 card.location 统计的口径才会。
  */
-import { MOVE_TYPE } from '../MoveEventNormalizer'
+import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import { trackerLogger } from '@/utils/logger'
-import type { Card } from '../Card'
+import type { Card } from '../model/Card'
 import type { Room } from '../Room'
 import type {
   LocationCandidate,

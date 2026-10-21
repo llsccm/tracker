@@ -1,0 +1,12 @@
+export { RoomBase } from './RoomBase'
+export { RoomConstraints } from './constraints'
+export { RoomDiagnostics } from './diagnostics'
+export { RoomIdentity } from './identity'
+export { RoomMoveEvents } from './moveEvents'
+export { RoomPublicZones } from './publicZones'
+export { RoomMovement } from './movement/RoomMovement'
+
+export type { AnonymizeLocatedIdentityOptions } from './identity'
+export type { MoveEventHandler, SkillHandler } from './moveEvents'
+export type { PlayerHandCardIDOptions } from './publicZones'
+export type { RoomMoveContext, RoomMovementOptions } from './movement/types'

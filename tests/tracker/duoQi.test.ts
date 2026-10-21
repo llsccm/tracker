@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { trackerLogger } from '@/utils/logger'
-import { isAnonymous } from '@/tracker/Card'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import type { Room } from '@/tracker/Room'
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import {
   commitDuoQiMove,
   getDuoQiState,
@@ -16,7 +15,7 @@ import { createTrackerControllerHarness, protocolMove } from './helpers/trackerC
 function getCard(room: Room, cardID: number) {
   const existing = room.cardIndex.get(cardID)
   if (existing) return existing
-  const target = room.zones.get('pile')!.cards.find(isAnonymous) ?? null
+  const target = room.zones.get('pile')!.cards.find((card) => card.isAnonymous) ?? null
   return room.materialize(cardID, target)!
 }
 

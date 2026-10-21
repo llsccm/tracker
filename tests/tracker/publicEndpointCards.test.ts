@@ -5,7 +5,6 @@ import {
   POSITION_TOP,
   getProtocolInsertionIndex
 } from '@/tracker/candidate/cardPositions'
-import { isAnonymous } from '@/tracker/Card'
 import { createTestRoom } from './helpers/room'
 
 describe('getPublicEndpointCards 位置归一化', () => {
@@ -45,7 +44,7 @@ describe('getPublicEndpointCards 位置归一化', () => {
     const pileCards = room.zones.get('pile')!.cards
 
     expect(pileCards).toHaveLength(4)
-    expect(pileCards.every(isAnonymous)).toBe(true)
+    expect(pileCards.every((card) => card.isAnonymous)).toBe(true)
 
     const bottomByConstant = room.getPublicEndpointCards('pile', 2, POSITION_BOTTOM)
     const bottomByString = room.getPublicEndpointCards('pile', 2, 'bottom')
@@ -138,7 +137,7 @@ describe('getPublicEndpointCards 位置归一化', () => {
     expect(suspendedIdentity.isKnown).toBe(true)
     expect(suspendedIdentity.suspended).toBe(false)
     expect(room.suspendedKnownCards.has(suspendedIdentity)).toBe(false)
-    expect(anonymousTarget).toSatisfy(isAnonymous)
+    expect(anonymousTarget).toSatisfy((card) => card.isAnonymous)
     expect(anonymousTarget.location).toBe('outside')
     expect(anonymousTarget.suspended).toBe(false)
   })

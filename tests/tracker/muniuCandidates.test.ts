@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
 import type { SeatID } from '@/tracker/types'
-import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/roomMovement/types'
+import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/room/movement/types'
 import { trackerLogger } from '@/utils/logger'
 import { createTestRoom, getCard, takeAnonymousCard } from './helpers/room'
 import { equipmentContainer, playerLocation } from './helpers/locationCandidates'
@@ -63,7 +62,7 @@ describe('木牛流马候选与收敛', () => {
         spellID: 700
       })
       const hiddenCard = room.playerCardsSnapshot.find(
-        (card) => isAnonymous(card) && card.subZone === 'mark'
+        (card) => card.isAnonymous && card.subZone === 'mark'
       )!
 
       const state = room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
@@ -211,7 +210,7 @@ describe('木牛流马候选与收敛', () => {
         spellID: 700
       })
       const placeholderCard = room.playerCardsSnapshot.find(
-        (card) => isAnonymous(card) && card.subZone === 'mark'
+        (card) => card.isAnonymous && card.subZone === 'mark'
       )!
 
       const pileCountBefore = room.zones.get('pile').cards.length
@@ -252,7 +251,7 @@ describe('木牛流马候选与收敛', () => {
         spellID: 700
       })
       const placeholderCard = room.playerCardsSnapshot.find(
-        (card) => isAnonymous(card) && card.subZone === 'mark'
+        (card) => card.isAnonymous && card.subZone === 'mark'
       )!
 
       const pileCountBefore = room.zones.get('pile').cards.length
@@ -294,7 +293,7 @@ describe('木牛流马候选与收敛', () => {
         spellID: 700
       })
       const placeholderCard = room.playerCardsSnapshot.find(
-        (card) => isAnonymous(card) && card.subZone === 'mark'
+        (card) => card.isAnonymous && card.subZone === 'mark'
       )!
 
       expect(
@@ -648,7 +647,7 @@ describe('木牛流马候选与收敛', () => {
         spellID: 700
       })
       const placeholders = room.playerCardsSnapshot.filter(
-        (card) => isAnonymous(card) && card.subZone === 'mark'
+        (card) => card.isAnonymous && card.subZone === 'mark'
       )
       const entityCountBefore = room.cards.length
 
@@ -681,7 +680,7 @@ describe('木牛流马候选与收敛', () => {
       expect(room.cards).toHaveLength(entityCountBefore)
       const remainingHand = room.playerCardsSnapshot.filter((card) => card.subZone === 'hand')
       expect(remainingHand).toHaveLength(1)
-      expect(remainingHand.every(isAnonymous)).toBe(true)
+      expect(remainingHand.every((card) => card.isAnonymous)).toBe(true)
       ;[candidateCard, revealedCard].forEach((card) => {
         expect(card.location).toBe('player')
         expect(card.subZone).toBe('mark')

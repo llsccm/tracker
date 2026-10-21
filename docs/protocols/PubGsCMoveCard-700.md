@@ -78,6 +78,6 @@ ToZoneParam: 700
 
 ## 实现与回归入口
 
-- `src/tracker/MoveEventNormalizer.ts`：保留声明数量，分别归一化来源与目标标记空间。
-- `src/tracker/roomMovement/hiddenMarks.ts`：木牛流马账本与容器投影迁座。
+- `src/tracker/protocol/MoveEventNormalizer.ts`：保留声明数量，分别归一化来源与目标标记空间。
+- `src/tracker/room/movement/hiddenMarks.ts`：木牛流马账本与容器投影迁座。
 - `tests/tracker/muniuMarkTransfer.test.ts`：使用上述原始协议，覆盖来源全暗、全明的两阶段迁移、已知内部牌可见性，以及重复暗迁座通知和 ZoneParam 优先级。

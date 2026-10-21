@@ -1,6 +1,6 @@
-import { AmbiguousKnownIndex } from '../AmbiguousKnownIndex'
-import { hasRealIdentity, type Card } from '../Card'
-import { CardLocationIndex } from '../CardLocationIndex'
+import { AmbiguousKnownIndex } from '../projection/AmbiguousKnownIndex'
+import type { Card } from '../model/Card'
+import { CardLocationIndex } from '../projection/CardLocationIndex'
 import type { PileIdentityConsistencyIssue } from '../PileIdentityLedger'
 import type { Room } from '../Room'
 import type { CardID } from '../types'
@@ -123,7 +123,7 @@ export class RoomDiagnostics {
         entityOwnerByID.set(card.entityID, card)
       }
 
-      if (hasRealIdentity(card)) {
+      if (card.hasRealIdentity) {
         const realCards = realCardsByID.get(card.id) ?? []
         realCards.push(card)
         realCardsByID.set(card.id, realCards)
@@ -166,7 +166,7 @@ export class RoomDiagnostics {
 
     room.cardIndex.forEach((card, cardID) => {
       if (
-        !hasRealIdentity(card) ||
+        card.isAnonymous ||
         card.id !== cardID ||
         !cardsSet.has(card) ||
         card.entityID !== cardID

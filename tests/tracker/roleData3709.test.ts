@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { handleGuiFu, parseGuiFuCardIDs } from '@/handler/skills/GuiFu'
-import { GUI_FU_ROLE_DATA_ID } from '@/tracker/runtime/protocolRules'
+import { GUI_FU_ROLE_DATA_ID } from '@/tracker/protocol/protocolRules'
 import type { Room } from '@/tracker/Room'
 import type { RawMoveCardEvent, TrackerControllerOptions } from '@/tracker/types'
 import { trackerLogger } from '@/utils/logger'
@@ -417,7 +417,10 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
   })
   it('诡伏暂存不构造标准事件，配对成功后才归一化一次', async () => {
     const { room, gain, receive } = createGuiFuHarness()
-    const normalize = vi.spyOn(await import('@/tracker/MoveEventNormalizer'), 'normalizeMoveEvent')
+    const normalize = vi.spyOn(
+      await import('@/tracker/protocol/MoveEventNormalizer'),
+      'normalizeMoveEvent'
+    )
     try {
       gain()
       expect(room.readSkillState(GUI_FU_ROLE_DATA_ID)).toBeDefined()

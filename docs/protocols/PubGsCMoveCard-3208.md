@@ -247,11 +247,11 @@ ToZoneParam: 0
 ## 实现与现有回归入口
 
 - `src/tracker/skill/ChengLie.ts` 的 `decorateChengLieMove`：牌顶取牌、离区前匿名化和待弃置队列。
-- `src/tracker/runtime/moveEventHandlers.ts`：注册 `3208` 处理器，并通过
+- `src/tracker/skill/registerHandlers.ts`：注册 `3208` 处理器，并通过
   `HAND_EXCHANGE_EXCLUDED_SPELL_IDS` 绕过通用整手交换。
-- `src/tracker/MoveEventNormalizer.ts` 的 `normalizeMoveEvent` / `inferEventType`：展示、同区
+- `src/tracker/protocol/MoveEventNormalizer.ts` 的 `normalizeMoveEvent` / `inferEventType`：展示、同区
   `noop` 和跨区移动分类。
-- `src/tracker/runtime/protocolRules.ts` 的 `PILE_RANDOM_AS_TOP_SPELL_IDS`：骋烈牌堆来源的
+- `src/tracker/protocol/protocolRules.ts` 的 `PILE_RANDOM_AS_TOP_SPELL_IDS`：骋烈牌堆来源的
   RANDOM 按牌顶解释。
 - `tests/tracker/chengLie.test.ts`：已有全明、部分明牌、全暗牌顶的完整链路，以及后续身份
   再次出现、洗牌和身份账本一致性验证。

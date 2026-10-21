@@ -302,6 +302,6 @@ Room.ensureSkillState('handExchangeBatches', createInitialState) -> {
 ## 相关代码
 
 - `src/tracker/skill/HandExchange.ts`
-- `src/tracker/runtime/moveEventHandlers.ts`（`decorateGenericMove` 调用）
-- `src/tracker/protocolZones.ts`（`EXCHANGE = 10`）
+- `src/tracker/skill/registerHandlers.ts`（`decorateGenericMove` 调用）
+- `src/tracker/protocol/protocolZones.ts`（`EXCHANGE = 10`）
 - `tests/tracker/handExchange.test.ts`

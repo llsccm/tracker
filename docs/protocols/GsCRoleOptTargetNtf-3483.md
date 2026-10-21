@@ -324,11 +324,11 @@ Type 53 的两组卡牌 ID 按下标逐项配对，而不是两个无序集合�
 ## 代码位置
 
 - 目标通知与部分手牌明牌：`src/handler/GsCRoleOptTargetNtf.js`（`SpellID = 3483`）
-- 牌堆移动位置归一化：`src/tracker/runtime/protocolRules.ts` 的 `normalizeTrackerMovePosition`
-- 同区展示识别：`src/tracker/MoveEventNormalizer.ts` 的 `isSameZoneShowEvent`
+- 牌堆移动位置归一化：`src/tracker/protocol/protocolRules.ts` 的 `normalizeTrackerMovePosition`
+- 同区展示识别：`src/tracker/protocol/MoveEventNormalizer.ts` 的 `isSameZoneShowEvent`
 - Type 53 目标视角判断与选择数据解析：`src/handler/CGsRoleSpellOptRep.js`
 - 目标视角交换装饰：`src/tracker/skill/JieLi.ts`
-- 移动装饰注册：`src/tracker/runtime/moveEventHandlers.ts` 的 `registerDefaultMoveEventHandlers`
+- 移动装饰注册：`src/tracker/skill/registerHandlers.ts` 的 `registerDefaultMoveEventHandlers`
 - 相关排除说明：`docs/protocols/hand-exchange.md`（诫厉不走整手交换账本）
 
 ## 已知适配缺口

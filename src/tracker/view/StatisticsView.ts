@@ -1,6 +1,6 @@
 import { CardConfig } from '@/config'
 import { n2N } from '@/utils'
-import { CARD_INSTANCE_STATUS } from '../CardCounter'
+import { CARD_INSTANCE_STATUS } from '../projection/CardCounter'
 import type { Room } from '../Room'
 import type { CardID } from '../types'
 

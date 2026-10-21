@@ -1,5 +1,5 @@
 import { CharacterConfig } from '@/config/CharacterConfig'
-import type { Player } from '../Player'
+import type { Player } from '@/tracker/model/Player'
 
 /** 顺位标签使用一基索引，索引 0 保留为空字符串。 */
 export const ORDER_LABELS: string[] = ['', '一', '二', '三', '四', '五', '六', '七', '八']

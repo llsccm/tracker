@@ -1,6 +1,6 @@
 import { getCardFaceHtml } from '@/utils'
-import type { Card } from '../Card'
-import type { CardInstance, CardInstanceStatus } from '../CardCounter'
+import type { Card } from '@/tracker/model/Card'
+import type { CardInstance, CardInstanceStatus } from '../projection/CardCounter'
 import type { Room } from '../Room'
 
 interface CardButtonOptions {

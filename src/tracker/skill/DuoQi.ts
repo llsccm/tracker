@@ -1,4 +1,4 @@
-import type { Card } from '../Card'
+import type { Card } from '@/tracker/model/Card'
 import type { GameState } from '../Game'
 import { getPositiveIDs } from '../helper/cardIDs'
 import type { Room } from '../Room'

@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import type { Room } from '@/tracker/Room'
-import { HIDDEN_MARK_STATE_KEY } from '@/tracker/roomMovement/types'
-import type { HiddenMarkRecord, HiddenMarkState } from '@/tracker/roomMovement/types'
+import { HIDDEN_MARK_STATE_KEY } from '@/tracker/room/movement/types'
+import type { HiddenMarkRecord, HiddenMarkState } from '@/tracker/room/movement/types'
 import { trackerLogger } from '@/utils/logger'
 import { createTestRoom } from './helpers/room'
 import {
@@ -28,7 +27,7 @@ function countAnonymousHand(room, seatID: number): number {
       card.location === 'player' &&
       card.subZone === 'hand' &&
       card.seats.has(seatID) &&
-      isAnonymous(card)
+      card.isAnonymous
   ).length
 }
 
@@ -68,7 +67,7 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
     expect(placeholder.location).toBe('player')
     expect(placeholder.subZone).toBe('hand')
     expect(placeholder.seats.has(seatID)).toBe(true)
-    expect(isAnonymous(placeholder)).toBe(true)
+    expect(placeholder.isAnonymous).toBe(true)
     // 来源手牌匿名数量 +1（占位挤回），不丢 outside
     expect(countAnonymousHand(room, seatID)).toBe(handBefore + 1)
     expect(room.zones.get('outside')?.cards ?? []).not.toContain(placeholder)
@@ -190,7 +189,7 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
     const record = getSingleRecord(room)
 
     // 构造一个属于其它 spell 的匿名 mark 占位，混入本记录账本
-    const foreign = room.zones.get('pile')?.cards.find((card) => isAnonymous(card))
+    const foreign = room.zones.get('pile')?.cards.find((card) => card.isAnonymous)
     expect(foreign).toBeTruthy()
     foreign!.bindCandidates([seatID], 'mark', FOREIGN_SPELL_ID, { known: false })
     record.placeholderCards.add(foreign!)

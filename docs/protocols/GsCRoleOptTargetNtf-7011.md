@@ -85,5 +85,5 @@ ToZoneParam: 0
 ## 代码位置
 
 - 目标通知与牌堆明牌：`src/handler/GsCRoleOptTargetNtf.js`
-- 移动位置预处理：`src/tracker/runtime/protocolRules.ts` 的 `normalizeTrackerMovePosition`
-- 同区展示识别：`src/tracker/MoveEventNormalizer.ts` 的 `isSameZoneShowEvent`
+- 移动位置预处理：`src/tracker/protocol/protocolRules.ts` 的 `normalizeTrackerMovePosition`
+- 同区展示识别：`src/tracker/protocol/MoveEventNormalizer.ts` 的 `isSameZoneShowEvent`

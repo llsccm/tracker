@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import type { RawMoveCardEvent } from '@/tracker/types'
 import {
@@ -110,7 +109,7 @@ describe('宴戏成功批次与暗牌失败降级', () => {
 
       controller.syncTrackerMove(yanXiMove({ CardIDs: cardIDs }))
 
-      expect(top.every(isAnonymous)).toBe(true)
+      expect(top.every((card) => card.isAnonymous)).toBe(true)
       expect(room.cardIndex.has(1)).toBe(false)
       expect(room.cardIndex.has(2)).toBe(false)
       expect(room.unlocatedIdentities.has(1)).toBe(true)
@@ -152,7 +151,7 @@ describe('宴戏成功批次与暗牌失败降级', () => {
 
     controller.syncTrackerMove(yanXiMove())
 
-    expect(isAnonymous(first)).toBe(true)
+    expect(first.isAnonymous).toBe(true)
     expect(third.id).toBe(3)
     expect(third.isKnown).toBe(true)
     expect(room.assertPileIdentityLedgerConsistency('yanxi:one-known')).toEqual([])

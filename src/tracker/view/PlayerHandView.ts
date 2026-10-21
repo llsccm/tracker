@@ -1,14 +1,13 @@
 import { SkillsConfig } from '@/config'
+import type { Card, Player } from '@/tracker/model'
 import { getPanelContentInner } from '@/ui/frameContent'
-import { Game } from '../index'
-import { getPileDisplayCards } from '../helper/pileOrder'
-import { formatPlayerSeatLabel, getDisplayIdLabel } from '../helper/seatLabel'
-import { createCardButton, createUnknownButton } from './cardButton'
-import { getPublicFieldCandidateCards } from './publicFieldCandidates'
-import type { Card } from '../Card'
-import type { Player } from '../Player'
-import type { Room } from '../Room'
 import { checkEllipsisOverflow, invalidateEllipsisOverflow } from '@/ui/overflowEllipsis'
+import { formatPlayerSeatLabel, getDisplayIdLabel } from '../helper/seatLabel'
+import { Game } from '../index'
+import type { Room } from '../Room'
+import { createCardButton, createUnknownButton } from './cardButton'
+import { getPileDisplayCards } from './pileOrder'
+import { getPublicFieldCandidateCards } from './publicFieldCandidates'
 
 let renderedMainHandCardIDs: number[] | null = null
 const renderedMainHandListeners = new Set<() => void>()

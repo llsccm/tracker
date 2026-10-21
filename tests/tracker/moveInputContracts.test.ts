@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { summarizeMoveEvent } from '@/tracker/helper/moveSummary'
 import { patchEvent } from '@/tracker/skill/moveEventUtils'
 import type { Room } from '@/tracker/Room'

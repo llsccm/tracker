@@ -46,15 +46,16 @@
     - `state.ts` / `configStore.ts` / `user.ts` / `userModel.ts` / `Game.ts` / `types.ts` / `traversalStats.ts`：配置代理、全局 UI、用户态、对局状态（`GameState` + `Game` 实例）、遍历插桩。
     - `Room.ts`：单局记牌器领域状态源；状态所有权、生命周期与行为模块边界见 [`room.md`](room.md)，
       GameState 统一临时状态仓库与清单见 [`skill_state.md`](skill_state.md)。
-    - `Card.ts` / `BaseCard.ts` / `Player.ts` / `Zone.ts`：牌/玩家/公共区模型；字段与不变量见 [`card_player_model.md`](card_player_model.md)。
-    - `ConstraintGroup.ts` / `AmbiguousKnownIndex.ts` / `CardLocationIndex.ts` / `CardCounter.ts`：约束与增量索引。
-    - `MoveEventNormalizer.ts` / `protocolZones.ts`：移动归一化与协议区映射。
-    - `roomConstraints.ts` / `roomPublicZones.ts` / `roomMovement.ts` + `roomMovement/*`：Room 行为拆分。
-    - `candidate/*`：完整位置、子区、公共区、手牌槽、装备容器、暗置标记等候选模型。
-    - `runtime/`（`bridge.ts` / `browser.ts` / `browserUserBinding.ts` / `moveEventHandlers.ts` / `trackerController.ts`）：可注入控制器与浏览器桥接。
-    - `skill/`：Room 内技能装饰（如骋烈、诫厉）。
-    - `helper/`：移动摘要、牌堆顺序。
-    - `view/`：`index.ts`、`dirtyRenderState.ts`、`PlayerHandView.ts`、`QueryPanelView.ts`、`StatisticsView.ts`、`cardButton.ts`、`publicFieldCandidates.ts`。
+    - `model/Card.ts` / `model/BaseCard.ts` / `model/Player.ts` / `model/Zone.ts`：牌/玩家/公共区模型；字段与不变量见 [`card_player_model.md`](card_player_model.md)。
+    - `constraint/`：`ConstraintGroup.ts`、`constraintSlots.ts`、`handSlotCounts.ts`、`handSlotUsage.ts`，集中维护约束模型与手牌槽位计算；Room 求解编排仍在 `room/constraints.ts`。
+    - `projection/`：`AmbiguousKnownIndex.ts`、`CardLocationIndex.ts`、`CardCounter.ts`、`playerSnapshot.ts`，集中维护派生索引、计数查询与玩家快照。
+    - `protocol/`：`MoveEventNormalizer.ts`、`protocolZones.ts`、`protocolRules.ts`，负责移动归一化、协议区映射与协议修正规则。
+    - `room/constraints.ts` / `room/publicZones.ts` / `room/movement/RoomMovement.ts` + `room/movement/*`：Room 行为拆分。
+    - `candidate/*`：完整位置、子区、公共区、牌序位置、装备容器与标记身份等候选基础规则；暗置移动判定在 `room/movement/hiddenMarkMove.ts`。
+    - `runtime/`（`bridge.ts` / `browser.ts` / `trackerController.ts`）：可注入控制器与浏览器桥接；协议录制由 `protocolRecorder.ts` / `protocolRecordingRules.ts` 负责。
+    - `skill/`：Room 内技能装饰（如骋烈、诫厉）及 `registerHandlers.ts` 中的默认装饰器注册。
+    - `helper/`：移动摘要、卡牌 ID 与座位标签辅助。
+    - `view/`：`index.ts`、`dirtyRenderState.ts`、`PlayerHandView.ts`、`QueryPanelView.ts`、`StatisticsView.ts`、`cardButton.ts`、`publicFieldCandidates.ts`、`pileOrder.ts`。
   - `tests/tracker/`：Vitest 记牌器回归（导入边界、Controller、候选、索引、暗置标记、匿名实体、随机转移、脏渲染、遍历基线等）。
   - `tests/contracts/pile-identity/`：不接生产状态的牌堆身份纯模型、oracle 与长期语义契约。
   - `src/config/`：远端配置解析：

@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { normalizeTrackerMovePosition } from '@/tracker/runtime/protocolRules'
+import { normalizeTrackerMovePosition } from '@/tracker/protocol/protocolRules'
 import {
   createErrorSpy,
   createTrackerControllerHarness,
@@ -36,7 +35,7 @@ describe('PileIdentityLedger integration', () => {
       controller.syncTrackerMove({ ...raw, ...normalizeTrackerMovePosition(raw) }, raw)
 
       expect(pile.cards).toHaveLength(5 + index)
-      expect(pile.cards.every((card) => isAnonymous(card) && !card.isKnown)).toBe(true)
+      expect(pile.cards.every((card) => card.isAnonymous && !card.isKnown)).toBe(true)
       expect(room.cardIndex.has(cardID)).toBe(false)
       expect(room.unlocatedIdentities.has(cardID)).toBe(true)
       expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([])
@@ -75,10 +74,10 @@ describe('PileIdentityLedger integration', () => {
       expect(handCards.every((card) => card.isKnown)).toBe(true)
     }
     if (drawIDs.length === 0) {
-      expect(handCards.every((card) => isAnonymous(card) && !card.isKnown)).toBe(true)
+      expect(handCards.every((card) => card.isAnonymous && !card.isKnown)).toBe(true)
     }
     expect(pile.cards).toHaveLength(5)
-    expect(pile.cards.every((card) => isAnonymous(card) && !card.isKnown)).toBe(true)
+    expect(pile.cards.every((card) => card.isAnonymous && !card.isKnown)).toBe(true)
     expect(room.cardIndex.get(31022)).toBe(equipment)
     expect(equipment.subZone).toBe('equip')
     huntianyiIDs
@@ -153,7 +152,7 @@ describe('PileIdentityLedger integration', () => {
     )
 
     expect(room.zones.get('pile')!.cards).toHaveLength(4)
-    expect(room.zones.get('pile')!.cards.every(isAnonymous)).toBe(true)
+    expect(room.zones.get('pile')!.cards.every((card) => card.isAnonymous)).toBe(true)
     expect(room.zones.get('discard')!.cards).toEqual([])
     expect(room.suspendedKnownCards.size).toBe(0)
     expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3, 4]))
@@ -501,7 +500,7 @@ describe('PileIdentityLedger integration', () => {
     const materializePileIdentities = (cardIDs: number[]) => {
       const pile = room.zones.get('pile')!
       cardIDs.forEach((cardID) => {
-        const target = pile.cards.find(isAnonymous)
+        const target = pile.cards.find((card) => card.isAnonymous)
         expect(target).toBeTruthy()
         expect(room.materialize(cardID, target ?? null)).toBeTruthy()
       })
@@ -554,7 +553,7 @@ describe('PileIdentityLedger integration', () => {
       room.zones
         .get('pile')!
         .cards.filter((card) => card.id !== 1 && card.id !== 2)
-        .every(isAnonymous)
+        .every((card) => card.isAnonymous)
     ).toBe(true)
     expect(
       Array.from(room.suspendedKnownCards, (card) => card.id).sort((left, right) => left - right)

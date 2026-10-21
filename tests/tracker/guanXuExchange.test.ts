@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { isAnonymous, type Card } from '@/tracker/Card'
+import type { Card } from '@/tracker/model/Card'
 import { POSITION_RANDOM } from '@/tracker/candidate/cardPositions'
-import { MOVE_TYPE, normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
+import { MOVE_TYPE, normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
 import decorateGuanXu, { GUAN_XU_STATE_KEY } from '@/tracker/skill/GuanXu'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
@@ -78,7 +78,7 @@ describe('黄承彦观虚目标视角交换', () => {
     const entityCountBefore = room.cards.length
     const pileCountBefore = pile.cards.length
     const originalPileTopFive = pile.cards.slice(-5)
-    expect(originalPileTopFive.every(isAnonymous)).toBe(true)
+    expect(originalPileTopFive.every((card) => card.isAnonymous)).toBe(true)
     expect(room.cardIndex.has(gainedPileCardID)).toBe(false)
     expect(room.unlocatedIdentities.has(gainedPileCardID)).toBe(true)
 
@@ -455,7 +455,7 @@ describe('黄承彦观虚目标视角交换', () => {
       .refreshPlayerSnapshot()
       .filter((card) => card.subZone === 'hand' && card.seats.has(targetSeat))
     expect(handCards).toHaveLength(1)
-    expect(handCards.every(isAnonymous)).toBe(true)
+    expect(handCards.every((card) => card.isAnonymous)).toBe(true)
     const before = captureMaterializationState(room, handCards)
 
     decorateGuanXuMove(room, {
@@ -514,7 +514,7 @@ describe('黄承彦观虚目标视角交换', () => {
     const room = controller.getTrackerRoom()!
     const exchangeCards = [...room.zones.get('exchange')!.cards]
     expect(exchangeCards).toHaveLength(6)
-    expect(exchangeCards.every(isAnonymous)).toBe(true)
+    expect(exchangeCards.every((card) => card.isAnonymous)).toBe(true)
     const before = captureMaterializationState(room, exchangeCards)
 
     decorateGuanXuMove(room, {

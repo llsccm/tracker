@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isAmbiguousKnownCard } from '@/tracker/AmbiguousKnownIndex'
+import { isAmbiguousKnownCard } from '@/tracker/projection/AmbiguousKnownIndex'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from './helpers/room'

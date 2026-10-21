@@ -2,7 +2,7 @@ import { tracker } from '@/tracker/runtime/browser'
 import type { CardID, SeatID } from '@/tracker/types'
 import type { RoleDataMessage } from './types'
 
-export { GUI_FU_ROLE_DATA_ID as ROLE_DATA_3709 } from '@/tracker/runtime/protocolRules'
+export { GUI_FU_ROLE_DATA_ID as ROLE_DATA_3709 } from '@/tracker/protocol/protocolRules'
 
 /**
  * 诡伏角色数据格式：首项为当前持有数量，随后为新增在前、仍持有旧牌在后的 CardID。

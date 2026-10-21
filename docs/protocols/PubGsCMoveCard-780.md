@@ -110,10 +110,10 @@ ToZoneParam: 0
 
 ## 代码与文档入口
 
-- `src/tracker/MoveEventNormalizer.ts`：`MOVE_TYPE.GIVE`、可见 ID 和区域端点归一化。
+- `src/tracker/protocol/MoveEventNormalizer.ts`：`MOVE_TYPE.GIVE`、可见 ID 和区域端点归一化。
 - `src/tracker/skill/WenGua.ts`：`decorateWenGuaCandidateSource()` 保存和消费候选快照。
-- `src/tracker/runtime/moveEventHandlers.ts`：仅为 `780` 注册候选来源筛选器。
-- `src/tracker/roomMovement.ts`：通用移动、候选传播与随机入堆边界。
-- `src/tracker/roomMovement/candidates.ts`：通用手牌转移和回堆候选传播。
+- `src/tracker/skill/registerHandlers.ts`：仅为 `780` 注册候选来源筛选器。
+- `src/tracker/room/movement/RoomMovement.ts`：通用移动、候选传播与随机入堆边界。
+- `src/tracker/room/movement/candidates.ts`：通用手牌转移和回堆候选传播。
 - `tests/tracker/wenGuaCandidateSource.test.ts`：明暗来源、B 原有明牌、旧约束、配对失效与生命周期回归。
 - [技能与协议特例](../agents/card_tracker_skills.md)、[临时状态清单](../agents/skill_state.md)。

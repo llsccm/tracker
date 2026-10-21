@@ -1,5 +1,5 @@
 import type { GameState, GameStateKey } from '../Game'
-import type { Player } from '../Player'
+import type { Player } from '@/tracker/model'
 import type { SeatID } from '../types'
 import { trackerLogger } from '@/utils/logger'
 

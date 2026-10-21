@@ -1,8 +1,7 @@
 import { protocolMove } from './helpers/trackerController'
 import { describe, expect, it } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
-import { normalizeMoveEvent } from '@/tracker/MoveEventNormalizer'
-import { registerDefaultMoveEventHandlers } from '@/tracker/runtime/moveEventHandlers'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
+import { registerDefaultMoveEventHandlers } from '@/tracker/skill/registerHandlers'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import type { TraversalStats } from '@/tracker/traversalStats'
 import { createTestRoom, getCard, getSuspendedIdentityIDs } from './helpers/room'
@@ -218,7 +217,7 @@ describe('Room.cards 遍历基线', () => {
     })
 
     const anonymousHandCards = room.cards.filter(
-      (card) => isAnonymous(card) && card.location === 'player'
+      (card) => card.isAnonymous && card.location === 'player'
     )
     expect(anonymousHandCards).toHaveLength(3)
     expect(summarize(stats)).toMatchInlineSnapshot(`

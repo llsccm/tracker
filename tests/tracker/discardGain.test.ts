@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import type { RawMoveCardEvent } from '@/tracker/types'
 import {
@@ -89,7 +88,7 @@ describe('弃牌堆未知获得', () => {
     expect(handCards).toHaveLength(4)
     expect(new Set(handCards.map((card) => card.id)).size).toBe(4)
     handCards.forEach((card) => {
-      expect(isAnonymous(card)).toBe(true)
+      expect(card.isAnonymous).toBe(true)
       expect(card.id).toBeLessThan(0)
       expect(card.entityID).toBe(card.id)
       expect(card.isKnown).toBe(false)
@@ -119,7 +118,7 @@ describe('弃牌堆未知获得', () => {
     const player = room.players.get(3)!
     const handCards = player.cards.filter((card) => card.subZone === 'hand')
     expect(handCards).toHaveLength(4)
-    expect(handCards.filter(isAnonymous)).toHaveLength(testCase.unknownCount)
+    expect(handCards.filter((card) => card.isAnonymous)).toHaveLength(testCase.unknownCount)
     expect(player.knownHandCards.map((card) => card.id).sort((a, b) => a - b)).toEqual(
       testCase.knownIDs
     )
@@ -159,7 +158,7 @@ describe('弃牌堆未知获得', () => {
       .cards.filter((card) => card.subZone === 'mark' && card.spellID === 4023)
     expect(markCards).toHaveLength(testCase.cardCount)
     expect(new Set(markCards.filter((card) => card.id > 0))).toEqual(new Set(sourceCards))
-    const placeholders = markCards.filter(isAnonymous)
+    const placeholders = markCards.filter((card) => card.isAnonymous)
     expect(placeholders).toHaveLength(testCase.unknownCount)
     expect(new Set(placeholders.map((card) => card.id)).size).toBe(testCase.unknownCount)
     placeholders.forEach((card) => {
@@ -222,7 +221,7 @@ describe('弃牌堆未知获得', () => {
     })
 
     expect(gainedCards).toHaveLength(2)
-    expect(gainedCards.every(isAnonymous)).toBe(true)
+    expect(gainedCards.every((card) => card.isAnonymous)).toBe(true)
     gainedCards.forEach((card) => {
       expect(playerSourceCards).not.toContain(card)
       expect(card.location).toBe('outside')
@@ -245,7 +244,7 @@ describe('弃牌堆未知获得', () => {
     controller.syncTrackerMove(discardGainMove({ MoveType: moveType }))
 
     const player = room.players.get(3)!
-    expect(player.cards.filter(isAnonymous)).toHaveLength(4)
+    expect(player.cards.filter((card) => card.isAnonymous)).toHaveLength(4)
     expect(player.unknownCardCount).toBe(4)
     expect(player.observedHandCount).toBe(4)
     expect(room.zones.get('discard')!.cards).toEqual([])
@@ -261,7 +260,7 @@ describe('弃牌堆未知获得', () => {
 
     const player = room.players.get(3)!
     expect(player.knownHandCards.map((card) => card.id).sort((a, b) => a - b)).toEqual([2, 5])
-    expect(player.cards.filter(isAnonymous)).toHaveLength(2)
+    expect(player.cards.filter((card) => card.isAnonymous)).toHaveLength(2)
     expect(player.observedHandCount).toBe(4)
     expect(player.unknownCardCount).toBe(2)
     expect(room.cards.filter((card) => card.id === 2)).toHaveLength(1)
@@ -296,7 +295,7 @@ describe('MoveType=15 弃牌堆明确来源兼容', () => {
 
     const player = room.players.get(3)!
     expect(new Set(player.knownHandCards)).toEqual(new Set(sourceCards))
-    expect(player.cards.filter(isAnonymous)).toEqual([])
+    expect(player.cards.filter((card) => card.isAnonymous)).toEqual([])
     expect(player.observedHandCount).toBe(2)
     expect(player.unknownCardCount).toBe(0)
     expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual([1, 3, 4, 6])

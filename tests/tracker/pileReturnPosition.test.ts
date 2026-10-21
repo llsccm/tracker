@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { normalizeTrackerMovePosition } from '@/tracker/runtime/protocolRules'
+import { normalizeTrackerMovePosition } from '@/tracker/protocol/protocolRules'
 import {
   createErrorSpy,
   createTrackerControllerHarness,
@@ -38,7 +37,7 @@ describe('回堆位置与匿名身份', () => {
     controller.syncTrackerMove(patched, raw)
 
     expect(pile.cards).toHaveLength(3)
-    expect(pile.cards.every((card) => isAnonymous(card) && !card.isKnown)).toBe(true)
+    expect(pile.cards.every((card) => card.isAnonymous && !card.isKnown)).toBe(true)
     expect(room.getPlayer(1)!.cards).toHaveLength(0)
     expect(room.cardIndex.has(17)).toBe(false)
     expect(room.assertPileIdentityLedgerConsistency('test:shouqi-random-return')).toEqual([])
@@ -61,7 +60,7 @@ describe('回堆位置与匿名身份', () => {
     )
 
     expect(pile.cards).toHaveLength(3)
-    expect(isAnonymous(card)).toBe(true)
+    expect(card.isAnonymous).toBe(true)
     expect(room.cardIndex.has(17)).toBe(false)
     expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([])
     expect(room.assertPileIdentityLedgerConsistency('test:random-pile-reinsert')).toEqual([])
@@ -91,14 +90,14 @@ describe('回堆位置与匿名身份', () => {
     expect(pile.cards).toHaveLength(3)
     expect(pile.cards).toContain(returnedCard)
     expect(pile.cards.filter((card) => card !== returnedCard)).toEqual(otherCards)
-    expect(pile.cards.every((card) => isAnonymous(card) && !card.isKnown)).toBe(true)
+    expect(pile.cards.every((card) => card.isAnonymous && !card.isKnown)).toBe(true)
     expect(room.cardIndex.has(17)).toBe(false)
     expect(room.unlocatedIdentities.has(17)).toBe(true)
     expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([])
     expect(room.assertPileIdentityLedgerConsistency('test:generic-random-return')).toEqual([])
 
     controller.syncTrackerMove(protocolMove({ CardIDs: [], CardCount: 1 }))
-    expect(room.getPlayer(1)!.cards.every(isAnonymous)).toBe(true)
+    expect(room.getPlayer(1)!.cards.every((card) => card.isAnonymous)).toBe(true)
     expect(room.cardIndex.has(17)).toBe(false)
     expect(room.assertPileIdentityLedgerConsistency('test:random-return-draw')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
@@ -124,7 +123,7 @@ describe('回堆位置与匿名身份', () => {
     )
 
     expect(pile.cards).toContain(returnedCard)
-    expect(isAnonymous(returnedCard)).toBe(true)
+    expect(returnedCard.isAnonymous).toBe(true)
     expect(room.cardIndex.has(17)).toBe(false)
     expect(room.unlocatedIdentities.has(17)).toBe(true)
     expect(room.assertPileIdentityLedgerConsistency('test:inferred-random-return')).toEqual([])
@@ -190,7 +189,7 @@ describe('回堆位置与匿名身份', () => {
     expect(pile.cards).toHaveLength(3)
     expect(room.getPlayer(1)!.cards).toHaveLength(0)
     expect(pile.cards.at(-1)).toBe(returnedCard)
-    expect(isAnonymous(returnedCard)).toBe(true)
+    expect(returnedCard.isAnonymous).toBe(true)
     expect(room.assertPileIdentityLedgerConsistency('test:743-top-return')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })

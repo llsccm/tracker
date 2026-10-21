@@ -1,6 +1,6 @@
 import type { NormalizedMoveCardFields } from '../types'
 import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
-import { MOVE_TYPE } from '../MoveEventNormalizer'
+import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
 import { getPositiveIDs } from '../helper/cardIDs'
 import { trackerLogger } from '@/utils/logger'
@@ -10,8 +10,8 @@ import {
   nextGroupID,
   patchEvent,
   type MoveEventDraft
-} from '../skill/moveEventUtils'
-import { CARD_INSTANCE_STATUS } from '../CardCounter'
+} from './moveEventUtils'
+import { CARD_INSTANCE_STATUS } from '../projection/CardCounter'
 
 const CHENG_LIE_DISCARD_QUEUE = 'chengLieDiscardQueue'
 

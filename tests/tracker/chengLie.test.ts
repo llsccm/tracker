@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import {
   createErrorSpy,
@@ -69,7 +68,7 @@ describe('骋烈：其他视角的牌顶展示与暗取', () => {
           (card) => card.location === 'player' && card.owner === seat && card.subZone === 'mark'
         )
         expect(marks).toHaveLength(1)
-        expect(marks.every(isAnonymous)).toBe(true)
+        expect(marks.every((card) => card.isAnonymous)).toBe(true)
       }
       for (const seat of [1, 6, 7]) {
         move({

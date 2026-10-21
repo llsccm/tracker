@@ -1,4 +1,4 @@
-import type { Card } from './Card'
+import type { Card } from './model/Card'
 import type { GameState } from './Game'
 import type { Room } from './Room'
 

@@ -112,7 +112,7 @@ if (!room) return
 - `player.unknownCardCount` 是观测总数扣除确定明牌和候选明牌容量上界后的未知额度，可能已由暗实体覆盖。
 - `player.getKnownHandSlotCount()` 返回确定明牌数量；`player.getCandidateHandSlotCount()` 返回单座位候选
   明牌容量上界，同一身份在该座位最多计一次，不能把各座位上界相加当作全局确定身份数。
-- `computeHandSlotAllocation(room)`（`src/tracker/candidate/handSlotUsage.ts`）一次返回各座位的确定明暗占用、
+- `computeHandSlotAllocation(room)`（`src/tracker/constraint/handSlotUsage.ts`）一次返回各座位的确定明暗占用、
   候选容量、暗实体覆盖、展示额度和匿名补缺；匿名补位使用它的结果，不再另写数量算法。
   未观测总数或无法安全对账时，匿名补缺为 `null`，以 `canReconcileAnonymous` 判断是否可以补位。
 - `knownHandCards`、`candidateHandCards` 和 `locationIndex` 会在 `resolveConstraints()` 后同步。刚调用底层
@@ -320,5 +320,5 @@ rg -n "getPositiveIDs|getPlayerHandCardIDs|knownHandCards|candidateHandCards" sr
 rg -n "revealTrackerCards|revealTrackerCardsInZone|moveCards" src tests
 ```
 
-核心源码入口：`src/tracker/Room.ts`、`src/tracker/Player.ts`、`src/tracker/Card.ts`、
-`src/tracker/Zone.ts`、`src/tracker/runtime/trackerController.ts`、`src/tracker/roomPublicZones.ts`。
+核心源码入口：`src/tracker/Room.ts`、`src/tracker/model/Player.ts`、`src/tracker/model/Card.ts`、
+`src/tracker/model/Zone.ts`、`src/tracker/runtime/trackerController.ts`、`src/tracker/room/publicZones.ts`。

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { MOVE_TYPE } from '@/tracker/MoveEventNormalizer'
+import { MOVE_TYPE } from '@/tracker/protocol/MoveEventNormalizer'
 import type { RawMoveCardEvent } from '@/tracker/types'
 import {
   createErrorSpy,

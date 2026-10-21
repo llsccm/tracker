@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CardConfig } from '@/config/CardConfig'
-import { Card } from '@/tracker/Card'
-import { CARD_INSTANCE_STATUS } from '@/tracker/CardCounter'
+import { Card } from '@/tracker/model/Card'
+import { CARD_INSTANCE_STATUS } from '@/tracker/projection/CardCounter'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import { createTestRoom, getCard } from './helpers/room'
 

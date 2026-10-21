@@ -4,12 +4,12 @@ import {
   getEquipmentMarkSeatChange,
   getObservedEquipmentMarkSnapshot,
   resolveEquipmentContainerLocationCandidates
-} from '@/tracker/roomMovement/equipmentMarks'
+} from '@/tracker/room/movement/equipmentMarks'
 import {
   HIDDEN_MARK_STATE_KEY,
   type HiddenMarkState,
   type RoomMovementOptions
-} from '@/tracker/roomMovement/types'
+} from '@/tracker/room/movement/types'
 import type { Room } from '@/tracker/Room'
 import type { CardID } from '@/tracker/types'
 import { collectTraversalStats } from '@/tracker/traversalStats'

@@ -5,10 +5,10 @@
  * Room 的 exchange 是一个全局公共区，若不保留桶归属，区内已知牌移动会误取物理端点，
  * 最后的空 CardIDs 回牌堆也会漏掉已经换入牌堆侧的已知手牌。
  */
-import { isAnonymous, type Card } from '../Card'
+import type { Card } from '@/tracker/model/Card'
 import { POSITION_TOP, insertCardsAtProtocolPosition } from '../candidate/cardPositions'
 import { createPublicCandidate } from '../candidate/publicCandidate'
-import { MOVE_TYPE } from '../MoveEventNormalizer'
+import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
 import { getPositiveIDs } from '../helper/cardIDs'
 import { getCount, type MoveEventDraft, patchEvent } from './moveEventUtils'
@@ -102,7 +102,7 @@ function resolveProtocolKnownCards(
 ): ProtocolKnownCardResolution {
   const selected: Card[] = []
   const selectedSet = new Set<Card>()
-  const anonymousTargets = candidates.filter(isAnonymous)
+  const anonymousTargets = candidates.filter((card) => card.isAnonymous)
   const plannedCardsByID = new Map<number, Card>()
   const commits: ProtocolKnownCardCommit[] = []
 

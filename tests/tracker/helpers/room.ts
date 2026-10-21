@@ -1,5 +1,4 @@
 import { Room } from '@/tracker/Room'
-import { isAnonymous } from '@/tracker/Card'
 import { createNoopGameState } from './noopRuntime'
 
 interface CreateTestRoomOptions {
@@ -56,13 +55,13 @@ export function getCard(room: Room, id: number) {
   const existing = room.cardIndex.get(id)
   if (existing) return existing
 
-  const target = room.zones.get('pile')?.cards.find(isAnonymous) ?? null
+  const target = room.zones.get('pile')?.cards.find((card) => card.isAnonymous) ?? null
   return room.materialize(id, target)
 }
 
 /** 领域单元测试取一个未分配身份的物理槽，不按 CardID 猜测暗牌。 */
 export function takeAnonymousCard(room: Room) {
-  const card = room.zones.get('pile')!.cards.find(isAnonymous)
+  const card = room.zones.get('pile')!.cards.find((card) => card.isAnonymous)
   if (!card) throw new Error('测试牌堆缺少匿名槽')
   room.clearCardsFromPublicZones([card])
   return card

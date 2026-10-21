@@ -1,6 +1,6 @@
 # Card / Player / Zone 模型（渐进式披露）
 
-> 当任务涉及 `src/tracker/Card.ts`、`BaseCard.ts`、`Player.ts` 或 `Zone.ts`，需要排查牌实体
+> 当任务涉及 `src/tracker/model/Card.ts`、`model/BaseCard.ts`、`model/Player.ts` 或 `model/Zone.ts`，需要排查牌实体
 > 位置、候选、玩家区投影、公共区顺序，或新增玩家子区、装备容器、标记区语义时，按需阅读本文。
 > 普通读取与调用方式先查 [`tracker_api.md`](tracker_api.md)；候选收敛与约束主流程见
 > [`card_tracker_convergence.md`](card_tracker_convergence.md)；匿名牌堆、物化与 suspended 见
@@ -42,6 +42,7 @@
 | 字段 / 读面 | 语义 |
 | --- | --- |
 | `id` / `entityID` | 真实 CardID 或稳定负匿名句柄；匿名实体物化时原地切换为正 ID |
+| `hasRealIdentity` / `isAnonymous` | 从当前 `id` 实时计算的互补 getter；物化或匿名化后自动反映身份状态，不代表牌面是否公开 |
 | `location` | 当前位置事实：公共区、`player` 或 `suspended` |
 | `subZone` / `spellID` | 玩家区内的 `hand` / `equip` / `judge` / `mark` 及标记技能 ID |
 | `isKnown` | 牌面是否已公开；不等于“身份已知”，也不等于位置确定 |
@@ -107,7 +108,7 @@
 - `getKnownHandSlotCount()` 返回确定明牌槽位数；`getCandidateHandSlotCount()` 返回受组内
   剩余名额约束的单座位候选容量上界，不是 `Card[]` 长度。同一身份在该座位最多计一次，
   不同座位的可能上界不能相加当作全局确定数量。名额解析与重叠处理统一在
-  `candidate/constraintSlots.ts` / `candidate/handSlotUsage.ts`。
+  `constraint/constraintSlots.ts` / `constraint/handSlotUsage.ts`。
 - `computeHandSlotAllocation(room)` 同时给出确定明暗占用、候选明牌容量上界、暗实体覆盖和匿名补缺；
   Player 与收敛器共用该结果。未观测手牌总数、未决名额不足或覆盖无法完整匹配时不执行匿名补位。
 

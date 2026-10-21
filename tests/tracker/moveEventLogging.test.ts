@@ -5,7 +5,7 @@ import {
   getMoveTypeLabel,
   getProtocolMoveSpecialLabel,
   normalizeMoveEvent
-} from '@/tracker/MoveEventNormalizer'
+} from '@/tracker/protocol/MoveEventNormalizer'
 import { summarizeMoveEvent } from '@/tracker/helper/moveSummary'
 import { TrackerController } from '@/tracker/runtime/trackerController'
 import type { RawMoveCardEvent, TrackerLogger } from '@/tracker/types'

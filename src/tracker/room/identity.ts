@@ -1,10 +1,10 @@
-import { Card, hasRealIdentity, isAnonymous } from '../Card'
+import type { Zone } from '@/tracker/model'
+import { Card } from '@/tracker/model'
+import { trackerLogger } from '@/utils/logger'
 import { POSITION_RANDOM } from '../candidate/cardPositions'
 import type { Room } from '../Room'
-import type { Zone } from '../Zone'
 import type { CardID, PublicPosition, PublicZoneName } from '../types'
-import type { RoomMoveContext } from '../roomMovement/types'
-import { trackerLogger } from '@/utils/logger'
+import type { RoomMoveContext } from './movement/types'
 
 export interface AnonymizeLocatedIdentityOptions {
   preservePlacement?: boolean
@@ -22,7 +22,7 @@ export class RoomIdentity {
     const room = this.room
     if (requireSuccess) {
       const invalidCards = cards.filter(
-        (card) => !hasRealIdentity(card) || card.id <= 0 || room.cardIndex.get(card.id) !== card
+        (card) => card.isAnonymous || room.cardIndex.get(card.id) !== card
       )
 
       if (invalidCards.length > 0) {
@@ -111,7 +111,7 @@ export class RoomIdentity {
     options: AnonymizeLocatedIdentityOptions = {}
   ): CardID | null {
     const room = this.room
-    if (!card || !hasRealIdentity(card) || card.id <= 0) return null
+    if (!card || card.isAnonymous) return null
     if (room.cardIndex.get(card.id) !== card) return null
 
     const { preservePlacement = false } = options
@@ -227,7 +227,7 @@ export class RoomIdentity {
 
     const existing = room.cardIndex.get(normalizedCardID)
     if (existing) return existing
-    if (!target || !isAnonymous(target)) return null
+    if (!target || target.hasRealIdentity) return null
 
     const wasDeckIdentity = room.deckIdentities.has(normalizedCardID)
     if (wasDeckIdentity && !room.unlocatedIdentities.has(normalizedCardID)) return null
@@ -250,7 +250,7 @@ export class RoomIdentity {
     if (existing) {
       // target 只有在匿名时才可承接已有身份。若 target 是其它正 ID，即使其牌面未公开，
       // 也不能用本次揭示覆盖该身份；调用方应保留原端点并走诊断/兜底路径。
-      if (target && target !== existing && isAnonymous(target)) {
+      if (target && target !== existing && target.isAnonymous) {
         this.materializeExistingIdentityAtTarget(existing, target)
       }
 
@@ -296,7 +296,7 @@ export class RoomIdentity {
     const targets = room.getPublicEndpointCards(zoneID, cardIDs.length, position)
     // 端点中的同 ID 实体由 existing 分支直接确认；其它身份只能占用匿名槽。
     // 不跳过正 ID 暗端点去拿更深处匿名槽，否则会把协议端点顺序改写成本地选择。
-    const availableTargets = targets.filter(isAnonymous)
+    const availableTargets = targets.filter((card) => card.isAnonymous)
 
     return cardIDs
       .map((cardID) => {
@@ -316,7 +316,7 @@ export class RoomIdentity {
    */
   private materializeExistingIdentityAtTarget(existing: Card, target: Card): void {
     const room = this.room
-    if (!isAnonymous(target)) return
+    if (target.hasRealIdentity) return
 
     if (existing.location === 'player' && existing.isKnown !== true) {
       const oldSubZone = existing.subZone ?? 'hand'

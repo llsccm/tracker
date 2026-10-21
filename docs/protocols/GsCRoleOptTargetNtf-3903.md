@@ -180,7 +180,7 @@ ToZoneParam: 0
 - 目标通知：`src/handler/GsCRoleOptTargetNtf.js` 的 `handleRoleOptTargetNtf`
 - 牌堆顶明牌入口：同文件的 `revealPileCards`
 - 匿名交换候选：`src/tracker/skill/TianHou.ts`
-- 同区展示基础归一：`src/tracker/MoveEventNormalizer.ts` 的 `inferEventType`
+- 同区展示基础归一：`src/tracker/protocol/MoveEventNormalizer.ts` 的 `inferEventType`
 - 公共区范围揭示：`src/tracker/runtime/trackerController.ts` 的
   `revealPublicCandidateCards`
 - 位置归一化：`src/handler/PubGsCMoveCard.js`（`3903` 不进 RANDOM-as-top 白名单）

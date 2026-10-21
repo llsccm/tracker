@@ -84,7 +84,7 @@
 
 木牛流马的三条相邻原始协议及 ZoneParam 语义见 [木牛流马协议说明](../protocols/PubGsCMoveCard-700.md)。装备本体迁座只处理装备自身；随后附属 mark700 协议才迁移内部牌、账本与投影，不得将空 CardIDs 当成空容器快照。
 
-装备容器规则集中在 `src/tracker/roomMovement/equipmentMarks.ts`：区分目标座位观测与真实空间迁移，
+装备容器规则集中在 `src/tracker/room/movement/equipmentMarks.ts`：区分目标座位观测与真实空间迁移，
 解析容器位置、生成稳定装备记录键并识别完整可见快照。规则只读上下文与显式传入的观测座位，
 不读取 `HiddenMarkState`；`hiddenMarks.ts` 仍独占 `muniuMarkSeat` 的写入及通用记录/占位/约束协调。
 零张通知不建立座位观测，普通手牌暗置可以更新观测但不接管空间迁移；现有

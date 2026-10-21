@@ -1,6 +1,6 @@
 import { SpellExtendConfig } from '@/config'
 import { Game, globalConfig } from '@/tracker'
-import { GUI_FU_ROLE_DATA_ID } from '@/tracker/runtime/protocolRules'
+import { GUI_FU_ROLE_DATA_ID } from '@/tracker/protocol/protocolRules'
 import { recordDuoQiRoleDataTarget } from '@/tracker/skill/DuoQi'
 import { renderPeiXiuMapWindow, setPeiXiuMapWindowVisible } from '@/ui/PeiXiuMapWindow'
 import { getRenderedPeiXiuHandSuitColors } from '@/ui/PeiXiuHandMirror'

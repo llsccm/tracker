@@ -1,5 +1,5 @@
 import { expect } from 'vitest'
-import { AmbiguousKnownIndex } from '@/tracker/AmbiguousKnownIndex'
+import { AmbiguousKnownIndex } from '@/tracker/projection/AmbiguousKnownIndex'
 import type { Room } from '@/tracker/Room'
 
 /**

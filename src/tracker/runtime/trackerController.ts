@@ -1,17 +1,21 @@
 import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
 import { fromPublicCandidate } from '../candidate/locationCandidate'
 import { createPublicCandidate } from '../candidate/publicCandidate'
-import type { Card } from '../Card'
+import type { Card } from '@/tracker/model/Card'
 import { Game, type GameState } from '../Game'
 import { summarizeMoveEvent } from '../helper/moveSummary'
-import { getProtocolMoveSpecialLabel, MOVE_TYPE, normalizeMoveEvent } from '../MoveEventNormalizer'
+import {
+  getProtocolMoveSpecialLabel,
+  MOVE_TYPE,
+  normalizeMoveEvent
+} from '../protocol/MoveEventNormalizer'
 import type { PileIdentityLedgerMove } from '../PileIdentityLedger'
 import {
   getProtocolMarkSpellID,
   getProtocolPlayerSubZone,
   getProtocolPublicZone,
   isProtocolPlayerZone
-} from '../protocolZones'
+} from '../protocol/protocolZones'
 import { Room } from '../Room'
 import type {
   CardID,
@@ -27,10 +31,10 @@ import type {
   TrackerLogger,
   TrackerView
 } from '../types'
-import { registerDefaultMoveEventHandlers } from './moveEventHandlers'
+import { registerDefaultMoveEventHandlers } from '../skill/registerHandlers'
 import { commitDuoQiMove, observeDuoQiKnownCardIDs } from '../skill/DuoQi'
 import { completeGuiFuMove, deferGuiFuMove } from '../skill/GuiFu'
-import { GUI_FU_ROLE_DATA_ID } from './protocolRules'
+import { GUI_FU_ROLE_DATA_ID } from '../protocol/protocolRules'
 import { trackerLogger } from '@/utils/logger'
 
 interface RevealTarget {
