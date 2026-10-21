@@ -7,6 +7,7 @@ export type HandSlotKind = 'known' | 'candidate'
 export interface HandSlotCards {
   knownCards: Card[]
   candidateCards: Card[]
+  exactHiddenCards: Card[]
 }
 
 /**
@@ -15,35 +16,12 @@ export interface HandSlotCards {
 export function getHandSlotKindForSeat(card: Card, seatID: number): HandSlotKind | null {
   if (card.location !== 'player' || card.isKnown !== true) return null
 
-  const normalizedSeatID = Number(seatID)
-  const locationCandidates = card.hasLocationCandidates?.()
-    ? getPlayerLocationCandidates(card.locationCandidates)
-    : []
-  const handLocationCandidates = locationCandidates.filter(
-    (candidate) => candidate.seatID === normalizedSeatID && candidate.subZone === 'hand'
+  const locations = card.getPossibleLocations()
+  const hasHand = getPlayerLocationCandidates(locations).some(
+    (candidate) => candidate.seatID === seatID && candidate.subZone === 'hand'
   )
-
-  if (handLocationCandidates.length > 0) {
-    return card.locationCandidates.length === 1 ? 'known' : 'candidate'
-  }
-
-  const hasSubZoneCandidates = card.hasSubZoneCandidates?.() === true
-
-  if (card.subZone === 'hand' && !hasSubZoneCandidates && card.seats.has(normalizedSeatID)) {
-    return card.seats.size === 1 ? 'known' : 'candidate'
-  }
-
-  if (
-    card.hasSubZoneCandidate?.({
-      seatID: normalizedSeatID,
-      subZone: 'hand',
-      spellID: null
-    })
-  ) {
-    return 'candidate'
-  }
-
-  return null
+  if (!hasHand) return null
+  return locations.length === 1 ? 'known' : 'candidate'
 }
 
 /**
@@ -58,16 +36,21 @@ export function collectHandSlotCardsBySeat(
   for (const seatID of seatIDs) {
     cardsBySeat.set(Number(seatID), {
       knownCards: [],
-      candidateCards: []
+      candidateCards: [],
+      exactHiddenCards: []
     })
   }
 
   for (const card of cards) {
-    if (card.location !== 'player' || card.isKnown !== true) continue
+    if (card.location !== 'player' || card.suspended) continue
 
-    const hasLocationCandidates = card.hasLocationCandidates?.() === true
-    const hasSubZoneCandidates = card.hasSubZoneCandidates?.() === true
-    if (card.subZone !== 'hand' && !hasLocationCandidates && !hasSubZoneCandidates) continue
+    if (!card.isKnown) {
+      // 同一 owner 下仍有 hand/mark 等候选时，不是确定暗手牌。
+      if (!card.hasLocationCandidates() && card.subZone === 'hand' && card.owner !== null) {
+        cardsBySeat.get(card.owner)?.exactHiddenCards.push(card)
+      }
+      continue
+    }
 
     cardsBySeat.forEach((slotCards, seatID) => {
       const handSlotKind = getHandSlotKindForSeat(card, seatID)

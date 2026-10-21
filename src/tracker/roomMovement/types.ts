@@ -1,4 +1,5 @@
 import type { Card } from '../Card'
+import type { ConstraintGroupOptions } from '../ConstraintGroup'
 import type {
   CardID,
   MoveSourceEvent,
@@ -11,10 +12,6 @@ import type {
   SubZone
 } from '../types'
 
-export type CountMapInput<Key extends string | number | object> =
-  | Map<Key, number | string>
-  | Record<string, number | string>
-export type ExpectedSlotsBySeatInput = CountMapInput<SeatID>
 export type SeatInput = SeatID | SeatID[]
 export type SourceZoneInput = PublicZoneName | number | null | undefined
 export type MoveTargetZone = PublicZoneName | 'player'
@@ -40,7 +37,7 @@ export interface RoomMovementOptions {
   moveType?: number
   position?: PublicPosition
   fromPosition?: PublicPosition
-  expectedSlotsBySeat?: ExpectedSlotsBySeatInput
+  expectedSlotsByLocation?: ConstraintGroupOptions['expectedSlotsByLocation']
   anonymizeCards?: Card[]
   requireAnonymizeSuccess?: boolean
   sourceCards?: Card[]
@@ -67,7 +64,7 @@ export interface RoomMoveContext {
   moveType?: number
   position: PublicPosition
   fromPosition: PublicPosition
-  expectedSlotsBySeat?: ExpectedSlotsBySeatInput
+  expectedSlotsByLocation?: ConstraintGroupOptions['expectedSlotsByLocation']
   anonymizeCards: Card[]
   requireAnonymizeSuccess: boolean
   sourceCards?: Card[]
@@ -165,6 +162,17 @@ export interface RandomHandTransferOptions {
   sourceUnknownCount?: number
   /** 全暗来源通常没有展示价值；技能身份账本可显式要求仍建立 N 选 K。 */
   force?: boolean
+  sourceEvent?: MoveSourceEvent
+}
+
+export interface MarkToHandCandidatesOptions {
+  /** 标记区所在座位；缺省时不接管，保留默认暗牌移动。 */
+  fromSeat: SeatID | null
+  /** 标记空间 ID；缺省时不接管，避免跨空间误合并候选。 */
+  fromSpellID: SpellID | null
+  /** 接收手牌座位；缺省时不接管。 */
+  toSeat: SeatID | null
+  count: number
   sourceEvent?: MoveSourceEvent
 }
 

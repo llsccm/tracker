@@ -20,9 +20,10 @@
 `Room.resolveConstraints()` 的职责，是在当前协议事实、候选位置、局部数量约束和观测手牌数之间求出一个稳定状态。稳定状态意味着再执行一轮不会继续改变候选、owner、匿名手牌实体或相关派生计数。
 
 Room 仅保留该公开入口，实际不动点循环与稳定尾部在 `RoomConstraints.resolveConstraints()` 中实现。
-`collectPlayerHandSlotCounts()`、`createHandSlotCountResolver()` 和 `reconcileAnonymousHandCards()`
-是约束模块的私有辅助方法，手牌槽摘要及 E1/E2 缓存不对外暴露。Room 继续持有牌局事实、触碰座位集合、
-脏事件和轮数统计；DEV 诊断实例由 Room 按需传入，诊断抽样与最终校验的执行顺序不变。
+手牌分配统一通过 `candidate/handSlotUsage.ts` 的 `computeHandSlotAllocation()` 读取；
+`reconcileAnonymousHandCards()` 只消费分配结果，不再另行扫描卡牌或计算缺口。
+E1/E2 缓存只在单次收敛内存活。Room 继续持有牌局事实、触碰座位集合、脏事件和轮数统计；
+DEV 诊断实例由 Room 按需传入，诊断抽样与最终校验的执行顺序不变。
 
 收敛遵循以下边界：
 
@@ -38,7 +39,7 @@ Room 仅保留该公开入口，实际不动点循环与稳定尾部在 `RoomCon
 
 - `Card.locationCandidates` 是完整位置候选的唯一主模型；`seats`、`subZoneCandidates` 与 `publicCandidates` 都是兼容投影。
 - `card.seats.size === 1` 只足以同步 `owner`。若仍存在 `A 手牌 / A 标记` 等多个完整位置候选，具体子区域尚未收敛。
-- `expectedSlotsBySeat` 只表达“本组有几张普通手牌属于某座位”，不能替代完整位置名额。
+- 建组、更新和移动统一接受 `expectedSlotsByLocation`；普通手牌使用 `player:<seat>:hand:none`，不再接受座位名额输入糖。
 - `expectedSlotsByLocation` 是玩家区、公共区与装备容器数量约束的唯一存储，不再维护子区槽位镜像；只有候选全集已被该局部分组覆盖时，才能执行强锁推理。
 - 未调用 `syncObservedPlayerHandCount()` 的玩家没有手牌数事实；默认值或负向差量不能被解释为“观测到 0 张”。
 - 匿名实体只覆盖已知物理数量缺口，不代表某个未公开 CardID，也不能用于证明具体牌序或 owner。
@@ -65,9 +66,9 @@ flowchart TD
 
 `ConstraintGroup.resolve()` 按以下层次处理本组卡牌：
 
-1. `candidateSeats` 与卡牌现有座位候选取交集。
-2. `expectedSlotsBySeat` 处理没有完整子区域候选的普通手牌。
-3. `expectedSlotsByLocation` 处理玩家完整位置、公共位置与装备容器。
+1. `candidateSeats` 仅记录分组创建/更新时的座位，不裁剪当前候选，也不随新移动扩写旧组。
+2. 只读取 `expectedSlotsByLocation`；省略更新项保持原名额，传空 Map 清空，传入集合整体替换。
+3. `getConstraintSlotState()` 统一读取该位置的确定牌、候选牌和剩余名额，再按数量执行消元。
 4. 对尚未由本轮位置操作同步 owner 的玩家区卡牌，再执行一次 owner 同步。
 
 数量约束只有两类安全推理：
@@ -77,7 +78,11 @@ flowchart TD
 
 公共位置按完整 key 匹配，不能用同一公共区中的任意确定牌提前占满牌顶/范围名额。装备容器候选收敛后仍保持 container 语义，展示座位优先取 mark 协议已观测的空间座位；尚未观测时才以装备位置兜底。装备本体移动不提前迁移内部牌或候选投影。
 
-`combinationID` 是展示与迁移标签，不是推理事实。同一张牌可属于多个约束组，标签被后处理组覆盖时不能让 `changed` 变为 `true`。
+同一张牌可属于多个约束组，成员关系仅由各组的 `cards` 集合保存，置换时迁移所有实际成员关系。
+实体单值分组标签已删除；协议 `combinationID` 仍可作为本次约束组的 ID。
+
+组内名额具有事件时效：随机手牌转移使来源/目标的旧手牌名额失效，其它位置名额继续保留；
+确定位置上的牌离组应在扩展候选之前扣减原位置名额。禁止用扩大 `candidateSeats` 代替数量约束失效处理。
 
 ### 约束三：观测手牌数排他
 
@@ -89,13 +94,32 @@ flowchart TD
 
 三类约束完成后，`reconcileAnonymousHandCards()` 根据观测手牌数、确定明牌和模糊明牌槽位补建或释放匿名手牌实体。实体数量变化会改变玩家区快照，必须把本轮标记为有变化并重新执行全部约束。
 
+名额解析的共同读面是 `candidate/constraintSlots.ts`；手牌分配唯一入口是
+`candidate/handSlotUsage.ts` 的 `computeHandSlotAllocation()`。它一次归组确定明牌、确定暗牌
+及候选明牌，并输出展示额度、暗实体覆盖和匿名补缺：
+
+- 先从组内名额扣除已确定位置的实体，不能把它们再次算作候选额度。
+- 候选明牌额度是单座位的可能容量上界：同一身份只计一次，同时受所有相交组的剩余名额限制。
+  不相交组独立求值，重复组取最紧名额；相交组按约束归属组合求解，结果不依赖组或卡牌遍历顺序。
+- 没有数量约束覆盖的候选不补造额度。不同座位的可能上界不能相加当作全局确定身份数量。
+- 未决暗实体只承接候选明牌容量上界无法覆盖的剩余名额；这里同样考虑跨组限制，不直接使用明牌数组长度。
+  重叠暗牌包按匹配去重，仅采用能同时满足全部需求的覆盖计数，不据此落定某张牌的身份或位置。
+- 同 owner 的 hand/mark 未决暗牌不能计入确定暗手牌。未观测总数、明牌候选缺少名额或暗实体需求无法完整匹配时，
+  `canReconcileAnonymous` 为 false、匿名补缺值为 null；不能用任意部分匹配或默认零值制造确定性。
+- 展示额度为 `max(0, observedHandCount - exactKnownCount - candidateKnownUpperBound)`；匿名缺口再减去
+  `exactHiddenCount` 与 `ambiguousHiddenCoveredCount`。Player 和匿名对账均消费这份结果，不另写公式。
+- 这些推导不回写 `observedHandCount`；协议总数事实、候选覆盖与匿名补缺仍分层。
+
 ## 增量执行与稳定尾部
 
 收敛循环使用三类增量机制：
 
 - **A2：玩家区增量快照**。`Room.refreshPlayerSnapshot()` 委托 `room/playerSnapshot.ts` 按 `dirtyCardEvents` 游标维护快照；数组、成员集合、游标和顺序表只在该模块内保存，Room 的 `playerCardsSnapshot` 是只读 getter。事件断档时回退全量重建，开发构建由 `assertPlayerSnapshotConsistency()` 校验。新实体通过 `Room.registerCardEntity()` 预先登记创建顺序，首次入手无需 `Room.cards.indexOf()`。
-- **E1：手牌槽按座位缓存**。首轮批量计算有观测手牌数的座位，后续轮次只为受影响座位懒重算；缓存只在单次 `resolveConstraints()` 内有效。
-- **E2：跳过未触碰座位**。首轮处理全部玩家，后续轮次跳过上一轮与本轮至今都未触碰的座位。
+- **E1：手牌分配按座位缓存**。首轮批量计算有观测手牌数的座位，后续轮次沿共享约束组传播触碰座位，批量重算依赖闭包；缓存只在单次 `resolveConstraints()` 内有效。
+- **E2：跳过无关座位**。首轮处理全部已观测玩家，后续轮次跳过触碰座位依赖闭包以外的玩家。暗实体匹配仍消费完整组集合，不能因本轮只重算部分座位而改变结果。
+
+收敛器按 `dirtyCardSeq` 判断玩家快照是否需要刷新，并把已刷新的快照传给分配入口，避免在同一同步阶段重复刷新。
+观测排他若改变候选，先进入下一轮重算分配，再执行匿名补位，不能用失效快照先造实体再回收。
 
 两套增量索引的影子全量重建只用于 DEV 诊断：默认在每个 Room 的首次收敛及之后每 32 次收敛时成对抽样；
 URL 参数 `debugAssert=1` 会恢复逐次检查，`debugAssert=0` 会关闭收敛尾部的影子索引检查。显式调用
@@ -150,7 +174,7 @@ URL 参数 `debugAssert=1` 会恢复逐次检查，`debugAssert=0` 会关闭收�
 
 | 现象 | 优先检查 |
 | --- | --- |
-| 收敛轮数持续升高或命中上限 | setter 是否重复返回 `true`；`combinationID` 或多座位重投影是否误当成状态变化 |
+| 收敛轮数持续升高或命中上限 | setter 是否重复返回 `true`；重复建组或多座位重投影是否误当成状态变化 |
 | owner 正确但手牌/标记位置错误 | 是否把 `seats.size === 1` 当成完整位置；是否缺少 `expectedSlotsByLocation` |
 | 某座位第二轮没有重新计算 | 候选变更事件是否携带 `previousSeats`；owner 前后座位是否进入 `resolveTouchedSeats` |
 | 已满手牌误删标记或容器候选 | 约束三是否只删除目标座位的 hand 候选；是否错误退化为 seat 级删除 |

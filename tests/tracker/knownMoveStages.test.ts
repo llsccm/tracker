@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createTestRoom } from './helpers/room'
+import { isAnonymous } from '@/tracker/Card'
+import { createTestRoom, getCard } from './helpers/room'
 
 describe('已知牌来源与落区阶段顺序', () => {
   it.each(['outside', 'pile', 'player'] as const)(
@@ -76,5 +77,35 @@ describe('已知牌来源与落区阶段顺序', () => {
     ])
     expect(room.getPlayerHandCardIDs(2)).toEqual([1, 2])
     expect(room.getPlayerHandCardIDs(1)).toEqual([])
+  })
+
+  it('整手已知牌转移到玩家时立即回补残留的公共槽位', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1, 2] })
+    const publicKnownCard = getCard(room, 1)
+    const sourceKnownCard = getCard(room, 2)
+    room.clearCardsFromPublicZones([sourceKnownCard])
+    sourceKnownCard.bindCandidates([1], 'hand', null, { known: true })
+    room.getPlayer(1).syncObservedHandCount(2)
+    const pile = room.zones.get('pile')!
+    const originalPileCards = new Set(pile.cards)
+    const pileCountBefore = pile.cards.length
+
+    room.moveCards([2, 1], 'player', {
+      fromSeatID: 1,
+      fromSubZone: 'hand',
+      toSeatID: 2,
+      subZone: 'hand',
+      cardCount: 2
+    })
+
+    const replacement = pile.cards.find((card) => !originalPileCards.has(card))
+    expect(pile.cards).toHaveLength(pileCountBefore)
+    expect(pile.cards).not.toContain(publicKnownCard)
+    expect(replacement).toSatisfy(isAnonymous)
+    expect(replacement?.location).toBe('pile')
+    expect(room.getPlayerHandCardIDs(2)).toEqual([1, 2])
+    expect(room.getPlayerHandCardIDs(1)).toEqual([])
+    expect(room.getPlayer(1).observedHandCount).toBe(0)
+    expect(room.getPlayer(2).observedHandCount).toBe(2)
   })
 })

@@ -13,7 +13,6 @@ export interface ReplayWatchedCardState {
   subZone: string | null
   seats: number[]
   candidates: string[]
-  combinationID: string | number | null
   isKnown: boolean
   suspended: boolean
   description: string
@@ -46,7 +45,6 @@ export interface ReplayConstraintProvenance {
   sourceEvent: Record<string, unknown> | string | null
   cardIDs: number[]
   candidateSeats: number[]
-  expectedSlotsBySeat: Record<string, number>
   expectedSlotsByLocation: Record<string, number>
 }
 
@@ -356,7 +354,6 @@ export function createWatchedCardState(card: Card, room: Room): ReplayWatchedCar
       .map((candidate) => createLocationCandidateKey(candidate))
       .filter(Boolean)
       .sort(),
-    combinationID: card.combinationID ?? null,
     isKnown: card.isKnown,
     suspended: card.suspended,
     description: card.getLocationDescription(),
@@ -384,7 +381,6 @@ function createProvenance(
     sourceEvent: summarizeSourceEvent(group.sourceEvent),
     cardIDs: Array.from(group.cards, (card) => card.id).sort((left, right) => left - right),
     candidateSeats: Array.from(group.candidateSeats).sort((left, right) => left - right),
-    expectedSlotsBySeat: mapNumberEntries(group.expectedSlotsBySeat),
     expectedSlotsByLocation: mapNumberEntries(group.expectedSlotsByLocation)
   }
 }
@@ -393,7 +389,6 @@ function createGroupSignature(group: ConstraintGroup): string {
   return JSON.stringify([
     Array.from(group.cards, (card) => card.entityID).sort((left, right) => left - right),
     Array.from(group.candidateSeats).sort((left, right) => left - right),
-    mapNumberEntries(group.expectedSlotsBySeat),
     mapNumberEntries(group.expectedSlotsByLocation)
   ])
 }
@@ -430,7 +425,6 @@ function isSameWatchedState(left: ReplayWatchedCardState, right: ReplayWatchedCa
     left.subZone === right.subZone &&
     left.isKnown === right.isKnown &&
     left.suspended === right.suspended &&
-    left.combinationID === right.combinationID &&
     sameStrings(left.candidates, right.candidates) &&
     sameNumbers(left.seats, right.seats) &&
     sameStrings(left.constraintGroupIDs, right.constraintGroupIDs)

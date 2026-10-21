@@ -5,43 +5,15 @@ import { HIDDEN_MARK_STATE_KEY } from '@/tracker/roomMovement/types'
 import type { HiddenMarkRecord, HiddenMarkState } from '@/tracker/roomMovement/types'
 import { trackerLogger } from '@/utils/logger'
 import { createTestRoom } from './helpers/room'
+import {
+  moveHiddenHandToMark,
+  moveKnownCardsToHand,
+  moveUnknownCardsToHand
+} from './helpers/hiddenMarks'
 
-const TROJAN_SPELL_ID = 700
+const MUNIU_SPELL_ID = 700
 const PLAYER_MARK_SPELL_ID = 500
 const FOREIGN_SPELL_ID = 999
-
-function dealKnownHand(room, cardIDs, seatID) {
-  room.moveCards(cardIDs, 'player', {
-    toSeatID: seatID,
-    subZone: 'hand',
-    fromZone: 'pile',
-    cardCount: cardIDs.length,
-    sourceEvent: { type: 'test:known-hand' }
-  })
-}
-
-function dealHiddenHand(room, count, seatID) {
-  room.moveCards(Array(count).fill(0), 'player', {
-    toSeatID: seatID,
-    subZone: 'hand',
-    fromZone: 'pile',
-    cardCount: count,
-    sourceEvent: { type: 'test:hidden-hand' }
-  })
-}
-
-function hiddenHandToMark(room, { seatID, count, spellID }) {
-  room.moveCards(Array(count).fill(0), 'player', {
-    toSeatID: seatID,
-    fromSeatID: seatID,
-    fromZone: 5,
-    fromSubZone: 'hand',
-    subZone: 'mark',
-    spellID,
-    cardCount: count,
-    sourceEvent: { type: 'test:hidden-mark' }
-  })
-}
 
 function getSingleRecord(room: Room): HiddenMarkRecord {
   const state = room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)
@@ -71,9 +43,9 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
       materializeDeckIdentities: false
     })
 
-    dealKnownHand(room, [141], seatID)
-    dealHiddenHand(room, 2, seatID)
-    hiddenHandToMark(room, { seatID, count: 1, spellID: PLAYER_MARK_SPELL_ID })
+    moveKnownCardsToHand(room, [141], seatID)
+    moveUnknownCardsToHand(room, 2, seatID)
+    moveHiddenHandToMark(room, { seatID, count: 1, spellID: PLAYER_MARK_SPELL_ID })
 
     const record = getSingleRecord(room)
     expect(record.hiddenCount).toBe(1)
@@ -110,9 +82,9 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
       materializeDeckIdentities: false
     })
 
-    dealKnownHand(room, [141], seatID)
-    dealHiddenHand(room, 2, seatID)
-    hiddenHandToMark(room, { seatID, count: 1, spellID: TROJAN_SPELL_ID })
+    moveKnownCardsToHand(room, [141], seatID)
+    moveUnknownCardsToHand(room, 2, seatID)
+    moveHiddenHandToMark(room, { seatID, count: 1, spellID: MUNIU_SPELL_ID })
 
     const record = getSingleRecord(room)
     const placeholder = Array.from(record.placeholderCards)[0]
@@ -137,9 +109,9 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
       materializeDeckIdentities: false
     })
 
-    dealKnownHand(room, [141, 142], seatID)
-    dealHiddenHand(room, 3, seatID)
-    hiddenHandToMark(room, { seatID, count: 2, spellID: PLAYER_MARK_SPELL_ID })
+    moveKnownCardsToHand(room, [141, 142], seatID)
+    moveUnknownCardsToHand(room, 3, seatID)
+    moveHiddenHandToMark(room, { seatID, count: 2, spellID: PLAYER_MARK_SPELL_ID })
 
     const record = getSingleRecord(room)
     expect(record.hiddenCount).toBe(2)
@@ -166,9 +138,9 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
       materializeDeckIdentities: false
     })
 
-    dealKnownHand(room, [141, 142], seatID)
-    dealHiddenHand(room, 1, seatID)
-    hiddenHandToMark(room, { seatID, count: 1, spellID: PLAYER_MARK_SPELL_ID })
+    moveKnownCardsToHand(room, [141, 142], seatID)
+    moveUnknownCardsToHand(room, 1, seatID)
+    moveHiddenHandToMark(room, { seatID, count: 1, spellID: PLAYER_MARK_SPELL_ID })
 
     const record = getSingleRecord(room)
     record.placeholderCards.clear()
@@ -211,9 +183,9 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
       materializeDeckIdentities: false
     })
 
-    dealKnownHand(room, [141], seatID)
-    dealHiddenHand(room, 2, seatID)
-    hiddenHandToMark(room, { seatID, count: 1, spellID: PLAYER_MARK_SPELL_ID })
+    moveKnownCardsToHand(room, [141], seatID)
+    moveUnknownCardsToHand(room, 2, seatID)
+    moveHiddenHandToMark(room, { seatID, count: 1, spellID: PLAYER_MARK_SPELL_ID })
 
     const record = getSingleRecord(room)
 
@@ -232,41 +204,5 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
     expect(record.placeholderCards.has(foreign!)).toBe(true)
     expect(foreign!.subZone).toBe('mark')
     expect(Number(foreign!.spellID)).toBe(FOREIGN_SPELL_ID)
-  })
-
-  it('整手完整揭示的守恒回收统一经 reconcileMarkSpace，占位不落 outside', () => {
-    const seatID = 3
-    const { room } = createTestRoom({
-      cardIDs: [141, 29, 50, 113, 900, 901, 902, 903, 904, 905],
-      seatIDs: [1, 2, 3],
-      materializeDeckIdentities: false
-    })
-
-    dealKnownHand(room, [141], seatID)
-    dealHiddenHand(room, 2, seatID)
-    hiddenHandToMark(room, { seatID, count: 1, spellID: TROJAN_SPELL_ID })
-    dealKnownHand(room, [113], seatID)
-
-    // 监听本局实际执行收敛的组件，不修改其它 Room 共用的原型。
-    const reconcileSpy = vi.spyOn(room.movement.hiddenMarks, 'reconcileMarkSpace')
-
-    room.moveCards([29, 50, 113], 'process', {
-      fromSeatID: seatID,
-      fromZone: 5,
-      fromSubZone: 'hand',
-      cardCount: 3,
-      sourceEvent: { type: 'test:hand-to-process' }
-    })
-
-    // 守恒回收由原语承担
-    expect(reconcileSpy).toHaveBeenCalled()
-    // 处理区正确，无占位泄漏到 outside 造成缺口
-    const processIDs = room.zones
-      .get('process')!
-      .cards.map((c) => c.id)
-      .sort((a, b) => a - b)
-    expect(processIDs).toEqual([29, 50, 113])
-
-    reconcileSpy.mockRestore()
   })
 })

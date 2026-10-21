@@ -79,6 +79,9 @@ PowerShell、编码和文件路径写法按 [`commands.md`](commands.md) 与 Ser
    `tests/replay/tracker/helpers/protocolReplay`，对最终 `Room` 或报告快照断言；不要把回放 helper
    混入普通 `tests/tracker/` 夹具。
 
+约束快照、watch provenance 与变化签名只记录 `expectedSlotsByLocation`，不保留已退役的
+`expectedSlotsBySeat` 运行时字段。连续转移后，因果闭包内仍存活组的位置名额应与最终快照一致。
+
 回放器只能保证“已实现协议集合”内的状态重建。遇到未支持协议会明确失败，不能用“忽略该条消息”来宣称
 完整回放成功。
 

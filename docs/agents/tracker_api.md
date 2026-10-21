@@ -109,9 +109,12 @@ if (!room) return
 ### 计数与“已知”不要混淆
 
 - `player.observedHandCount` 是协议或移动事件给出的手牌总数，不是从现有 `Card` 反推的结果。
-- `player.unknownCardCount` 是收敛后仍需要匿名槽覆盖的数量。
-- `player.getKnownHandSlotCount()` 和 `player.getCandidateHandSlotCount()` 返回的是占用槽位数，不是
-  `Card[]` 长度；候选分组可能一张实体占用多个逻辑槽位。
+- `player.unknownCardCount` 是观测总数扣除确定明牌和候选明牌容量上界后的未知额度，可能已由暗实体覆盖。
+- `player.getKnownHandSlotCount()` 返回确定明牌数量；`player.getCandidateHandSlotCount()` 返回单座位候选
+  明牌容量上界，同一身份在该座位最多计一次，不能把各座位上界相加当作全局确定身份数。
+- `computeHandSlotAllocation(room)`（`src/tracker/candidate/handSlotUsage.ts`）一次返回各座位的确定明暗占用、
+  候选容量、暗实体覆盖、展示额度和匿名补缺；匿名补位使用它的结果，不再另写数量算法。
+  未观测总数或无法安全对账时，匿名补缺为 `null`，以 `canReconcileAnonymous` 判断是否可以补位。
 - `knownHandCards`、`candidateHandCards` 和 `locationIndex` 会在 `resolveConstraints()` 后同步。刚调用底层
   `bindCandidates()` 后若要立即读取稳定投影，应显式调用 `room.resolveConstraints()`。
 - `room.getPlayer(seatID)` 在座位尚未注册时实际可能返回 `undefined`，调用方应保留可选链/判空。
@@ -282,8 +285,8 @@ publicCandidateReveal: { zone: 'pile', position: 'top', count: N }
 ## 读取与修改公共区
 
 - 读取某区实体：`room.getPublicZone('discard').cards`。
-- 读取某区正 ID：`room.publicZones.getPublicZoneCardIDs('discard')`；牌堆快捷入口是
-  `room.publicZones.getPileCardIDs()`。
+- 读取某区正 ID：`room.getPublicZone('discard').cards.filter((card) => card.id > 0).map((card) => card.id)`。
+  牌堆包含匿名槽，正 ID 列表不代表全部剩余身份，不能用它计算完整牌堆分布。
 - 读取某张牌的位置摘要：`room.publicZones.getCardLocationInfo(cardID)`。
 - 普通移动：`room.moveCards()`；它会处理来源端点、匿名槽、候选传播、约束和索引。
 - 只有整区初始化/洗牌才使用 `zone.replaceAll(cards)`；低层 `zone.add(cards, position)` 只适合已知的

@@ -25,16 +25,12 @@ describe('收敛终止性回归护栏（#2 约束二收敛非终止）', () => {
     firstPlayer.syncObservedHandCount(1)
     secondPlayer.syncObservedHandCount(0)
 
-    const firstSlotCount = vi.spyOn(firstPlayer, 'getCandidateHandSlotCount')
-    const secondSlotCount = vi.spyOn(secondPlayer, 'getCandidateHandSlotCount')
     const firstRefresh = vi.spyOn(firstPlayer, 'refreshUnknownCardCount')
     const secondRefresh = vi.spyOn(secondPlayer, 'refreshUnknownCardCount')
 
     room.resolveConstraints()
 
     expect(room.lastResolveRounds).toBe(2)
-    expect(firstSlotCount).toHaveBeenCalledTimes(2)
-    expect(secondSlotCount).toHaveBeenCalledTimes(1)
     expect(firstRefresh).toHaveBeenCalledTimes(2)
     expect(secondRefresh).toHaveBeenCalledTimes(1)
     expect(room.playerCardsSnapshot).toHaveLength(1)
@@ -42,15 +38,11 @@ describe('收敛终止性回归护栏（#2 约束二收敛非终止）', () => {
     expect(room.resolveTouchedSeats).toBeNull()
 
     const anonymousHandCard = room.playerCardsSnapshot[0]
-    firstSlotCount.mockClear()
-    secondSlotCount.mockClear()
     firstRefresh.mockClear()
     secondRefresh.mockClear()
     room.resolveConstraints()
 
     expect(room.lastResolveRounds).toBe(1)
-    expect(firstSlotCount).toHaveBeenCalledTimes(1)
-    expect(secondSlotCount).toHaveBeenCalledTimes(1)
     expect(firstRefresh).toHaveBeenCalledTimes(1)
     expect(secondRefresh).toHaveBeenCalledTimes(1)
     expect(room.playerCardsSnapshot).toEqual([anonymousHandCard])

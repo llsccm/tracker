@@ -52,16 +52,18 @@
 | `subZoneCandidates` | 玩家完整位置候选的只读投影 |
 | `publicCandidates` | 牌堆顶/底等公共不确定位置的只读投影 |
 | `suspended` | 候选范围过宽时暂停追踪的展示标记 |
-| `combinationID` | 最近一次局部分组的展示/迁移标签，不是推理事实 |
+| `getPossibleLocations()` | 只读展开未决候选或确定位置；暂停追踪时为空，不反向写入投影 |
 
 ### 候选主模型
 
 - 外部写入候选推荐只使用 `setLocationCandidates()`、`setSeats()` 和
-  `resolveLocationCandidate()`；`bindCandidates()` 与 `setSubZoneCandidates()` 仅供
-  内部委托使用，不应列为通用外部写入口。
+  `resolveLocationCandidate()`；`bindCandidates()` 仅供内部委托使用，不应列为通用外部写入口。
 - `locationCandidates`、`seats`、`subZoneCandidates`、`publicCandidates` 均不允许
   在外部直接修改。
 - `seats.size === 1` 只表示 owner 确定；`A 手牌 / A 标记` 仍可能在子区域层未收敛。
+- `setSeats()` 是显式座位筛选入口，不是投影同步入口。候选写入由 `setLocationCandidates()`
+  提交，单一玩家位置委托 `resolveLocationCandidate()` 落定；后续 owner/seat 投影不反向调用
+  `setSeats()` 或 `clearSeats()`。重复提交相同的确定位置不产生变化事件。
 - 候选缩小时必须携带 `previousSeats`，否则收敛器无法恢复被剔除的座位。
 - 装备容器候选使用 `type: 'container'` 与 `containerType: 'equipment'`，不直接同步到
   `seats` 或 `owner`，展示座位优先使用标记协议已观测的空间座位；尚无标记协议时才以装备位置兜底。
@@ -73,7 +75,7 @@
 - `bindCandidates()` / `bindTo()`：绑定玩家区和候选/确定席位；`bindTo()` 默认确认明牌。
 - `resolveLocationCandidate()`：候选只剩一个玩家位置时落定 `location`、`subZone` 与
   `spellID`。
-- `moveToPublicZone()`：清空玩家区候选、`seats`、`combinationID` 与 `spellID`；移入
+- `moveToPublicZone()`：清空玩家区候选、`seats` 与 `spellID`；移入
   `exile` / `outside` 时重置 `isKnown`。
 - `reset()`：恢复初始牌堆状态并清空时间戳与候选。
 
@@ -90,7 +92,7 @@
 | `seatID` / `fixedViewId` | 物理座位号和牌局显示顺位；显隐变化时按显示座位从 1 连续重排，隐藏座位无显示顺位 |
 | `isShown` | 座位当前是否显示；临时隐藏保留玩家和牌区数据，新局默认显示 |
 | `hasObservedHandCount` / `observedHandCount` | 协议或移动事件给出的手牌总数事实 |
-| `unknownCardCount` | 收敛后仍需匿名槽覆盖的暗牌额度 |
+| `unknownCardCount` | 观测总数扣除确定明牌及候选明牌容量上界后的未知额度，可能已由暗实体覆盖 |
 | `knownHandCards` | 确定普通手牌明牌，由 `Room.syncViewGroups()` 同步 |
 | `candidateHandCards` | 仍属于手牌候选的已知牌，由视图同步写入 |
 | `equipCards` / `judgeCards` | 装备区与判定区视图数组 |
@@ -102,8 +104,12 @@
   `room.resolveConstraints()` 后再读。
 - `cards` 是动态归组读面：`room.cards.filter((card) => card.location === 'player' &&
   card.seats.has(seatID))`，包含匿名暗牌，适合一次性归组而不是高频渲染。
-- `getKnownHandSlotCount()` 和 `getCandidateHandSlotCount()` 返回占用槽位数，不是
-  `Card[]` 长度；候选分组可能一张实体占用多个逻辑槽位。
+- `getKnownHandSlotCount()` 返回确定明牌槽位数；`getCandidateHandSlotCount()` 返回受组内
+  剩余名额约束的单座位候选容量上界，不是 `Card[]` 长度。同一身份在该座位最多计一次，
+  不同座位的可能上界不能相加当作全局确定数量。名额解析与重叠处理统一在
+  `candidate/constraintSlots.ts` / `candidate/handSlotUsage.ts`。
+- `computeHandSlotAllocation(room)` 同时给出确定明暗占用、候选明牌容量上界、暗实体覆盖和匿名补缺；
+  Player 与收敛器共用该结果。未观测手牌总数、未决名额不足或覆盖无法完整匹配时不执行匿名补位。
 
 ## Zone：公共区有序关系
 

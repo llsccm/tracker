@@ -148,20 +148,6 @@ export class RoomPublicZones {
   }
 
   /**
-   * 获取公共区中已知物理牌 ID 顺序。
-   */
-  getPublicZoneCardIDs(zoneID: PublicZoneName = 'pile'): CardID[] {
-    return (this.room.zones.get(zoneID)?.cards ?? []).map((card) => card.id).filter((id) => id > 0)
-  }
-
-  /**
-   * 获取当前牌堆中的已知物理牌 ID 顺序。
-   */
-  getPileCardIDs(): CardID[] {
-    return this.getPublicZoneCardIDs('pile')
-  }
-
-  /**
    * 获取指定玩家手牌中的物理牌 ID。
    */
   getPlayerHandCardIDs(seatID: SeatID, options: PlayerHandCardIDOptions = {}): CardID[] {

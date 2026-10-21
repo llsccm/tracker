@@ -40,12 +40,19 @@
 - 候选与位置：`locationCandidates.test.ts`、`publicCandidates.test.ts`、`publicFieldCandidates.test.ts`、`locationIndex.test.ts`、`cardLocationIndexIncremental.test.ts`
 - 约束与收敛：`convergenceTermination.test.ts`、`resolveConstraintsIncrementalIndex.test.ts`、`ambiguousKnownIndexIncremental.test.ts`
 - 暗牌 / 标记 / 随机转移：`hiddenMarkCandidates.test.ts`、`randomTransferLifecycle.test.ts`、`handCountObservation.test.ts`、`playerHandMirror.test.ts`
+- 木牛流马：`muniuCandidates.test.ts`（暗置候选、迁座投影、完整快照与整手揭示）、`muniuMarkTransfer.test.ts`（原始协议链路）、`equipmentMarks.test.ts`（容器只读规则）
 - 局流与技能副作用：`gameFlowState.test.ts`、`spellEffects.test.ts`、`roleOptTargetNtf.test.ts`
 - 牌堆身份模型：`tests/contracts/pile-identity/pileGenerationPool.test.ts`、`pileIdentityLedger.test.ts`、`pileIdentityLedgerIntegration.test.ts`
 - 视图与展示：`viewDirtyRender.test.ts`、`pileDisplayOrder.test.ts`、`suitGlyph.test.ts`
 - 性能护栏：`traversalBaseline.test.ts`
 - 计数器：`cardCounter.test.ts`
 - 日志：`moveEventLogging.test.ts`
+
+木牛专属的候选与收敛场景集中在 `muniuCandidates.test.ts`。洗牌及洗牌后揭示仍由
+`anonymousPileSpike.test.ts`、`pileDisplayOrder.test.ts` 覆盖；通用标记占位守恒、普通出牌的来源隔离和
+Controller 入口分别保留在 `markSpaceReconcile.test.ts`、`knownDiscardConfirm.test.ts`、
+`trackerController.test.ts`。重复的手牌准备与暗置操作复用 `tests/tracker/helpers/hiddenMarks.ts`，
+协议关键字段和业务断言保留在各自用例中。
 
 ---
 
@@ -216,6 +223,8 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
   `exchange` 等非牌堆公共区在无 CardIDs 时仍须按端点移除实际实体，包括已知牌。
 - Room/ledger 事务完成后，cohort 身份必须恰好位于 `unlocatedIdentities` 或
   `suspendedKnownCards`，不能缺失或同时存在于两边。
+- 直接调用 Room 的洗牌测试也执行最终身份校验；直接准备实体的夹具必须提交对应明牌/移动账本事实，
+  历史正 ID 暗实体对照不能豁免已公开身份的账本更新。
 
 纯模型的历史推演与 oracle 边界仍归档于
 本地 [`plans/pile-generation-identity-pool-plan.md`](../../plans/pile-generation-identity-pool-plan.md)。
@@ -240,8 +249,10 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
 - 结构性优化导致数字下降：可更新快照，并在 PR 说明收益场景
 - 无关改动导致数字上升：先解释原因；不能无说明地 `-u`
 - 新增必要全量扫描：先问能否改增量；若必须全量，插桩 + 基线场景同步落地
-- `createTestRoom({ materializeDeckIdentities: false })` 才对齐生产 `Room.initDeck()` 的匿名牌堆；
-  `true` 仅是历史正 ID 暗槽对照。旧 cohort 的未物化身份应直接按最终 suspended 状态注册，
+- `createTestRoom()` 默认对齐生产 `Room.initDeck()` 的匿名牌堆；暗牌单元夹具可用
+  `takeAnonymousCard()` 取出未分配身份的物理槽，不把 CardID 当作暗牌索引。
+  `materializeDeckIdentities: true` 仅用于显式构造历史正 ID 暗槽异常或性能对照。
+  `getCard()` 会物化并公开身份，不能用它准备普通暗牌。旧 cohort 的未物化身份应直接按最终 suspended 状态注册，
   不进入只用于清理既有投影的通用脏事件流；已物化暗实体仍须匿名化并保留线性对照快照。
   更新洗牌基线时同时断言 suspended 数量，避免通过少建展示实体获得虚假的遍历下降。
 

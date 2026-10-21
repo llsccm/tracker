@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { isAnonymous } from '@/tracker/Card'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import type { UnassignedMarkSpaceState } from '@/tracker/roomMovement/types'
@@ -7,6 +6,46 @@ import { createTestRoom, getCard } from './helpers/room'
 import { locationKeys, playerHand, publicLocation } from './helpers/locationCandidates'
 
 describe('Room.moveCards 组合路线', () => {
+  it.each([
+    { subZone: 'equip', hiddenCount: 0, cardCount: 1 },
+    { subZone: 'judge', hiddenCount: 0, cardCount: 1 },
+    { subZone: 'equip', hiddenCount: 1, cardCount: 2 }
+  ] as const)(
+    '未接管的 $subZone 来源移动按张数扣减实体（暗牌 $hiddenCount，移动 $cardCount）',
+    ({ subZone, hiddenCount, cardCount }) => {
+      const { room } = createTestRoom({ cardIDs: [11, 12, 13], seatIDs: [1, 2] })
+      const cards = [11, 12, 13].map((id) => getCard(room, id)!)
+      room.clearCardsFromPublicZones(cards)
+      cards.forEach((card, index) => {
+        card.bindCandidates([1], subZone, null, { known: index >= hiddenCount })
+      })
+      const targetPlayer = room.getPlayer(2)!
+      targetPlayer.syncObservedHandCount(0)
+
+      room.moveCards([], 'player', {
+        fromZone: null,
+        fromSeatID: 1,
+        fromSubZone: subZone,
+        toSeatID: 2,
+        subZone: 'hand',
+        cardCount,
+        sourceEvent: { type: 'test:visible-subzone-count-only-transfer' }
+      })
+
+      const sourceCards = room.playerCardsSnapshot.filter(
+        (card) => card.subZone === subZone && card.resolvedSeat === 1
+      )
+      const targetCards = room.playerCardsSnapshot.filter(
+        (card) => card.subZone === 'hand' && card.resolvedSeat === 2
+      )
+      expect(sourceCards).toHaveLength(cards.length - cardCount)
+      expect(targetCards).toHaveLength(cardCount)
+      expect(targetCards.every((card) => cards.includes(card))).toBe(true)
+      expect(targetPlayer.observedHandCount).toBe(cardCount)
+      expect(room.cards).toHaveLength(cards.length)
+    }
+  )
+
   it('已知牌与暗牌混合移入玩家手牌时保留数量与身份边界', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1] })
     const knownCard = getCard(room, 1)
@@ -77,7 +116,8 @@ describe('Room.moveCards 组合路线', () => {
 
     const pileCards = room.zones.get('pile').cards
 
-    expect(room.cards.filter((card) => isAnonymous(card))).toHaveLength(0)
+    // 回牌堆必须复用原占位实体，不能额外创建匿名回退实体。
+    expect(room.cards).toHaveLength(6)
     expect(markPlaceholders.filter((card) => pileCards.includes(card))).toHaveLength(4)
     const remainingMarkPlaceholders = markPlaceholders.filter((card) => card.location === 'player')
     expect(remainingMarkPlaceholders).toHaveLength(1)
@@ -119,7 +159,8 @@ describe('Room.moveCards 组合路线', () => {
 
     const pileCards = room.zones.get('pile').cards
 
-    expect(room.cards.filter((card) => isAnonymous(card))).toHaveLength(0)
+    // 回牌堆必须复用原占位实体，不能额外创建匿名回退实体。
+    expect(room.cards).toHaveLength(5)
     expect(spell35Cards.filter((card) => pileCards.includes(card))).toHaveLength(1)
     expect(spell36Cards.some((card) => pileCards.includes(card))).toBe(false)
     expect(markSpaceState.spaces.get(35)).toHaveLength(1)

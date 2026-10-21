@@ -74,7 +74,9 @@ describe('问卦候选来源筛选', () => {
       const give = giveMove()
       controller.syncTrackerMove(give)
       const transferGroups = [...room.constraintGroups.values()].filter(
-        (group) => group.cards.has(sourceCards[0]) && group.expectedSlotsBySeat.get(4) === 1
+        (group) =>
+          group.cards.has(sourceCards[0]) &&
+          group.expectedSlotsByLocation.get('player:4:hand:none') === 1
       )
       expect(transferGroups.length).toBeGreaterThan(0)
 
@@ -103,8 +105,8 @@ describe('问卦候选来源筛选', () => {
       expect(originalTargetCard.seats).toEqual(new Set([4]))
       expect(originalTargetCard.isKnown).toBe(true)
       transferGroups.forEach((group) => {
-        expect(group.expectedSlotsBySeat.has(1)).toBe(false)
-        expect(group.expectedSlotsBySeat.has(4)).toBe(false)
+        expect(group.expectedSlotsByLocation.has('player:1:hand:none')).toBe(false)
+        expect(group.expectedSlotsByLocation.has('player:4:hand:none')).toBe(false)
         expect(group.expectedSlotsByLocation.size).toBe(0)
       })
       expect(room.getPlayer(1)!.observedHandCount).toBe(2)

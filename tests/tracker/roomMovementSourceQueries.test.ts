@@ -8,7 +8,7 @@ import {
 import { HIDDEN_MARK_STATE_KEY } from '@/tracker/roomMovement/types'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import { playerLocation, publicLocation } from './helpers/locationCandidates'
-import { createTestRoom, getCard } from './helpers/room'
+import { createTestRoom, getCard, takeAnonymousCard } from './helpers/room'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -29,12 +29,12 @@ describe('移动组件共享来源查询', () => {
 
   it('精确来源优先，保持同类实体顺序并支持排除；查询不会移动或收敛实体', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5, 6] })
-    const candidate = getCard(room, 1)!
-    const exact = getCard(room, 2)!
+    const candidate = takeAnonymousCard(room)
+    const exact = takeAnonymousCard(room)
     const known = getCard(room, 3)!
-    const suspended = getCard(room, 4)!
-    const otherSeat = getCard(room, 5)!
-    const laterExact = getCard(room, 6)!
+    const suspended = takeAnonymousCard(room)
+    const otherSeat = takeAnonymousCard(room)
+    const laterExact = takeAnonymousCard(room)
     room.clearCardsFromPublicZones(room.cards)
     candidate.bindCandidates([1, 2], 'hand')
     exact.bindCandidates([1], 'hand')
@@ -76,8 +76,8 @@ describe('移动组件共享来源查询', () => {
   it('共享手牌查询区分手牌与标记，并保留明暗实体的读取语义', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3] })
     const known = getCard(room, 1)!
-    const unknown = getCard(room, 2)!
-    const mark = getCard(room, 3)!
+    const unknown = takeAnonymousCard(room)
+    const mark = takeAnonymousCard(room)
     room.clearCardsFromPublicZones(room.cards)
     known.bindCandidates([1], 'hand', null, { known: true })
     unknown.bindCandidates([1, 2], 'hand')
@@ -93,8 +93,8 @@ describe('移动组件共享来源查询', () => {
   it('查询实时读取各自 Room，不缓存旧席位或串用另一局实体', () => {
     const { room: firstRoom } = createTestRoom({ cardIDs: [1] })
     const { room: secondRoom } = createTestRoom({ cardIDs: [1] })
-    const firstCard = getCard(firstRoom, 1)!
-    const secondCard = getCard(secondRoom, 1)!
+    const firstCard = takeAnonymousCard(firstRoom)
+    const secondCard = takeAnonymousCard(secondRoom)
     firstRoom.clearCardsFromPublicZones([firstCard])
     secondRoom.clearCardsFromPublicZones([secondCard])
     firstCard.bindCandidates([1], 'hand')
@@ -115,7 +115,7 @@ describe('移动组件共享来源查询', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4] })
     const first = getCard(room, 1)!
     const second = getCard(room, 2)!
-    const third = getCard(room, 3)!
+    const third = takeAnonymousCard(room)
     room.clearCardsFromPublicZones([first, second, third])
     third.bindCandidates([1, 2], 'hand')
     first.bindCandidates([1], 'hand', null, { known: true })

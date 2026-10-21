@@ -20,7 +20,7 @@
 ## 当前定位
 
 - `src/tracker/` 是当前主动运行的记牌器与运行时状态核心；`Room` 是单局状态源，`src/tracker/view/` 直接渲染主面板节点，并通过 `CardLocationIndex` 读取公共区与玩家区域投影。
-- `src/handler/legacyMoveCard.js` 仍保留指向旧链表模型的历史代码，但**没有**经 `src/handler/index.js` 主动导出；不要把它视为可用运行路径。
+- 旧链表记牌器及其 `legacyMoveCard` 辅助已删除；没有并行的旧记牌器运行路径。
 - `src/handler/PubGsCMoveCard.js` 以只读 `raw` 与独立 `patched` 分离原始协议和修正；入口过滤、位置归一化、局流及技能补丁完成后统一提交，仅允许修正 `CardIDs`、`FromPosition`、`ToPosition`。最终事件归一化留在 Controller；真正的卡牌状态移动通过 `src/tracker/runtime/browser.ts`（再导出 `bridge.ts`）提供的 `tracker`（实现位于 `runtime/trackerController.ts`）同步到当前 `Room`。
 - `src/tracker/index.ts` 仅导出共享运行时状态（`globalConfig`、`globalState`、`rogueMap`、`UI`）、`user` 与 `Game`；底层核心对象从各自子模块直接导入。
 
@@ -57,7 +57,7 @@
 - 移动上下文快照由无状态的 `roomMovement/context.ts` 构造；未知身份的来源取牌与目标落区阶段由 `roomMovement/unknownPlacement.ts` 实现，RoomMovement 保留调用入口与阶段顺序。
 - 装备容器座位、迁座、稳定记录键和完整快照规则在 `roomMovement/equipmentMarks.ts`；该模块只读输入，暗置标记组件继续负责唯一账本、占位与收敛协调，不建立独立木牛状态。
 - `RoomConstraints` 位于 `src/tracker/roomConstraints.ts`，集中实现不动点收敛、E1/E2 手牌槽懒缓存、匿名手牌实体对账、约束组维护、实体牌解析及稳定态的索引/视图组/计数器同步。Room 保留 `resolveConstraints()` 公开入口和状态所有权，DEV 诊断按需传入。
-- `RoomPublicZones` 位于 `src/tracker/roomPublicZones.ts`，负责公共区一致性检查、公共区牌序读取、玩家手牌 ID 查询以及旧辅助兼容的 zoneID 读面。
+- `RoomPublicZones` 位于 `src/tracker/roomPublicZones.ts`，负责公共区一致性检查、洗牌槽位校准及玩家手牌 ID 查询。公共区牌序直接读取 `Room.getPublicZone()` 返回的 `Zone.cards`。
 - `RoomDiagnostics` 位于 `src/tracker/room/diagnostics.ts`，负责 DEV 身份/槽位与身份账本守恒、玩家快照和影子索引检查、抽样门控及收敛轮数告警；Room 的公开断言 API 保持不变。
 - `protocolZones.ts` 负责把协议区域编号映射为新版公共区与玩家子区；`MoveEventNormalizer` 只做分类与字段映射，不直接修改 `Room` 状态。`FromID` / `ToID` 的含义依赖具体 `FromZone` / `ToZone`，不能一律当作座位 ID：例如 `FromZone=8` 弹窗标记回牌堆时，`FromID` 可能是技能/标记空间 ID；`FromZone=1` 牌堆来源时，`FromID=255` 可能只是牌堆/无座位占位。
 - `Room.moveCards()`、`Room.resolveConstraints()`、`Room.shufflePile()`、`Room.getPublicZone()` 是高频核心入口，应优先留在 `Room` 中；新增内部辅助方法时优先放入对应行为模块，再由 `Room` 暴露必要的薄入口。
@@ -79,8 +79,9 @@
 
 - 表达一次移动、分配、展示或模糊明牌事件形成的局部候选包。
 - `cards` 是原生 `Set<Card>`，使用 `.has()` / `.delete()` / `.size` 与迭代能力维护组内实体牌。
-- `candidateSeats` 只约束本组卡牌。
-- `expectedSlotsBySeat` 只做“某席位在本组内锁定数量达到期望值后，从本组其他候选牌剔除该席位”的收敛。
+- `candidateSeats` 是分组涉及座位的历史快照，不裁剪卡牌当前候选；不再需要通过扩写旧组座位来保住新候选。
+- 建组、更新和移动只接受 `expectedSlotsByLocation`，手牌也显式传入完整玩家位置。
+- 卡牌可同时参与多个 `ConstraintGroup.cards` 集合，不再持有单值分组标签；协议 `combinationID` 仅用于命名本次约束组。
 - `expectedSlotsByLocation` 是完整位置数量约束的唯一存储，统一表达玩家区、公共区与装备容器位置，不再维护子区槽位镜像。
 - 玩家子区名额也直接写入 `expectedSlotsByLocation`，例如一组 4 张明牌中 `A 手牌 = 3`、`A 标记(某 spellID) = 1`；它不能被 `seats.size === 1` 替代。
 - 不把“同组”解释为“同 owner”，避免多人分配、洗牌后明牌、交换临时区等场景过度收敛。
@@ -120,6 +121,7 @@
 [`card_tracker_skills.md`](card_tracker_skills.md)：
 
 - 暗置标记区候选（包括普通标记与木牛流马装备容器）。
+- 标记区多选一暗交手牌及随后手牌弃置（`SpellID=3658`，来源标记 `3657`）。
 - 观虚目标视角交换（`SpellID=987/988`）。
 - 整手牌交换、诫厉观看与交换区暂存（`SpellID=3483`）。
 - 反间（`SpellID=713`）展示、手牌移交与目标手牌展示，样例见
@@ -171,7 +173,7 @@
 
 - 尚未完整恢复旧版 `cardManager.pack()` 链表推理承载的所有不确定性语义；宴戏、权变、诫厉等技能仍需要用新版 `ConstraintGroup` 做进一步精细化。
 - 诫厉协议已对视角分流：发动者的 `GsCRoleOptTargetNtf` 携带完整牌堆/手牌 ID，目标与其它座位只有 `Params=[pileCount]`。生产目标用 Type 53 只定位自己被换走手牌的回堆槽，其它槽位保持匿名；发动者只走默认移动。第三方视角不消费牌 ID、不移动物理实体，仅在完整交换链结算后把目标手牌明牌扩展为“原位置 / 牌堆顶前 pileCount 张”弱候选；开发模式只允许目标视角做完整身份调试。
-- 主动运行路径不再依赖 `cardManager.findKZ()`；遗留文件中残留的旧 `cardManager` / `Zone` 引用需要后续清理或删除。
+- 主动运行路径不再依赖 `cardManager.findKZ()`；旧链表辅助与未接入技能文件已清理。
 - 技能处理器目前仍是偏单牌回调，可能需要向批量拦截器演进。
 - 已有 `pnpm test:tracker` 的 Node/Vitest 回归覆盖导入边界、Controller、位置候选、公共候选、位置索引、暗置标记、脏渲染与遍历基线等；仍需补齐更多 `Room.moveCards()` 组合路线与浏览器运行时验证。
 - `CardLocationIndex`、`Room.notifyCardChanged()` 与 `view/dirtyRenderState.ts` 已接入：面板与玩家手牌可按脏集合局部重绘；仍可继续收紧边界场景与高频刷新策略。
@@ -188,7 +190,7 @@
 
 - `Room.moveCards()` 中 `fromSubZone` 是区分来源玩家子区的关键字段，手写调用若省略它仍可能误判。
 - 解析 `PubGsCMoveCard` 时不要仅凭 `FromID` / `ToID` 推断座位；必须结合 `FromZone` / `ToZone`、`FromZoneParam` / `ToZoneParam`、`SpellID` 与归一化后的 `fromSubZone` / `spellID` 判断。已知边界包括 `FromZone=8, MoveType=7` 的 `FromID` 可能是技能空间 ID，以及 `FromZone=1, MoveType=6` 的 `FromID=255` 可能表示牌堆/无座位。
-- `swapCardWithUnknown()` 等涉及暗牌置换的行为，内部直接改变状态较多，若后续 `Card` 扩展历史时间戳等字段，需统一收口。
+- 玩家来源已知牌统一通过 `swapKnownCardWithPlayerSourcePlaceholder()` 置换；补造来源占位后也复用此入口，位置与时间戳通过 Card 绑定/候选 API 提交。
 - 部分基于差量同步的逻辑仍缺少覆盖率，重构时容易引发微小不一致。
 - `locationCandidates(type: public)` 负责牌堆顶/底候选传播，和 `ConstraintGroup`、`AmbiguousKnownIndex` 的边界要保持清楚，避免把公共候选误收敛成确定 owner。
 - `subZoneCandidates` 与 `seats` 都是 `locationCandidates` 的只读投影，边界要保持清楚：`seats` 只代表座位级投影，不能直接代表具体子区域。
@@ -225,6 +227,25 @@
 - 修改文档无需运行构建测试。
 - 修改记忆库后运行 `serena memories check`。
 - 修改记牌器核心代码后运行 `pnpm test:tracker`、`pnpm typecheck:tracker`、`pnpm lint` 与 `pnpm build`；涉及发布、打包配置或高风险核心协议路径时再运行 `pnpm build:prod`。
+
+### 候选与位置语义改动的准入检查
+
+新增或扩展位置候选、`seats` 投影、子区归属之前，先列出**全部写入者**再动手：
+
+- 建立/追加：`Card.setLocationCandidates`、`addSeat`、`bindCandidates`、`Room.createConstraintGroup`。
+- 投影/收缩：`Card.setSeats`、`storeLocationCandidates`、`ConstraintGroup.resolve`。
+- 回收：`Room.removeCardsFromConstraintGroups`、`reconcileAnonymousHandCards`、`suspendKnownCard`。
+
+`ConstraintGroup.candidateSeats` 不再参与裁剪，但旧数量约束仍可能与新移动冲突。
+改动前必须确认哪些既有组已持有这批牌、哪些 `expectedSlotsByLocation` / 兼容手牌名额
+已经过期。确定位置上的牌离组时，先按原位置扣减旧名额，再写入新候选；只失效部分位置
+时保留其它位置约束。补充“旧组 + 新候选”和“旧组仍有其它牌”的回归，避免依赖干净场面。
+
+位置写入通过 `Card.setLocationCandidates()` / `resolveLocationCandidate()` 提交，
+投影同步不调用 `setSeats()` 反向改写候选。手牌计数与约束消元共享
+`candidate/constraintSlots.ts` 的确定牌、候选牌及剩余名额摘要；候选容量与暗实体覆盖由
+`candidate/handSlotUsage.ts` 的 `computeHandSlotAllocation()` 计算，Player 展示额度与匿名实体
+补位共用同一份分配结果，不在 Player 或 Room 中另写名额解释。
 
 ---
 

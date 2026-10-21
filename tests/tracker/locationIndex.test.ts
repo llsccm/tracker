@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createTestRoom, getCard } from './helpers/room'
+import { createTestRoom, getCard, takeAnonymousCard } from './helpers/room'
 import { playerLocation } from './helpers/locationCandidates'
 
 describe('CardLocationIndex 投影', () => {
@@ -40,7 +40,7 @@ describe('CardLocationIndex 投影', () => {
 
   it('暗标记牌不投影到可见标记区', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1] })
-    const hiddenMark = getCard(room, 1)
+    const hiddenMark = takeAnonymousCard(room)
 
     room.clearCardsFromPublicZones([hiddenMark])
     hiddenMark.bindCandidates([1], 'mark', 700, { known: false })

@@ -11,6 +11,63 @@ import {
 } from './helpers/locationCandidates'
 
 describe('完整位置候选回归', () => {
+  it.each([false, true])('旧组座位快照不裁剪共享牌的新位置（逆序收敛：%s）', (reverse) => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [0, 3] })
+    const cards = [getCard(room, 1)!, getCard(room, 2)!]
+    const mark = playerLocation(0, 'mark', 3657)
+    const hand = playerLocation(3, 'hand')
+    cards.forEach((card) => card.bindCandidates([0], 'mark', 3657, { known: true }))
+    const oldGroup = room.createConstraintGroup({ cards, candidateSeats: [0] })
+    cards.forEach((card) => card.setLocationCandidates([mark, hand]))
+    const newGroup = room.createConstraintGroup({
+      cards,
+      candidateSeats: [0, 3],
+      expectedSlotsByLocation: new Map([
+        [createLocationCandidateKey(mark), 1],
+        [createLocationCandidateKey(hand), 1]
+      ])
+    })
+    const groups = reverse ? [newGroup, oldGroup] : [oldGroup, newGroup]
+    groups.forEach((group) => group.resolve())
+    cards.forEach((card) => {
+      expect(card.hasLocationCandidate(mark)).toBe(true)
+      expect(card.hasLocationCandidate(hand)).toBe(true)
+      expect(card.owner).toBeNull()
+    })
+    expect(oldGroup.candidateSeats).toEqual(new Set([0]))
+    groups.forEach((group) => expect(group.resolve()).toBe(false))
+  })
+
+  it('候选落定与重复写入保持幂等，并通知所有失去候选的座位', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0, 3] })
+    const card = getCard(room, 1)!
+    const mark = playerLocation(0, 'mark', 3657)
+    const hand = playerLocation(3, 'hand')
+    card.bindCandidates([0], 'mark', 3657, { known: true })
+    card.setLocationCandidates([mark, hand])
+    const eventStart = room.dirtyCardEvents.length
+
+    expect(card.setLocationCandidates([hand])).toBe(true)
+    expect(card.locationCandidates).toEqual([])
+    expect(card.seats).toEqual(new Set([3]))
+    expect(card.owner).toBe(3)
+    expect(card.subZone).toBe('hand')
+    expect(card.spellID).toBeNull()
+    expect(room.dirtyCardEvents.slice(eventStart).map((event) => event.detail)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          previousSeats: expect.arrayContaining([0, 3]),
+          previousSeatSize: 2,
+          nextSeatSize: 1
+        })
+      ])
+    )
+    const settledEvents = room.dirtyCardEvents.length
+    expect(card.setLocationCandidates([hand])).toBe(false)
+    expect(card.setSeats([3])).toBe(false)
+    expect(room.dirtyCardEvents).toHaveLength(settledEvents)
+  })
+
   it('期望槽位解析区分已落定位置与同 owner 下仍未决的多个位置', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0] })
     const card = getCard(room, 1)!
@@ -97,7 +154,7 @@ describe('完整位置候选回归', () => {
     )
   })
 
-  it('重叠约束组切换 combinationID 不驱动 resolve 重循环', () => {
+  it('重叠约束组重复 apply 不驱动 resolve 重循环', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
     const card = getCard(room, 1)
     const firstGroup = new ConstraintGroup({ id: 'test:overlap-a', cards: [card] })
@@ -106,7 +163,7 @@ describe('完整位置候选回归', () => {
     firstGroup.apply()
     secondGroup.apply()
 
-    // 回归：同一张牌可同时属于多个组，combinationID 只能作为标签，不能成为收敛状态。
+    // 同一张牌可同时属于多个组，重复 apply 不能报告虚假的状态变化。
     expect(firstGroup.resolve()).toBe(false)
   })
 

@@ -75,6 +75,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
 
   it('公共 known 不覆盖正 ID 暗牌顶，缺失实体走诊断兜底', () => {
     const { room } = createTestRoom({
+      materializeDeckIdentities: true,
       cardIDs: [1, 2, 3, 4, 5],
       seatIDs: [1]
     })
@@ -425,6 +426,7 @@ describe('阶段 1 匿名牌堆 spike', () => {
 
   it('洗牌时将 cohort 暗标记实体原地匿名化', () => {
     const { room } = createTestRoom({
+      materializeDeckIdentities: true,
       cardIDs: [1, 2, 3, 4, 5],
       seatIDs: [1]
     })
@@ -438,9 +440,30 @@ describe('阶段 1 匿名牌堆 spike', () => {
       cardCount: 1,
       sourceEvent: { type: 'stage1:discard-before-appeared-shuffle' }
     })
+    room.pileIdentityLedger.applyMove({
+      eventType: 'moveKnown',
+      fromZone: 1,
+      toZone: 2,
+      cardIDs: [1],
+      cardCount: 1,
+      pileCountBefore: 5,
+      pileCountAfter: pile.cards.length,
+      discardCountAfter: discard.cards.length
+    })
     pile.removeCard(visibleHandCard)
     pile.removeCard(hiddenMarkCard)
     visibleHandCard.bindCandidates([1], 'hand', null, { known: true })
+    // 明牌事实必须先离开 cohort；暗实体仍保留为本用例的历史状态对照。
+    room.pileIdentityLedger.applyMove({
+      eventType: 'moveKnown',
+      fromZone: 1,
+      toZone: 5,
+      cardIDs: [4],
+      cardCount: 2,
+      pileCountBefore: 4,
+      pileCountAfter: pile.cards.length,
+      discardCountAfter: discard.cards.length
+    })
     hiddenMarkCard.bindCandidates([1], 'hand', null, { known: false })
     room.getPlayer(1).syncObservedHandCount(2)
     room.moveCards([0], 'player', {

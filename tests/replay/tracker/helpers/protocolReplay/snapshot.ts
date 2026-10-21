@@ -142,7 +142,6 @@ function createConstraintSnapshot(group: ConstraintGroup) {
     cardIDs: Array.from(group.cards, (card) => card.id),
     entityIDs: Array.from(group.cards, (card) => card.entityID),
     candidateSeats: sortNumbers(group.candidateSeats),
-    expectedSlotsBySeat: mapNumberEntries(group.expectedSlotsBySeat),
     expectedSlotsByLocation: mapNumberEntries(group.expectedSlotsByLocation)
   }
   return snapshot

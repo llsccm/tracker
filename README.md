@@ -11,9 +11,10 @@ work in progress
 
 ## 安装方式
 
-1. 浏览器需先安装用户脚本管理器（如 [Tampermonkey](https://www.tampermonkey.net/)）。
-2. 点击下方链接安装最新版本脚本：
-   - [安装脚本 (daxiaochao.user.js)](https://github.com/llsccm/tracker/releases/latest/download/daxiaochao.user.js)
+1. 浏览器需先安装用户脚本管理器（如 [Tampermonkey](https://www.tampermonkey.net/)）
+2. 选择以下任一方式安装：
+   - [通过 GreasyFork 安装](https://greasyfork.org/zh-CN/scripts/601076)：打开页面后点击安装或者 [点此安装](https://update.greasyfork.org/scripts/601076/%E4%B8%89%E5%9B%BD%E6%9D%80%E5%B0%8F%E6%8A%84%20Lite.user.js)
+   - [从 GitHub Releases 安装](https://github.com/llsccm/tracker/releases/latest/download/daxiaochao.user.js)
 
 ## 开源许可
 

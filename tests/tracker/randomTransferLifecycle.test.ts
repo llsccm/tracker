@@ -70,8 +70,8 @@ describe('随机手牌转移完整生命周期', () => {
       const transferGroup = Array.from(room.constraintGroups.values()).find(
         (group) => (group.sourceEvent as { type?: string } | null)?.type === 'e2e:random-transfer'
       )
-      expect(transferGroup?.expectedSlotsBySeat.get(2)).toBe(6)
-      expect(transferGroup?.expectedSlotsBySeat.get(3)).toBe(3)
+      expect(transferGroup?.expectedSlotsByLocation.get('player:2:hand:none')).toBe(6)
+      expect(transferGroup?.expectedSlotsByLocation.get('player:3:hand:none')).toBe(3)
       expect(
         allIDs.every((id) => {
           const card = getCard(room, id)
@@ -272,8 +272,8 @@ describe('随机手牌转移完整生命周期', () => {
     })
 
     expect(transferGroup?.cards.size).toBe(8)
-    expect(transferGroup?.expectedSlotsBySeat.get(2)).toBe(5)
-    expect(transferGroup?.expectedSlotsBySeat.get(3)).toBe(3)
+    expect(transferGroup?.expectedSlotsByLocation.get('player:2:hand:none')).toBe(5)
+    expect(transferGroup?.expectedSlotsByLocation.get('player:3:hand:none')).toBe(3)
 
     const remainingHiddenCard = sourceHiddenIDs
       .map((id) => getCard(room, id))
@@ -289,8 +289,8 @@ describe('随机手牌转移完整生命周期', () => {
       cardCount: 3,
       sourceEvent: { type: 'regression:source-plays-known' }
     })
-    expect(transferGroup?.expectedSlotsBySeat.get(2)).toBe(2)
-    expect(transferGroup?.expectedSlotsBySeat.get(3)).toBe(3)
+    expect(transferGroup?.expectedSlotsByLocation.get('player:2:hand:none')).toBe(2)
+    expect(transferGroup?.expectedSlotsByLocation.get('player:3:hand:none')).toBe(3)
 
     // 130 酒是组外新摸到的确定明牌，此时 2 号位总手牌数为 3。
     room.moveCards([130], 'player', {
@@ -320,8 +320,8 @@ describe('随机手牌转移完整生命周期', () => {
     })
 
     expect(transferGroup?.cards.size).toBe(3)
-    expect(transferGroup?.expectedSlotsBySeat.get(2)).toBe(2)
-    expect(transferGroup?.expectedSlotsBySeat.get(3)).toBe(1)
+    expect(transferGroup?.expectedSlotsByLocation.get('player:2:hand:none')).toBe(2)
+    expect(transferGroup?.expectedSlotsByLocation.get('player:3:hand:none')).toBe(1)
     expect(Array.from(getCard(room, 46).seats).sort()).toEqual([2, 3])
     expect(Array.from(getCard(room, 118).seats).sort()).toEqual([2, 3])
     expect(Array.from(remainingHiddenCard?.seats ?? []).sort()).toEqual([2, 3])

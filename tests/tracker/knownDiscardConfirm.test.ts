@@ -90,7 +90,7 @@ describe('known 路径落弃明牌确认', () => {
     const pile = room.zones.get('pile')!
 
     ;[29, 50, 113].forEach((id) => {
-      const card = room.cardIndex.get(id)!
+      const card = getCard(room, id)!
       pile.removeCard(card)
       card.isKnown = false
       processZone.add(card)
