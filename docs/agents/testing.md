@@ -40,12 +40,19 @@
 - 候选与位置：`locationCandidates.test.ts`、`publicCandidates.test.ts`、`publicFieldCandidates.test.ts`、`locationIndex.test.ts`、`cardLocationIndexIncremental.test.ts`
 - 约束与收敛：`convergenceTermination.test.ts`、`resolveConstraintsIncrementalIndex.test.ts`、`ambiguousKnownIndexIncremental.test.ts`
 - 暗牌 / 标记 / 随机转移：`hiddenMarkCandidates.test.ts`、`randomTransferLifecycle.test.ts`、`handCountObservation.test.ts`、`playerHandMirror.test.ts`
+- 木牛流马：`muniuCandidates.test.ts`（暗置候选、迁座投影、完整快照与整手揭示）、`muniuMarkTransfer.test.ts`（原始协议链路）、`equipmentMarks.test.ts`（容器只读规则）
 - 局流与技能副作用：`gameFlowState.test.ts`、`spellEffects.test.ts`、`roleOptTargetNtf.test.ts`
 - 牌堆身份模型：`tests/contracts/pile-identity/pileGenerationPool.test.ts`、`pileIdentityLedger.test.ts`、`pileIdentityLedgerIntegration.test.ts`
 - 视图与展示：`viewDirtyRender.test.ts`、`pileDisplayOrder.test.ts`、`suitGlyph.test.ts`
 - 性能护栏：`traversalBaseline.test.ts`
 - 计数器：`cardCounter.test.ts`
 - 日志：`moveEventLogging.test.ts`
+
+木牛专属的候选与收敛场景集中在 `muniuCandidates.test.ts`。洗牌及洗牌后揭示仍由
+`anonymousPileSpike.test.ts`、`pileDisplayOrder.test.ts` 覆盖；通用标记占位守恒、普通出牌的来源隔离和
+Controller 入口分别保留在 `markSpaceReconcile.test.ts`、`knownDiscardConfirm.test.ts`、
+`trackerController.test.ts`。重复的手牌准备与暗置操作复用 `tests/tracker/helpers/hiddenMarks.ts`，
+协议关键字段和业务断言保留在各自用例中。
 
 ---
 
