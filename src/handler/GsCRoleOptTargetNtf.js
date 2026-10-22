@@ -12,7 +12,6 @@ import {
 import { clearJieLiState, recordJieLiContext } from '../tracker/skill/JieLi'
 import { laya } from '@/runtime/gameAdapter'
 import { wait } from '@/utils'
-import { handleXiaShuTargetNotice } from './skills/XiaShu'
 
 function revealPlayerHandCards(seatID, cardIDs, options = {}) {
   tracker.revealTrackerCards({ type: 'player', seatID, ...options }, cardIDs)
@@ -89,27 +88,21 @@ function parseJieLiNotice(msg) {
 // GsCRoleOptTargetNtf
 export function handleRoleOptTargetNtf(msg) {
   const { SpellID, Param, Params, SeatID, SrcSeatID, targetSeatID, Type } = msg
+  tracker.dispatchSkillProtocolEvent({ type: 'targetNotice', message: msg })
 
-  if (FULL_HAND_ROLE_OPT_SPELL_IDS.has(Number(SpellID))) {
+  if (FULL_HAND_ROLE_OPT_SPELL_IDS.has(SpellID)) {
     if (targetSeatID === undefined || targetSeatID === 255) return
     if (Params?.length > 0) revealPlayerHandCards(targetSeatID, Params, { fullHand: true })
     return
   }
 
-  if (PARTIAL_HAND_ROLE_OPT_SPELL_IDS.has(Number(SpellID))) {
+  if (PARTIAL_HAND_ROLE_OPT_SPELL_IDS.has(SpellID)) {
     if (targetSeatID === undefined || targetSeatID === 255) return
     if (Param == 0 && Params?.length > 0) revealPlayerHandCards(targetSeatID, Params)
     return
   }
 
   switch (SpellID) {
-    // 下书
-    case 361:
-      if (Param == 0 && Params?.length > 0 && Type == 29) {
-        handleXiaShuTargetNotice(msg)
-      }
-      break
-
     // 张菖蒲 严教
     case 945:
       if (Param == 0 && Params?.length > 0) {

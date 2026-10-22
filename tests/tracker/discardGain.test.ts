@@ -110,10 +110,16 @@ describe('弃牌堆未知获得', () => {
   it.each([
     { cardIDs: [2, 5, 1, 4], knownIDs: [1, 2, 4, 5], discardIDs: [3, 6], unknownCount: 0 },
     { cardIDs: [2, 0, 5, 0], knownIDs: [2, 5], discardIDs: [1, 3, 4, 6], unknownCount: 2 }
-  ])('协议给出 $cardIDs 时精确移动已知牌，仅为未知部分补位', (testCase) => {
-    const { controller, room, errorSpy } = createRoomWithDiscard()
+  ])('领域移动给出 $cardIDs 时精确移动已知牌，仅为未知部分补位', (testCase) => {
+    const { room, errorSpy } = createRoomWithDiscard()
 
-    controller.syncTrackerMove(discardGainMove({ CardIDs: testCase.cardIDs }))
+    room.moveCards(testCase.cardIDs, 'player', {
+      fromZone: 'discard',
+      toSeatID: 3,
+      subZone: 'hand',
+      cardCount: 4,
+      moveType: 18
+    })
 
     const player = room.players.get(3)!
     const handCards = player.cards.filter((card) => card.subZone === 'hand')

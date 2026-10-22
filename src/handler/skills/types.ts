@@ -7,7 +7,6 @@ export interface SkillMoveContext {
   readonly raw: Readonly<RawMoveCardEvent>
   readonly patched: PatchedMoveCardFields
   game: GameState
-  afterMove?: (callback: () => void) => void
 }
 
 export interface RoleDataMessage {

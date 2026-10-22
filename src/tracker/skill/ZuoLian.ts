@@ -15,6 +15,7 @@ import type { Card } from '@/tracker/model/Card'
 import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import { PROTOCOL_ZONE } from '../protocol/protocolZones'
 import type { Room } from '../Room'
+import type { CardID, PatchedMoveCardFields, SeatID } from '../types'
 import {
   getCount,
   hasPositiveID,
@@ -24,6 +25,43 @@ import {
 } from './moveEventUtils'
 
 const ZUO_LIAN_SPELL_ID = 3488
+
+interface ZuoLianState {
+  [seatID: SeatID]: CardID
+  stack?: CardID
+}
+
+export function prepareZuoLianMove(patched: PatchedMoveCardFields, room: Room): void {
+  if (patched.FromZone === 5 && patched.ToZone === 5 && patched.MoveType === 21) {
+    const positiveIDs = patched.CardIDs.filter((id) => id > 0)
+    if (positiveIDs.length === 1) {
+      const state = room.ensureSkillState<ZuoLianState>(ZUO_LIAN_SPELL_ID, () => ({}))
+      state[patched.FromID] = positiveIDs[0]
+    }
+    return
+  }
+
+  if (patched.FromZone === 5 && patched.ToZone === 10 && patched.MoveType === 11) {
+    const state = room.ensureSkillState<ZuoLianState>(ZUO_LIAN_SPELL_ID, () => ({}))
+    const knownCardID = patched.CardIDs.find((id) => id > 0)
+    const cardID = knownCardID || state[patched.FromID]
+    delete state[patched.FromID]
+    if (!(cardID > 0)) {
+      delete state.stack
+      return
+    }
+    if (!knownCardID) patched.CardIDs[0] = cardID
+    state.stack = cardID
+    return
+  }
+
+  if (patched.FromZone === 10 && [1, 2].includes(patched.ToZone) && patched.MoveType === 11) {
+    const state = room.readSkillState<ZuoLianState>(ZUO_LIAN_SPELL_ID)
+    const cardID = state?.stack
+    if (!patched.CardIDs.some((id) => id > 0) && cardID > 0) patched.CardIDs[0] = cardID
+    if (state) delete state.stack
+  }
+}
 
 export default function decorateZuoLian(event: MoveEventDraft, room: Room): MoveEventDraft {
   const move = event.protocol

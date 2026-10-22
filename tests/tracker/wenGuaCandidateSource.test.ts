@@ -21,8 +21,19 @@ function createHarness(sourceIDs = [11, 12, 0], targetIDs = [13, 0]) {
     70
   )
   controller.initTrackerDeck([11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
-  controller.syncTrackerMove(protocolMove({ CardIDs: sourceIDs, ToID: 1 }))
-  controller.syncTrackerMove(protocolMove({ CardIDs: targetIDs, ToID: 4 }))
+  for (const [seatID, ids] of [
+    [1, sourceIDs],
+    [4, targetIDs]
+  ] as const) {
+    const knownIDs = ids.filter((id) => id > 0)
+    const unknownCount = ids.length - knownIDs.length
+    if (knownIDs.length)
+      controller.syncTrackerMove(protocolMove({ CardIDs: knownIDs, ToID: seatID }))
+    if (unknownCount)
+      controller.syncTrackerMove(
+        protocolMove({ CardIDs: [], CardCount: unknownCount, ToID: seatID })
+      )
+  }
   const room = controller.getTrackerRoom()!
   room.getPlayer(1)!.syncObservedHandCount(sourceIDs.length)
   room.getPlayer(4)!.syncObservedHandCount(targetIDs.length)

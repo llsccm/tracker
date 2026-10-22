@@ -11,7 +11,7 @@ import {
   shouldIgnoreTrackerMove,
   shouldRevealAsFullHand
 } from '@/tracker/protocol/protocolRules'
-import { parseGuiFuCardIDs } from '@/handler/skills/GuiFu'
+import { parseGuiFuCardIDs } from '@/tracker/skill/GuiFu'
 import {
   initializeDuoQiState,
   recordDuoQiActivation,
@@ -696,7 +696,10 @@ function applyRoleDataEx(
     }
     if (seatID === mySeatID) return ignored('主视角已从移动协议获知诡伏牌面')
     requireReadyRoom(context, record, '物化诡伏获得牌')
-    context.controller.syncTrackerGuiFuRoleData(seatID, cardIDs)
+    context.controller.dispatchSkillProtocolEvent({
+      type: 'roleData',
+      message: { DataID: dataID, SeatID: seatID, Datas: datas }
+    })
     return applied()
   }
 

@@ -19,6 +19,9 @@ const {
 
 vi.mock('../../src/tracker/runtime/browser', () => ({
   tracker: {
+    dispatchSkillProtocolEvent(event) {
+      return Game.room?.dispatchSkillProtocolEvent?.(event)
+    },
     getReadyTrackerRoom,
     revealTrackerCards,
     revealTrackerCardsInZone,
@@ -27,6 +30,7 @@ vi.mock('../../src/tracker/runtime/browser', () => ({
 }))
 
 vi.mock('../../src/tracker/skill/JieLi', () => ({
+  default: (event) => event,
   recordJieLiSelection
 }))
 
@@ -38,6 +42,7 @@ import { handleRoleSpellOptRep } from '@/handler/CGsRoleSpellOptRep'
 import { Game } from '@/tracker'
 import { Room } from '@/tracker/Room'
 import { getDuoQiState } from '@/tracker/skill/DuoQi'
+import { registerDefaultMoveEventHandlers } from '@/tracker/skill/registerHandlers'
 
 describe('CGsRoleSpellOptRep', () => {
   beforeEach(() => {
@@ -135,6 +140,7 @@ describe('CGsRoleSpellOptRep', () => {
   it('Type 72 在开局时机创建结构化夺炁状态', () => {
     Game.isGameStart = true
     const room = new Room({ gameState: Game })
+    registerDefaultMoveEventHandlers(room)
     room.registerPlayers([{ SeatID: 2, ClientID: 200 }], 200)
     room.initDeck([63, 125])
 
@@ -193,7 +199,9 @@ describe('CGsRoleSpellOptRep', () => {
   })
 
   it('下书选择回复先于移动，只记录选项等待实际转移', () => {
-    Game.setSpellState(361, {
+    const room = new Room({ gameState: Game })
+    registerDefaultMoveEventHandlers(room)
+    room.setSkillState(361, {
       shownCardIDs: [108, 131, 49, 54, 78],
       targetSeatID: 4
     })
@@ -206,7 +214,7 @@ describe('CGsRoleSpellOptRep', () => {
       data_count: 2
     })
 
-    expect(Game.getSpellState(361)).toMatchObject({
+    expect(room.readSkillState(361)).toMatchObject({
       actorSeatID: 1,
       choice: 2,
       targetSeatID: 4

@@ -1,8 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { handleUpdateRoleDataExNtf } from '@/handler/GsCUpdateRoleDataExNtf'
 import { Game } from '@/tracker'
 import { Room } from '@/tracker/Room'
 import { getDuoQiState, initializeDuoQiState, recordDuoQiActivation } from '@/tracker/skill/DuoQi'
+import { registerDefaultMoveEventHandlers } from '@/tracker/skill/registerHandlers'
+
+vi.mock('@/tracker/runtime/browser', () => ({
+  tracker: {
+    dispatchSkillProtocolEvent(event) {
+      return Game.room?.dispatchSkillProtocolEvent(event)
+    }
+  }
+}))
 
 describe('GsCUpdateRoleDataExNtf 夺炁目标', () => {
   afterEach(() => {
@@ -12,6 +21,7 @@ describe('GsCUpdateRoleDataExNtf 夺炁目标', () => {
 
   it('DataID=8 用 SeatID 和 Datas 更新 3730 目标及技能拥有者', () => {
     const room = new Room({ gameState: Game })
+    registerDefaultMoveEventHandlers(room)
     room.registerPlayers(
       [
         { SeatID: 2, ClientID: 200 },

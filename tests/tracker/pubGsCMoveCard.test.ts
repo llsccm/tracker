@@ -7,9 +7,9 @@ const { applySpellEffect, handleGameFlowState, handleSpecialZones, syncTrackerMo
   () => ({
     applySpellEffect: vi.fn(),
     handleGameFlowState: vi.fn(),
-    handleSpecialZones: vi.fn<
-      (context: SkillMoveContext & { finishMove(): void }) => { handled: boolean }
-    >(() => ({ handled: false })),
+    handleSpecialZones: vi.fn<(context: SkillMoveContext) => { handled: boolean }>(() => ({
+      handled: false
+    })),
     syncTrackerMove: vi.fn()
   })
 )
@@ -45,7 +45,7 @@ describe('PubGsCMoveCard', () => {
   it.each([
     ['其他视角', []],
     ['主视角', [51, 146, 138, 4]]
-  ])('手气卡回堆在%s均归一为 RANDOM', (_view, cardIDs) => {
+  ])('手气卡回堆在%s保留端点交由 Controller 归一化', (_view, cardIDs) => {
     const msg = protocolMove({
       CardCount: 4,
       CardIDs: cardIDs,
@@ -64,16 +64,13 @@ describe('PubGsCMoveCard', () => {
     handleMoveCard(msg)
 
     expect(syncTrackerMove).toHaveBeenCalledOnce()
-    expect(syncTrackerMove).toHaveBeenCalledWith(
-      { ...msg, CardIDs: cardIDs, FromPosition: POSITION_TOP, ToPosition: POSITION_RANDOM },
-      msg
-    )
+    expect(syncTrackerMove).toHaveBeenCalledWith({ ...msg, CardIDs: cardIDs }, msg)
     expect(handleSpecialZones).toHaveBeenCalledOnce()
     expect(handleGameFlowState).toHaveBeenCalledOnce()
     expect(applySpellEffect).toHaveBeenCalledOnce()
   })
 
-  it('浑天仪特殊位置在响应器前归一为 RANDOM，并沿通用流水线提交一次', () => {
+  it('浑天仪特殊位置交由 Controller 归一化，并沿通用流水线提交一次', () => {
     const msg = protocolMove({
       CardIDs: [51],
       FromZone: 0,
@@ -89,13 +86,10 @@ describe('PubGsCMoveCard', () => {
     expect(handleSpecialZones).toHaveBeenCalledOnce()
     const context = handleSpecialZones.mock.calls[0][0]
     expect(context.raw.ToPosition).toBe(POSITION_TOP + 1)
-    expect(context.patched.ToPosition).toBe(POSITION_RANDOM)
+    expect(context.patched.ToPosition).toBe(POSITION_TOP + 1)
     expect(handleGameFlowState).toHaveBeenCalledExactlyOnceWith(context)
     expect(applySpellEffect).toHaveBeenCalledExactlyOnceWith(context)
-    expect(syncTrackerMove).toHaveBeenCalledExactlyOnceWith(
-      { ...msg, ToPosition: POSITION_RANDOM },
-      msg
-    )
+    expect(syncTrackerMove).toHaveBeenCalledExactlyOnceWith(msg, msg)
     expect(msg.ToPosition).toBe(POSITION_TOP + 1)
   })
 
@@ -147,13 +141,12 @@ describe('PubGsCMoveCard', () => {
     )
   })
 
-  it('移动后副作用在 tracker 同步完成后执行', () => {
+  it('Handler UI 状态采集后只提交一次，不再维护移动后回调', () => {
     const order: string[] = []
-    applySpellEffect.mockImplementationOnce(
-      (context: { afterMove(callback: () => void): void }) => {
-        context.afterMove(() => order.push('afterMove'))
-      }
-    )
+    applySpellEffect.mockImplementationOnce((context) => {
+      expect(context).not.toHaveProperty('afterMove')
+      order.push('collect')
+    })
     syncTrackerMove.mockImplementationOnce(() => order.push('syncTrackerMove'))
 
     handleMoveCard(
@@ -173,7 +166,7 @@ describe('PubGsCMoveCard', () => {
       })
     )
 
-    expect(order).toEqual(['syncTrackerMove', 'afterMove'])
+    expect(order).toEqual(['collect', 'syncTrackerMove'])
   })
 
   it('下书处理器直接使用完整 patched，不提前派生端点', () => {
@@ -323,7 +316,6 @@ describe('PubGsCMoveCard', () => {
     handleSpecialZones.mockImplementationOnce((context) => {
       context.patched.CardIDs[0] = 96
       context.patched.ToPosition = POSITION_RANDOM
-      context.finishMove()
       return { handled: true }
     })
 
@@ -342,7 +334,7 @@ describe('PubGsCMoveCard', () => {
   it.each([
     { name: '明暗混合', CardIDs: [96, 0], CardCount: 2 },
     { name: '明牌数量不符', CardIDs: [96, 113], CardCount: 1 }
-  ])('$name在补丁后降级，保留协议张数和原始列表', ({ CardIDs, CardCount }) => {
+  ])('$name交由 Controller 校验，保留协议张数和原始列表', ({ CardIDs, CardCount }) => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     const msg = protocolMove({ CardIDs, CardCount })
     applySpellEffect.mockImplementationOnce((context) => {
@@ -352,30 +344,28 @@ describe('PubGsCMoveCard', () => {
     handleMoveCard(msg)
 
     expect(syncTrackerMove.mock.calls[0][1]).toMatchObject({ CardIDs, CardCount })
-    expect(syncTrackerMove.mock.calls[0][0].CardIDs).toEqual([])
+    expect(syncTrackerMove.mock.calls[0][0].CardIDs).toEqual(CardIDs)
     expect(msg.CardIDs).toEqual(CardIDs)
-    expect(errors).toHaveBeenCalledTimes(2)
+    expect(errors).not.toHaveBeenCalled()
     errors.mockRestore()
   })
 
-  it('特殊区域提前提交也执行补丁后检查与回调', () => {
+  it('特殊区域跳过普通副作用，由外层统一提交一次', () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     const order: string[] = []
     syncTrackerMove.mockImplementationOnce(() => order.push('sync'))
     handleSpecialZones.mockImplementationOnce((context) => {
       context.patched.CardIDs = [96, 0]
-      context.afterMove!(() => order.push('after'))
-      context.finishMove()
       return { handled: true }
     })
 
     handleMoveCard(protocolMove({ CardIDs: [], CardCount: 2 }))
 
-    expect(syncTrackerMove.mock.calls[0][0].CardIDs).toEqual([])
-    expect(order).toEqual(['sync', 'after'])
+    expect(syncTrackerMove.mock.calls[0][0].CardIDs).toEqual([96, 0])
+    expect(order).toEqual(['sync'])
     expect(handleGameFlowState).not.toHaveBeenCalled()
     expect(applySpellEffect).not.toHaveBeenCalled()
-    expect(errors).toHaveBeenCalledTimes(2)
+    expect(errors).not.toHaveBeenCalled()
     errors.mockRestore()
   })
 
@@ -414,9 +404,9 @@ describe('PubGsCMoveCard', () => {
       options: { fromPosition: POSITION_TOP },
       raw: { CardIDs: [0], FromPosition: POSITION_RANDOM }
     })
-    expect(event.protocol).toBe(syncTrackerMove.mock.calls[0][0])
-    expect(event.cardIDs).toBe(syncTrackerMove.mock.calls[0][0].CardIDs)
-    expect(event.raw).toBe(syncTrackerMove.mock.calls[0][1])
+    expect(event.protocol).toEqual(syncTrackerMove.mock.calls[0][0])
+    expect(event.cardIDs).not.toBe(syncTrackerMove.mock.calls[0][0].CardIDs)
+    expect(event.raw).toEqual(syncTrackerMove.mock.calls[0][1])
     expect(event.options.sourceEvent?.raw).toBe(event.raw)
     expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([96])
     expect(msg.CardIDs).toEqual([0])

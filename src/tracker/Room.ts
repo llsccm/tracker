@@ -31,12 +31,15 @@ import type {
   AnonymizeLocatedIdentityOptions,
   MoveEventHandler,
   PlayerHandCardIDOptions,
+  RoomSkillPlugin,
   SkillHandler
 } from './room/index'
 import type {
   CardID,
   MoveOptions,
   NormalizedMoveEvent,
+  PatchedMoveCardFields,
+  RawMoveCardEvent,
   PublicPosition,
   PublicLocationCandidate,
   PublicZoneName,
@@ -45,6 +48,7 @@ import type {
   SpellID,
   SubZoneCandidate
 } from './types'
+import type { PendingSkillMove, SkillProtocolEvent } from './skill/protocolEvents'
 
 interface RoomOptions {
   gameState?: GameState
@@ -224,6 +228,7 @@ export class Room extends RoomBase {
     this.counter = new CardCounter(this)
     this.isDeckReady = true
     this.publicZones.assertPublicZoneConsistency('initDeck')
+    this.moveEvents.onDeckInitialized()
   }
 
   applyPileIdentityMove(
@@ -391,6 +396,29 @@ export class Room extends RoomBase {
    */
   registerMoveEventHandler(spellID: SpellID | '*', handler: MoveEventHandler): void {
     this.moveEvents.registerMoveEventHandler(spellID, handler)
+  }
+
+  registerSkillPlugin(plugin: RoomSkillPlugin): void {
+    this.moveEvents.registerSkillPlugin(plugin)
+  }
+
+  beforeNormalizeMove(
+    patched: PatchedMoveCardFields,
+    raw: Readonly<RawMoveCardEvent>
+  ): 'defer' | void {
+    return this.moveEvents.beforeNormalizeMove(patched, raw)
+  }
+
+  afterMoveCommitted(event: NormalizedMoveEvent): void {
+    this.moveEvents.afterMoveCommitted(event)
+  }
+
+  notifyCardsRevealed(cardIDs: readonly CardID[]): void {
+    this.moveEvents.notifyCardsRevealed(cardIDs)
+  }
+
+  dispatchSkillProtocolEvent(event: SkillProtocolEvent): PendingSkillMove[] {
+    return this.moveEvents.dispatchSkillProtocolEvent(event)
   }
 
   /**
