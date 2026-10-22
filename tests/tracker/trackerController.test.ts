@@ -55,7 +55,7 @@ describe('TrackerController', () => {
     controller.destroyTrackerRoom()
   })
 
-  it('直接消费完整 patched，并保留独立 raw 引用，不重新拼接协议', () => {
+  it('复制完整 patched 与 raw，冻结快照且不修改调用方消息', () => {
     const { controller } = createTrackerControllerHarness()
     controller.initTrackerRoom()
     controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }], 100)
@@ -70,10 +70,13 @@ describe('TrackerController', () => {
 
     expect(decorateSpy).toHaveBeenCalledOnce()
     const event = decorateSpy.mock.calls[0][0]
-    expect(event.protocol).toBe(patched)
-    expect(event.cardIDs).toBe(patched.CardIDs)
-    expect(event.raw).toBe(raw)
-    expect(event.options.sourceEvent?.raw).toBe(raw)
+    expect(event.protocol).toEqual(patched)
+    expect(event.protocol).not.toBe(patched)
+    expect(event.cardIDs).not.toBe(patched.CardIDs)
+    expect(event.raw).toEqual(raw)
+    expect(event.raw).not.toBe(raw)
+    expect(Object.isFrozen(event.raw)).toBe(true)
+    expect(event.options.sourceEvent?.raw).toBe(event.raw)
     expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([2])
     expect(controller.getTrackedPlayerHandCardIDs(0)).toEqual([])
     expect(raw.CardIDs).toEqual([1])

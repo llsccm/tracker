@@ -5,33 +5,39 @@
 > [`docs/protocols/README.md`](../protocols/README.md)。新增技能临时状态前先查
 > [`skill_state.md`](skill_state.md)，确认统一状态仓库中的 key 与访问入口。
 
-## 移动装饰器输入契约
+## 技能插件与移动装饰器输入契约
 
 - `MoveEventDraft.protocol` 直接引用最终 `patched` 的只读协议；`cardIDs` 初始复用其只读数组，技能分支直接读取数值，
   不再从 `getRaw(event)` 取字段并重复 `Number()` 转换。
-- 响应器只读取 `patched`，下书按手牌区协议判断并读取 `FromID/ToID`；端点仅在最终事件归一化时解析。
+- `RoomSkillPlugin.beforeNormalizeMove` 只修改 Controller 私有的 `patched`；原始宿主输入及 raw 快照不受影响。
+  端点在最终事件归一化时解析；下书在成功提交后按领域手牌子区和来源/目标座位结算。
 - 当前移动牌与数量以 `event.cardIDs` / `event.cardCount` 为准；`protocol` 保留装饰前的协议字段，
   `patchEvent()` 不因来源实体或候选推断而改写它。
 - `event.raw` 与 `options.sourceEvent.raw` 引用同一份原始输入；后者随 `MoveOptions` 进入 Room，保留来源追溯。
 - `Room.decorateMoveEvent()` 接收完整标准事件；领域直调仍使用 `Room.moveCards()`。
-  独立技能通知、角色数据或选择回复仍在各自解析入口处理原始字段，不套用移动协议契约。
+  使用技能、目标通知、选择回复和角色数据通过 `dispatchSkillProtocolEvent()` 输入已迁移插件，
+  `SkillProtocolEvent` 的判别联合保持各协议字段语义，不套用移动契约。
+- 默认插件集中注册于 `src/tracker/skill/registerHandlers.ts`；清议/联句、迁附、生墨、择行、椒遇和
+  佐练使用归一化前补牌，下书使用成功提交钩子。状态统一在 `tracker` scope；称象 UI 暂存仍在 Handler。
+- 插件顺序、异常处理、defer、成功通知与销毁边界见 [`room.md`](room.md)；相关集成回归为
+  `tests/tracker/skillLifecycle.test.ts` 和 `tests/tracker/skillCardPatches.test.ts`。
 
 ## 快速索引
 
-| 场景 | 协议或识别条件 | 主要实现 / 回归入口 |
-| --- | --- | --- |
-| 诡伏相邻获得消息补全 | `SpellID=3709` + `DataID=3709` | `src/tracker/skill/GuiFu.ts`、`tests/tracker/roleData3709.test.ts` |
-| 下书明暗选择 | `SpellID=361` | `src/handler/skills/XiaShu.ts`、`tests/tracker/xiaShu.test.ts` |
-| 反间展示与手牌移交 | `SpellID=713`、`MoveType=27` | `docs/protocols/PubGsCMoveCard-713.md`；现有列表解码条件不匹配该样例 |
-| 问卦候选来源筛选 | `SpellID=780`、暗交牌 `MoveType=27` 后紧邻回堆 | `src/tracker/skill/WenGua.ts`；`tests/tracker/wenGuaCandidateSource.test.ts` |
-| 权变牌堆顶观看与获得 | `SpellID=7011`、`MoveType=21/18` | `docs/protocols/GsCRoleOptTargetNtf-7011.md` |
-| 暗置标记区候选 | `FromZone=5`、`ToZone=4/8`、全暗 `CardIDs` | `RoomMovementHiddenMarks.handleHiddenMarkMove()`、`hiddenMarkCandidates` |
-| 观虚目标视角交换 | `SpellID=987/988` | `src/tracker/skill/GuanXu.ts`、`tests/tracker/guanXuExchange.test.ts` |
-| 整手牌交换 | `MoveType=11` + `5<->10` + 整手张数 | `src/tracker/skill/HandExchange.ts` |
-| 骋烈其他视角的暗中交换与弃置 | `SpellID=3208` | `src/tracker/skill/ChengLie.ts`、`tests/tracker/chengLie.test.ts` |
-| 诫厉观看与暂存 | `SpellID=3483` | `handleRoleOptTargetNtf`、`tests/tracker/roleOptTargetNtf.test.ts` |
-| 天候私有观看与展示 | `SpellID=3903` | `src/tracker/skill/TianHou.ts`、`tests/tracker/tianHouExchange.test.ts` |
-| 兴作牌底与手牌交换 | `SpellID=3776` | `src/tracker/skill/XingZuo.ts`、`tests/tracker/xingZuo.test.ts` |
+| 场景                         | 协议或识别条件                                 | 主要实现 / 回归入口                                                          |
+| ---------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- |
+| 诡伏相邻获得消息补全         | `SpellID=3709` + `DataID=3709`                 | `src/tracker/skill/GuiFu.ts`、`tests/tracker/roleData3709.test.ts`           |
+| 下书明暗选择                 | `SpellID=361`                                  | `src/tracker/skill/XiaShu.ts`、`tests/tracker/xiaShu.test.ts`                |
+| 反间展示与手牌移交           | `SpellID=713`、`MoveType=27`                   | `docs/protocols/PubGsCMoveCard-713.md`；现有列表解码条件不匹配该样例         |
+| 问卦候选来源筛选             | `SpellID=780`、暗交牌 `MoveType=27` 后紧邻回堆 | `src/tracker/skill/WenGua.ts`；`tests/tracker/wenGuaCandidateSource.test.ts` |
+| 权变牌堆顶观看与获得         | `SpellID=7011`、`MoveType=21/18`               | `docs/protocols/GsCRoleOptTargetNtf-7011.md`                                 |
+| 暗置标记区候选               | `FromZone=5`、`ToZone=4/8`、全暗 `CardIDs`     | `RoomMovementHiddenMarks.handleHiddenMarkMove()`、`hiddenMarkCandidates`     |
+| 观虚目标视角交换             | `SpellID=987/988`                              | `src/tracker/skill/GuanXu.ts`、`tests/tracker/guanXuExchange.test.ts`        |
+| 整手牌交换                   | `MoveType=11` + `5<->10` + 整手张数            | `src/tracker/skill/HandExchange.ts`                                          |
+| 骋烈其他视角的暗中交换与弃置 | `SpellID=3208`                                 | `src/tracker/skill/ChengLie.ts`、`tests/tracker/chengLie.test.ts`            |
+| 诫厉观看与暂存               | `SpellID=3483`                                 | `handleRoleOptTargetNtf`、`tests/tracker/roleOptTargetNtf.test.ts`           |
+| 天候私有观看与展示           | `SpellID=3903`                                 | `src/tracker/skill/TianHou.ts`、`tests/tracker/tianHouExchange.test.ts`      |
+| 兴作牌底与手牌交换           | `SpellID=3776`                                 | `src/tracker/skill/XingZuo.ts`、`tests/tracker/xingZuo.test.ts`              |
 
 ## 诡伏相邻获得消息补全（SpellID=3709）
 
@@ -43,6 +49,8 @@
   用牌后、获得技能时等没有前置获得移动的角色数据忽略，不根据状态列表独立移动牌；
   失配或被下一条移动打断时告警清除暂存。
 - 已携带 ID 的移动立即同步，主视角不重复处理角色数据。
+- `guiFuPlugin` 接收所有前置移动及 `DataID=3709` 的角色数据，返回补全移动供 Controller 续交；
+  `onDeckInitialized` 清理待配对状态，Controller 不包含技能 ID 或专用分支。
 - 原始移动、相邻角色数据及 `raw` / `patched` 约定见
   [诡伏协议专页](../protocols/PubGsCMoveCard-3709.md)。
 
@@ -59,7 +67,8 @@
 - 下书不快照或重建既有 `ConstraintGroup`。通用转移负责失效旧的来源/目标手牌名额并创建本次转移
   约束，随后由展示牌确认触发统一收敛。
 - 实测 `CGsRoleSpellOptRep` 选择回复固定早于后续取牌 `PubGsCMoveCard`。选择处理器只记录
-  `choice/actorSeatID`；移动完成回调是唯一结算点，负责确认展示牌并清理技能状态。
+  `choice/actorSeatID`；`afterMoveCommitted` 是唯一结算点，负责确认展示牌并清理技能状态。
+  移动失败、noop 或同区展示不结算，零增量确认直接使用 Room 并同步身份账本和公开 ID 通知。
 - 协议样例：`docs/protocols/GsCRoleOptTargetNtf-361.md`。
 
 ## 反间展示与手牌移交（SpellID=713）

@@ -1,9 +1,7 @@
 import { Game } from '@/tracker'
 import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
 import { tracker } from '@/tracker/runtime/browser'
-import { initializeDuoQiState } from '@/tracker/skill/DuoQi'
 import { recordJieLiSelection } from '@/tracker/skill/JieLi'
-import { handleXiaShuChoice } from './skills/XiaShu'
 import { destroyPingJianWindow } from '@/ui/PingJianWindow'
 
 const PROTOCOL_PILE_ZONE = 1
@@ -15,7 +13,7 @@ function revealCardsInProtocolZone(id, cardIDs, zone = PROTOCOL_HAND_ZONE, pos =
 }
 
 // Type 级结果不一定绑定单一技能，例如叫分和开局初始牌通知。
-function handleResultType({ Datas, Type }) {
+function handleResultType({ Type }) {
   switch (Type) {
     // 44: 斗地主玩家叫分结果 Datas: [300] data_count: 1 只是当前操作的返回 并非最终结果
     case 44:
@@ -24,13 +22,6 @@ function handleResultType({ Datas, Type }) {
     // 45: 斗地主地主结果 Datas: [betBaseCoin,betCoinMulti] [300, 1]
     case 45:
       // 但是这里是系统播报 没办法判断谁是地主
-      break
-
-    // TODO 初始牌 OPT_INITIAL_CARDS 夺炁初始化
-    case 72: // 此时 turn = 1 round = 0 phase = 0
-      if (Datas?.length && Game.isGameStart && !Game.round && !Game.phase) {
-        initializeDuoQiState(Game, Datas)
-      }
       break
 
     default:
@@ -43,6 +34,7 @@ function handleResultType({ Datas, Type }) {
 export function handleRoleSpellOptRep(msg = {}) {
   const { Datas, SeatID, SpellID, Type } = msg
   handleResultType(msg)
+  tracker.dispatchSkillProtocolEvent({ type: 'choice', message: msg })
 
   switch (SpellID) {
     // 知己知彼
@@ -83,14 +75,6 @@ export function handleRoleSpellOptRep(msg = {}) {
     case 3571:
       // 这里只有一张牌的消息 有一点点意义
       // if (Type === 10) Game.getSpellState(SpellID)?.add?.(Datas[0])
-      break
-
-    // 下书
-    case 361:
-      if (Type === 22 && Array.isArray(Datas) && msg.data_count === 2) {
-        // Datas[0] 为 1 取展示牌，为 2 取暗牌
-        handleXiaShuChoice(msg)
-      }
       break
 
     // 诫厉

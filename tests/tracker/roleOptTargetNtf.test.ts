@@ -10,6 +10,9 @@ const { destroyPeiXiuMapWindow, drawChengXiang, revealTrackerCards, renderPingJi
 
 vi.mock('@/tracker/runtime/browser', () => ({
   tracker: {
+    dispatchSkillProtocolEvent(event) {
+      return Game.room?.dispatchSkillProtocolEvent?.(event)
+    },
     getReadyTrackerRoom: vi.fn(),
     revealTrackerCards
   }
@@ -33,6 +36,8 @@ import { CardConfig, SpellExtendConfig } from '@/config'
 import { handleRoleOptTargetNtf } from '@/handler/GsCRoleOptTargetNtf'
 import { Game } from '@/tracker'
 import { tracker } from '@/tracker/runtime/browser'
+import { Room } from '@/tracker/Room'
+import { registerDefaultMoveEventHandlers } from '@/tracker/skill/registerHandlers'
 
 describe('GsCRoleOptTargetNtf', () => {
   beforeEach(() => {
@@ -77,6 +82,8 @@ describe('GsCRoleOptTargetNtf', () => {
   })
 
   it('下书目标通知直接记录目标座位和展示牌', () => {
+    const room = new Room({ gameState: Game })
+    registerDefaultMoveEventHandlers(room)
     handleRoleOptTargetNtf({
       Param: 0,
       Params: [108, 131, 49, 54, 78],
@@ -90,7 +97,7 @@ describe('GsCRoleOptTargetNtf', () => {
     })
 
     expect(revealTrackerCards).not.toHaveBeenCalled()
-    expect(Game.getSpellState(361)).toEqual({
+    expect(room.readSkillState(361)).toEqual({
       shownCardIDs: [108, 131, 49, 54, 78],
       targetSeatID: 4
     })

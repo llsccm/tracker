@@ -1,24 +1,21 @@
 import { SpellExtendConfig } from '@/config'
 import { Game, globalConfig } from '@/tracker'
-import { GUI_FU_ROLE_DATA_ID } from '@/tracker/protocol/protocolRules'
-import { recordDuoQiRoleDataTarget } from '@/tracker/skill/DuoQi'
+import { tracker } from '@/tracker/runtime/browser'
 import { renderPeiXiuMapWindow, setPeiXiuMapWindowVisible } from '@/ui/PeiXiuMapWindow'
 import { getRenderedPeiXiuHandSuitColors } from '@/ui/PeiXiuHandMirror'
 import { parsePeiXiuRoleData, solvePeiXiuRoleData } from '@/utils/peixiuRouteFeature'
 import { handleQiaoZhi } from './skills/QiaoZhi'
-import { handleGuiFu } from './skills/GuiFu'
 import { laya } from '@/runtime/gameAdapter'
 
 // GsCUpdateRoleDataExNtf
 export function handleUpdateRoleDataExNtf(msg) {
   const { Datas, SeatID, DataID } = msg
+  tracker.dispatchSkillProtocolEvent({ type: 'roleData', message: msg })
   switch (DataID) {
     // OPT_DATA_ADD_SPELL_EFFECT
     case 8:
       if (Array.isArray(Datas)) {
         const spellID = msg.Datas[0]
-        // 夺炁：SeatID 是目标，Datas=[SpellID, 技能拥有者座位]。
-        if (spellID === 3730) recordDuoQiRoleDataTarget(Game, msg)
         // 清理宴戏
         if (spellID === 7017) Game.deleteState('tracker', 7017)
       }
@@ -94,20 +91,6 @@ export function handleUpdateRoleDataExNtf(msg) {
     case 3544:
       // 其他视角的移动协议只有暗牌数量，3544 通知补充实际 CardID；主视角已从移动协议获知。
       handleQiaoZhi(msg, Game.myID)
-      break
-
-    // 诡伏：角色数据补齐相邻获得消息的 ID，再提交一次普通移动。
-    case GUI_FU_ROLE_DATA_ID:
-      handleGuiFu(msg, Game.myID)
-      break
-
-    // 郭照 椒遇 选择的颜色
-    case 3571:
-      // Datas:[x] 1红2黑
-      if (Array.isArray(Datas)) {
-        const colors = Datas[0] == 1 ? [1, 2] : [3, 4]
-        Game.setSpellState(3571, new Set(colors))
-      }
       break
 
     // 尽览

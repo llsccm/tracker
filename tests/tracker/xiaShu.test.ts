@@ -1,25 +1,10 @@
 import { moveContext } from './helpers/moveContext'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { applySpellEffect } from '@/handler/spellEffects'
-import handleXiaShuMove, {
-  handleXiaShuChoice,
-  handleXiaShuTargetNotice
-} from '@/handler/skills/XiaShu'
-import { Game } from '@/tracker'
+import { describe, expect, it } from 'vitest'
+import { xiaShuPlugin } from '@/tracker/skill/XiaShu'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from './helpers/room'
-
-const { revealTrackerCards } = vi.hoisted(() => ({ revealTrackerCards: vi.fn() }))
-
-vi.mock('@/tracker/runtime/browser', () => ({
-  tracker: { revealTrackerCards }
-}))
-
-afterEach(() => {
-  revealTrackerCards.mockReset()
-  Game.deleteSpellState(361)
-})
 
 describe('下书', () => {
   it('选择回复先于移动时由通用转移收敛四张暗牌和一个候选槽', () => {
@@ -29,6 +14,7 @@ describe('下书', () => {
     const allCardIDs = [...shownCardIDs, ...hiddenCardIDs, ...candidateCardIDs]
     const { room } = createTestRoom({ cardIDs: allCardIDs, seatIDs: [3, 6, 7] })
 
+    room.registerSkillPlugin(xiaShuPlugin)
     try {
       const sourceCards = allCardIDs.map((cardID) => getCard(room, cardID))
       room.clearCardsFromPublicZones(sourceCards)
@@ -82,53 +68,30 @@ describe('下书', () => {
       room.getPlayer(3).syncObservedHandCount(0)
       room.resolveConstraints()
 
-      revealTrackerCards.mockImplementation(
-        (
-          target: {
-            seatID?: number
-            handMoveCount?: number
-            sourceEvent?: { type: string; label?: string }
-          },
-          cardIDs: number[]
-        ) => {
-          room.moveCards(cardIDs, 'player', {
-            toSeatID: Number(target.seatID),
-            fromSeatID: Number(target.seatID),
-            fromZone: null,
-            fromSubZone: 'hand',
-            subZone: 'hand',
-            cardCount: cardIDs.length,
-            handMoveCount: Number(target.handMoveCount),
-            sourceEvent: target.sourceEvent
-          })
+      room.dispatchSkillProtocolEvent({
+        type: 'targetNotice',
+        message: {
+          Param: 0,
+          Params: shownCardIDs,
+          SpellID: 361,
+          targetSeatID: 7,
+          Type: 29
         }
-      )
-
-      handleXiaShuTargetNotice({
-        Param: 0,
-        Params: shownCardIDs,
-        SeatID: 3,
-        SpellID: 361,
-        SrcSeatID: 3,
-        targetSeatID: 7,
-        Type: 29
       })
       // 实测 CGsRoleSpellOptRep 先于后续取牌 PubGsCMoveCard 到达。
-      handleXiaShuChoice({
-        Datas: [2, 1],
-        SeatID: 3,
-        SpellID: 361,
-        Type: 22,
-        data_count: 2
+      room.dispatchSkillProtocolEvent({
+        type: 'choice',
+        message: {
+          Datas: [2, 1],
+          SeatID: 3,
+          SpellID: 361,
+          Type: 22,
+          data_count: 2
+        }
       })
 
-      const afterMoveCallbacks: (() => void)[] = []
-      applySpellEffect({
-        game: Game,
-        afterMove(callback: () => void) {
-          afterMoveCallbacks.push(callback)
-        },
-        ...moveContext({
+      const event = normalizeMoveEvent(
+        moveContext({
           SpellID: 361,
           CardIDs: [0, 0, 0, 0, 0],
           CardCount: 5,
@@ -137,8 +100,8 @@ describe('下书', () => {
           FromZone: 5,
           ToZone: 5,
           MoveType: 5
-        })
-      })
+        }).patched
+      )
 
       room.moveCards([], 'player', {
         fromZone: null,
@@ -152,8 +115,7 @@ describe('下书', () => {
 
       expect(room.getPlayer(7).observedHandCount).toBe(5)
       expect(room.getPlayer(3).observedHandCount).toBe(5)
-      expect(afterMoveCallbacks).toHaveLength(1)
-      afterMoveCallbacks[0]()
+      room.afterMoveCommitted(event)
 
       shownCardIDs.forEach((cardID) => {
         expect(Array.from(getCard(room, cardID).seats)).toEqual([7])
@@ -184,7 +146,7 @@ describe('下书', () => {
       expect(transferGroup?.expectedSlotsByLocation.get('player:3:hand:none')).toBe(5)
       expect(transferGroup?.expectedSlotsByLocation.get(targetHandKey)).toBe(0)
       expect(transferGroup?.expectedSlotsByLocation.get(actorHandKey)).toBe(5)
-      expect(Game.getSpellState(361)).toBeUndefined()
+      expect(room.readSkillState(361)).toBeUndefined()
     } finally {
       room.destroy()
     }
@@ -193,28 +155,28 @@ describe('下书', () => {
   it.each([
     ['同区展示', { FromZone: 5, ToZone: 5, FromID: 7, ToID: 7 }],
     ['标记区来源', { FromZone: 4, ToZone: 5, FromID: 7, ToID: 3 }]
-  ])('移动位置为%s时不注册下书回调', (_label, move) => {
-    Game.setSpellState(361, { shownCardIDs: [96], targetSeatID: 7, choice: 2, actorSeatID: 3 })
-    const callbacks: (() => void)[] = []
+  ])('移动位置为%s时不结算下书', (_label, move) => {
+    const { room } = createTestRoom({ cardIDs: [96], seatIDs: [3, 7] })
+    room.registerSkillPlugin(xiaShuPlugin)
+    const state = { shownCardIDs: [96], targetSeatID: 7, choice: 2, actorSeatID: 3 }
+    room.setSkillState(361, state)
+    room.afterMoveCommitted(
+      normalizeMoveEvent(
+        moveContext({
+          FromPosition: POSITION_RANDOM,
+          ToPosition: POSITION_TOP,
+          FromZoneParam: 0,
+          ToZoneParam: 0,
+          ...move,
+          CardIDs: [0],
+          MoveType: 5,
+          SpellID: 361,
+          CardCount: 1
+        }).patched
+      )
+    )
 
-    handleXiaShuMove({
-      ...moveContext({
-        FromPosition: POSITION_RANDOM,
-        ToPosition: POSITION_TOP,
-        FromZoneParam: 0,
-        ToZoneParam: 0,
-        ...move,
-        CardIDs: [0],
-        MoveType: 5,
-        SpellID: 361,
-        CardCount: 1
-      }),
-      game: Game,
-      afterMove(callback: () => void) {
-        callbacks.push(callback)
-      }
-    })
-
-    expect(callbacks).toHaveLength(0)
+    expect(room.readSkillState(361)).toBe(state)
+    room.destroy()
   })
 })

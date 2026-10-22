@@ -2,6 +2,7 @@ import type { Room } from '../Room'
 import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import { GUI_FU_ROLE_DATA_ID } from '../protocol/protocolRules'
 import type { CardID, NormalizedMoveCardFields, RawMoveCardEvent, SeatID } from '../types'
+import type { RoomSkillPlugin } from '../room/moveEvents'
 import { trackerLogger } from '@/utils/logger'
 
 /** 无 ID 的获得与角色数据相邻；只暂存一条原始移动，不提前改动任何牌实体。 */
@@ -82,4 +83,28 @@ function hasDiscardSourceCards(room: Room, cardIDs: readonly CardID[]): boolean 
     const card = room.cardIndex.get(cardID)
     return card?.location === 'discard' && card.isKnown && discard?.cards.includes(card) === true
   })
+}
+
+/** 角色数据首项为数量，后续身份按新增在前排列；尾部补零不属于持有牌。 */
+export function parseGuiFuCardIDs(datas: unknown): CardID[] {
+  if (!Array.isArray(datas)) return []
+  const count = datas[0]
+  const cardIDs = datas.slice(1, count + 1)
+  return cardIDs.length === count && cardIDs.every((cardID) => cardID > 0) ? cardIDs : []
+}
+
+export const guiFuPlugin: RoomSkillPlugin = {
+  id: 'guiFu',
+  // 后续任意移动都会使未配对记录失效，不能仅订阅 3709。
+  beforeNormalizeMove(patched, raw, room) {
+    if (deferGuiFuMove(room, raw, patched)) return 'defer'
+  },
+  onProtocolEvent(event, room) {
+    if (event.type !== 'roleData' || event.message.DataID !== GUI_FU_ROLE_DATA_ID) return
+    const { SeatID, Datas } = event.message
+    if (SeatID == null || SeatID === 255 || room.mySeatID == null || SeatID === room.mySeatID)
+      return
+    return completeGuiFuMove(room, SeatID, parseGuiFuCardIDs(Datas)) ?? undefined
+  },
+  onDeckInitialized: (room) => room.deleteSkillState(GUI_FU_ROLE_DATA_ID)
 }
