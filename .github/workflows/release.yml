@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-releases
   cancel-in-progress: false
 
 jobs:
@@ -39,13 +39,45 @@ jobs:
       - name: Build production userscript
         run: pnpm build:prod
 
+      - name: Checkout releases branch
+        uses: actions/checkout@v7
+        with:
+          ref: releases
+          path: release-branch
+          persist-credentials: true
+
+      - name: Push userscripts to releases branch
+        working-directory: release-branch
+        run: |
+          cp ../dist/daxiaochao.user.js ../dist/daxiaochao.meta.js .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- daxiaochao.user.js daxiaochao.meta.js
+          if git diff --cached --quiet; then
+            echo "Userscripts are already up to date."
+            exit 0
+          fi
+          git commit -m "chore(release): publish ${GITHUB_REF_NAME}"
+          git push origin HEAD:refs/heads/releases
+
       - name: Create and publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          cat > "$RUNNER_TEMP/release-notes.md" <<EOF
+          ## 安装方式
+
+          1. 浏览器需先安装用户脚本管理器（如 [Tampermonkey](https://www.tampermonkey.net/)）。
+          2. 选择以下任一方式安装：
+             - [从 GitHub 安装最新版本](https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/daxiaochao.user.js)
+             - [通过 CDN 安装最新版本](https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@releases/daxiaochao.user.js)：从 releases 分支获取，更新可能有缓存延迟。
+             - [通过 GreasyFork 安装](https://greasyfork.org/zh-CN/scripts/601076)：打开页面后点击安装。
+
+          EOF
           gh release create "$GITHUB_REF_NAME" \
             dist/daxiaochao.user.js \
             dist/daxiaochao.meta.js \
             --verify-tag \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
             --generate-notes \
             --title "$GITHUB_REF_NAME"

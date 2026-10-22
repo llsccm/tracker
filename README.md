@@ -15,6 +15,7 @@ work in progress
 2. 选择以下任一方式安装：
    - [通过 GreasyFork 安装](https://greasyfork.org/zh-CN/scripts/601076)：打开页面后点击安装或者 [点此安装](https://update.greasyfork.org/scripts/601076/%E4%B8%89%E5%9B%BD%E6%9D%80%E5%B0%8F%E6%8A%84%20Lite.user.js)
    - [从 GitHub Releases 安装](https://github.com/llsccm/tracker/releases/latest/download/daxiaochao.user.js)
+   - [通过 CDN 安装](https://cdn.jsdelivr.net/gh/llsccm/tracker@releases/daxiaochao.user.js)：从 `releases` 分支获取最新构建，更新可能有缓存延迟。
 
 ## 开源许可
 
