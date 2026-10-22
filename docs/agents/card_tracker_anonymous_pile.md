@@ -18,6 +18,8 @@
   覆盖另一个正 ID 暗实体。
 - 真实洗牌关闭旧 generation 时，尚未出现的身份转为 detached `suspendedKnownCards` 展示实体；
   它们不占牌堆、手牌或 mark 物理槽。
+- 公共范围揭示使用 `detachedKnownCards` 承载身份，不增加 `Room.cards`，不设置 suspended；
+  精确揭示或移动在原匿名槽上物化身份并回收载体。
 - 协议张数大于本地可枚举实体时只告警，不凭空补建牌堆槽。
 
 ## 按问题定位
@@ -48,7 +50,7 @@ flowchart LR
 
 ### 物理实体层
 
-- `Room.cards` 保存当前单局创建过的 `Card` 实体。
+- `Room.cards` 登记物理实体及历史 suspended 展示实体；公共范围载体单独保存，完整身份读面为 `trackedCards`。
 - `Zone('pile')` 保存有序物理牌堆，内部顺序为牌底到牌顶。
 - 未公开牌堆槽必须是稳定负 `id/entityID` 的匿名实体；`id=0` 只允许作为输入语义，不能写入实体。
 - 牌堆中可以存在已经公开的正 ID 明牌，例如已确认的牌顶或牌底；禁止存在正 ID 暗牌堆实体。
@@ -62,6 +64,7 @@ flowchart LR
 | `unlocatedIdentities` | 身份存在，但尚未绑定到具体 `Card` 实体 | 否 |
 | `cardIndex` | 正 ID 已绑定到实体，可位于公共区、玩家区或 suspended | 取决于实体位置 |
 | `suspendedKnownCards` | 旧世代未决身份的 detached 展示实体，位于 `location='suspended'` | 否 |
+| `detachedKnownCards` | 已公开但尚无精确物理槽的范围身份，仍登记在 `cardIndex` | 否 |
 
 `suspendedKnownCards` 中的牌仍登记在 `cardIndex`，但不属于任何物理 `Zone` 或玩家槽。它们用于保留
 “这个身份曾属于已关闭的旧牌堆世代、当前具体位置未知”的展示事实。
@@ -156,7 +159,7 @@ accountedPileCount
 
 ### 匿名牌离开牌堆
 
-- 常规摸牌 `MoveType=1` 必须按协议端点顺序移动实际实体；若端点包含已公开明牌，Controller 会把
+- 常规摸牌 `MoveType=1` 必须按协议端点顺序移动实际实体；若端点包含已公开明牌，RoomIdentity 会把
   对应身份作为 `knownPileIdentityIDsConsumed` 精确提交给账本。
 - 非标准牌堆获得且 `CardIDs=[]` 时只消费匿名槽，跳过全部已公开牌堆身份；`POSITION_RANDOM` 只表示
   匿名代表和批次边界不确定，不证明某个已知身份离堆。
@@ -249,12 +252,17 @@ accountedPileCount
 
 | 层 | 负责 | 不负责 |
 | --- | --- | --- |
-| `TrackerController` | 归一化协议、收集物理移动前后数量、构造 `PileIdentityLedgerMove` | 直接修改 cohort 或 Card 内部状态 |
-| `Room` / `RoomMovement` | 选择来源实体、移动物理槽、物化/匿名化、恢复 suspended、维护索引 | 自行猜测 cohort 中具体是哪张牌 |
+| `TrackerController` | 归一化和装饰协议、选择 Room 移动/洗牌/揭示入口 | 构造账本移动事件、后置提交普通移动或直接修改 cohort |
+| `Room` / `RoomIdentity` / `RoomMovement` | 采集移动快照、选择来源实体、移动物理槽、提交身份账本、物化/匿名化、恢复 suspended、收敛并维护索引 | 自行猜测 cohort 中具体是哪张牌 |
 | `PileIdentityLedger` | 提交身份集合、已知牌堆/弃牌身份、cohort 基数与 generation 事务 | 操作 `Card`、`Zone`、玩家区或 UI |
 
-普通移动先完成 Room 物理移动，再提交账本并按最终物理数量对账。洗牌必须先提交账本世代事务，再
-重建物理牌堆，避免物理状态领先于身份权威。
+普通移动先完成物理移动，再提交账本并按实际数量对账，最后统一收敛和检查；账本投影产生的匿名化
+也必须进入本次索引同步。直接调用 `Room.moveCards()` 具有相同事务边界，不再需要调用方补交账本。
+洗牌必须先提交账本世代事务，再重建物理牌堆，避免物理状态领先于身份权威。
+
+`Room.revealPublicCandidates()` 同步范围身份、位置候选和账本。`trackedCards` 供身份推断、玩家快照
+及索引重建读取，`cards` 继续承载物理实体登记。范围身份的展示名额与物理容量由
+`computeHandSlotAllocation()` 分别计算；不能因为候选占据名额而释放它实际依赖的匿名手牌槽。
 
 ## 诊断快照
 
@@ -300,6 +308,7 @@ accountedPileCount
 
 - `tests/tracker/pileIdentityLedger.test.ts`：纯账本事件、cohort 基数、降级、守恒与快照。
 - `tests/tracker/pileIdentityLedgerIntegration.test.ts`：Controller/Room/ledger 事务、洗牌与 suspended。
+- `tests/tracker/roomIdentityTransactions.test.ts`：Room 直调事务、取消预检、单次提交、范围身份重复揭示、匿名槽物化与容量守恒。
 - `tests/tracker/shuffleProtocolCount.test.ts`：匿名弃牌获得后的协议张数校正、候选保留、已知身份排除、零张及连续洗牌。
 - `tests/tracker/trackerController.test.ts`：协议端到端移动、游戏外实体、两阶段匿名揭示。
 - `tests/tracker/knownDiscardConfirm.test.ts`：known 缺口、正 ID 暗实体确认与诊断。

@@ -108,7 +108,7 @@ export class CardCounter {
       this.registerIdentity(cardID)
     })
 
-    this.room.cards.forEach((card) => {
+    this.room.trackedCards.forEach((card) => {
       this.addCard(card)
     })
   }
@@ -136,6 +136,13 @@ export class CardCounter {
   markDirty(card: Card | null | undefined): void {
     if (!card) return
     this.dirtyCards.add(card)
+  }
+
+  /** 回收 detached 载体，身份索引由接管它的物理槽继续复用。 */
+  removeCard(card: Card): void {
+    this.removeCardStatus(card)
+    this.registeredCards.delete(card)
+    this.dirtyCards.delete(card)
   }
 
   /**

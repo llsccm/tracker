@@ -4,12 +4,7 @@ import { createPublicCandidate } from '../candidate/publicCandidate'
 import type { Card } from '@/tracker/model/Card'
 import { Game, type GameState } from '../Game'
 import { summarizeMoveEvent } from '../helper/moveSummary'
-import {
-  getProtocolMoveSpecialLabel,
-  MOVE_TYPE,
-  normalizeMoveEvent
-} from '../protocol/MoveEventNormalizer'
-import type { PileIdentityLedgerMove } from '../PileIdentityLedger'
+import { getProtocolMoveSpecialLabel, normalizeMoveEvent } from '../protocol/MoveEventNormalizer'
 import {
   getProtocolMarkSpellID,
   getProtocolPlayerSubZone,
@@ -21,6 +16,7 @@ import type {
   CardID,
   MoveOptions,
   NormalizedMoveEvent,
+  PatchedMoveCardFields,
   PublicPosition,
   PublicZoneName,
   RawMoveCardEvent,
@@ -32,9 +28,11 @@ import type {
   TrackerView
 } from '../types'
 import { registerDefaultMoveEventHandlers } from '../skill/registerHandlers'
-import { commitDuoQiMove, observeDuoQiKnownCardIDs } from '../skill/DuoQi'
-import { completeGuiFuMove, deferGuiFuMove } from '../skill/GuiFu'
-import { GUI_FU_ROLE_DATA_ID } from '../protocol/protocolRules'
+import type { SkillProtocolEvent } from '../skill/protocolEvents'
+import {
+  hasMixedTrackerMoveVisibility,
+  normalizeTrackerMovePosition
+} from '../protocol/protocolRules'
 import { trackerLogger } from '@/utils/logger'
 
 interface RevealTarget {
@@ -195,7 +193,6 @@ export class TrackerController {
       return
     }
 
-    this.trackerRoom.deleteSkillState(GUI_FU_ROLE_DATA_ID)
     this.trackerRoom.initDeck(cardIDs)
     this.controllerView.mount(this.trackerRoom)
     this.controllerLogger.info('Room 牌堆初始化完成', { cardIDs })
@@ -279,20 +276,27 @@ export class TrackerController {
    * 这层不直接改卡牌状态，状态变更统一收口在 Room.moveCards()/shufflePile()/showCards。
    */
   syncTrackerMove(
-    patched: Readonly<RawMoveCardEvent>,
-    raw: Readonly<RawMoveCardEvent> = patched
+    input: Readonly<RawMoveCardEvent>,
+    source: Readonly<RawMoveCardEvent> = input
   ): void {
     const readyRoom = this.getReadyTrackerRoom()
     if (!readyRoom) return
 
+    const raw = Object.freeze({ ...source, CardIDs: Object.freeze([...source.CardIDs]) })
+    const patched: PatchedMoveCardFields = { ...input, CardIDs: [...input.CardIDs] }
+
     try {
+      Object.assign(patched, normalizeTrackerMovePosition(patched))
       this.controllerLogger.info(getProtocolMoveSpecialLabel(patched) ?? '移动协议输入', {
         raw: this.summarizeProtocolMove(raw),
         patched: this.summarizeProtocolMove(patched)
       })
 
-      // 诡伏配对只依赖协议字段；暂存时无需构造尚不能执行的标准事件。
-      if (deferGuiFuMove(readyRoom, raw, patched)) return
+      if (readyRoom.beforeNormalizeMove(patched, raw) === 'defer') return
+      if (hasMixedTrackerMoveVisibility(patched)) {
+        this.controllerLogger.warn('移动协议明暗牌混合，按暗牌处理', { raw, patched })
+        patched.CardIDs = []
+      }
       const normalizedEvent = normalizeMoveEvent(patched, raw)
 
       // 来源区域由协议给出；本地代表子区可能仍为 mark，不能覆盖 hand/mark 完整位置候选。
@@ -327,8 +331,6 @@ export class TrackerController {
 
       // 技能处理器
       const event = readyRoom.decorateMoveEvent(normalizedEvent)
-      const pileCountBefore = readyRoom.zones.get('pile')?.cards.length ?? 0
-      const knownPileDrawCards = this.collectRegularDrawKnownPileCards(readyRoom, patched, event)
 
       this.controllerLogger.debug('移动事件装饰完成', {
         before: summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS),
@@ -348,7 +350,7 @@ export class TrackerController {
           '移动事件分支: revealPublicCandidate',
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
-        this.revealPublicCandidateCards(event)
+        if (!this.revealPublicCandidateCards(event)) return
       } else if (event.type === 'noop') {
         this.controllerLogger.info(
           '移动事件跳过',
@@ -360,57 +362,35 @@ export class TrackerController {
           '移动事件分支: showCards',
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
-        this.showTrackerCards(event)
+        if (!this.showTrackerCards(event)) return
       } else if (event.type === 'shuffleDiscardIntoPile') {
         this.controllerLogger.info(
           '移动事件分支: shuffleDiscardIntoPile',
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
 
-        // 洗牌闭世代依赖账本提交结果，因此把同一条身份事件交给 Room，在物理区重建前提交；
-        // 其它移动仍保持“先移动实体、再写账本”的普通后置流程。
-        // 注意：createPileIdentityMove 在 readyRoom.shufflePile 之前调用，因此
-        // visiblePileIdentityIDsAfter 及依赖 pileCountAfter 的取值都是事务开始、洗牌前的可见状态。
-        const pileIdentityMove = this.createPileIdentityMove(
-          patched,
-          event,
-          readyRoom,
-          pileCountBefore,
-          knownPileDrawCards
-        )
-
         readyRoom.shufflePile({
-          cardCount: event.cardCount,
-          identityMove: pileIdentityMove
+          cardCount: event.cardCount
         })
-
-        this.controllerView.scheduleRender()
-
-        return
       } else {
         this.controllerLogger.info(
           '移动事件分支: moveCards',
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
-        const moveCompleted = readyRoom.moveCards(event.cardIDs, event.toZone, event.options)
+        const moveCompleted = readyRoom.moveCards(event.cardIDs, event.toZone, {
+          ...event.options,
+          pileIdentityEvent: event
+        })
         if (!moveCompleted) {
           this.controllerLogger.warn('移动来源解析失败，已取消本次 tracker 移动', {
             cardIDs: event.cardIDs
           })
           return
         }
-        commitDuoQiMove(readyRoom, event)
       }
 
-      const pileIdentityMove = this.createPileIdentityMove(
-        patched,
-        event,
-        readyRoom,
-        pileCountBefore,
-        knownPileDrawCards
-      )
-      readyRoom.applyPileIdentityMove(pileIdentityMove)
-      observeDuoQiKnownCardIDs(readyRoom, event.cardIDs)
+      readyRoom.afterMoveCommitted(event)
+      readyRoom.notifyCardsRevealed(event.cardIDs)
       this.controllerView.scheduleRender()
     } catch (e) {
       trackerLogger.error(
@@ -421,126 +401,27 @@ export class TrackerController {
     }
   }
 
-  /** 把规范化后的协议移动转换为生产身份账本事件。 */
-  private createPileIdentityMove(
-    event: RawMoveCardEvent,
-    normalizedEvent: NormalizedMoveEvent,
-    room: Room,
-    pileCountBefore: number,
-    knownPileDrawCards: readonly Card[]
-  ): Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'> {
-    const fromZone = event.FromZone == null ? null : Number(event.FromZone)
-    const cardIDs = this.normalizeIDs(normalizedEvent.options.pileIdentityCardIDs ?? event.CardIDs)
-    const pileCountAfter = room.zones.get('pile')?.cards.length ?? 0
-    const knownPileIdentityIDsConsumed = knownPileDrawCards
-      .filter((card) => card.location !== 'pile' && card.id > 0)
-      .map((card) => card.id)
-    const actualPileConsumptionCount = Math.max(0, pileCountBefore - pileCountAfter)
-    const anonymousPileConsumptionCount =
-      fromZone === 1 && cardIDs.length === 0
-        ? Math.max(0, actualPileConsumptionCount - knownPileIdentityIDsConsumed.length)
-        : undefined
-    const visiblePileIdentityIDsAfter = this.collectVisiblePileTopIdentityIDs(room)
-
-    return {
-      eventType: normalizedEvent.type,
-      fromZone,
-      toZone: event.ToZone == null ? null : Number(event.ToZone),
-      cardIDs,
-      cardCount: normalizedEvent.cardCount,
-      pileCountBefore,
-      anonymousPileConsumptionCount,
-      knownPileIdentityIDsConsumed,
-      visiblePileIdentityIDsAfter,
-      fromPosition: normalizedEvent.options.fromPosition,
-      toPosition: normalizedEvent.options.position,
-      moveType: normalizedEvent.moveType,
-      spellID: event.SpellID
-    }
-  }
-
-  private collectRegularDrawKnownPileCards(
-    room: Room,
-    event: RawMoveCardEvent,
-    normalizedEvent: NormalizedMoveEvent
-  ): Card[] {
-    if (
-      Number(event.FromZone) !== 1 ||
-      this.normalizeIDs(event.CardIDs).length > 0 ||
-      Number(normalizedEvent.moveType) !== MOVE_TYPE.DRAW
-    ) {
-      return []
-    }
-
-    const pileCards = room.zones.get('pile')?.cards ?? []
-    const count = Math.min(Math.max(0, normalizedEvent.cardCount), pileCards.length)
-    const sourceCards =
-      normalizedEvent.options.fromPosition === POSITION_BOTTOM
-        ? pileCards.slice(0, count)
-        : pileCards.slice(-count)
-    return sourceCards.filter((card) => card.id > 0 && card.isKnown === true)
-  }
-
-  private collectVisiblePileTopIdentityIDs(room: Room): CardID[] {
-    const pileCards = room.zones.get('pile')?.cards ?? []
-    const visibleCardIDs: CardID[] = []
-    for (let index = pileCards.length - 1; index >= 0; index -= 1) {
-      const card = pileCards[index]
-      if (card?.isKnown !== true || card.id <= 0) break
-      visibleCardIDs.push(card.id)
-    }
-    return this.normalizeIDs(visibleCardIDs)
-  }
-
   /**
    * 记录公共区范围揭示。
    * 与普通 showCards 不同，这里只确认身份属于某个端点范围，不占用或重排具体公共区槽位。
    *
    * 实体与身份处理原则：
    * - 优先复用已物化的实体（`cardIndex`）。
-   * - 范围揭示不占用或重排具体公共区匿名槽；未定位身份通过场外占位物化，
-   *   以保留可见身份及其公共区范围候选。
-   * - 身份物化失败时直接跳过该 ID 并保留警告日志。
+   * - 未定位身份由 Room 创建 detached 载体，不增加物理容量，也不重排匿名槽。
+   * - 后续精确揭示或移动由 Room 在真实匿名槽上物化，并回收临时载体。
    */
-  private revealPublicCandidateCards(event: NormalizedMoveEvent): void {
+  private revealPublicCandidateCards(event: NormalizedMoveEvent): boolean {
     const readyRoom = this.getReadyTrackerRoom()
     const reveal = event.options.publicCandidateReveal
-    if (!readyRoom || !reveal || !(Number(reveal.count) > 0)) return
+    if (!readyRoom || !reveal || !(Number(reveal.count) > 0)) return false
 
     const ids = this.normalizeIDs(event.cardIDs).filter((id) => id > 0)
     const locationCandidate = fromPublicCandidate(
       createPublicCandidate(reveal.zone, reveal.position, Number(reveal.count))
     )
-    if (ids.length === 0 || !locationCandidate) return
+    if (ids.length === 0 || !locationCandidate) return false
 
-    const cards = ids
-      .map((id) => {
-        const existing = readyRoom.cardIndex.get(id)
-        if (existing) {
-          existing.confirmKnown()
-          return existing
-        }
-
-        // 场外实体只承载已公开身份；原匿名牌堆槽继续承担牌堆数量和顺序。
-        const [target] = readyRoom.createExternalCards([], 1)
-        const materialized = readyRoom.materialize(id, target)
-
-        if (!materialized) {
-          this.controllerLogger.warn('公共区范围揭示身份无法物化，已跳过', {
-            id,
-            zone: reveal.zone,
-            position: locationCandidate.position
-          })
-        }
-
-        return materialized
-      })
-      .filter((card): card is Card => Boolean(card))
-
-    cards.forEach((card) => {
-      card.setLocationCandidates([locationCandidate], 'revealPublicCandidate')
-    })
-    readyRoom.resolveConstraints()
+    const cards = readyRoom.revealPublicCandidates(ids, locationCandidate)
 
     this.controllerLogger.info('公共区范围揭示完成', {
       ids,
@@ -549,18 +430,19 @@ export class TrackerController {
       count: reveal.count,
       resolvedCount: cards.length
     })
+    return cards.length > 0
   }
 
   /**
    * 处理“展示/看牌”类移动事件。
    * 这类协议只说明卡牌变为可见，不一定意味着发生了普通移动，因此单独走明牌同步路径。
    */
-  private showTrackerCards(event: NormalizedMoveEvent): void {
+  private showTrackerCards(event: NormalizedMoveEvent): boolean {
     const readyRoom = this.getReadyTrackerRoom()
-    if (!readyRoom) return
+    if (!readyRoom) return false
 
     const ids = this.normalizeIDs(event.cardIDs).filter((id) => id > 0)
-    if (ids.length === 0) return
+    if (ids.length === 0) return false
 
     const raw = event.raw ?? event.options?.sourceEvent?.raw ?? {}
     const move = event.protocol
@@ -585,7 +467,7 @@ export class TrackerController {
         spellID
       })
 
-      readyRoom.moveCards(ids, 'player', {
+      return readyRoom.moveCards(ids, 'player', {
         toSeatID: seatID,
         fromSeatID: seatID,
         fromZone: null,
@@ -598,8 +480,6 @@ export class TrackerController {
           raw
         }
       })
-
-      return
     }
 
     const zoneName = getProtocolPublicZone(zone, event.toZone ?? 'process')
@@ -623,15 +503,13 @@ export class TrackerController {
       // 判定获得既会展示牌面，也会把实体移出来源公共区；复用标准移动链路完成来源置换，
       // 并清空协议残留的玩家槽位，避免公共区来源被误判为手牌。
       knownCards.forEach((card) => card.confirmKnown())
-      readyRoom.moveCards(ids, zoneName, {
+      return readyRoom.moveCards(ids, zoneName, {
         ...event.options,
         fromZone: sourceZoneName,
         fromSeatID: null,
         fromSubZone: null,
         cardCount: ids.length
       })
-
-      return
     }
 
     // 牌堆同区展示描述的是端点明牌事实，不能只确认牌面而保留原随机位置。
@@ -644,6 +522,8 @@ export class TrackerController {
       reposition: shouldRepositionPile,
       cardIDsTopFirst: shouldRepositionPile && position === POSITION_TOP
     })
+    readyRoom.applyPileIdentityReveal(ids)
+    return true
   }
 
   /**
@@ -670,7 +550,7 @@ export class TrackerController {
           readyRoom.syncObservedPlayerHandCount(seatID, handCount, { resolve: false })
         }
 
-        readyRoom.moveCards(ids, 'player', {
+        const completed = readyRoom.moveCards(ids, 'player', {
           toSeatID: seatID,
           fromSeatID: target.fromSeatID ?? (target.fromZone == null ? seatID : undefined),
           fromZone: target.fromZone ?? null,
@@ -684,6 +564,7 @@ export class TrackerController {
             raw: { target, cardIDs: ids }
           }
         })
+        if (!completed) return
       } else if (target.type === 'public') {
         const zoneName = target.zoneName ?? 'pile'
         const position = target.position ?? POSITION_TOP
@@ -700,20 +581,23 @@ export class TrackerController {
       // target 只描述展示目标，不能证明已有实体真的离开原公共区；例如弃牌区重复明示
       // 仍会保持在 discard。让 Room 根据同步完成后的 Card.location 写入账本分区。
       readyRoom.applyPileIdentityReveal(ids)
-      observeDuoQiKnownCardIDs(readyRoom, ids)
+      readyRoom.notifyCardsRevealed(ids)
       this.controllerView.scheduleRender()
     } catch (e) {
       trackerLogger.error('明牌同步失败', e, { target, cardIDs: ids })
     }
   }
 
-  /** 补齐相邻诡伏移动的身份，再走普通移动管线，数量和身份账本都只提交一次。 */
-  syncTrackerGuiFuRoleData(seatID: SeatID, cardIDs: readonly CardID[]): void {
+  /** 分发非移动技能事实；插件补齐的待提交移动仍走同一条移动管线。 */
+  dispatchSkillProtocolEvent(event: SkillProtocolEvent): void {
     const readyRoom = this.getReadyTrackerRoom()
     if (!readyRoom) return
-
-    const move = completeGuiFuMove(readyRoom, seatID, cardIDs)
-    if (move) this.syncTrackerMove(move.patched, move.raw)
+    try {
+      const moves = readyRoom.dispatchSkillProtocolEvent(event)
+      for (const move of moves) this.syncTrackerMove(move.patched, move.raw)
+    } catch (error) {
+      trackerLogger.error('技能协议处理失败', error, event)
+    }
   }
 
   /**
@@ -885,10 +769,15 @@ export class TrackerController {
       readyRoom.materializeAtPublicEndpoint(ids, target.zoneName, target.position)
     }
 
-    const existingCards = readyRoom.findCardsByIDs(ids)
+    const existingCards = readyRoom
+      .findCardsByIDs(ids)
+      .filter((card) => !readyRoom.detachedKnownCards.has(card))
     const existingIDs = new Set(existingCards.map((card) => card.id))
     const missingIDs = ids.filter(
-      (id) => !existingIDs.has(id) && !readyRoom.unlocatedIdentities.has(id)
+      (id) =>
+        !existingIDs.has(id) &&
+        !readyRoom.unlocatedIdentities.has(id) &&
+        !readyRoom.cardIndex.has(id)
     )
     const createdCards =
       missingIDs.length > 0 ? readyRoom.createExternalCards(missingIDs, missingIDs.length) : []

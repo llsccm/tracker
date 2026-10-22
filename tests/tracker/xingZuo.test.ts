@@ -15,7 +15,8 @@ function setupExchange(bottomIDs: number[] = [1, 2, 3], handIDs: number[] = []) 
     1
   )
   controller.initTrackerDeck(Array.from({ length: 20 }, (_, index) => index + 1))
-  controller.syncTrackerMove(protocolMove({ ToID: 4, CardCount: 4, CardIDs: handIDs }))
+  controller.syncTrackerMove(protocolMove({ ToID: 4, CardCount: 4, CardIDs: [] }))
+  if (handIDs.length) controller.revealTrackerCards({ type: 'player', seatID: 4 }, handIDs)
   controller.revealTrackerCardsInZone({ id: 255, zone: 1, pos: POSITION_BOTTOM }, bottomIDs)
   const room = controller.getTrackerRoom()!
   return { controller, room, errorSpy }

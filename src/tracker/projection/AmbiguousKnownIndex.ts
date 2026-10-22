@@ -51,11 +51,11 @@ export class AmbiguousKnownIndex {
    */
   rebuild(groups: ConstraintGroup[] = [], options: { record?: boolean } = {}): void {
     const { record = true } = options
-    if (record) recordTraversal('ambiguousKnownIndex:rebuild', this.room.cards.length)
+    if (record) recordTraversal('ambiguousKnownIndex:rebuild', this.room.trackedCards.length)
     this.items.clear()
     this.containerDependentCards.clear()
 
-    this.room.cards.forEach((card) => {
+    this.room.trackedCards.forEach((card) => {
       const item = this.buildItem(card, this.getRelatedGroups(card, groups))
       if (item) this.items.set(card.id, item)
       if (this.hasContainerLocationCandidates(card)) this.containerDependentCards.add(card)

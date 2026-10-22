@@ -6,16 +6,16 @@
 
 ## 按需细节路由
 
-| 关注方向 | 按需文档 | 触发场景 |
-| --- | --- | --- |
-| Room 单局容器与行为模块 | [`room.md`](room.md) | 修改 `Room.ts`、判断状态所有权、选择 Room/Movement/Constraints/PublicZones 落点，或排查单局主流程 |
-| Card / Player / Zone 模型 | [`card_player_model.md`](card_player_model.md) | 排查牌实体字段、玩家区投影、公共区顺序，或新增子区/装备容器/标记区 |
-| 匿名牌堆与身份账本 | [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md) | 匿名物理槽、`PileIdentityLedger`、cohort/generation、`unlocated`/`suspended` 分区、物化、洗牌身份守恒 |
-| 约束收敛与不动点 | [`card_tracker_convergence.md`](card_tracker_convergence.md) | 修改 `resolveConstraints()`、`ConstraintGroup`、完整位置名额、观测手牌数排他，或排查过度收敛、欠收敛、空转与遍历量回归 |
-| 技能与协议特例 | [`card_tracker_skills.md`](card_tracker_skills.md) | 暗置标记、观虚 `987/988`、整手牌交换、骋烈 `3208`、诫厉 `3483`、天候 `3903` 等 |
-| 对局临时状态 | [`skill_state.md`](skill_state.md) | 使用 GameState 统一状态仓库、选择 key 命名空间，或核对当前技能使用清单 |
-| 历史验证记录 | [`card_tracker_validation_history.md`](card_tracker_validation_history.md) | 追溯里程碑、旧测试数量、遍历基线或历史决策 |
-| 回放历史证据 | [`replay.md`](replay.md) | 任务明确涉及 JSONL 回放、`tests/replay/` 或匿名槽回放决策 |
+| 关注方向                  | 按需文档                                                                   | 触发场景                                                                                                               |
+| ------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Room 单局容器与行为模块   | [`room.md`](room.md)                                                       | 修改 `Room.ts`、判断状态所有权、选择 Room/Movement/Constraints/PublicZones 落点，或排查单局主流程                      |
+| Card / Player / Zone 模型 | [`card_player_model.md`](card_player_model.md)                             | 排查牌实体字段、玩家区投影、公共区顺序，或新增子区/装备容器/标记区                                                     |
+| 匿名牌堆与身份账本        | [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md)         | 匿名物理槽、`PileIdentityLedger`、cohort/generation、`unlocated`/`suspended` 分区、物化、洗牌身份守恒                  |
+| 约束收敛与不动点          | [`card_tracker_convergence.md`](card_tracker_convergence.md)               | 修改 `resolveConstraints()`、`ConstraintGroup`、完整位置名额、观测手牌数排他，或排查过度收敛、欠收敛、空转与遍历量回归 |
+| 技能与协议特例            | [`card_tracker_skills.md`](card_tracker_skills.md)                         | 暗置标记、观虚 `987/988`、整手牌交换、骋烈 `3208`、诫厉 `3483`、天候 `3903` 等                                         |
+| 对局临时状态              | [`skill_state.md`](skill_state.md)                                         | 使用 GameState 统一状态仓库、选择 key 命名空间，或核对当前技能使用清单                                                 |
+| 历史验证记录              | [`card_tracker_validation_history.md`](card_tracker_validation_history.md) | 追溯里程碑、旧测试数量、遍历基线或历史决策                                                                             |
+| 回放历史证据              | [`replay.md`](replay.md)                                                   | 任务明确涉及 JSONL 回放、`tests/replay/` 或匿名槽回放决策                                                              |
 
 ## 当前定位
 
@@ -49,7 +49,7 @@
 ### `Room` 行为模块
 
 - `PlayerSnapshot` 位于 `src/tracker/projection/playerSnapshot.ts`，独占玩家快照缓存；新实体通过 `Room.registerCardEntity()` 同时登记快照及区域索引顺序。
-- `RoomMoveEvents` 位于 `src/tracker/room/moveEvents.ts`，维护按局隔离的处理器注册表、领域输入补齐及有序装饰链。
+- `RoomMoveEvents` 位于 `src/tracker/room/moveEvents.ts`，维护按局隔离的技能插件注册表，统一归一化前补牌、装饰、成功提交、明牌通知、非移动协议与牌堆重建钩子；契约见 [`room.md`](room.md)。
 - `RoomIdentity` 位于 `src/tracker/room/identity.ts`，实现物化、匿名化、移动身份批处理、已有身份接管和外部实体创建；Room 保留身份账本事务与稳定入口。
 
 - `RoomMovement` 位于 `src/tracker/room/movement/RoomMovement.ts`，通过组合 `RoomMovementSources`、`RoomMovementCandidates`、`RoomMovementHiddenMarks` 实现移动阶段；共享读取集中在 `room/movement/sourceQueries.ts`，不再使用纵向多层继承。Room 保留阶段顺序与收敛边界，详见 [`room.md`](room.md)。
@@ -174,7 +174,7 @@
 - 尚未完整恢复旧版 `cardManager.pack()` 链表推理承载的所有不确定性语义；宴戏、权变、诫厉等技能仍需要用新版 `ConstraintGroup` 做进一步精细化。
 - 诫厉协议已对视角分流：发动者的 `GsCRoleOptTargetNtf` 携带完整牌堆/手牌 ID，目标与其它座位只有 `Params=[pileCount]`。生产目标用 Type 53 只定位自己被换走手牌的回堆槽，其它槽位保持匿名；发动者只走默认移动。第三方视角不消费牌 ID、不移动物理实体，仅在完整交换链结算后把目标手牌明牌扩展为“原位置 / 牌堆顶前 pileCount 张”弱候选；开发模式只允许目标视角做完整身份调试。
 - 主动运行路径不再依赖 `cardManager.findKZ()`；旧链表辅助与未接入技能文件已清理。
-- 技能处理器目前仍是偏单牌回调，可能需要向批量拦截器演进。
+- 技能生命周期已通过 `RoomSkillPlugin` 批量分发；跨协议的通用中断协调器仍未实现，现有技能各自维护序列有效性。
 - 已有 `pnpm test:tracker` 的 Node/Vitest 回归覆盖导入边界、Controller、位置候选、公共候选、位置索引、暗置标记、脏渲染与遍历基线等；仍需补齐更多 `Room.moveCards()` 组合路线与浏览器运行时验证。
 - `CardLocationIndex`、`Room.notifyCardChanged()` 与 `view/dirtyRenderState.ts` 已接入：面板与玩家手牌可按脏集合局部重绘；仍可继续收紧边界场景与高频刷新策略。
 - cohort 分组 UI 已裁决不接入；若未来重新评估，应以独立产品需求启动，不要恢复迁移期

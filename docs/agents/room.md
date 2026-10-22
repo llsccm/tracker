@@ -8,17 +8,17 @@
 
 ## 阅读路由
 
-| 当前任务 | 建议阅读 | 说明 |
-| --- | --- | --- |
-| 快速理解 Room 的职责与主流程 | 本文第一至四层 | 单局状态源、生命周期、状态所有权、写入管线 |
-| 查找读取、移动、揭示或物化 API | [`tracker_api.md`](tracker_api.md) | 稳定公开入口与调用示例 |
-| 修改 `Card` / `Player` / `Zone` | [`card_player_model.md`](card_player_model.md) | 实体字段、候选主模型、玩家投影与公共区顺序 |
-| 修改约束或排查不收敛 | [`card_tracker_convergence.md`](card_tracker_convergence.md) | 不动点、数量约束、`changed` 契约与性能护栏 |
-| 处理匿名槽、物化、洗牌身份 | [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md) | cohort/generation、身份分区与 `PileIdentityLedger` |
-| 处理技能或协议特例 | [`card_tracker_skills.md`](card_tracker_skills.md) / [`../protocols/README.md`](../protocols/README.md) | 技能装饰、协议字段样例与特殊移动语义 |
-| 使用技能临时状态 | [`skill_state.md`](skill_state.md) | GameState 统一仓库、命名空间、Room 薄入口与当前技能清单 |
-| 排查 Room 创建、挂载或销毁 | [`lifecycle.md`](lifecycle.md) | Controller、Room、View 的应用级时序 |
-| 选择回归命令或补测试 | [`testing.md`](testing.md) | tracker 测试、类型检查、lint 与构建 |
+| 当前任务                        | 建议阅读                                                                                                | 说明                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| 快速理解 Room 的职责与主流程    | 本文第一至四层                                                                                          | 单局状态源、生命周期、状态所有权、写入管线              |
+| 查找读取、移动、揭示或物化 API  | [`tracker_api.md`](tracker_api.md)                                                                      | 稳定公开入口与调用示例                                  |
+| 修改 `Card` / `Player` / `Zone` | [`card_player_model.md`](card_player_model.md)                                                          | 实体字段、候选主模型、玩家投影与公共区顺序              |
+| 修改约束或排查不收敛            | [`card_tracker_convergence.md`](card_tracker_convergence.md)                                            | 不动点、数量约束、`changed` 契约与性能护栏              |
+| 处理匿名槽、物化、洗牌身份      | [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md)                                      | cohort/generation、身份分区与 `PileIdentityLedger`      |
+| 处理技能或协议特例              | [`card_tracker_skills.md`](card_tracker_skills.md) / [`../protocols/README.md`](../protocols/README.md) | 技能装饰、协议字段样例与特殊移动语义                    |
+| 使用技能临时状态                | [`skill_state.md`](skill_state.md)                                                                      | GameState 统一仓库、命名空间、Room 薄入口与当前技能清单 |
+| 排查 Room 创建、挂载或销毁      | [`lifecycle.md`](lifecycle.md)                                                                          | Controller、Room、View 的应用级时序                     |
+| 选择回归命令或补测试            | [`testing.md`](testing.md)                                                                              | tracker 测试、类型检查、lint 与构建                     |
 
 ## 第一层：先建立最小模型
 
@@ -55,13 +55,13 @@ flowchart LR
 
 ## 第二层：单局生命周期
 
-| 阶段 | 核心入口 | Room 状态 |
-| --- | --- | --- |
-| 构造 | `new Room({ gameState })` | 创建公共 `Zone`、行为模块、约束/索引容器与身份账本，并绑定本局 `GameState`；此时还没有可运行牌堆 |
-| 注册座位 | `registerPlayers(infos, currentUserID)` | 重建 `players`、`seatIDs`、`size`，识别 `mySeatID`，同步录像状态与固定视角前置数据 |
-| 初始化牌堆 | `initDeck(cardIDs)` | 清空旧牌池，创建等量匿名物理槽，登记真实身份，初始化 generation 0、索引、快照与 `CardCounter`，最后置 `isDeckReady = true` |
-| 对局运行 | `moveCards()` / `shufflePile()` / reveal 相关入口 | 更新物理实体、身份账本、候选与手牌数事实，再执行收敛和派生同步 |
-| 销毁 | `destroy()` | 与 `GameState` 解绑并触发统一临时状态清理，再清空玩家、Zone、牌实体、约束、身份分区、脏状态和座位信息；整个实例随即失效，不再被 Controller 复用 |
+| 阶段       | 核心入口                                          | Room 状态                                                                                                                                       |
+| ---------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 构造       | `new Room({ gameState })`                         | 创建公共 `Zone`、行为模块、约束/索引容器与身份账本，并绑定本局 `GameState`；此时还没有可运行牌堆                                                |
+| 注册座位   | `registerPlayers(infos, currentUserID)`           | 重建 `players`、`seatIDs`、`size`，识别 `mySeatID`，同步录像状态与固定视角前置数据                                                              |
+| 初始化牌堆 | `initDeck(cardIDs)`                               | 清空旧牌池，创建等量匿名物理槽，登记真实身份，初始化 generation 0、索引、快照与 `CardCounter`，最后置 `isDeckReady = true`                      |
+| 对局运行   | `moveCards()` / `shufflePile()` / reveal 相关入口 | 更新物理实体、身份账本、候选与手牌数事实，再执行收敛和派生同步                                                                                  |
+| 销毁       | `destroy()`                                       | 与 `GameState` 解绑并触发统一临时状态清理，再清空玩家、Zone、牌实体、约束、身份分区、脏状态和座位信息；整个实例随即失效，不再被 Controller 复用 |
 
 浏览器侧可能在玩家注册后进行一次早期 View 挂载，但只有 `initDeck()` 完成后 Room 才能通过
 `getReadyTrackerRoom()` 对外提供完整记牌能力。具体挂载时序不要在 Room 内推断，见
@@ -77,24 +77,25 @@ Controller 每次创建 Room 后、注册座位前调用 `Game.beginPlayback()`�
 
 ### 权威事实
 
-| 分区 | 代表字段 | 语义 |
-| --- | --- | --- |
-| 座位与视角 | `players`、`seatIDs`、`size`、`mySeatID`、`firstID` | 本局玩家集合、主视角与固定显示顺位前置事实 |
-| 物理牌实体 | `cards`、`zones`、`cardIndex` | 已创建的 `Card` 实体、公共区有序关系与已定位正 ID 索引 |
-| 身份分区 | `deckIdentities`、`unlocatedIdentities`、`suspendedKnownCards`、`pileIdentityLedger` | 暗牌堆真实身份集合、未定位身份、暂停展示实体与 cohort/generation 权威账本 |
-| 推断约束 | `constraintGroups` | 局部位置/数量约束 |
-| 技能临时账本 | GameState `tracker` scope（经 `read/ensure/set/deleteSkillState` 访问） | 当前 Room 的技能推断状态；存储和生命周期由 GameState 统一管理 |
-| 扩展注册表 | `skillHandlers`、`moveEventHandlers` | 移动装饰器与事件处理器；随 Room 销毁，不跨局复用状态 |
+| 分区         | 代表字段                                                                             | 语义                                                                                |
+| ------------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| 座位与视角   | `players`、`seatIDs`、`size`、`mySeatID`、`firstID`                                  | 本局玩家集合、主视角与固定显示顺位前置事实                                          |
+| 物理牌实体   | `cards`、`zones`、`cardIndex`                                                        | 物理实体、公共区有序关系与正 ID 索引；历史 suspended 展示实体仍登记于 `cards`       |
+| 范围身份载体 | `detachedKnownCards`、`trackedCards`                                                 | 公共范围揭示不增加 `cards`；`trackedCards` 合并物理实体与范围身份，供推断和投影读取 |
+| 身份分区     | `deckIdentities`、`unlocatedIdentities`、`suspendedKnownCards`、`pileIdentityLedger` | 暗牌堆真实身份集合、未定位身份、暂停展示实体与 cohort/generation 权威账本           |
+| 推断约束     | `constraintGroups`                                                                   | 局部位置/数量约束                                                                   |
+| 技能临时账本 | GameState `tracker` scope（经 `read/ensure/set/deleteSkillState` 访问）              | 当前 Room 的技能推断状态；存储和生命周期由 GameState 统一管理                       |
+| 扩展注册表   | `RoomMoveEvents` 的技能插件、`skillHandlers` 与旧装饰入口读面                        | 技能生命周期与单牌定位扩展；随 Room 销毁，不跨局复用状态                            |
 
 ### 派生状态与缓存
 
-| 分区 | 代表字段 | 更新方式 |
-| --- | --- | --- |
-| 位置投影 | `locationIndex` | `resolveConstraints()` 消费卡牌脏事件和公共区脏集合，断档时全量重建 |
-| 模糊明牌反查 | `ambiguousKnownIndex` | 通常增量更新；约束组结构变化时全量重建 |
-| 计数查询 | `counter` | `initDeck()` 后创建，收敛尾部按脏牌增量更新 |
-| 玩家区快照 | `PlayerSnapshot` 内部数组、成员集合、游标与创建顺序 | Room 保留 `playerCardsSnapshot` 只读 getter；按 `dirtyCardEvents` 增量刷新，断档时回退全量 |
-| View 脏状态 | `viewDirty`、`dirtyCards`、`dirtyCardEvents`、`dirtyPublicZones` | 由卡牌/Zone 变更入口记录，供索引和视图各自按游标消费 |
+| 分区         | 代表字段                                                         | 更新方式                                                                                   |
+| ------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 位置投影     | `locationIndex`                                                  | `resolveConstraints()` 消费卡牌脏事件和公共区脏集合，断档时全量重建                        |
+| 模糊明牌反查 | `ambiguousKnownIndex`                                            | 通常增量更新；约束组结构变化时全量重建                                                     |
+| 计数查询     | `counter`                                                        | `initDeck()` 后创建，收敛尾部按脏牌增量更新                                                |
+| 玩家区快照   | `PlayerSnapshot` 内部数组、成员集合、游标与创建顺序              | Room 保留 `playerCardsSnapshot` 只读 getter；按 `dirtyCardEvents` 增量刷新，断档时回退全量 |
+| View 脏状态  | `viewDirty`、`dirtyCards`、`dirtyCardEvents`、`dirtyPublicZones` | 由卡牌/Zone 变更入口记录，供索引和视图各自按游标消费                                       |
 
 派生数组、索引桶和快照都不是写入事实。不要直接修改 `locationIndex`、
 `Player.knownHandCards`、`Player.candidateHandCards` 或其它视图分组。
@@ -103,19 +104,27 @@ Controller 每次创建 Room 后、注册座位前调用 `Game.beginPlayback()`�
 
 ### 普通协议移动
 
-原始协议消息先由 `src/handler/PubGsCMoveCard.js` 完成协议预处理、位置规范化、`CardIDs` 修正和
-技能副作用，再交给 `src/tracker/runtime/bridge.ts` 装配的 `tracker` 同步归一化移动。不要在
-handler 中直接修改 `Card`、`Zone` 或玩家投影；`TrackerController` / bridge 只负责归一化事实的
-运行时同步、Room 生命周期和入口连接。
+`src/handler/PubGsCMoveCard.js` 负责入口过滤、局流、计数、特殊区域和称象 UI 状态采集。
+特殊区域处理器只更新状态并返回 `{ handled }`，控制是否跳过普通副作用；所有有效路径均由
+`handleMoveCard()` 末尾统一调用 `syncTrackerMove()`，不向处理器传递提交回调。
+`TrackerController.syncTrackerMove()` 复制 raw/patched，冻结原始快照，再执行位置规范化、
+`Room.beforeNormalizeMove()` 补牌、明暗数量校验、一次归一化及 `decorateMoveEvent()`。
+领域事务成功后才发送 `afterMoveCommitted()` 和公开 ID 通知；延迟、noop、来源失败及异常不发送
+成功通知。Controller 直调同样运行补牌；入口过滤保留在 Handler，Controller 仍支持零张洗牌。
+Handler 不直接修改 `Card`、`Zone` 或玩家投影。
 
 `Room.moveCards()` 保留高频主流程，阶段细节委托给 `RoomMovement`：
 
-1. `createMoveContext()` 统一已知 ID、物理数量、来源/目标、手牌差量和特殊选项。
+1. `createMoveContext()` 统一已知 ID、物理数量、来源/目标、手牌差量和特殊选项；`RoomIdentity.capturePileMoveSnapshot()` 保存移动前牌堆数量及常规摸牌的可见端点。
 2. 对必须匿名化的模糊来源实体先整批预检，避免产生半完成状态。
 3. 写入来源与目标手牌总数差量，并在整手揭示前置处理暗置标记候选。
 4. 解析已知牌，必要时物化匿名槽；传播候选，再分别移动匿名牌和已知牌。
 5. 写入公共位置候选或局部 `ConstraintGroup`。
-6. 调用 `resolveConstraints()`，稳定所有派生状态并执行守恒检查。
+6. `RoomIdentity.commitPileIdentityForMove()` 提交身份账本并投影 cohort；随后调用 `resolveConstraints()`，稳定所有派生状态并执行最终一致性检查。
+
+普通移动的数量快照、身份事件构造和提交都由 Room 内聚。Controller 仅透传 `pileIdentityEvent`
+提供最终协议事实；技能的 `pileIdentityCardIDs` 优先于协议 ID。领域直调无需伪造协议，使用移动上下文
+推导账本区域和身份。匿名化预检失败时不修改实体、手牌总数或账本，也不提交事务。
 
 移动的端点取牌、公共候选、随机手牌转移和已知/匿名置换细节，应继续下钻到
 `src/tracker/room/movement/RoomMovement.ts`、`src/tracker/room/movement/` 及对应协议/技能文档。
@@ -124,17 +133,17 @@ handler 中直接修改 `Card`、`Zone` 或玩家投影；`TrackerController` / 
 
 `RoomMovement` 不再通过多层继承拼接行为，而是在构造时创建以下职责组件：
 
-| 组件 / 文件 | 职责与依赖 |
-| --- | --- |
-| `createMoveContext()` / `room/movement/context.ts` | 无状态地解析移动参数并快照移动前来源手牌事实；不持有缓存，独立于协议事件归一化 |
-| `RoomMovementSources` / `room/movement/sources.ts` | 来源定位、取牌、占位置换和手牌差量；仅通过 `HiddenMarkPlaceholderAccess` 调用标记占位查找、移除与替换 |
-| `RoomMovementUnknownPlacement` / `room/movement/unknownPlacement.ts` | 未知身份移动阶段；保留玩家目标与公共目标各自的缺口处理语义，不假设未知来源实体必为匿名牌 |
-| `RoomMovementKnownSources` / `room/movement/knownSources.ts` | outside、公共端点、玩家子区三路已知牌解析与整批身份确认；复用 Room 身份原语与来源查询 |
-| `RoomMovementKnownPlacement` / `room/movement/knownPlacement.ts` | 已知牌来源校正、逐牌技能/落区与旧公共槽回补；复用来源置换和标记组件，不复制规则 |
-| `RoomMovementCandidates` / `room/movement/candidates.ts` | 随机手牌转移、公共候选传播和局部约束维护；不持有来源或标记组件 |
-| `RoomMovementHiddenMarks` / `room/movement/hiddenMarks.ts` | 暗置标记、装备容器位置解析、木牛与标记槽守恒；通过共享查询取得来源占位，不反向依赖来源组件 |
-| `room/movement/equipmentMarks.ts` | 装备容器座位投影、目标/迁座识别、稳定记录键与全明快照判定；只读传入的实体索引、观测座位和移动上下文，不访问标记账本 |
-| `room/movement/sourceQueries.ts` | 无状态的候选读取、手牌查询与未知来源筛选；精确来源优先，同类实体保持原有顺序 |
+| 组件 / 文件                                                          | 职责与依赖                                                                                                          |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `createMoveContext()` / `room/movement/context.ts`                   | 无状态地解析移动参数并快照移动前来源手牌事实；不持有缓存，独立于协议事件归一化                                      |
+| `RoomMovementSources` / `room/movement/sources.ts`                   | 来源定位、取牌、占位置换和手牌差量；仅通过 `HiddenMarkPlaceholderAccess` 调用标记占位查找、移除与替换               |
+| `RoomMovementUnknownPlacement` / `room/movement/unknownPlacement.ts` | 未知身份移动阶段；保留玩家目标与公共目标各自的缺口处理语义，不假设未知来源实体必为匿名牌                            |
+| `RoomMovementKnownSources` / `room/movement/knownSources.ts`         | outside、公共端点、玩家子区三路已知牌解析与整批身份确认；复用 Room 身份原语与来源查询                               |
+| `RoomMovementKnownPlacement` / `room/movement/knownPlacement.ts`     | 已知牌来源校正、逐牌技能/落区与旧公共槽回补；复用来源置换和标记组件，不复制规则                                     |
+| `RoomMovementCandidates` / `room/movement/candidates.ts`             | 随机手牌转移、公共候选传播和局部约束维护；不持有来源或标记组件                                                      |
+| `RoomMovementHiddenMarks` / `room/movement/hiddenMarks.ts`           | 暗置标记、装备容器位置解析、木牛与标记槽守恒；通过共享查询取得来源占位，不反向依赖来源组件                          |
+| `room/movement/equipmentMarks.ts`                                    | 装备容器座位投影、目标/迁座识别、稳定记录键与全明快照判定；只读传入的实体索引、观测座位和移动上下文，不访问标记账本 |
+| `room/movement/sourceQueries.ts`                                     | 无状态的候选读取、手牌查询与未知来源筛选；精确来源优先，同类实体保持原有顺序                                        |
 
 所有组件仍写入同一个 Room；标记账本仍通过 `Room.ensureSkillState()` 保存在按局隔离的 GameState 中。
 共享查询实时读取 Room / Card，不保存快照，不移动实体，也不初始化标记账本。
@@ -221,22 +230,23 @@ cohort 身份到匿名实体的投影，并协调洗回身份匿名化和物理�
 
 ## 第五层：新增逻辑应放在哪里
 
-| 变更类型 | 首选位置 | 原因 |
-| --- | --- | --- |
-| 协议预处理、位置规范化、`CardIDs` 修正、技能副作用 | `src/handler/PubGsCMoveCard.js` | 统一处理原始协议字段并桥接归一化移动 |
-| 归一化移动同步、Room 创建/销毁与运行时同步 | `src/tracker/runtime/bridge.ts`、`trackerController.ts` | 连接 handler、Room 与生命周期 |
-| `moveCards()` 某个低频阶段或来源取牌规则 | `room/movement/RoomMovement.ts` / `room/movement/*` | 保持 Room 中的高频主流程短而稳定 |
-| 不动点收敛、手牌槽缓存、匿名手牌对账、约束组与稳定态同步 | `room/constraints.ts` | 集中维护求解和稳定投影规则；Room 保留公开收敛入口与状态所有权 |
-| 公共区查询、牌序读面、一致性诊断 | `room/publicZones.ts` | 避免在 Room 重复实现 Zone 遍历 |
-| 座位/视角字段与查询、GameState 上下文、技能状态访问 | `room/RoomBase.ts` | 单层基础类，不依赖完整 Room；不创建独立技能状态仓库 |
-| 玩家区快照、事件游标、实体创建顺序 | `projection/playerSnapshot.ts` | 唯一派生缓存，Room 保留查询和刷新入口 |
-| 处理器注册、移动事件装饰及输入类型 | `room/moveEvents.ts` | 注册表按局隔离，输出规范化事件 |
-| 身份物化、匿名化、外部/suspended 实体创建与世代身份投影 | `room/identity.ts` | Room 保留状态所有权、账本事务协调、公开原语及成功解绑后的诊断；不复制身份账本 |
-| DEV 身份/槽位守恒、玩家快照、影子索引断言与收敛告警 | `room/diagnostics.ts` | 只读检查，保留 Room 公开薄入口；抽样计数随初始化/销毁重置 |
-| 稳定且高频的单局公开入口 | `Room.ts` 的薄门面 | 便于调用方检索与引用追踪 |
-| 技能专属事件装饰与临时账本 | `src/tracker/skill/` + GameState `tracker` 状态 | 技能状态按局隔离，Room 仅提供领域访问入口 |
-| 牌实体、玩家事实或公共区模型语义 | `model/Card.ts` / `model/Player.ts` / `model/Zone.ts` | 由对应模型维护自身不变量 |
-| DOM、挂载、渲染合并与显隐 | `src/tracker/view/` / `src/ui/` | Room 只记录可供视图消费的状态与脏事件 |
+| 变更类型                                                 | 首选位置                                                | 原因                                                                          |
+| -------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 入口过滤、局流计数与 UI 状态采集                         | `src/handler/PubGsCMoveCard.js`                         | 不保存 tracker 推断状态，不维护移动后回调                                     |
+| 技能补牌、成功提交通知与非移动协议推断                   | `src/tracker/skill/` 的 `RoomSkillPlugin`               | 通过 Room 访问领域状态，Controller 只编排通用阶段                             |
+| 归一化移动同步、Room 创建/销毁与运行时同步               | `src/tracker/runtime/bridge.ts`、`trackerController.ts` | 连接 handler、Room 与生命周期                                                 |
+| `moveCards()` 某个低频阶段或来源取牌规则                 | `room/movement/RoomMovement.ts` / `room/movement/*`     | 保持 Room 中的高频主流程短而稳定                                              |
+| 不动点收敛、手牌槽缓存、匿名手牌对账、约束组与稳定态同步 | `room/constraints.ts`                                   | 集中维护求解和稳定投影规则；Room 保留公开收敛入口与状态所有权                 |
+| 公共区查询、牌序读面、一致性诊断                         | `room/publicZones.ts`                                   | 避免在 Room 重复实现 Zone 遍历                                                |
+| 座位/视角字段与查询、GameState 上下文、技能状态访问      | `room/RoomBase.ts`                                      | 单层基础类，不依赖完整 Room；不创建独立技能状态仓库                           |
+| 玩家区快照、事件游标、实体创建顺序                       | `projection/playerSnapshot.ts`                          | 唯一派生缓存，Room 保留查询和刷新入口                                         |
+| 插件注册、阶段分发及输入类型                             | `room/moveEvents.ts`、`skill/protocolEvents.ts`         | 注册表按局隔离，移动与非移动事实使用各自的类型契约                            |
+| 身份物化、匿名化、外部/suspended 实体创建与世代身份投影  | `room/identity.ts`                                      | Room 保留状态所有权、账本事务协调、公开原语及成功解绑后的诊断；不复制身份账本 |
+| DEV 身份/槽位守恒、玩家快照、影子索引断言与收敛告警      | `room/diagnostics.ts`                                   | 只读检查，保留 Room 公开薄入口；抽样计数随初始化/销毁重置                     |
+| 稳定且高频的单局公开入口                                 | `Room.ts` 的薄门面                                      | 便于调用方检索与引用追踪                                                      |
+| 技能专属事件装饰与临时账本                               | `src/tracker/skill/` + GameState `tracker` 状态         | 技能状态按局隔离，Room 仅提供领域访问入口                                     |
+| 牌实体、玩家事实或公共区模型语义                         | `model/Card.ts` / `model/Player.ts` / `model/Zone.ts`   | 由对应模型维护自身不变量                                                      |
+| DOM、挂载、渲染合并与显隐                                | `src/tracker/view/` / `src/ui/`                         | Room 只记录可供视图消费的状态与脏事件                                         |
 
 `RoomIdentity.anonymizeMoveSourceCards()` 负责模糊来源实体的整批预检与身份解绑，
 `anonymizeRandomPileReturn()` 在已知/未知移动路径汇合后转换随机回堆实体；
@@ -247,13 +257,22 @@ Room 继续负责相应的 `PileIdentityLedger` 事务和阶段顺序。
 
 新实体统一通过 `Room.registerCardEntity()` 追加到 `cards`，同时为 `PlayerSnapshot` 和
 `CardLocationIndex` 登记创建顺序；该原语不移动牌、不发脏事件，也不写身份分区。
-初始化牌堆、外部实体创建及 detached suspended 实体均使用此入口，避免首次入手时扫描全牌池找顺序。
+初始化牌堆、外部实体创建及历史 detached suspended 实体均使用此入口，避免首次入手时扫描全牌池找顺序。
+公共范围揭示使用 `revealPublicCandidates()` / `ensureDetachedKnownIdentity()`，通过
+`registerDetachedKnownCard()` 登记于独立集合及派生顺序，不追加物理实体。后续有精确匿名来源时，
+`materialize()` 在原匿名槽上物化并回收载体、迁移约束引用；匿名手牌对账会保留范围身份需要的物理槽，
+范围落定后再接管。没有合法匿名端点的纯揭示保留范围候选，不能新增实体或覆盖另一正 ID。
 
-`RoomMoveEvents` 只接受完整 `NormalizedMoveEvent`，不补造协议、数量或选项，也不重新分类。
-生产协议先经 `normalizeMoveEvent()`；领域直调使用 `Room.moveCards()`，不要伪造不完整协议调用装饰器。
-测试用 `protocolMove()` 构造完整消息后再归一化；处理器签名始终接收完整事件。
-通配处理器先执行，随后按去重后的技能顺序执行；空返回或异常保留上一事件继续处理。
-两类注册表随 Room 销毁统一清理，对外 getter 仅提供只读读面。
+`RoomMoveEvents` 通过唯一 ID 注册 `RoomSkillPlugin`，重复 ID 报错。移动阶段通配插件先执行，
+再按协议和领域技能顺序匹配，同一插件最多执行一次；`registerMoveEventHandler()` 是装饰阶段的
+兼容适配入口。`decorateMove` 只接收完整 `NormalizedMoveEvent`，不补造协议、数量或选项；
+空返回或异常保留上一事件。`beforeNormalizeMove` 返回 `defer` 立即中止；前置/协议异常向上传递，
+提交后通知逐插件隔离异常。`notifyCardsRevealed()` 广播去重后的正 ID。
+
+`dispatchSkillProtocolEvent()` 分发使用技能、目标通知、选择回复与角色数据，返回待续交移动；
+Controller 负责沿普通移动管线提交。`onDeckInitialized` 广播给插件清理相关状态，销毁统一清理
+插件及旧注册表。领域直调仍使用 `Room.moveCards()`，不隐式触发协议插件，避免内部补偿重复通知。
+测试用 `protocolMove()` 构造完整消息；协议端到端测试使用 Controller，低层阶段测试可直接调用 Room。
 
 ## 第六层：核心不变量与修改护栏
 
@@ -270,14 +289,14 @@ Room 继续负责相应的 `PileIdentityLedger` 事务和阶段顺序。
 
 ## 第七层：按症状诊断
 
-| 症状 | 优先检查 |
-| --- | --- |
-| `room` 为 `null`、牌堆未就绪或 View 挂载顺序异常 | [`lifecycle.md`](lifecycle.md) 与 `TrackerController` |
-| 牌从错误端点取出、落错区或物理数量不符 | `Room.moveCards()`、`RoomMovement`、[`card_player_model.md`](card_player_model.md) |
-| 正 ID 重复、匿名槽丢失、洗牌后身份异常 | [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md) |
-| 候选过度收敛、欠收敛、轮数异常或遍历上涨 | [`card_tracker_convergence.md`](card_tracker_convergence.md) |
-| Room 状态正确但 UI 未刷新或分组陈旧 | `dirtyCardEvents`、`dirtyPublicZones`、`locationIndex`、`src/tracker/view/` |
-| 只有某个 className / SpellID 出错 | [`../protocols/README.md`](../protocols/README.md) 与 [`card_tracker_skills.md`](card_tracker_skills.md) |
+| 症状                                             | 优先检查                                                                                                 |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `room` 为 `null`、牌堆未就绪或 View 挂载顺序异常 | [`lifecycle.md`](lifecycle.md) 与 `TrackerController`                                                    |
+| 牌从错误端点取出、落错区或物理数量不符           | `Room.moveCards()`、`RoomMovement`、[`card_player_model.md`](card_player_model.md)                       |
+| 正 ID 重复、匿名槽丢失、洗牌后身份异常           | [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md)                                       |
+| 候选过度收敛、欠收敛、轮数异常或遍历上涨         | [`card_tracker_convergence.md`](card_tracker_convergence.md)                                             |
+| Room 状态正确但 UI 未刷新或分组陈旧              | `dirtyCardEvents`、`dirtyPublicZones`、`locationIndex`、`src/tracker/view/`                              |
+| 只有某个 className / SpellID 出错                | [`../protocols/README.md`](../protocols/README.md) 与 [`card_tracker_skills.md`](card_tracker_skills.md) |
 
 ## 源码入口
 

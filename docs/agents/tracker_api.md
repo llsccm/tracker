@@ -282,13 +282,17 @@ publicCandidateReveal: { zone: 'pile', position: 'top', count: N }
 期待它单独完成范围揭示。技能已有专用 decorator 时，跟随对应技能模块，不要绕过 Controller 自己写
 `locationCandidates`。
 
+领域层使用 `room.revealPublicCandidates(cardIDs, publicLocationCandidate)`，由 Room 同步身份候选和账本。
+未物化身份登记在 `detachedKnownCards`，不会增加 `Room.cards` 或改变牌堆顺序；后续精确揭示会在
+原匿名槽上物化并回收载体。读取全部身份候选时使用 `trackedCards`，统计物理实体时继续使用 `cards`。
+
 ## 读取与修改公共区
 
 - 读取某区实体：`room.getPublicZone('discard').cards`。
 - 读取某区正 ID：`room.getPublicZone('discard').cards.filter((card) => card.id > 0).map((card) => card.id)`。
   牌堆包含匿名槽，正 ID 列表不代表全部剩余身份，不能用它计算完整牌堆分布。
 - 读取某张牌的位置摘要：`room.publicZones.getCardLocationInfo(cardID)`。
-- 普通移动：`room.moveCards()`；它会处理来源端点、匿名槽、候选传播、约束和索引。
+- 普通移动：`room.moveCards()`；它会处理来源端点、匿名槽、候选传播、账本提交、约束和索引，调用方无需再补交移动账本。
 - 只有整区初始化/洗牌才使用 `zone.replaceAll(cards)`；低层 `zone.add(cards, position)` 只适合已知的
   单区落点测试。不要用 `zone.add()` 代替协议移动，否则可能漏掉身份账本和手牌总数变化。
 

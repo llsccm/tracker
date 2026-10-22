@@ -36,7 +36,9 @@
 
 ## Card：运行时牌实体
 
-`Card` 是每张物理牌在单局中的唯一运行时实体，`Room.cards` 持有当前创建过的全部实例。
+`Card` 承载物理牌或独立身份载体。`Room.cards` 登记物理实体及历史 suspended 展示实体；
+公共范围揭示的载体单独保存在 `Room.detachedKnownCards`，不增加物理容量。
+推断与投影统一读取 `Room.trackedCards`；精确来源揭示通过 `materialize()` 将身份绑定到原匿名槽。
 `id` 与 `entityID` 在真实身份下为正 ID；匿名槽使用稳定负 `entityID`，不再使用 `id = 0`。
 
 | 字段 / 读面 | 语义 |

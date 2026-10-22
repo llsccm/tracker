@@ -1,7 +1,7 @@
 import { CardConfig } from '@/config'
 import { laya } from '@/runtime/gameAdapter'
 import { Game } from '@/tracker'
-import { recordDuoQiActivation } from '@/tracker/skill/DuoQi'
+import { tracker } from '@/tracker/runtime/browser'
 import { setSuitRecord } from '@/utils'
 
 /**
@@ -15,7 +15,7 @@ export function handleUseSpell(msg) {
   //   drawLastUseCard(CardIDs)
   // }
 
-  recordDuoQiActivation(Game, msg)
+  tracker.dispatchSkillProtocolEvent({ type: 'useSpell', message: msg })
 
   switch (SpellID) {
     // 博图计数器
@@ -41,37 +41,11 @@ export function handleUseSpell(msg) {
       break
     }
 
-    // CardIDs: [110, 49] SeatID: 6 DestSeatIDs: [5]
-    case 3157: // 夏侯玄 清议
-    case 3511: // 李婉 联句
-    case 3854: // 择行
-      // 主视角
-      if (Game.myID === undefined || SeatID === Game.myID) break
-      // 联句/择行 目标角色
-      if (msg.dest_Count === 1 && msg.DestSeatIDs?.[0] === Game.myID) break
-
-      if (CardIDs?.length === msg.card_count) Game.setSpellState(SpellID, CardIDs)
-      break
-
     case 3193: // 贵相
     case 3185: // 持纲
     case 3138: // 持纲(旧)
     case 3161: // 醇醪(界)
       Game.phase--
-      break
-
-    case 3571:
-      // 郭照 椒遇 现在会进入处理区 无需再创建空间存储
-      // if (msg.EffectIndex === 1) {
-      //   Game.setSpellState(3571, new Set())
-      // }
-      break
-
-    // 谋许攸 迁附 控顶
-    case 3750:
-      if (msg.EffectIndex === 2 && !msg.DestSeatIDs?.length) {
-        Game.setSpellState(3750, CardIDs)
-      }
       break
 
     case 13027:
@@ -91,13 +65,6 @@ export function handleUseSpell(msg) {
         laya.zhanfaCounter(SpellID)
       }
 
-      break
-
-    case 3434:
-      if (Game.myID === undefined || SeatID === Game.myID) break
-      // Params: [82, 0] 虚拟牌技能id
-      // EffectIndex: 2
-      Game.setSpellState(3434, CardIDs)
       break
 
     default:

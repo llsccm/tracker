@@ -50,6 +50,11 @@ export class RoomMovementKnownSources {
     const resumedCardIDs: CardID[] = []
     const confirmedFromUnknownIDs: CardID[] = []
     context.knownCards.forEach((card) => {
+      // 来源没有合法匿名槽时沿用 known 缺口补建语义；范围载体只在此刻成为物理实体。
+      if (this.room.detachedKnownCards.delete(card)) {
+        this.room.registerCardEntity(card)
+        trackerLogger.warn('已知移动缺少匿名来源槽，范围身份转为物理实体', { cardID: card.id })
+      }
       const wasSuspended = card.suspended === true || this.room.suspendedKnownCards.has(card)
       this.room.resumeSuspendedKnownCard(card)
       if (wasSuspended) resumedCardIDs.push(card.id)
@@ -292,7 +297,9 @@ export class RoomMovementKnownSources {
       .map((cardID) => {
         const existing = this.room.cardIndex.get(cardID)
         const existingInSource = Boolean(
-          existing && this.sources.isCardInPlayerSource(existing, context)
+          existing &&
+          !this.room.detachedKnownCards.has(existing) &&
+          this.sources.isCardInPlayerSource(existing, context)
         )
         const target = existingInSource ? existing : availableTargets.shift()
         const ledgerBefore = {

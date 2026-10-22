@@ -1,7 +1,8 @@
 import type { Zone } from '@/tracker/model'
 import { Card } from '@/tracker/model'
 import { trackerLogger } from '@/utils/logger'
-import { POSITION_RANDOM } from '../candidate/cardPositions'
+import { POSITION_BOTTOM, POSITION_RANDOM } from '../candidate/cardPositions'
+import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
 import type { CardID, PublicPosition, PublicZoneName } from '../types'
 import type { RoomMoveContext } from './movement/types'
@@ -10,9 +11,93 @@ export interface AnonymizeLocatedIdentityOptions {
   preservePlacement?: boolean
 }
 
+export interface PileMoveSnapshot {
+  pileCountBefore: number
+  knownPileDrawCards: readonly Card[]
+}
+
 /** 身份绑定、解绑与世代投影的阶段实现；实体、身份分区及索引仍由 Room 唯一持有。 */
 export class RoomIdentity {
   constructor(private readonly room: Room) {}
+
+  capturePileMoveSnapshot(context: RoomMoveContext): PileMoveSnapshot {
+    const pileCards = this.room.zones.get('pile')!.cards
+    const pileCountBefore = pileCards.length
+    const cardIDs = context.pileIdentityEvent?.protocol.CardIDs ?? context.knownIDs
+    if (
+      context.fromZone !== 'pile' ||
+      cardIDs.some((id) => id > 0) ||
+      context.moveType !== MOVE_TYPE.DRAW
+    ) {
+      return { pileCountBefore, knownPileDrawCards: [] }
+    }
+
+    const count = Math.min(Math.max(0, context.cardCount), pileCountBefore)
+    const sourceCards =
+      count === 0
+        ? []
+        : context.fromPosition === POSITION_BOTTOM
+          ? pileCards.slice(0, count)
+          : pileCards.slice(-count)
+    return {
+      pileCountBefore,
+      knownPileDrawCards: sourceCards.filter((card) => card.id > 0 && card.isKnown)
+    }
+  }
+
+  commitPileIdentityForMove(context: RoomMoveContext, snapshot: PileMoveSnapshot): void {
+    const event = context.pileIdentityEvent
+    const pileCountAfter = this.room.zones.get('pile')!.cards.length
+    const cardIDs = (
+      context.pileIdentityCardIDs ??
+      event?.protocol.CardIDs ??
+      context.knownIDs
+    ).filter((id) => id > 0)
+    const knownPileIdentityIDsConsumed = snapshot.knownPileDrawCards
+      .filter((card) => card.location !== 'pile' && card.id > 0)
+      .map((card) => card.id)
+    const fromZone = event?.protocol.FromZone ?? this.getIdentityZone(context.fromZone)
+
+    this.room.applyPileIdentityMove({
+      eventType: event?.type ?? (context.knownIDs.length > 0 ? 'moveKnown' : 'moveUnknown'),
+      fromZone,
+      toZone: event?.protocol.ToZone ?? this.getIdentityZone(context.toZone),
+      cardIDs,
+      cardCount: event?.cardCount ?? context.cardCount,
+      pileCountBefore: snapshot.pileCountBefore,
+      anonymousPileConsumptionCount:
+        fromZone === 1 && cardIDs.length === 0
+          ? Math.max(
+              0,
+              snapshot.pileCountBefore - pileCountAfter - knownPileIdentityIDsConsumed.length
+            )
+          : undefined,
+      knownPileIdentityIDsConsumed,
+      visiblePileIdentityIDsAfter: this.collectVisiblePileTopIdentityIDs(),
+      fromPosition: context.fromPosition,
+      toPosition: context.position,
+      moveType: context.moveType,
+      spellID: event?.protocol.SpellID ?? context.spellID
+    })
+  }
+
+  private getIdentityZone(zone: RoomMoveContext['fromZone'] | 'player'): number | null {
+    // 账本只区分牌堆、弃牌与其余区域；数字来源在 Room API 中表示座位。
+    if (zone === 'pile') return 1
+    if (zone === 'discard') return 2
+    return null
+  }
+
+  collectVisiblePileTopIdentityIDs(): CardID[] {
+    const pileCards = this.room.zones.get('pile')!.cards
+    const cardIDs: CardID[] = []
+    for (let index = pileCards.length - 1; index >= 0; index -= 1) {
+      const card = pileCards[index]
+      if (!card.isKnown || card.id <= 0) break
+      cardIDs.push(card.id)
+    }
+    return cardIDs
+  }
 
   /** Preflight and anonymize one move's identities before its pile-ledger transaction. */
   anonymizeMoveSourceCards(
@@ -226,7 +311,10 @@ export class RoomIdentity {
     if (!(normalizedCardID > 0)) return null
 
     const existing = room.cardIndex.get(normalizedCardID)
-    if (existing) return existing
+    if (existing) {
+      if (room.detachedKnownCards.has(existing) && !target?.isAnonymous) return null
+      return existing
+    }
     if (!target || target.hasRealIdentity) return null
 
     const wasDeckIdentity = room.deckIdentities.has(normalizedCardID)
@@ -248,6 +336,20 @@ export class RoomIdentity {
 
     const existing = room.cardIndex.get(cardID)
     if (existing) {
+      if (room.detachedKnownCards.has(existing) && target?.isAnonymous) {
+        // 精确来源槽已经提供了比范围候选更强的位置证据。迁移约束引用，随后由移动/揭示
+        // 落区收口候选；保留 target 本身，避免替换匿名槽或凭空多出物理实体。
+        room.constraints.replaceCardInConstraintGroups(existing, target)
+        existing.isKnown = false
+        existing.moveToPublicZone('outside')
+        room.notifyCardChanged(existing, { type: 'detached-identity-materialized' })
+        room.counter?.removeCard(existing)
+        room.detachedKnownCards.delete(existing)
+        room.suspendedKnownCards.delete(existing)
+        room.cardIndex.delete(cardID)
+        room.unlocatedIdentities.add(cardID)
+        return this.materialize(cardID, target)
+      }
       // target 只有在匿名时才可承接已有身份。若 target 是其它正 ID，即使其牌面未公开，
       // 也不能用本次揭示覆盖该身份；调用方应保留原端点并走诊断/兜底路径。
       if (target && target !== existing && target.isAnonymous) {
@@ -524,11 +626,7 @@ export class RoomIdentity {
     if (!(cardID > 0) || room.cardIndex.has(cardID)) return null
     if (!room.unlocatedIdentities.has(cardID)) return null
 
-    const card = new Card(cardID, room)
-    card.location = 'suspended'
-    card.isKnown = true
-    card.suspended = true
-    card.syncTimestamp()
+    const card = this.createKnownIdentity(cardID, true)
 
     room.registerCardEntity(card)
     room.deckIdentities.add(cardID)
@@ -537,6 +635,34 @@ export class RoomIdentity {
     room.suspendedKnownCards.add(card)
     // 动态实体仍需按 room.cards 创建顺序登记；它当前不参与任何位置投影，无需触发重投影。
     room.counter?.addCard(card)
+    return card
+  }
+
+  ensureDetachedKnownIdentity(cardID: CardID): Card | null {
+    const room = this.room
+    if (!(cardID > 0)) return null
+    const existing = room.cardIndex.get(cardID)
+    if (existing) {
+      existing.confirmKnown()
+      room.resumeSuspendedKnownCard(existing)
+      return existing
+    }
+
+    const card = this.createKnownIdentity(cardID, false)
+    room.registerDetachedKnownCard(card)
+    room.deckIdentities.add(cardID)
+    room.cardIndex.set(cardID, card)
+    room.unlocatedIdentities.delete(cardID)
+    room.counter?.addCard(card)
+    return card
+  }
+
+  private createKnownIdentity(cardID: CardID, suspended: boolean): Card {
+    const card = new Card(cardID, this.room)
+    card.location = suspended ? 'suspended' : 'outside'
+    card.isKnown = true
+    card.suspended = suspended
+    card.syncTimestamp()
     return card
   }
 }

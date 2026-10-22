@@ -30,8 +30,7 @@ function summarize(stats: TraversalStats) {
 function createShuffleBaselineRoom(materializeDeckIdentities: boolean) {
   const { room } = createTestRoom({
     cardIDs: DECK_IDS,
-    seatIDs: [1, 2],
-    materializeDeckIdentities
+    seatIDs: [1, 2]
   })
   room.moveCards([10, 11, 12], 'player', {
     toSeatID: 1,
@@ -46,6 +45,15 @@ function createShuffleBaselineRoom(materializeDeckIdentities: boolean) {
     cardCount: 3,
     sourceEvent: { type: 'baseline:discard' }
   })
+
+  // 移动现已自动完成 cohort 匿名化；历史暗实体对照在准备移动结束后再构造。
+  if (materializeDeckIdentities) {
+    const pileCards = room.zones.get('pile')!.cards
+    Array.from(room.unlocatedIdentities).forEach((cardID, index) => {
+      room.materialize(cardID, pileCards[index])!.isKnown = false
+    })
+    room.resolveConstraints()
+  }
 
   return {
     room,

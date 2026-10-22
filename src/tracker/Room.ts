@@ -31,19 +31,24 @@ import type {
   AnonymizeLocatedIdentityOptions,
   MoveEventHandler,
   PlayerHandCardIDOptions,
+  RoomSkillPlugin,
   SkillHandler
 } from './room/index'
 import type {
   CardID,
   MoveOptions,
   NormalizedMoveEvent,
+  PatchedMoveCardFields,
+  RawMoveCardEvent,
   PublicPosition,
+  PublicLocationCandidate,
   PublicZoneName,
   SeatID,
   SeatInfo,
   SpellID,
   SubZoneCandidate
 } from './types'
+import type { PendingSkillMove, SkillProtocolEvent } from './skill/protocolEvents'
 
 interface RoomOptions {
   gameState?: GameState
@@ -51,8 +56,6 @@ interface RoomOptions {
 
 interface ShufflePileOptions {
   cardCount?: number | null
-  /** Controller 归一化后的同一条洗牌事件，由 Room 在物理重建前提交给身份账本。 */
-  identityMove?: Omit<PileIdentityLedgerMove, 'pileCountAfter' | 'discardCountAfter'>
   ambiguousDiscardRecycleGroups?: readonly AmbiguousDiscardRecycleGroup[]
 }
 
@@ -71,6 +74,16 @@ export class Room extends RoomBase {
   /** 牌堆是否已经通过 MsgGamePlayCardNtf 完成初始化 */
   isDeckReady = false
   cards: Card[] = []
+  /** 只有范围位置证据的公开身份，不占用或增加物理槽。 */
+  readonly detachedKnownCards = new Set<Card>()
+  private detachedIdentitySeq = 0
+  private detachedCardOrder = new WeakMap<Card, number>()
+  /** 身份推断与投影读面；物理容量继续读取 cards。 */
+  get trackedCards(): readonly Card[] {
+    return this.detachedKnownCards.size === 0
+      ? this.cards
+      : [...this.cards, ...this.detachedKnownCards]
+  }
   cardIndex: Map<CardID, Card> = new Map()
   /**
    * 尚未绑定到任何 Card 实体的真实身份，是 deckIdentities 的动态子集。
@@ -179,6 +192,9 @@ export class Room extends RoomBase {
     if (import.meta.env.DEV) this.diagnostics.reset()
 
     this.cards.length = 0
+    this.detachedKnownCards.clear()
+    this.detachedIdentitySeq = 0
+    this.detachedCardOrder = new WeakMap()
     this.playerSnapshot.reset()
     this.cardIndex.clear()
     this.unlocatedIdentities = new Set(cardIDs.filter((id) => id > 0))
@@ -212,6 +228,7 @@ export class Room extends RoomBase {
     this.counter = new CardCounter(this)
     this.isDeckReady = true
     this.publicZones.assertPublicZoneConsistency('initDeck')
+    this.moveEvents.onDeckInitialized()
   }
 
   applyPileIdentityMove(
@@ -253,7 +270,10 @@ export class Room extends RoomBase {
       const groupByLocation = new Map(revealGroups)
 
       normalizedCardIDs.forEach((cardID) => {
-        const actualLocation = this.cardIndex.get(cardID)?.location
+        const card = this.cardIndex.get(cardID)
+        // 范围身份尚未物化时，展示目标不能覆盖原有候选位置证据。
+        if (card && this.detachedKnownCards.has(card)) return
+        const actualLocation = card?.location
         // 协议目标只是“在哪里展示”，不一定触发物理搬运；同步完成后的 Card.location
         // 才能证明该身份是否仍在弃牌堆，并决定洗牌时是否继续计入已知弃牌身份。
         const revealLocation: PileIdentityRevealLocation | undefined =
@@ -291,8 +311,8 @@ export class Room extends RoomBase {
   /**
    * 在物理 Room 与身份 ledger 都完成一次协议事务后检查最终目标态。
    *
-   * 这里刻意不挂到 `resolveConstraints()`：卡牌移动先于 Controller 写入 ledger，收敛尾部
-   * 仍处于合法的事务中间态。只有 init / move / reveal 的账本写入完成后，才能要求每个
+   * 低层物化与揭示允许分阶段写入，因此在 init / move / reveal 事务完成后调用，而不对
+   * 任意手工收敛检查未提交的身份事实。账本与实体同步后，要求每个
    * cohort 身份恰好由未定位池或 suspended 展示实体承载，并禁止牌堆继续承载正 ID 暗实体。
    */
   assertPileIdentityLedgerConsistency(context = ''): PileIdentityConsistencyIssue[] {
@@ -376,6 +396,29 @@ export class Room extends RoomBase {
    */
   registerMoveEventHandler(spellID: SpellID | '*', handler: MoveEventHandler): void {
     this.moveEvents.registerMoveEventHandler(spellID, handler)
+  }
+
+  registerSkillPlugin(plugin: RoomSkillPlugin): void {
+    this.moveEvents.registerSkillPlugin(plugin)
+  }
+
+  beforeNormalizeMove(
+    patched: PatchedMoveCardFields,
+    raw: Readonly<RawMoveCardEvent>
+  ): 'defer' | void {
+    return this.moveEvents.beforeNormalizeMove(patched, raw)
+  }
+
+  afterMoveCommitted(event: NormalizedMoveEvent): void {
+    this.moveEvents.afterMoveCommitted(event)
+  }
+
+  notifyCardsRevealed(cardIDs: readonly CardID[]): void {
+    this.moveEvents.notifyCardsRevealed(cardIDs)
+  }
+
+  dispatchSkillProtocolEvent(event: SkillProtocolEvent): PendingSkillMove[] {
+    return this.moveEvents.dispatchSkillProtocolEvent(event)
   }
 
   /**
@@ -526,7 +569,20 @@ export class Room extends RoomBase {
   registerCardEntity(card: Card): void {
     this.cards.push(card)
     this.playerSnapshot.registerCard(card, this.cards.length - 1)
-    this.locationIndex.registerCard(card)
+    this.locationIndex.registerCard(card, this.cards.length - 1)
+  }
+
+  registerDetachedKnownCard(card: Card): void {
+    this.detachedKnownCards.add(card)
+    // detached 载体排在物理实体之后；重建时复用同一顺序键，不改变后续新增载体的顺序。
+    const order = 2 ** 32 + this.detachedIdentitySeq++
+    this.detachedCardOrder.set(card, order)
+    this.playerSnapshot.registerCard(card, order)
+    this.locationIndex.registerCard(card, order)
+  }
+
+  getDetachedCardOrder(card: Card): number | undefined {
+    return this.detachedKnownCards.has(card) ? this.detachedCardOrder.get(card) : undefined
   }
 
   allocateAnonymousEntityID(): number {
@@ -629,6 +685,27 @@ export class Room extends RoomBase {
     this.counter?.markDirty(card)
   }
 
+  ensureDetachedKnownIdentity(cardID: CardID): Card | null {
+    return this.identity.ensureDetachedKnownIdentity(cardID)
+  }
+
+  revealPublicCandidates(cardIDs: readonly CardID[], candidate: PublicLocationCandidate): Card[] {
+    const cards = cardIDs
+      .map((cardID) => this.ensureDetachedKnownIdentity(cardID))
+      .filter((card): card is Card => Boolean(card))
+    cards.forEach((card) => card.setLocationCandidates([candidate], 'revealPublicCandidate'))
+    this.pileIdentityLedger.applyReveal({
+      cardIDs: cards.map((card) => card.id),
+      location:
+        candidate.zone === 'pile' ? 'pile' : candidate.zone === 'discard' ? 'discard' : 'outside',
+      pileCountAfter: this.zones.get('pile')!.cards.length,
+      discardCountAfter: this.zones.get('discard')!.cards.length
+    })
+    this.resolveConstraints()
+    this.assertPileIdentityLedgerConsistency('revealPublicCandidate')
+    return cards
+  }
+
   markViewDirty(_reason = 'view-dirty'): void {
     this.viewDirty = true
   }
@@ -684,15 +761,16 @@ export class Room extends RoomBase {
       .map((card) => card.id)
       .filter((cardID) => cardID > 0)
     const identityMove = {
-      ...(options.identityMove ?? {
-        eventType: 'shuffleDiscardIntoPile',
-        fromZone: 2,
-        toZone: 9,
-        cardIDs: [],
-        cardCount: targetPileCount,
-        pileCountBefore: remainingPileCards.length
-      }),
-      ...(ambiguousRemainingPileCards.length > 0 ? { visiblePileIdentityIDsAfter: [] } : {}),
+      eventType: 'shuffleDiscardIntoPile',
+      fromZone: 2,
+      toZone: 9,
+      cardIDs: [],
+      cardCount: targetPileCount,
+      pileCountBefore: remainingPileCards.length,
+      visiblePileIdentityIDsAfter:
+        ambiguousRemainingPileCards.length > 0
+          ? []
+          : this.identity.collectVisiblePileTopIdentityIDs(),
       ambiguousDiscardRecycleGroups: options.ambiguousDiscardRecycleGroups
     }
     // 洗牌会同时关闭旧 cohort 与建立洗回批次；必须先让账本原子提交这次过渡，Room 才能
@@ -786,6 +864,11 @@ export class Room extends RoomBase {
 
     // 账本已经在物理事务前滚动；这里完成实体投影、收敛与最终态校验，事务中间态不告警。
     this.identity.anonymizePileCohortIdentityEntities(identityContext)
+    this.detachedKnownCards.forEach((card) => {
+      card.removePublicCandidates(
+        (candidate) => candidate?.zone === 'pile' || candidate?.zone === 'discard'
+      )
+    })
     this.resolveConstraints()
     this.assertPileIdentityLedgerConsistency(identityContext)
   }
@@ -917,6 +1000,7 @@ export class Room extends RoomBase {
     opt: MoveOptions = {}
   ): boolean {
     const context = this.movement.createMoveContext(cardIDs, toZone, opt)
+    const pileSnapshot = this.identity.capturePileMoveSnapshot(context)
 
     const anonymization = this.identity.anonymizeMoveSourceCards(
       context.anonymizeCards,
@@ -966,8 +1050,10 @@ export class Room extends RoomBase {
 
     this.movement.createPublicMoveConstraintGroup(context)
 
-    // 执行状态收敛
+    // 账本投影也可能匿名化实体，必须先提交，再统一同步稳定索引和计数器。
+    this.identity.commitPileIdentityForMove(context, pileSnapshot)
     this.resolveConstraints()
+    this.assertPileIdentityLedgerConsistency('moveCards')
 
     trackerLogger.info('moveCards 完成', {
       ...summarizeMoveContext(context, { includeKnownCardIDs: true }),
@@ -999,7 +1085,10 @@ export class Room extends RoomBase {
     this.players.clear()
     this.zones.forEach((zone) => zone.clear())
     this.zones.clear()
-    this.cards.forEach((card) => card.reset())
+    this.trackedCards.forEach((card) => card.reset())
+    this.detachedKnownCards.clear()
+    this.detachedIdentitySeq = 0
+    this.detachedCardOrder = new WeakMap()
     this.constraintGroups.clear()
     this.constraintGroupsDirty = false
     if (import.meta.env.DEV) this.diagnostics.reset()

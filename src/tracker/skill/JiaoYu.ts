@@ -1,7 +1,12 @@
-import type { SkillMoveContext } from './types'
+import type { Room } from '../Room'
+import type { PatchedMoveCardFields } from '../types'
+import type { SkillRoleDataMessage } from './protocolEvents'
 
-export default function handleJiaoYu(context: SkillMoveContext): void {
-  const { patched } = context
+export function recordJiaoYu(room: Room, msg: SkillRoleDataMessage): void {
+  if (msg.Datas) room.setSkillState(3571, new Set(msg.Datas[0] === 1 ? [1, 2] : [3, 4]))
+}
+
+export default function handleJiaoYu(patched: PatchedMoveCardFields, room: Room): void {
   if (
     patched.FromZone != 8 ||
     patched.ToZone != 5 ||
@@ -11,13 +16,13 @@ export default function handleJiaoYu(context: SkillMoveContext): void {
     return
   }
 
-  const colors = context.game.getSpellState<Set<number>>(patched.SpellID)
+  const colors = room.readSkillState<Set<number>>(patched.SpellID)
   if (!(colors instanceof Set) || colors.size == 0) return
 
   const markSpellID = patched.FromID || patched.SpellID
   const markCards =
-    context.game.room
-      ?.refreshPlayerSnapshot()
+    room
+      .refreshPlayerSnapshot()
       .filter(
         (card) =>
           card.location === 'player' &&

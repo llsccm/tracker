@@ -206,8 +206,10 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
 当前必须保持的自动化契约：
 
 - `pileIdentityLedger.test.ts` 覆盖 cohort 基数、批次消费、已知/匿名回堆、初洗与一致性。
-- `pileIdentityLedgerIntegration.test.ts` 覆盖 Controller 事务、常规摸牌、匿名获得、连续洗牌、
+- `pileIdentityLedgerIntegration.test.ts` 覆盖 Controller 入口事务、常规摸牌、匿名获得、连续洗牌、
   suspended 身份恢复，以及两种开局初洗协议。
+- `roomIdentityTransactions.test.ts` 覆盖 Room 直调事务、预检取消与 Controller 单次提交，以及公共范围
+  身份的重复揭示、后续物化、匿名手牌容量与索引重建；范围揭示不得增加 `Room.cards`。
 - 开局 `2 -> 9` 在有效回收张数为 `0`，或等于整副卡池身份数时，都不得滚动 generation 或
   创建 suspended；有效回收张数由协议最终牌堆张数减去原剩余牌堆张数确定。
 - `shuffleProtocolCount.test.ts` 覆盖暗取后的洗牌数量校正：物理槽按协议张数补足或退出，

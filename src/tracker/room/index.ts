@@ -7,6 +7,6 @@ export { RoomPublicZones } from './publicZones'
 export { RoomMovement } from './movement/RoomMovement'
 
 export type { AnonymizeLocatedIdentityOptions } from './identity'
-export type { MoveEventHandler, SkillHandler } from './moveEvents'
+export type { MoveEventHandler, RoomSkillPlugin, SkillHandler } from './moveEvents'
 export type { PlayerHandCardIDOptions } from './publicZones'
 export type { RoomMoveContext, RoomMovementOptions } from './movement/types'

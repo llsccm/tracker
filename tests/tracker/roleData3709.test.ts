@@ -1,13 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { handleGuiFu, parseGuiFuCardIDs } from '@/handler/skills/GuiFu'
+import { describe, expect, it, vi } from 'vitest'
+import { parseGuiFuCardIDs } from '@/tracker/skill/GuiFu'
 import { GUI_FU_ROLE_DATA_ID } from '@/tracker/protocol/protocolRules'
 import type { Room } from '@/tracker/Room'
 import type { RawMoveCardEvent, TrackerControllerOptions } from '@/tracker/types'
 import { trackerLogger } from '@/utils/logger'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
-
-const { syncTrackerGuiFuRoleData } = vi.hoisted(() => ({ syncTrackerGuiFuRoleData: vi.fn() }))
-vi.mock('@/tracker/runtime/browser', () => ({ tracker: { syncTrackerGuiFuRoleData } }))
 
 function getHandIDs(room: Room, seatID = 2) {
   return room.cards
@@ -42,9 +39,6 @@ function createGuiFuHarness(options: TrackerControllerOptions = {}) {
       MoveType: 4
     })
   )
-  syncTrackerGuiFuRoleData.mockImplementation((seatID, cardIDs) => {
-    controller.syncTrackerGuiFuRoleData(seatID, cardIDs)
-  })
   return {
     controller,
     room,
@@ -64,7 +58,14 @@ function createGuiFuHarness(options: TrackerControllerOptions = {}) {
       )
     },
     receive(cardIDs: number[], seatID = 2) {
-      handleGuiFu({ SeatID: seatID, Datas: [cardIDs.length, ...cardIDs, 0, 0] }, 1)
+      controller.dispatchSkillProtocolEvent({
+        type: 'roleData',
+        message: {
+          DataID: GUI_FU_ROLE_DATA_ID,
+          SeatID: seatID,
+          Datas: [cardIDs.length, ...cardIDs, 0, 0]
+        }
+      })
     }
   }
 }
@@ -78,8 +79,6 @@ function expectHand(room: Room, cardIDs: number[]) {
 }
 
 describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
-  beforeEach(() => syncTrackerGuiFuRoleData.mockReset())
-
   it('按数量读取当前持有列表，忽略尾部补位零', () => {
     expect(parseGuiFuCardIDs([2, 20, 10, 0, 0])).toEqual([20, 10])
     expect(parseGuiFuCardIDs([0, 0])).toEqual([])
@@ -88,17 +87,26 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
     expect(parseGuiFuCardIDs([2, 20, 0])).toEqual([])
   })
 
-  it('handler 只把非主视角的当前持有列表交给配对入口', () => {
-    expect(handleGuiFu({ SeatID: 2, Datas: [2, 20, 10, 0] }, 1)).toEqual([20, 10])
-    expect(syncTrackerGuiFuRoleData).toHaveBeenCalledExactlyOnceWith(2, [20, 10])
+  it('通用协议入口配对非主视角的当前持有列表', () => {
+    const { room, gain, receive } = createGuiFuHarness()
+    gain({ CardCount: 2 })
+    receive([20, 10])
+    expectHand(room, [10, 20])
   })
 
   it('主视角、无座位和未知视角不重复同步', () => {
-    expect(handleGuiFu({ SeatID: 1, Datas: [1, 10] }, 1)).toEqual([])
-    expect(handleGuiFu({ SeatID: 255, Datas: [1, 10] }, 1)).toEqual([])
-    expect(handleGuiFu({ Datas: [1, 10] }, 1)).toEqual([])
-    expect(handleGuiFu({ SeatID: 2, Datas: [1, 10] }, null)).toEqual([])
-    expect(syncTrackerGuiFuRoleData).not.toHaveBeenCalled()
+    const { controller, room, gain, receive } = createGuiFuHarness()
+    gain()
+    const move = vi.spyOn(room, 'moveCards')
+    receive([10], 1)
+    receive([10], 255)
+    controller.dispatchSkillProtocolEvent({
+      type: 'roleData',
+      message: { DataID: 3709, Datas: [1, 10] }
+    })
+    room.mySeatID = undefined
+    receive([10], 2)
+    expect(move).not.toHaveBeenCalled()
   })
 
   it.each([1, 2])('来源区域 %i 在配对前不创建占位或提交数量，之后只移动一次', (fromZone) => {
@@ -322,8 +330,10 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
 
       controller.syncTrackerMove(patched, raw)
       const pending = room.readSkillState<{ raw: unknown; patched: unknown }>(GUI_FU_ROLE_DATA_ID)
-      expect(pending?.raw).toBe(raw)
-      expect(pending?.patched).toBe(patched)
+      expect(pending?.raw).toEqual(raw)
+      expect(pending?.raw).not.toBe(raw)
+      expect(pending?.patched).toEqual(patched)
+      expect(pending?.patched).not.toBe(patched)
       receive([40])
 
       expectHand(room, [40])

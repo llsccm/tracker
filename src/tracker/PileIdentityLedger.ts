@@ -235,7 +235,7 @@ export class PileIdentityLedger {
       const cardIDs = normalizeIDs(move.cardIDs)
       const knownCount = cardIDs.length
       const protocolUnknownCount = Math.max(0, normalizeCount(move.cardCount) - knownCount)
-      // 常规摸牌的 CardIDs 可能为空，但 Room 已精确移走可见牌顶；Controller 用该字段把
+      // 常规摸牌的 CardIDs 可能为空，但 Room 已精确移走可见牌顶；RoomIdentity 用该字段把
       // 已知边界身份从账本中同步消费，剩余数量才按匿名槽处理。
       const knownPileIdentityIDsConsumed =
         move.fromZone === 1 && cardIDs.length === 0
