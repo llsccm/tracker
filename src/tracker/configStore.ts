@@ -5,7 +5,12 @@ export interface StorageAdapter {
 }
 
 export type ConfigEntry = readonly [key: string, id: string, defaultValue: unknown]
-export type ConfigEffects = Record<string, ((value: unknown) => void) | undefined>
+
+/** 配置副作用与对应配置项共享值类型。 */
+export type ConfigEffects<TEntries extends readonly ConfigEntry[] = typeof ACTIVE_CONFIG_ENTRIES> =
+  {
+    [K in keyof ConfigStore<TEntries>]?: (value: ConfigStore<TEntries>[K]) => void
+  }
 
 type WidenConfigValue<T> = T extends boolean
   ? boolean
@@ -24,7 +29,7 @@ interface ConfigStoreOptions<TEntries extends readonly ConfigEntry[] = readonly 
   entries?: TEntries
   storage?: StorageAdapter | null
   eventTarget?: EventTarget | null
-  effects?: ConfigEffects
+  effects?: ConfigEffects<TEntries>
 }
 
 export const ACTIVE_CONFIG_ENTRIES = [

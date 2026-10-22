@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { createConfigStore, createMemoryStorageAdapter } from '@/tracker/configStore'
 import { globalConfig } from '@/tracker/state'
 import { createUserModel, user } from '@/tracker/user'
@@ -57,6 +57,37 @@ describe('state/user Node 导入边界', () => {
     expect(config.padding).toBe(0)
     expect(effect).not.toHaveBeenCalled()
     expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('自定义配置副作用按配置项推导参数类型并接收更新值', () => {
+    const changes: (number | boolean | string)[] = []
+    const config = createConfigStore({
+      entries: [
+        ['count', 'COUNT', 0],
+        ['enabled', 'ENABLED', false],
+        ['title', 'TITLE', '']
+      ] as const,
+      effects: {
+        count: (value) => {
+          expectTypeOf(value).toEqualTypeOf<number>()
+          changes.push(value)
+        },
+        enabled: (value) => {
+          expectTypeOf(value).toEqualTypeOf<boolean>()
+          changes.push(value)
+        },
+        title: (value) => {
+          expectTypeOf(value).toEqualTypeOf<string>()
+          changes.push(value)
+        }
+      }
+    })
+
+    config.count = 3
+    config.enabled = true
+    config.title = '已更新'
+
+    expect(changes).toEqual([3, true, '已更新'])
   })
 
   it('用户数据模型独立创建与独立更新', () => {
