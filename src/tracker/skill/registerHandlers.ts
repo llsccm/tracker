@@ -128,9 +128,16 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
     onCardsRevealed: (ids, currentRoom) => observeDuoQiKnownCardIDs(currentRoom, ids),
     onProtocolEvent(event, currentRoom) {
       if (event.type === 'useSpell') recordDuoQiActivation(currentRoom.game, event.message)
-      if (event.type === 'roleData' && event.message.DataID === 8) {
+
+      // 狂魔状态
+      if (
+        event.type === 'roleData' &&
+        event.message.DataID === 8 &&
+        event.message.Datas?.[0] === 3730
+      ) {
         recordDuoQiRoleDataTarget(currentRoom.game, event.message)
       }
+
       if (event.type === 'choice' && event.message.Type === 72 && event.message.Datas?.length) {
         const game = currentRoom.game
         if (game.isGameStart && !game.round && !game.phase) {
