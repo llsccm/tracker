@@ -81,4 +81,16 @@ describe('座位镜像 show-ellipsis', () => {
     checkSeatOverlayOverflow(host as unknown as HTMLElement)
     expect(host.classList.contains('show-ellipsis')).toBe(true)
   })
+
+  it('单行卡牌内边距外扩不被误判为溢出', () => {
+    const host = createHost(40, 41)
+    checkSeatOverlayOverflow(host as unknown as HTMLElement)
+    expect(host.classList.contains('show-ellipsis')).toBe(false)
+  })
+
+  it('真实多行溢出仍会添加 show-ellipsis', () => {
+    const host = createHost(40, 80)
+    checkSeatOverlayOverflow(host as unknown as HTMLElement)
+    expect(host.classList.contains('show-ellipsis')).toBe(true)
+  })
 })

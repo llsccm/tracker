@@ -9,6 +9,14 @@
  *   - 清空内容前调用 `invalidateEllipsisOverflow(el)`
  */
 
+/**
+ * 单行卡牌占位 40px，与溢出阈值零余量；卡内 `.card-name` 的 2px 文字阴影内边距
+ * 会外扩到卡片盒之外并计入 scrollHeight，不留容差会把一张明牌误判为溢出。
+ *
+ * shortcut: 固定像素容差，卡牌行高或文字阴影尺寸变化时需重新校准。
+ */
+const OVERFLOW_TOLERANCE_PX = 4
+
 const tokens = new WeakMap<object, number>()
 
 /** 鸭子类型守卫：兼容浏览器 HTMLElement 和测试环境中的 mock 对象。 */
@@ -34,7 +42,8 @@ function nextToken(el: object): number {
  * 异步（rAF）检查容器是否溢出，溢出则添加 `show-ellipsis`，否则移除。
  *
  * @param threshold 溢出阈值，默认等于 `clientHeight`（即 `scrollHeight > clientHeight`）。
- *   传入固定值（如 40）时使用该值而非 `clientHeight`。
+ *   传入固定值（如 40）时使用该值而非 `clientHeight`。判定统一附加
+ *   `OVERFLOW_TOLERANCE_PX` 容差，吸收单行卡牌的内边距外扩。
  */
 export function checkEllipsisOverflow(el: unknown, threshold?: number): void {
   if (!isEllipsisHost(el)) return
@@ -44,7 +53,7 @@ export function checkEllipsisOverflow(el: unknown, threshold?: number): void {
   requestAnimationFrame(() => {
     if (tokens.get(el) !== token) return
     const limit = threshold ?? el.clientHeight
-    if (el.clientHeight > 0 && el.scrollHeight > limit) {
+    if (el.clientHeight > 0 && el.scrollHeight > limit + OVERFLOW_TOLERANCE_PX) {
       el.classList.add('show-ellipsis')
     } else {
       el.classList.remove('show-ellipsis')
