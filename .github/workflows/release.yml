@@ -10,6 +10,7 @@ permissions:
 
 concurrency:
   group: release-releases
+  queue: max
   cancel-in-progress: false
 
 jobs:
@@ -39,7 +40,39 @@ jobs:
       - name: Build production userscript
         run: pnpm build:prod
 
+      - name: Check release eligibility
+        id: release-check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists; skipping publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          latest_release_tag="$(gh release list \
+            --repo "$GITHUB_REPOSITORY" \
+            --limit 1 \
+            --exclude-drafts \
+            --exclude-pre-releases \
+            --json tagName \
+            --jq '.[0].tagName')"
+          current_version="${GITHUB_REF_NAME#v}"
+          latest_version="${latest_release_tag#v}"
+          if [[ "$current_version" =~ ^[0-9]+(\.[0-9]+)*$ ]] && [[ "$latest_version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            newest_version="$(printf '%s\n' "$latest_version" "$current_version" | sort -V | tail -n 1)"
+            if [ "$newest_version" != "$current_version" ]; then
+              echo "Release $GITHUB_REF_NAME is older than $latest_release_tag; skipping publish."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
       - name: Checkout releases branch
+        if: steps.release-check.outputs.publish == 'true'
         uses: actions/checkout@v7
         with:
           ref: releases
@@ -47,6 +80,7 @@ jobs:
           persist-credentials: true
 
       - name: Push userscripts to releases branch
+        if: steps.release-check.outputs.publish == 'true'
         working-directory: release-branch
         run: |
           cp ../dist/daxiaochao.user.js ../dist/daxiaochao.meta.js .
@@ -61,6 +95,7 @@ jobs:
           git push origin HEAD:refs/heads/releases
 
       - name: Create and publish GitHub Release
+        if: steps.release-check.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -75,6 +110,7 @@ jobs:
 
           EOF
           gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
             dist/daxiaochao.user.js \
             dist/daxiaochao.meta.js \
             --verify-tag \

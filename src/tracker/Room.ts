@@ -864,6 +864,11 @@ export class Room extends RoomBase {
 
     // 账本已经在物理事务前滚动；这里完成实体投影、收敛与最终态校验，事务中间态不告警。
     this.identity.anonymizePileCohortIdentityEntities(identityContext)
+    this.detachedKnownCards.forEach((card) => {
+      card.removePublicCandidates(
+        (candidate) => candidate?.zone === 'pile' || candidate?.zone === 'discard'
+      )
+    })
     this.resolveConstraints()
     this.assertPileIdentityLedgerConsistency(identityContext)
   }

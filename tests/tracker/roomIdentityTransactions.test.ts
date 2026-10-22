@@ -163,4 +163,18 @@ describe('公共范围身份的物理容量', () => {
     expect(room.locationIndex.candidateHandBySeat.get(1)).toEqual(candidates)
     expect(room.cards).toHaveLength(6)
   })
+
+  it('洗牌后清除 detached 牌堆候选但保留 outside 候选', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4] })
+    const pileCandidate = fromPublicCandidate(createPublicCandidate('pile', POSITION_TOP, 1))!
+    const discardCandidate = createPublicCandidate('discard', POSITION_TOP, 1)
+    const outsideCandidate = createPublicCandidate('outside', POSITION_RANDOM, 1)
+    const [card] = room.revealPublicCandidates([1], pileCandidate)
+    card.addPublicCandidate(discardCandidate)
+    card.addPublicCandidate(outsideCandidate)
+
+    room.shufflePile()
+
+    expect(card.publicCandidates).toEqual([outsideCandidate])
+  })
 })
