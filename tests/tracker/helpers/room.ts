@@ -56,7 +56,9 @@ export function getCard(room: Room, id: number) {
   if (existing) return existing
 
   const target = room.zones.get('pile')?.cards.find((card) => card.isAnonymous) ?? null
-  return room.materialize(id, target)
+  const card = room.materialize(id, target)
+  if (card) room.applyPileIdentityReveal([id])
+  return card
 }
 
 /** 领域单元测试取一个未分配身份的物理槽，不按 CardID 猜测暗牌。 */

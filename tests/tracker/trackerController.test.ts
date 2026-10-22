@@ -583,6 +583,8 @@ describe('TrackerController', () => {
       })
     ])
     expect(pile.cards).not.toContain(shownCard)
+    expect(room.cards).toHaveLength(deckIDs.length)
+    expect(room.detachedKnownCards.has(shownCard)).toBe(true)
     expect(room.unlocatedIdentities.has(shownID)).toBe(false)
   })
 

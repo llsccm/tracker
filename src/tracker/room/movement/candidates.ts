@@ -406,7 +406,7 @@ export class RoomMovementCandidates {
     if (toZone !== 'pile' || !(count > 0)) return
 
     const candidate = createPublicCandidate(toZone, position, count)
-    this.room.cards
+    this.room.trackedCards
       .filter((card) =>
         card.publicCandidates?.some((item) => item.zone === 'pile' && item.position === 'top')
       )
@@ -444,7 +444,7 @@ export class RoomMovementCandidates {
       return []
     }
 
-    const affectedCards = this.room.cards.filter((card) =>
+    const affectedCards = this.room.trackedCards.filter((card) =>
       card.publicCandidates?.some(
         (candidate) => candidate.zone === fromZone && candidate.position === position
       )

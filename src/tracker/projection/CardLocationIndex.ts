@@ -85,7 +85,7 @@ export class CardLocationIndex {
    */
   rebuild(room: Room, options: { record?: boolean } = {}): void {
     const { record = true } = options
-    if (record) recordTraversal('locationIndex:rebuild', room.cards.length)
+    if (record) recordTraversal('locationIndex:rebuild', room.trackedCards.length)
     this.knownHandBySeat.clear()
     this.candidateHandBySeat.clear()
     this.equipBySeat.clear()
@@ -112,8 +112,8 @@ export class CardLocationIndex {
     })
 
     // 按 room.cards 顺序遍历：桶内顺序即 room.cards 顺序，增量插入也沿用该顺序。
-    room.cards.forEach((card, index) => {
-      this.cardOrder.set(card, index)
+    room.trackedCards.forEach((card, index) => {
+      this.cardOrder.set(card, room.getDetachedCardOrder(card) ?? index)
       this.maxOrder = index
 
       const targets = this.projectCard(room, card)
@@ -133,11 +133,12 @@ export class CardLocationIndex {
    * 若等到首次脏事件才登记，顺序会取决于实体进入投影桶的先后；
    * 全量 rebuild 却按 room.cards 创建顺序登记，两条路径随后就会产生不同桶顺序。
    */
-  registerCard(card: Card): void {
-    if (this.cardOrder.has(card)) return
+  registerCard(card: Card, order?: number): void {
+    if (this.cardOrder.has(card) && order === undefined) return
 
-    this.maxOrder += 1
-    this.cardOrder.set(card, this.maxOrder)
+    const nextOrder = order ?? this.maxOrder + 1
+    this.maxOrder = Math.max(this.maxOrder, nextOrder)
+    this.cardOrder.set(card, nextOrder)
   }
 
   /**

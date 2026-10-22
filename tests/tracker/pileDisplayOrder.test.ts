@@ -921,6 +921,7 @@ describe('牌堆展示顺序', () => {
     const pile = getPile(room)
     // 本组专门验证已知身份残留公共区；公开身份后再构造来源占位。
     getCards(room, cardIDs)
+    room.applyPileIdentityReveal(cardIDs)
     const knownCard = room.cardIndex.get(knownId)!
     const placeholder = setup(room)
     const pileCountBefore = pile.cards.length
@@ -946,6 +947,7 @@ describe('牌堆展示顺序', () => {
     room.getPlayer(1).syncObservedHandCount(1)
     // 来源端点的身份已经由其它协议确认，回填只应迁移位置而不能重新盖暗。
     sourceEndpoint.confirmKnown()
+    room.applyPileIdentityReveal([2, 4])
 
     room.moveCards([knownCard.id], 'discard', {
       fromSeatID: 1,
@@ -997,6 +999,7 @@ describe('牌堆展示顺序', () => {
     const { room } = createTestRoom({ cardIDs: [76, 91, 122, 200], seatIDs: [1] })
     const pile = getPile(room)
     const [publicKnownCard, batchKnownPlaceholder] = getCards(room, [76, 91])
+    room.applyPileIdentityReveal([76, 91])
     const sparePlaceholder = takeAnonymousCard(room)
 
     withWarnSpy((warnSpy) => {

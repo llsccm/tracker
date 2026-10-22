@@ -3,6 +3,7 @@ import type { ConstraintGroupOptions } from '@/tracker/constraint/ConstraintGrou
 import type {
   CardID,
   MoveSourceEvent,
+  NormalizedMoveEvent,
   PostMovePublicCandidate,
   PublicCandidateSource,
   PublicPosition,
@@ -23,6 +24,8 @@ export type MoveTargetZone = PublicZoneName | 'player'
 export type KnownCardCreationReason = 'external-source' | 'known-fallback'
 
 export interface RoomMovementOptions {
+  pileIdentityCardIDs?: readonly CardID[]
+  pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
   toSeatID?: SeatInput
   subZone?: SubZone
   spellID?: SpellID
@@ -50,6 +53,8 @@ export interface RoomMovementOptions {
 }
 
 export interface RoomMoveContext {
+  pileIdentityCardIDs?: readonly CardID[]
+  pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
   cardIDs: readonly CardID[]
   toZone: MoveTargetZone
   toSeatID?: SeatInput

@@ -108,6 +108,9 @@ flowchart TD
   `canReconcileAnonymous` 为 false、匿名补缺值为 null；不能用任意部分匹配或默认零值制造确定性。
 - 展示额度为 `max(0, observedHandCount - exactKnownCount - candidateKnownUpperBound)`；匿名缺口再减去
   `exactHiddenCount` 与 `ambiguousHiddenCoveredCount`。Player 和匿名对账均消费这份结果，不另写公式。
+- 公共范围的 detached 身份计入展示名额，但不承担物理槽。实体补缺使用排除 detached 后的确定明牌数
+  与候选容量上界；`HandSlotAllocation.detachedKnownCards` 列出已落定的范围身份，匿名对账优先让它们
+  接管已有匿名手牌，再重新计算分配。不得在对账器中另写一套候选容量公式。
 - 这些推导不回写 `observedHandCount`；协议总数事实、候选覆盖与匿名补缺仍分层。
 
 ## 增量执行与稳定尾部

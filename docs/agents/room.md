@@ -80,7 +80,8 @@ Controller 每次创建 Room 后、注册座位前调用 `Game.beginPlayback()`�
 | 分区 | 代表字段 | 语义 |
 | --- | --- | --- |
 | 座位与视角 | `players`、`seatIDs`、`size`、`mySeatID`、`firstID` | 本局玩家集合、主视角与固定显示顺位前置事实 |
-| 物理牌实体 | `cards`、`zones`、`cardIndex` | 已创建的 `Card` 实体、公共区有序关系与已定位正 ID 索引 |
+| 物理牌实体 | `cards`、`zones`、`cardIndex` | 物理实体、公共区有序关系与正 ID 索引；历史 suspended 展示实体仍登记于 `cards` |
+| 范围身份载体 | `detachedKnownCards`、`trackedCards` | 公共范围揭示不增加 `cards`；`trackedCards` 合并物理实体与范围身份，供推断和投影读取 |
 | 身份分区 | `deckIdentities`、`unlocatedIdentities`、`suspendedKnownCards`、`pileIdentityLedger` | 暗牌堆真实身份集合、未定位身份、暂停展示实体与 cohort/generation 权威账本 |
 | 推断约束 | `constraintGroups` | 局部位置/数量约束 |
 | 技能临时账本 | GameState `tracker` scope（经 `read/ensure/set/deleteSkillState` 访问） | 当前 Room 的技能推断状态；存储和生命周期由 GameState 统一管理 |
@@ -110,12 +111,16 @@ handler 中直接修改 `Card`、`Zone` 或玩家投影；`TrackerController` / 
 
 `Room.moveCards()` 保留高频主流程，阶段细节委托给 `RoomMovement`：
 
-1. `createMoveContext()` 统一已知 ID、物理数量、来源/目标、手牌差量和特殊选项。
+1. `createMoveContext()` 统一已知 ID、物理数量、来源/目标、手牌差量和特殊选项；`RoomIdentity.capturePileMoveSnapshot()` 保存移动前牌堆数量及常规摸牌的可见端点。
 2. 对必须匿名化的模糊来源实体先整批预检，避免产生半完成状态。
 3. 写入来源与目标手牌总数差量，并在整手揭示前置处理暗置标记候选。
 4. 解析已知牌，必要时物化匿名槽；传播候选，再分别移动匿名牌和已知牌。
 5. 写入公共位置候选或局部 `ConstraintGroup`。
-6. 调用 `resolveConstraints()`，稳定所有派生状态并执行守恒检查。
+6. `RoomIdentity.commitPileIdentityForMove()` 提交身份账本并投影 cohort；随后调用 `resolveConstraints()`，稳定所有派生状态并执行最终一致性检查。
+
+普通移动的数量快照、身份事件构造和提交都由 Room 内聚。Controller 仅透传 `pileIdentityEvent`
+提供最终协议事实；技能的 `pileIdentityCardIDs` 优先于协议 ID。领域直调无需伪造协议，使用移动上下文
+推导账本区域和身份。匿名化预检失败时不修改实体、手牌总数或账本，也不提交事务。
 
 移动的端点取牌、公共候选、随机手牌转移和已知/匿名置换细节，应继续下钻到
 `src/tracker/room/movement/RoomMovement.ts`、`src/tracker/room/movement/` 及对应协议/技能文档。
@@ -247,7 +252,11 @@ Room 继续负责相应的 `PileIdentityLedger` 事务和阶段顺序。
 
 新实体统一通过 `Room.registerCardEntity()` 追加到 `cards`，同时为 `PlayerSnapshot` 和
 `CardLocationIndex` 登记创建顺序；该原语不移动牌、不发脏事件，也不写身份分区。
-初始化牌堆、外部实体创建及 detached suspended 实体均使用此入口，避免首次入手时扫描全牌池找顺序。
+初始化牌堆、外部实体创建及历史 detached suspended 实体均使用此入口，避免首次入手时扫描全牌池找顺序。
+公共范围揭示使用 `revealPublicCandidates()` / `ensureDetachedKnownIdentity()`，通过
+`registerDetachedKnownCard()` 登记于独立集合及派生顺序，不追加物理实体。后续有精确匿名来源时，
+`materialize()` 在原匿名槽上物化并回收载体、迁移约束引用；匿名手牌对账会保留范围身份需要的物理槽，
+范围落定后再接管。没有合法匿名端点的纯揭示保留范围候选，不能新增实体或覆盖另一正 ID。
 
 `RoomMoveEvents` 只接受完整 `NormalizedMoveEvent`，不补造协议、数量或选项，也不重新分类。
 生产协议先经 `normalizeMoveEvent()`；领域直调使用 `Room.moveCards()`，不要伪造不完整协议调用装饰器。
