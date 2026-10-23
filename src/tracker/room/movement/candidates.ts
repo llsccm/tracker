@@ -1,5 +1,5 @@
 import { trackerLogger } from '@/utils/logger'
-import { getCompatibleMarkSpellIDs } from '@/tracker/candidate/markSpellID'
+import { getPopupSpaceCards } from './popupSpaces'
 import {
   createLocationCandidateKey,
   fromPublicCandidate
@@ -16,7 +16,7 @@ import type { Room } from '@/tracker/Room'
 import { getKnownHandCardsBySeat, getPlayerHandCardsBySeat } from './sourceQueries'
 import {
   PAIDUI_POSITIONS,
-  type MarkToHandCandidatesOptions,
+  type StoredToHandCandidatesOptions,
   type MoveTargetZone,
   type PublicCandidatesToHandOptions,
   type RandomHandToPublicOptions,
@@ -259,26 +259,37 @@ export class RoomMovementCandidates {
    * 参与牌保留原物理投影，完整位置候选表达不确定性，数量约束负责后续收敛。
    * @returns 是否已接管本次暗牌移动。
    */
-  markMarkToHandCandidates({
+  markStoredToHandCandidates({
+    fromPopupSpaceID,
+    gainSpellID,
     fromSeat,
     fromSpellID,
     toSeat,
     count,
     sourceEvent
-  }: MarkToHandCandidatesOptions): boolean {
-    if (!(count > 0) || fromSeat === null || toSeat === null) return false
-    if (fromSpellID === null || fromSpellID === undefined) return false
+  }: StoredToHandCandidatesOptions): boolean {
+    if (!(count > 0) || toSeat === null) return false
+    if (fromPopupSpaceID === undefined && (fromSeat === null || fromSpellID == null)) return false
 
-    const markCards = getVisibleMarkSpaceCards(this.room, fromSeat, fromSpellID)
+    const isPopup = fromPopupSpaceID !== undefined
+    const spaceCards = isPopup ? getPopupSpaceCards(this.room, fromPopupSpaceID) : []
+    // 混合明暗或旧批尚有未决分支时，不能把可见身份数冒充空间总数。
+    if (isPopup && spaceCards.some((card) => !card.isKnown || card.hasLocationCandidates()))
+      return false
+    const markCards = isPopup
+      ? spaceCards
+      : getVisibleMarkSpaceCards(this.room, fromSeat, fromSpellID)
     // 只有可见牌多于协议张数时才是“多选一”；唯一解仍由来源取牌直接搬走。
     if (markCards.length <= count) return false
 
-    const markCandidate: PlayerLocationCandidate = {
-      type: 'player',
-      seatID: fromSeat,
-      subZone: 'mark',
-      spellID: fromSpellID
-    }
+    const markCandidate = isPopup
+      ? { type: 'popup' as const, spaceID: fromPopupSpaceID }
+      : {
+          type: 'player' as const,
+          seatID: fromSeat,
+          subZone: 'mark',
+          spellID: fromSpellID
+        }
     const handCandidate: PlayerLocationCandidate = {
       type: 'player',
       seatID: toSeat,
@@ -298,21 +309,22 @@ export class RoomMovementCandidates {
       })
       card.setLocationCandidates(
         [...otherCandidates, markCandidate, handCandidate],
-        'markMarkToHandCandidates'
+        'markStoredToHandCandidates'
       )
+      if (gainSpellID !== undefined) card.recordHandGain(toSeat, gainSpellID)
     })
 
     // 全部参与牌共同竞争两个位置：标记区留 N-K 张，目标手牌得 K 张。
     // 候选数一开始大于名额，不会触发强锁；某张牌离场、名额恰好等于剩余候选数时才收敛。
     this.room.createConstraintGroup({
       cards: markCards,
-      candidateSeats: Array.from(new Set([fromSeat, toSeat])),
+      candidateSeats: isPopup ? [toSeat] : Array.from(new Set([fromSeat, toSeat])),
       expectedSlotsByLocation: new Map([
         [markKey, markCards.length - count],
         [handKey, count]
       ]),
       known: true,
-      sourceEvent: sourceEvent ?? { type: 'markMarkToHandCandidates' }
+      sourceEvent: sourceEvent ?? { type: 'markStoredToHandCandidates' }
     })
 
     trackerLogger.info('标记区可见牌多于暗牌张数，建立标记/手牌双边候选', {
@@ -572,7 +584,7 @@ export class RoomMovementCandidates {
 
 /** 收集某标记空间内仍在玩家区、可展示身份且未交给账本管理的牌。 */
 function getVisibleMarkSpaceCards(room: Room, seatID: SeatID, spellID: SpellID): Card[] {
-  const markSpellIDs = getCompatibleMarkSpellIDs(spellID)
+  const markSpellIDs = spellID != null ? [spellID] : []
   return room
     .refreshPlayerSnapshot()
     .filter(

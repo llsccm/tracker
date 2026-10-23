@@ -67,11 +67,18 @@ export interface OutsideLocationCandidate {
   batchID?: string
 }
 
+/** 区域 8 的临时弹窗位置；空间标识不是玩家座位。 */
+export interface PopupLocationCandidate {
+  type: 'popup'
+  spaceID: number
+}
+
 export type LocationCandidate =
   | PlayerLocationCandidate
   | PublicLocationCandidate
   | ContainerLocationCandidate
   | OutsideLocationCandidate
+  | PopupLocationCandidate
 
 export type RawMoveEventType =
   | 'noop'
@@ -122,6 +129,8 @@ export type PatchedMoveCardFields = Omit<
 }
 
 export interface MoveSourceEvent {
+  /** 触发本事件的协议技能，与目标标记空间 ID 分开。 */
+  spellID?: SpellID
   type?: RawMoveEventType
   label?: string
   moveType?: number
@@ -136,6 +145,11 @@ export interface PublicCandidateSource {
 }
 
 export interface MoveOptions {
+  /** 区域 8 的临时空间标识，与玩家座位和本次动作技能分开。 */
+  fromPopupSpaceID?: number
+  toPopupSpaceID?: number
+  /** 手牌获得来源；undefined 表示揭示时保留已有来源，null 表示无技能来源。 */
+  gainSpellID?: SpellID | null
   toSeatID?: SeatID
   subZone?: SubZone
   /** 按端点映射的技能 ID；纯公共区移动保留协议 SpellID。 */

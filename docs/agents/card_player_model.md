@@ -8,22 +8,22 @@
 
 ## 阅读路由
 
-| 当前任务 | 建议阅读 | 说明 |
-| --- | --- | --- |
-| 理解模型字段与不变量 | 本文 | `Card` / `Player` / `Zone` 的状态分层和写入口 |
-| 快速完成读取/移动/揭示 | [`tracker_api.md`](tracker_api.md) | 稳定的公开 API 与低层原语 |
-| 修改候选、约束或收敛 | [`card_tracker_convergence.md`](card_tracker_convergence.md) | `locationCandidates`、`ConstraintGroup`、手牌数排他 |
-| 处理匿名槽、物化、suspended | [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md) | 负 ID 匿名实体与身份账本 |
-| 定位 Room 与生命周期 | [`room.md`](room.md) / [`lifecycle.md`](lifecycle.md) | 单局容器、行为模块与挂载时序 |
+| 当前任务                    | 建议阅读                                                           | 说明                                                |
+| --------------------------- | ------------------------------------------------------------------ | --------------------------------------------------- |
+| 理解模型字段与不变量        | 本文                                                               | `Card` / `Player` / `Zone` 的状态分层和写入口       |
+| 快速完成读取/移动/揭示      | [`tracker_api.md`](tracker_api.md)                                 | 稳定的公开 API 与低层原语                           |
+| 修改候选、约束或收敛        | [`card_tracker_convergence.md`](card_tracker_convergence.md)       | `locationCandidates`、`ConstraintGroup`、手牌数排他 |
+| 处理匿名槽、物化、suspended | [`card_tracker_anonymous_pile.md`](card_tracker_anonymous_pile.md) | 负 ID 匿名实体与身份账本                            |
+| 定位 Room 与生命周期        | [`room.md`](room.md) / [`lifecycle.md`](lifecycle.md)              | 单局容器、行为模块与挂载时序                        |
 
 ## 核心分层
 
-| 类 | 职责 | 不负责 |
-| --- | --- | --- |
-| `BaseCard` | 保存 ID 与从 `CardConfig` 读取的静态展示元数据 | 位置、候选、明暗状态 |
-| `Card` | 单局运行时牌实体，保存物理身份、位置、候选、明暗、时间戳 | 玩家区数组的最终投影 |
-| `Player` | 单座位的视图分组与手牌数事实 | 直接持有全局卡牌候选 |
-| `Zone` | 公共区的有序 `Card[]` 关系 | 玩家手牌、装备、判定、标记的所有权 |
+| 类         | 职责                                                     | 不负责                             |
+| ---------- | -------------------------------------------------------- | ---------------------------------- |
+| `BaseCard` | 保存 ID 与从 `CardConfig` 读取的静态展示元数据           | 位置、候选、明暗状态               |
+| `Card`     | 单局运行时牌实体，保存物理身份、位置、候选、明暗、时间戳 | 玩家区数组的最终投影               |
+| `Player`   | 单座位的视图分组与手牌数事实                             | 直接持有全局卡牌候选               |
+| `Zone`     | 公共区的有序 `Card[]` 关系                               | 玩家手牌、装备、判定、标记的所有权 |
 
 ## BaseCard：静态元数据
 
@@ -41,21 +41,24 @@
 推断与投影统一读取 `Room.trackedCards`；精确来源揭示通过 `materialize()` 将身份绑定到原匿名槽。
 `id` 与 `entityID` 在真实身份下为正 ID；匿名槽使用稳定负 `entityID`，不再使用 `id = 0`。
 
-| 字段 / 读面 | 语义 |
-| --- | --- |
-| `id` / `entityID` | 真实 CardID 或稳定负匿名句柄；匿名实体物化时原地切换为正 ID |
+| 字段 / 读面                       | 语义                                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------------------- |
+| `id` / `entityID`                 | 真实 CardID 或稳定负匿名句柄；匿名实体物化时原地切换为正 ID                           |
 | `hasRealIdentity` / `isAnonymous` | 从当前 `id` 实时计算的互补 getter；物化或匿名化后自动反映身份状态，不代表牌面是否公开 |
-| `location` | 当前位置事实：公共区、`player` 或 `suspended` |
-| `subZone` / `spellID` | 玩家区内的 `hand` / `equip` / `judge` / `mark` 及标记技能 ID |
-| `isKnown` | 牌面是否已公开；不等于“身份已知”，也不等于位置确定 |
-| `turn` / `round` / `phase` | 最近一次同步的轮次/阶段时间戳 |
-| `owner` | 由 `syncOwnerFromSeats()` 从座位投影派生，不是独立候选状态 |
-| `locationCandidates` | 完整位置候选唯一主模型 |
-| `seats` | `locationCandidates` 的座位级只读投影 |
-| `subZoneCandidates` | 玩家完整位置候选的只读投影 |
-| `publicCandidates` | 牌堆顶/底等公共不确定位置的只读投影 |
-| `suspended` | 候选范围过宽时暂停追踪的展示标记 |
-| `getPossibleLocations()` | 只读展开未决候选或确定位置；暂停追踪时为空，不反向写入投影 |
+| `location`                        | 当前位置事实：公共区、`popup`、`player` 或 `suspended`                                |
+| `popupSpaceID`                    | 确定弹窗位置的空间 ID，独立于玩家标记 `spellID` 和手牌获得来源                        |
+| `subZone` / `spellID`             | 玩家区内的 `hand` / `equip` / `judge` / `mark` 及标记技能 ID                          |
+| `gainSpellID`                     | 当前确定手牌的获得技能来源，独立于标记空间；无技能或位置未定时为 `null`               |
+| `getHandGainSpellID(seatID)`      | 读取某座位手牌候选分支的获得技能；不表示该身份已确定入手                              |
+| `isKnown`                         | 牌面是否已公开；不等于“身份已知”，也不等于位置确定                                    |
+| `turn` / `round` / `phase`        | 最近一次同步的轮次/阶段时间戳                                                         |
+| `owner`                           | 由 `syncOwnerFromSeats()` 从座位投影派生，不是独立候选状态                            |
+| `locationCandidates`              | 完整位置候选唯一主模型                                                                |
+| `seats`                           | `locationCandidates` 的座位级只读投影                                                 |
+| `subZoneCandidates`               | 玩家完整位置候选的只读投影                                                            |
+| `publicCandidates`                | 牌堆顶/底等公共不确定位置的只读投影                                                   |
+| `suspended`                       | 候选范围过宽时暂停追踪的展示标记                                                      |
+| `getPossibleLocations()`          | 只读展开未决候选或确定位置；暂停追踪时为空，不反向写入投影                            |
 
 ### 候选主模型
 
@@ -74,6 +77,10 @@
 
 ### 常用状态迁移
 
+- 获得来源由移动入口记录；明确获得和匿名槽物化保留来源，同座位揭示不覆盖已有来源。
+  候选按座位记录来源，收敛后清理失效分支；离开手牌、进入公共区或重置时清理，转交后使用新获得事件的技能。
+  获得技能不参与 `locationCandidates` key、数量名额、owner 或标记区投影。
+
 - `confirmKnown()`：标记明牌并同步时间戳，不负责移动区域。
 - `bindCandidates()` / `bindTo()`：绑定玩家区和候选/确定席位；`bindTo()` 默认确认明牌。
 - `resolveLocationCandidate()`：候选只剩一个玩家位置时落定 `location`、`subZone` 与
@@ -90,23 +97,23 @@
 手牌记录仍属于原 `seatID`，视图按新顺位重新绑定容器并重绘；例如座位 6 激活成为五号位后，
 座位 7 的原有手牌随其显示到六号位，不转交给座位 6。
 
-| 字段 | 语义 |
-| --- | --- |
-| `seatID` / `fixedViewId` | 物理座位号和牌局显示顺位；显隐变化时按显示座位从 1 连续重排，隐藏座位无显示顺位 |
-| `isShown` | 座位当前是否显示；临时隐藏保留玩家和牌区数据，新局默认显示 |
-| `hasObservedHandCount` / `observedHandCount` | 协议或移动事件给出的手牌总数事实 |
-| `unknownCardCount` | 观测总数扣除确定明牌及候选明牌容量上界后的未知额度，可能已由暗实体覆盖 |
-| `knownHandCards` | 确定普通手牌明牌，由 `Room.syncViewGroups()` 同步 |
-| `candidateHandCards` | 仍属于手牌候选的已知牌，由视图同步写入 |
-| `equipCards` / `judgeCards` | 装备区与判定区视图数组 |
-| `markCards` | `spellID -> Card[]`，按技能隔离多个标记区 |
-| `generals` / `figure` | 角色武将与阵营类型 |
+| 字段                                         | 语义                                                                            |
+| -------------------------------------------- | ------------------------------------------------------------------------------- |
+| `seatID` / `fixedViewId`                     | 物理座位号和牌局显示顺位；显隐变化时按显示座位从 1 连续重排，隐藏座位无显示顺位 |
+| `isShown`                                    | 座位当前是否显示；临时隐藏保留玩家和牌区数据，新局默认显示                      |
+| `hasObservedHandCount` / `observedHandCount` | 协议或移动事件给出的手牌总数事实                                                |
+| `unknownCardCount`                           | 观测总数扣除确定明牌及候选明牌容量上界后的未知额度，可能已由暗实体覆盖          |
+| `knownHandCards`                             | 确定普通手牌明牌，由 `Room.syncViewGroups()` 同步                               |
+| `candidateHandCards`                         | 仍属于手牌候选的已知牌，由视图同步写入                                          |
+| `equipCards` / `judgeCards`                  | 装备区与判定区视图数组                                                          |
+| `markCards`                                  | `spellID -> Card[]`，按技能隔离多个标记区                                       |
+| `generals` / `figure`                        | 角色武将与阵营类型                                                              |
 
 - `knownHandCards`、`candidateHandCards`、`equipCards`、`judgeCards`、`markCards` 是投影
   缓存，不直接由外部 `push`；普通代码应读取 `room.locationIndex` 或调用
   `room.resolveConstraints()` 后再读。
 - `cards` 是动态归组读面：`room.cards.filter((card) => card.location === 'player' &&
-  card.seats.has(seatID))`，包含匿名暗牌，适合一次性归组而不是高频渲染。
+card.seats.has(seatID))`，包含匿名暗牌，适合一次性归组而不是高频渲染。
 - `getKnownHandSlotCount()` 返回确定明牌槽位数；`getCandidateHandSlotCount()` 返回受组内
   剩余名额约束的单座位候选容量上界，不是 `Card[]` 长度。同一身份在该座位最多计一次，
   不同座位的可能上界不能相加当作全局确定数量。名额解析与重叠处理统一在
@@ -123,6 +130,11 @@
   `replaceAll()` 只用于初始化、洗牌等整区重建。
 - 公共区不表达玩家手牌、装备、判定或标记区所有权；这些由 `Card.location === 'player'`
   与 `Player` 选择器表达。
+- `Zone('exchange')` 拥有命名 `ExchangeBatch`；`room.publicZones.getExchangeBatch(key)` 返回批次视图。
+  `cards` 只返回仍在物理交换区的成员，`candidateCards` 返回带本批令牌的逻辑候选；后者不占物理槽。
+  批次通过 `stage()`、`captureNextMove()`、`transferTo()` 管理引用，移动结束清除离区成员，`clear()` 随整区重建或销毁释放引用。
+- 区域 `8` 使用 `location='popup'` 与 `popupSpaceID`，完整位置 key 为 `popup:<spaceID>`，由 `popupSpaces` 持有明牌、暗槽及候选引用；
+  玩家标记区仍使用 `player:<seat>:mark:<spellID>`。二者不共享来源槽，也不将技能 ID 当座位。
 
 ## 同步链
 

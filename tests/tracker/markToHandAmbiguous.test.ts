@@ -172,8 +172,8 @@ describe('标记区暗牌进入手牌', () => {
     const group = Array.from(room.constraintGroups.values()).find(
       (item) => item.cards.has(firstMark) && item.expectedSlotsByLocation.size === 2
     )
-    expect(group?.expectedSlotsByLocation.get(markKey)).toBe(1)
-    expect(group?.expectedSlotsByLocation.get(handKey)).toBe(1)
+    expect(group?.expectedSlotsByLocation.get(markKey)).toEqual({ min: 1, max: 1 })
+    expect(group?.expectedSlotsByLocation.get(handKey)).toEqual({ min: 1, max: 1 })
   })
 
   it('标记区只有唯一可见牌时仍按唯一解取出', () => {
@@ -290,8 +290,8 @@ it('旧组只移除部分牌时先按原位置扣名额，再扩展目标候选'
   moveHiddenMarkToHand(room, { fromSeatID: 0, toSeatID: 3, fromZoneParam: 3657, spellID: 3658 })
 
   expect(Array.from(oldGroup.cards, (card) => card.id)).toEqual([21])
-  expect(oldGroup.expectedSlotsByLocation.get(sourceKey)).toBe(0)
-  expect(oldGroup.expectedSlotsByLocation.get(otherKey)).toBe(1)
+  expect(oldGroup.expectedSlotsByLocation.get(sourceKey)).toEqual({ min: 0, max: 0 })
+  expect(oldGroup.expectedSlotsByLocation.get(otherKey)).toEqual({ min: 1, max: 1 })
   expect(otherMark.owner).toBe(1)
   expect(otherMark.subZone).toBe('mark')
   expect(room.getPlayer(3)!.getCandidateHandSlotCount()).toBe(1)

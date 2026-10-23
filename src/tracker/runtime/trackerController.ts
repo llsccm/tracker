@@ -36,6 +36,7 @@ import {
 import { trackerLogger } from '@/utils/logger'
 
 interface RevealTarget {
+  popupSpaceID?: number
   type?: 'player' | 'public' | string
   seatID?: SeatID
   fromSeatID?: SeatID
@@ -459,6 +460,16 @@ export class TrackerController {
       move.SpellID
     )
 
+    if (zone === 8) {
+      return readyRoom.moveCards(ids, 'popup', {
+        fromZone: 'popup',
+        fromPopupSpaceID: event.options.toPopupSpaceID,
+        toPopupSpaceID: event.options.toPopupSpaceID,
+        handMoveCount: 0,
+        sourceEvent: event.options.sourceEvent
+      })
+    }
+
     if (subZone && seatID != null && seatID !== 255) {
       this.controllerLogger.info('展示明牌进入玩家区', {
         ids,
@@ -565,6 +576,15 @@ export class TrackerController {
           }
         })
         if (!completed) return
+      } else if (target.type === 'popup') {
+        const completed = readyRoom.moveCards(ids, 'popup', {
+          fromZone: 'popup',
+          fromPopupSpaceID: target.popupSpaceID,
+          toPopupSpaceID: target.popupSpaceID,
+          handMoveCount: 0,
+          sourceEvent: target.sourceEvent
+        })
+        if (!completed) return
       } else if (target.type === 'public') {
         const zoneName = target.zoneName ?? 'pile'
         const position = target.position ?? POSITION_TOP
@@ -593,8 +613,12 @@ export class TrackerController {
     const readyRoom = this.getReadyTrackerRoom()
     if (!readyRoom) return
     try {
+      const previousCardSeq = readyRoom.dirtyCardSeq
       const moves = readyRoom.dispatchSkillProtocolEvent(event)
       for (const move of moves) this.syncTrackerMove(move.patched, move.raw)
+      if (moves.length === 0 && readyRoom.dirtyCardSeq !== previousCardSeq) {
+        this.controllerView.scheduleRender()
+      }
     } catch (error) {
       trackerLogger.error('技能协议处理失败', error, event)
     }
@@ -687,6 +711,22 @@ export class TrackerController {
   revealTrackerCardsInZone(protocolZone: ProtocolZoneInput, cardIDs: CardID[] | CardID = []): void {
     const ids = this.normalizeIDs(cardIDs).filter((id) => id > 0)
     const { zone, id, spellID = null, pos } = protocolZone
+
+    if (zone === 8) {
+      this.revealTrackerCards(
+        {
+          type: 'popup',
+          popupSpaceID: spellID ?? id,
+          sourceEvent: {
+            type: 'revealCards',
+            label: 'protocolZone.reveal',
+            raw: { protocolZone, cardIDs: ids }
+          }
+        },
+        ids
+      )
+      return
+    }
 
     if (isProtocolPlayerZone(zone) && id !== 255) {
       const subZone = getProtocolPlayerSubZone(zone)

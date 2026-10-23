@@ -158,7 +158,7 @@ describe('周群天候其他视角换牌候选', () => {
     expect(room.getPlayer(actorSeat)!.observedHandCount).toBe(2)
   })
 
-  it('明暗混合交换两张时保留逐牌弱候选，展示命中后确认该明牌换出', () => {
+  it('明暗混合交换两张时保留区间约束，展示命中后确认该明牌换出', () => {
     const { controller, knownCards, room } = setupHand({
       knownIDs: [88, 146],
       hiddenCount: 2
@@ -166,6 +166,10 @@ describe('周群天候其他视角换牌候选', () => {
 
     runExchange(controller, 2)
     knownCards.forEach((card) => expectHandOrPileTop(card, 2))
+    const group = Array.from(room.constraintGroups.values()).find((item) =>
+      item.expectedSlotsByLocation.has('public:pile:top:2')
+    )!
+    expect(group.expectedSlotsByLocation.get('public:pile:top:2')).toEqual({ min: 0, max: 2 })
 
     const pileBeforeShow = room.zones.get('pile')!.cards.map((card) => card.id)
     showFinalCard(controller, 88)

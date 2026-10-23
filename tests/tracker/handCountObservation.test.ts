@@ -171,8 +171,8 @@ describe('玩家手牌数观测', () => {
     )
 
     expect(candidateCards).toEqual([first, second])
-    expect(group.expectedSlotsByLocation.get('player:1:hand:none')).toBe(1)
-    expect(group.expectedSlotsByLocation.get('player:2:hand:none')).toBe(1)
+    expect(group.expectedSlotsByLocation.get('player:1:hand:none')).toEqual({ min: 1, max: 1 })
+    expect(group.expectedSlotsByLocation.get('player:2:hand:none')).toEqual({ min: 1, max: 1 })
   })
 
   it('随机手牌转移让明暗实体共同参与精确槽位约束', () => {
@@ -215,8 +215,8 @@ describe('玩家手牌数观测', () => {
 
     expect(group).toBeDefined()
     expect(group.cards.size).toBe(9)
-    expect(group.expectedSlotsByLocation.get('player:2:hand:none')).toBe(6)
-    expect(group.expectedSlotsByLocation.get('player:3:hand:none')).toBe(3)
+    expect(group.expectedSlotsByLocation.get('player:2:hand:none')).toEqual({ min: 6, max: 6 })
+    expect(group.expectedSlotsByLocation.get('player:3:hand:none')).toEqual({ min: 3, max: 3 })
     expect(sourceCards.every((card) => card.seats.has(2) && card.seats.has(3))).toBe(true)
     expect(hiddenIDs.map((id) => getCard(room, id)).every((card) => card.seats.size === 2)).toBe(
       true
@@ -370,8 +370,14 @@ describe('玩家手牌数观测', () => {
       )
       expect(transferGroup).toBeDefined()
       expect(transferGroup?.cards.size).toBe(3)
-      expect(transferGroup?.expectedSlotsByLocation.get('player:1:hand:none')).toBe(2)
-      expect(transferGroup?.expectedSlotsByLocation.get('player:5:hand:none')).toBe(1)
+      expect(transferGroup?.expectedSlotsByLocation.get('player:1:hand:none')).toEqual({
+        min: 2,
+        max: 2
+      })
+      expect(transferGroup?.expectedSlotsByLocation.get('player:5:hand:none')).toEqual({
+        min: 1,
+        max: 1
+      })
       expect(room.getPlayer(1).observedHandCount).toBe(2)
       expect(room.getPlayer(5).observedHandCount).toBe(1)
       // 只有本次唯一归属覆盖的 3 张进入 N 选 K；残留跨座位候选不掺入。

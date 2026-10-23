@@ -24,6 +24,9 @@ export type MoveTargetZone = PublicZoneName | 'player'
 export type KnownCardCreationReason = 'external-source' | 'known-fallback'
 
 export interface RoomMovementOptions {
+  fromPopupSpaceID?: number
+  toPopupSpaceID?: number
+  gainSpellID?: SpellID | null
   pileIdentityCardIDs?: readonly CardID[]
   pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
   toSeatID?: SeatInput
@@ -53,6 +56,9 @@ export interface RoomMovementOptions {
 }
 
 export interface RoomMoveContext {
+  fromPopupSpaceID?: number
+  toPopupSpaceID?: number
+  gainSpellID: SpellID | null | undefined
   pileIdentityCardIDs?: readonly CardID[]
   pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
   cardIDs: readonly CardID[]
@@ -116,7 +122,7 @@ export interface HiddenMarkState {
   muniuMarkSeat: SeatID | null
 }
 
-export interface UnassignedMarkSpaceState {
+export interface PopupSpaceState {
   spaces: Map<SpellID, Card[]>
 }
 
@@ -127,6 +133,7 @@ export interface TakeSpecificSourceFallback {
 }
 
 export interface TakeSourceCardsOptions {
+  fromPopupSpaceID?: number
   sourceIsOutside?: boolean
   fromSeat?: SeatID | null
   fromSubZone?: SubZone
@@ -170,8 +177,10 @@ export interface RandomHandTransferOptions {
   sourceEvent?: MoveSourceEvent
 }
 
-export interface MarkToHandCandidatesOptions {
-  /** 标记区所在座位；缺省时不接管，保留默认暗牌移动。 */
+export interface StoredToHandCandidatesOptions {
+  fromPopupSpaceID?: number
+  gainSpellID?: SpellID | null
+  /** 玩家标记来源座位；弹窗来源使用 fromPopupSpaceID。 */
   fromSeat: SeatID | null
   /** 标记空间 ID；缺省时不接管，避免跨空间误合并候选。 */
   fromSpellID: SpellID | null
@@ -208,5 +217,5 @@ export interface PublicCandidatesToHandOptions {
 export const PAIDUI_POSITIONS = ['top', 'bottom']
 // GameState tracker 命名空间中的通用账本 key：记录“手牌暗置到标记区”的明牌候选关系。
 export const HIDDEN_MARK_STATE_KEY = 'hiddenMarkCandidates'
-// GameState tracker 命名空间中的通用账本 key：记录 toSeatID=255 等无席位标记空间里的暗占位实体。
-export const UNASSIGNED_MARK_SPACE_STATE_KEY = 'unassignedMarkSpaces'
+// 临时弹窗空间的实体与候选引用，随移动消耗，空桶在收敛尾部释放。
+export const POPUP_SPACE_STATE_KEY = 'popupSpaces'

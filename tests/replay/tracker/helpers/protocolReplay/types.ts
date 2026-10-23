@@ -1,4 +1,5 @@
 import type { GameState } from '@/tracker/Game'
+import type { SlotCountRange } from '@/tracker/constraint/ConstraintGroup'
 import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 import type { TrackerController } from '@/tracker/runtime/trackerController'
 import type { TrackerControllerOptions } from '@/tracker/types'
@@ -63,7 +64,7 @@ export interface TrackerReplayConstraintSnapshot {
   cardIDs: number[]
   entityIDs: number[]
   candidateSeats: number[]
-  expectedSlotsByLocation: Record<string, number>
+  expectedSlotsByLocation: Record<string, SlotCountRange>
 }
 
 export interface TrackerReplayRoomSnapshot {

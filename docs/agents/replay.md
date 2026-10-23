@@ -81,6 +81,8 @@ PowerShell、编码和文件路径写法按 [`commands.md`](commands.md) 与 Ser
 
 约束快照、watch provenance 与变化签名只记录 `expectedSlotsByLocation`，不保留已退役的
 `expectedSlotsBySeat` 运行时字段。连续转移后，因果闭包内仍存活组的位置名额应与最终快照一致。
+位置名额值为 `{ min, max }`；快照与来源追踪复制区间，变化签名同时包含上下界并按位置 key 排序，
+文本报告显示为 `位置=[min,max]`，精确名额同样保留相等的上下界。
 
 回放器只能保证“已实现协议集合”内的状态重建。遇到未支持协议会明确失败，不能用“忽略该条消息”来宣称
 完整回放成功。

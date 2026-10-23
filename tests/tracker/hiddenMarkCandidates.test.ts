@@ -79,7 +79,7 @@ describe('隐藏标记区候选', () => {
     expect(event.options.spellID).toBe(3389)
   })
 
-  it('414 标记区全暗回手牌时兼容 3389 返回事件', () => {
+  it('414 标记区全暗回手牌按来源空间读取，动作技能为 3389', () => {
     const { room } = createTestRoom({ cardIDs: [136, 137, 138, 139], seatIDs: [6] })
     const knownCard = getCard(room, 136)
     const hiddenCards = room.zones.get('pile')!.cards.filter((card) => card.isAnonymous)
@@ -202,7 +202,7 @@ describe('隐藏标记区候选', () => {
     candidateCard.confirmKnown()
     candidateCard.setLocationCandidates([sourceMark, otherHand])
 
-    expect(room.movement.sources.resolveSourcePlayerCandidate(candidateCard, context)).toBe(true)
+    expect(room.movement.sources.resolveStoredSourceCandidate(candidateCard, context)).toBe(true)
     expect(candidateCard.subZone).toBe('mark')
     expect(candidateCard.spellID).toBe(414)
 
@@ -216,7 +216,7 @@ describe('隐藏标记区候选', () => {
     expect(room.movement.sources.swapKnownCardWithPlayerSourcePlaceholder(knownCard, context)).toBe(
       placeholder
     )
-    expect(room.movement.sources.isCardInPlayerSource(knownCard, context)).toBe(true)
+    expect(room.movement.sources.isCardInStoredSource(knownCard, context)).toBe(true)
     expect(knownCard.subZone).toBe('mark')
     expect(knownCard.spellID).toBe(414)
     expect(placeholder.subZone).toBe('hand')
@@ -249,10 +249,7 @@ describe('隐藏标记区候选', () => {
 
     expect(mixedCandidate.subZone).toBe(null)
     expect(mixedCandidate.spellID).toBe(null)
-    expect(getUnknownPlayerSourceCards(room, 6, 'mark', 3389)).toEqual([
-      exactSource,
-      mixedCandidate
-    ])
+    expect(getUnknownPlayerSourceCards(room, 6, 'mark', 414)).toEqual([exactSource, mixedCandidate])
   })
 
   it.each([1, 3])('全明手牌暗置 %s 张标记区时创建完整位置强约束', (markCount) => {
@@ -275,8 +272,14 @@ describe('隐藏标记区候选', () => {
 
     expect(record.knownMarkMin).toBe(markCount)
     expect(record.knownMarkMax).toBe(markCount)
-    expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(hand))).toBe(4 - markCount)
-    expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(mark))).toBe(markCount)
+    expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(hand))).toEqual({
+      min: 4 - markCount,
+      max: 4 - markCount
+    })
+    expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(mark))).toEqual({
+      min: markCount,
+      max: markCount
+    })
     cards.forEach((card) => {
       expect(
         card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
@@ -284,7 +287,7 @@ describe('隐藏标记区候选', () => {
     })
   })
 
-  it('混有暗牌时只展示候选，不创建强约束', () => {
+  it('混有暗牌时保留候选并建立区间名额', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [1] })
     const cards = [1, 2].map((id) => getCard(room, id))
     const hand = playerLocation(1, 'hand')
@@ -304,12 +307,35 @@ describe('隐藏标记区候选', () => {
 
     expect(record.knownMarkMin).toBe(0)
     expect(record.knownMarkMax).toBe(2)
-    expect(room.constraintGroups.has('hidden_mark_1:1:1234')).toBe(false)
+    expect(
+      room.constraintGroups
+        .get('hidden_mark_1:1:1234')!
+        .expectedSlotsByLocation.get('player:1:mark:1234')
+    ).toEqual({ min: 0, max: 2 })
     cards.forEach((card) => {
       expect(
         card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
       ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
     })
+  })
+
+  it('三明两暗暗置一张后，一张明牌从标记明弃可排除其余标记候选', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5], seatIDs: [1] })
+    moveKnownCardsToHand(room, [1, 2, 3], 1)
+    room.moveCards([], 'player', { toSeatID: 1, fromZone: 'pile', cardCount: 2 })
+    moveHiddenHandToMark(room, { seatID: 1, count: 1, spellID: 1234 })
+    const group = room.constraintGroups.get('hidden_mark_1:1:1234')!
+    expect(group.expectedSlotsByLocation.get('player:1:hand:none')).toEqual({ min: 2, max: 3 })
+    expect(group.expectedSlotsByLocation.get('player:1:mark:1234')).toEqual({ min: 0, max: 1 })
+    room.moveCards([1], 'discard', { fromSeatID: 1, fromSubZone: 'mark', fromSpellID: 1234 })
+    expect(
+      room
+        .getPlayer(1)!
+        .knownHandCards.map((card) => card.id)
+        .sort()
+    ).toEqual([2, 3])
+    expect(room.getPlayer(1)!.observedHandCount).toBe(4)
+    expect(room.getPlayer(1)!.unknownCardCount).toBe(2)
   })
 
   it('暗置标记追加目标候选时不丢已有跨角色手牌候选', () => {

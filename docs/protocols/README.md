@@ -51,7 +51,7 @@
 | 文档                                                     | DataID | 场景             | 关键识别                                             |
 | -------------------------------------------------------- | -----: | ---------------- | ---------------------------------------------------- |
 | [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `8` | OPT_DATA_ADD_SPELL_EFFECT | `SeatID` 为目标；`Datas=[3730,技能拥有者座位]` |
-| [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `3544` | 巧织暗取牌       | `Datas=[cardID,0]`；非主视角将牌面物化到目标普通手牌 |
+| [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `3544` | 巧织暗取牌       | `Datas=[cardID,0]`；默认技能管线零增量确认手牌；无通知也可由标记区剩余明弃收敛 |
 | [诡伏](PubGsCMoveCard-3709.md) | `3709` | 诡伏当前持有状态 | 获得牌、用牌后或获得技能时同步；仅有待配对获得移动时补入 `patched` |
 | [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `4022` | 裴秀地图状态更新 | `Datas=[mapID,currentCell,historyCount,...]`，仅己方 |
 

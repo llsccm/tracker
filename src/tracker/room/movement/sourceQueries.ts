@@ -1,7 +1,8 @@
 import { getPlayerLocationCandidates } from '@/tracker/candidate/locationCandidate'
-import { getCompatibleMarkSpellIDs } from '@/tracker/candidate/markSpellID'
 import type { Card } from '@/tracker/model/Card'
 import type { Room } from '@/tracker/Room'
+import { getPopupSpaceCards } from './popupSpaces'
+import type { RoomMoveContext } from './types'
 import type {
   PlayerLocationCandidate,
   SeatID,
@@ -48,7 +49,7 @@ export function getUnknownPlayerSourceCards(
   const sourceSpellIDs = Array.isArray(spellIDs) ? spellIDs : [spellIDs]
   const markSpellIDs =
     subZone === 'mark'
-      ? Array.from(new Set(sourceSpellIDs.flatMap((spellID) => getCompatibleMarkSpellIDs(spellID))))
+      ? Array.from(new Set(sourceSpellIDs.filter((spellID) => spellID != null)))
       : []
   const matchesSpellID = (spellID: PlayerLocationCandidate['spellID']): boolean =>
     subZone !== 'mark' ||
@@ -88,6 +89,27 @@ export function isExactUnknownPlayerSourceCard(card: Card, seatID: SeatID): bool
     card.suspended !== true &&
     card.owner === seatID &&
     !card.hasLocationCandidates()
+  )
+}
+
+/** 明确的弹窗端点只查对应空间，玩家端点只查座位子区。 */
+export function getUnknownStoredSourceCards(
+  room: Room,
+  context: RoomMoveContext,
+  excludedCards: Iterable<Card> = []
+): Card[] {
+  if (context.fromZone === 'popup') {
+    const excluded = new Set(excludedCards)
+    return getPopupSpaceCards(room, context.fromPopupSpaceID).filter(
+      (card) => !card.isKnown && !card.hasLocationCandidates() && !excluded.has(card)
+    )
+  }
+  return getUnknownPlayerSourceCards(
+    room,
+    context.fromSeat,
+    context.fromSubZone,
+    context.fromSpellID ?? context.spellID,
+    excludedCards
   )
 }
 

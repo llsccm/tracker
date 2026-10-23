@@ -158,7 +158,10 @@ function formatProvenance(item: ReplayConstraintProvenance): string {
     `updated@${item.lastUpdatedAtSeq}`,
     item.invalidatedAtSeq === null ? 'alive' : `invalidated@${item.invalidatedAtSeq}`
   ].join(' ')
-  const slots = formatEntries(item.expectedSlotsByLocation)
+  const slots =
+    Object.entries(item.expectedSlotsByLocation)
+      .map(([key, range]) => `${key}=[${range.min},${range.max}]`)
+      .join(' ') || '(空)'
   return (
     `- group=${item.id} ${lifecycle} seats=[${item.candidateSeats.join(',')}] ` +
     `cards=${item.cardIDs.length} slotsByLocation={${slots}} source=${stringifyInline(item.sourceEvent)}`

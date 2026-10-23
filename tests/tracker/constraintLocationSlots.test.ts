@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
+import { computeHandSlotAllocation } from '@/tracker/constraint/handSlotUsage'
 import type { Room } from '@/tracker/Room'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from './helpers/room'
@@ -24,6 +25,103 @@ function verifyLocationSlotContract(room: Room, group: ConstraintGroup): void {
 
 void verifyLocationSlotContract
 
+describe('区间名额', () => {
+  it('公共端点的单值候选已占用上界，排除同组其余公共分支', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1] })
+    const cards = [1, 2, 3].map((id) => getCard(room, id)!)
+    const pile = publicLocation('pile', 'top', 1)
+    const hand = playerLocation(1, 'hand')
+    cards[0].setLocationCandidates([pile])
+    cards.slice(1).forEach((card) => card.setLocationCandidates([hand, pile]))
+    const group = room.createConstraintGroup({
+      cards,
+      expectedSlotsByLocation: {
+        [createLocationCandidateKey(pile)]: { min: 0, max: 1 },
+        [createLocationCandidateKey(hand)]: { min: 0, max: 3 }
+      }
+    })
+    expect(group.resolve()).toBe(true)
+    expect(
+      cards.slice(1).every((card) => card.subZone === 'hand' && !card.hasLocationCandidates())
+    ).toBe(true)
+    expect(group.resolve()).toBe(false)
+  })
+
+  it('上下界分别消元，离组扣减两端且等价更新幂等', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1, 2] })
+    const cards = [1, 2, 3].map((id) => getCard(room, id)!)
+    const hand = playerLocation(1, 'hand')
+    const other = playerLocation(2, 'hand')
+    cards.forEach((card) => card.setLocationCandidates([hand, other]))
+    const ranges = {
+      'player:1:hand:none': { min: 1, max: 2 },
+      'player:2:hand:none': { min: 1, max: 2 }
+    }
+    const group = room.createConstraintGroup({
+      id: 'range',
+      cards,
+      expectedSlotsByLocation: ranges
+    })
+    expect(group.resolve()).toBe(false)
+    expect(room.getPlayer(1)!.getCandidateHandSlotCount()).toBe(2)
+    room.constraintGroupsDirty = false
+    room.createConstraintGroup({ id: 'range', expectedSlotsByLocation: ranges })
+    expect(room.constraintGroupsDirty).toBe(false)
+    cards[0].resolveLocationCandidate(hand)
+    room.removeCardsFromConstraintGroups([cards[0]])
+    expect(group.expectedSlotsByLocation.get('player:1:hand:none')).toEqual({ min: 0, max: 1 })
+    cards[1].resolveLocationCandidate(hand)
+    expect(group.resolve()).toBe(true)
+    expect(cards[2].owner).toBe(2)
+    expect(group.resolve()).toBe(false)
+  })
+
+  it('下界锁定必须覆盖所有候选，零下界不能被上界替代', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [1, 2, 3] })
+    const cards = [1, 2].map((id) => getCard(room, id)!)
+    const hand = playerLocation(1, 'hand')
+    const mark = playerLocation(1, 'mark', 1234)
+    const escape = playerLocation(3, 'hand')
+    cards.forEach((card) => card.setLocationCandidates([hand, mark, escape]))
+    const group = room.createConstraintGroup({
+      cards,
+      expectedSlotsByLocation: {
+        'player:1:hand:none': { min: 2, max: 3 },
+        'player:1:mark:1234': { min: 0, max: 1 }
+      }
+    })
+    expect(group.resolve()).toBe(false)
+    cards.forEach((card) => card.removeLocationCandidate(escape))
+    expect(group.resolve()).toBe(true)
+    expect(cards.every((card) => !card.hasLocationCandidates() && card.subZone === 'hand')).toBe(
+      true
+    )
+    const zero = new ConstraintGroup({
+      cards,
+      expectedSlotsByLocation: { 'player:2:hand:none': '0' }
+    })
+    expect(zero.expectedSlotsByLocation.get('player:2:hand:none')).toEqual({ min: 0, max: 0 })
+  })
+
+  it('区间暗实体只能提供下界必需覆盖', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [1] })
+    const hidden = room.zones.get('pile')!.cards[0]
+    hidden.setLocationCandidates([playerLocation(1, 'hand'), playerLocation(1, 'mark', 1234)])
+    room.createConstraintGroup({
+      cards: [hidden],
+      expectedSlotsByLocation: {
+        'player:1:hand:none': { min: 0, max: 1 },
+        'player:1:mark:1234': { min: 0, max: 1 }
+      }
+    })
+    room.getPlayer(1)!.syncObservedHandCount(1)
+    const allocation = computeHandSlotAllocation(room).get(1)!
+    expect(allocation.ambiguousHiddenCoveredCount).toBe(0)
+    expect(allocation.canReconcileAnonymous).toBe(false)
+    expect(allocation.anonymousMissingCount).toBeNull()
+  })
+})
+
 describe('完整位置名额生命周期', () => {
   it('完整位置名额支持对象输入与多子区更新', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
@@ -36,8 +134,8 @@ describe('完整位置名额生命周期', () => {
     })
     expect(group.expectedSlotsByLocation).toEqual(
       new Map([
-        ['player:1:hand:none', 1],
-        ['player:2:hand:none', 0]
+        ['player:1:hand:none', { min: 1, max: 1 }],
+        ['player:2:hand:none', { min: 0, max: 0 }]
       ])
     )
     expect(group).not.toHaveProperty('expectedSlotsBySeat')
@@ -46,7 +144,7 @@ describe('完整位置名额生命周期', () => {
       id: group.id,
       expectedSlotsByLocation: undefined
     })
-    expect(group.expectedSlotsByLocation.get('player:1:hand:none')).toBe(1)
+    expect(group.expectedSlotsByLocation.get('player:1:hand:none')).toEqual({ min: 1, max: 1 })
     expect(room.constraintGroupsDirty).toBe(false)
 
     const markKey = createLocationCandidateKey(playerLocation(1, 'mark', 700))
@@ -59,8 +157,8 @@ describe('完整位置名额生命周期', () => {
     })
     expect(group.expectedSlotsByLocation).toEqual(
       new Map([
-        ['player:1:hand:none', 2],
-        [markKey, 1]
+        ['player:1:hand:none', { min: 2, max: 2 }],
+        [markKey, { min: 1, max: 1 }]
       ])
     )
     room.createConstraintGroup({
@@ -72,12 +170,12 @@ describe('完整位置名额生命周期', () => {
     })
     expect(group.expectedSlotsByLocation).toEqual(
       new Map([
-        [markKey, 1],
-        ['player:2:hand:none', 1]
+        [markKey, { min: 1, max: 1 }],
+        ['player:2:hand:none', { min: 1, max: 1 }]
       ])
     )
     room.createConstraintGroup({ id: group.id, expectedSlotsByLocation: new Map([[markKey, 1]]) })
-    expect(group.expectedSlotsByLocation).toEqual(new Map([[markKey, 1]]))
+    expect(group.expectedSlotsByLocation).toEqual(new Map([[markKey, { min: 1, max: 1 }]]))
   })
 
   it('候选计数先扣除组内确定牌，匿名对账只补剩余缺口', () => {
@@ -176,8 +274,8 @@ describe('完整位置名额生命周期', () => {
     const handKey = createLocationCandidateKey(hand)
     const markKey = createLocationCandidateKey(mark)
     const slots = new Map([
-      [handKey, 1],
-      [markKey, 0]
+      [handKey, { min: 1, max: 1 }],
+      [markKey, { min: 0, max: 0 }]
     ])
     const group = room.createConstraintGroup({
       id: 'location-slots',
@@ -206,8 +304,8 @@ describe('完整位置名额生命周期', () => {
     })
     expect(group.expectedSlotsByLocation).toEqual(
       new Map([
-        [handKey, 0],
-        [markKey, 1]
+        [handKey, { min: 0, max: 0 }],
+        [markKey, { min: 1, max: 1 }]
       ])
     )
     expect(room.constraintGroupsDirty).toBe(true)
@@ -242,12 +340,15 @@ describe('完整位置名额生命周期', () => {
       })
 
       expect(room.removeCardsFromConstraintGroups([cards[0]])).toBe(true)
-      expect(group.expectedSlotsByLocation.get(key)).toBe(1)
-      expect(group.expectedSlotsByLocation.get('player:1:hand:none')).toBe(remainingSeatSlots)
+      expect(group.expectedSlotsByLocation.get(key)).toEqual({ min: 1, max: 1 })
+      expect(group.expectedSlotsByLocation.get('player:1:hand:none')).toEqual({
+        min: remainingSeatSlots,
+        max: remainingSeatSlots
+      })
       expect(room.removeCardsFromConstraintGroups([cards[0]])).toBe(false)
-      expect(group.expectedSlotsByLocation.get(key)).toBe(1)
+      expect(group.expectedSlotsByLocation.get(key)).toEqual({ min: 1, max: 1 })
       expect(room.removeCardsFromConstraintGroups([cards[1]])).toBe(true)
-      expect(group.expectedSlotsByLocation.get(key)).toBe(0)
+      expect(group.expectedSlotsByLocation.get(key)).toEqual({ min: 0, max: 0 })
       expect(room.constraintGroups.has(group.id!)).toBe(false)
     }
   )
@@ -259,8 +360,8 @@ describe('完整位置名额生命周期', () => {
     const mark = playerLocation(1, 'mark', 700)
     card.setLocationCandidates([hand, mark])
     const slots = new Map([
-      [createLocationCandidateKey(hand), 1],
-      [createLocationCandidateKey(mark), 1]
+      [createLocationCandidateKey(hand), { min: 1, max: 1 }],
+      [createLocationCandidateKey(mark), { min: 1, max: 1 }]
     ])
     const group = room.createConstraintGroup({
       cards: [card, getCard(room, 2)!],
@@ -307,14 +408,14 @@ describe('完整位置名额生命周期', () => {
       card.setLocationCandidates([hand, thirdHand, mark, container, pile])
     })
     const keptSlots = new Map([
-      [createLocationCandidateKey(thirdHand), 1],
-      [createLocationCandidateKey(mark), 0],
-      [createLocationCandidateKey(container), 0],
-      [createLocationCandidateKey(pile), 0]
+      [createLocationCandidateKey(thirdHand), { min: 1, max: 1 }],
+      [createLocationCandidateKey(mark), { min: 0, max: 0 }],
+      [createLocationCandidateKey(container), { min: 0, max: 0 }],
+      [createLocationCandidateKey(pile), { min: 0, max: 0 }]
     ])
     const handSlots = new Map([
-      [createLocationCandidateKey(hand), 1],
-      [createLocationCandidateKey(targetHand), 0]
+      [createLocationCandidateKey(hand), { min: 1, max: 1 }],
+      [createLocationCandidateKey(targetHand), { min: 0, max: 0 }]
     ])
     const group = room.createConstraintGroup({
       id: 'mixed-old-slots',
@@ -337,7 +438,7 @@ describe('完整位置名额生命周期', () => {
       })
     ).toEqual(cards)
     expect(group.expectedSlotsByLocation).toEqual(keptSlots)
-    expect(group.expectedSlotsByLocation.get('player:3:hand:none')).toBe(1)
+    expect(group.expectedSlotsByLocation.get('player:3:hand:none')).toEqual({ min: 1, max: 1 })
     expect(room.constraintGroups.has(group.id!)).toBe(true)
     expect(room.constraintGroups.has(emptyGroup.id!)).toBe(false)
     room.resolveConstraints()

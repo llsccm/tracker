@@ -46,7 +46,7 @@ function moveMuniuMarks(room: Room, fromSeatID: SeatID, seatID: SeatID, count = 
 
 describe('木牛流马候选与收敛', () => {
   describe('暗置候选与名额', () => {
-    it('木马一明一暗暗放入标记区时只创建弱候选', () => {
+    it('木马一明一暗暗放入标记区时保留零到一张明牌名额', () => {
       const { room } = createTestRoom({ cardIDs: [161, 1, 2], seatIDs: [1] })
       const knownCard = getCard(room, 1)
       const hand = playerLocation(1, 'hand')
@@ -70,7 +70,11 @@ describe('木牛流马候选与收敛', () => {
 
       expect(record.knownMarkMin).toBe(0)
       expect(record.knownMarkMax).toBe(1)
-      expect(room.constraintGroups.has('hidden_mark_1:muniu:161')).toBe(false)
+      expect(
+        room.constraintGroups
+          .get('hidden_mark_1:muniu:161')!
+          .expectedSlotsByLocation.get('container:equipment:161:700')
+      ).toEqual({ min: 0, max: 1 })
       expect(
         knownCard.locationCandidates
           .map((candidate) => createLocationCandidateKey(candidate))
@@ -98,8 +102,14 @@ describe('木牛流马候选与收敛', () => {
 
       const group = room.constraintGroups.get('hidden_mark_1:muniu:161')
 
-      expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(hand))).toBe(3)
-      expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(mark))).toBe(1)
+      expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(hand))).toEqual({
+        min: 3,
+        max: 3
+      })
+      expect(group.expectedSlotsByLocation.get(createLocationCandidateKey(mark))).toEqual({
+        min: 1,
+        max: 1
+      })
       cards.forEach((card) => {
         expect(
           card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
@@ -126,7 +136,10 @@ describe('木牛流马候选与收敛', () => {
       expect(movedGroup.id).toBe(group.id)
       expect(movedGroup.candidateSeats).toEqual(new Set([1, 2]))
       expect(room.constraintGroups.has('hidden_mark_1:2:700')).toBe(false)
-      expect(movedGroup.expectedSlotsByLocation.get(createLocationCandidateKey(mark))).toBe(1)
+      expect(movedGroup.expectedSlotsByLocation.get(createLocationCandidateKey(mark))).toEqual({
+        min: 1,
+        max: 1
+      })
       expect(room.locationIndex.markBySeatAndSpell.get(2).get(700)).toEqual(
         expect.arrayContaining(cards)
       )
@@ -450,10 +463,10 @@ describe('木牛流马候选与收敛', () => {
       const group = room.constraintGroups.get(groupID)
       expect(
         group.expectedSlotsByLocation.get(createLocationCandidateKey(playerLocation(1, 'hand')))
-      ).toBe(2)
+      ).toEqual({ min: 2, max: 2 })
       expect(
         group.expectedSlotsByLocation.get(createLocationCandidateKey(equipmentContainer(161, 700)))
-      ).toBe(2)
+      ).toEqual({ min: 2, max: 2 })
       expect(
         Array.from(room.constraintGroups.keys()).filter(
           (id) => typeof id === 'string' && id.startsWith('hidden_mark_')
@@ -489,7 +502,7 @@ describe('木牛流马候选与收敛', () => {
         group.expectedSlotsByLocation.get(
           createLocationCandidateKey(playerLocation(1, 'mark', 1234))
         )
-      ).toBe(1)
+      ).toEqual({ min: 1, max: 1 })
       expect(group.candidateSeats).toEqual(new Set([1]))
     })
   })

@@ -361,11 +361,11 @@ describe('黄承彦观虚目标视角交换', () => {
     exchangeMoves.forEach((move) => controller.syncTrackerMove(move))
 
     const guanXuState = room.readSkillState(GUAN_XU_STATE_KEY) as {
-      bySpell: Record<string, { buckets: Record<string, { cards: Card[] }> }>
+      bySpell: Record<string, { buckets: Record<string, { batchKey: string }> }>
     }
-    const returnedPileCardIDs = guanXuState.bySpell[String(987)].buckets[String(actorSeat)].cards
-      .filter((card) => card.location === 'exchange')
-      .map((card) => card.id)
+    const returnedPileCardIDs = room.publicZones
+      .getExchangeBatch(guanXuState.bySpell[String(987)].buckets[String(actorSeat)].batchKey)
+      .cards.map((card) => card.id)
     expect(returnedPileCardIDs).toHaveLength(5)
     expect(returnedPileCardIDs[2]).toBe(returnedHandCardID)
     expect(returnedPileCardIDs).not.toContain(gainedPileCardID)

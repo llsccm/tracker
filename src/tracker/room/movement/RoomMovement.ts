@@ -76,11 +76,14 @@ export class RoomMovement {
 
     // 标记区可见牌多于协议暗牌张数时，挑一张会固化身份，改为标记/手牌双边候选。
     if (
-      this.candidates.markMarkToHandCandidates({
-        fromSeat: context.fromSubZone === 'mark' ? context.fromSeat : null,
+      this.candidates.markStoredToHandCandidates({
+        fromPopupSpaceID: context.knownIDs.length === 0 ? context.fromPopupSpaceID : undefined,
+        fromSeat:
+          context.fromSubZone === 'mark' && context.knownIDs.length === 0 ? context.fromSeat : null,
         fromSpellID: context.fromSpellID ?? context.spellID ?? null,
         toSeat: context.targetHandSeat,
         count: context.unknownCount,
+        gainSpellID: context.gainSpellID,
         sourceEvent: context.sourceEvent
       })
     ) {
@@ -120,6 +123,9 @@ export class RoomMovement {
       // 完整候选覆盖已经表达了这次 K 张转移；此时不能再确定性挑选暗实体搬到目标。
       // 返回空数组表示候选建模失败，仍允许默认未知移动路径执行保守回退。
       context.skipUnknownMovement = propagatedCards.length > 0
+      if (context.gainSpellID !== undefined && targetHandSeat !== null) {
+        propagatedCards.forEach((card) => card.recordHandGain(targetHandSeat, context.gainSpellID))
+      }
     }
 
     if (
@@ -141,7 +147,7 @@ export class RoomMovement {
     }
 
     // 若来源公共区已有候选牌，摸入手牌时把公共候选转化为目标玩家手牌候选。
-    this.candidates.propagatePublicCandidatesToHand({
+    const publicHandCandidates = this.candidates.propagatePublicCandidatesToHand({
       fromZone,
       fromPosition,
       toZone,
@@ -150,6 +156,11 @@ export class RoomMovement {
       count: handMoveCount,
       sourceEvent
     })
+    if (context.gainSpellID !== undefined && targetHandSeat !== null) {
+      publicHandCandidates.forEach((card) =>
+        card.recordHandGain(targetHandSeat, context.gainSpellID)
+      )
+    }
   }
 
   /**
