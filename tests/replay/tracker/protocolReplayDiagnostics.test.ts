@@ -130,7 +130,7 @@ describe('回放诊断：解析、指标、watch 与断言', () => {
     const game = new GameState()
     const room = new Room({ gameState: game })
     const handKey = 'player:1:hand:none'
-    const markKey = 'markSpace:3544'
+    const markKey = 'popup:3544'
     const group = room.createConstraintGroup({
       id: 'range-slots',
       expectedSlotsByLocation: {

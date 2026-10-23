@@ -21,11 +21,37 @@ function verifyLocationSlotContract(room: Room, group: ConstraintGroup): void {
   room.constraints.createConstraintGroup({ expectedSlotsBySubZone: new Map() })
   // @ts-expect-error 约束组不再保留子区槽位镜像。
   void group.expectedSlotsBySubZone
+  // @ts-expect-error 名额仅接受数字或数字区间，不再接受字符串。
+  new ConstraintGroup({ expectedSlotsByLocation: { 'player:1:hand:none': '1' } })
 }
 
 void verifyLocationSlotContract
 
 describe('区间名额', () => {
+  it.each([
+    NaN,
+    Infinity,
+    -1,
+    0.5,
+    Number.MAX_SAFE_INTEGER + 1,
+    { min: NaN, max: 1 },
+    { min: 0, max: NaN },
+    { min: 0.5, max: 1 },
+    { min: 0, max: 1.5 },
+    { min: 0, max: Infinity },
+    { min: 0, max: Number.MAX_SAFE_INTEGER + 1 },
+    { min: -1, max: 1 },
+    { min: 2, max: 1 }
+  ])('拒绝无效名额 %j，避免无效边界参与消元', (count) => {
+    const group = new ConstraintGroup({
+      expectedSlotsByLocation: { 'player:1:hand:none': 1 }
+    })
+    expect(() => group.normalizeExpectedLocationSlots({ 'player:1:hand:none': count })).toThrow(
+      RangeError
+    )
+    expect(group.expectedSlotsByLocation.get('player:1:hand:none')).toEqual({ min: 1, max: 1 })
+  })
+
   it('公共端点的单值候选已占用上界，排除同组其余公共分支', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1] })
     const cards = [1, 2, 3].map((id) => getCard(room, id)!)
@@ -98,7 +124,7 @@ describe('区间名额', () => {
     )
     const zero = new ConstraintGroup({
       cards,
-      expectedSlotsByLocation: { 'player:2:hand:none': '0' }
+      expectedSlotsByLocation: { 'player:2:hand:none': 0 }
     })
     expect(zero.expectedSlotsByLocation.get('player:2:hand:none')).toEqual({ min: 0, max: 0 })
   })

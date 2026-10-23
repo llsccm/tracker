@@ -44,6 +44,9 @@ pnpm typecheck:replay
 pnpm replay:tracker
 ```
 
+两个回放入口均静默处理通过测试的控制台日志，失败时保留诊断。录制 runner 默认仅在失败时输出完整报告；
+显式设置 `DXC_TRACKER_REPLAY_TRACE=1` 时仍输出成功报告中的逐条状态。
+
 录制 runner 支持以下环境变量：
 
 - `DXC_TRACKER_PROTOCOL_FILE`：覆盖默认 `replays/tracker-protocols.jsonl` 路径。

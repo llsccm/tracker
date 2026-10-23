@@ -38,4 +38,44 @@ describe('命名交换批次', () => {
     room.publicZones.deleteExchangeBatch(batch.key)
     expect(batch.candidateCards).toEqual([])
   })
+
+  it.each([true, false])('捕获新增物理成员时保留逻辑候选，提前读取=%s', (readBeforeComplete) => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3] })
+    const [physical, candidate, incoming] = room.zones.get('pile')!.cards
+    const exchange = room.zones.get('exchange')!
+    const batch = room.publicZones.getExchangeBatch('capture')
+    exchange.add([physical])
+    batch.stage([physical, candidate])
+    candidate.setLocationCandidates([{ type: 'outside', zone: 'exchange', batchID: batch.key }])
+
+    batch.captureNextMove()
+    exchange.add([incoming])
+    if (readBeforeComplete) expect(batch.cards).toEqual([incoming])
+    batch.completeMove()
+    expect(batch.cards).toEqual([incoming])
+    expect(batch.candidateCards).toEqual([candidate])
+  })
+
+  it('批次转移保留两侧未转移的逻辑候选，逻辑成员不影响物理插槽', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5] })
+    const [a, b, c, firstCandidate, secondCandidate] = room.zones.get('pile')!.cards
+    const first = room.publicZones.getExchangeBatch('first')
+    const second = room.publicZones.getExchangeBatch('second')
+    room.zones.get('exchange')!.add([a, b, c])
+    first.stage([firstCandidate, a, b])
+    second.stage([secondCandidate, c])
+    firstCandidate.setLocationCandidates([
+      { type: 'outside', zone: 'exchange', batchID: first.key }
+    ])
+    secondCandidate.setLocationCandidates([
+      { type: 'outside', zone: 'exchange', batchID: second.key }
+    ])
+
+    expect(first.transferTo(second, [b], 0)).toBe(true)
+    room.zones.get('exchange')!.completeExchangeMove()
+    expect(first.cards).toEqual([a])
+    expect(second.cards).toEqual([b, c])
+    expect(first.candidateCards).toEqual([firstCandidate])
+    expect(second.candidateCards).toEqual([secondCandidate])
+  })
 })

@@ -12,7 +12,7 @@ export interface SlotCountRange {
   readonly max: number
 }
 
-export type SlotCountInput = number | string | SlotCountRange
+export type SlotCountInput = number | SlotCountRange
 
 type CountMapInput<Key extends string | number | object> =
   | Map<Key, SlotCountInput>
@@ -73,10 +73,14 @@ export class ConstraintGroup {
             typeof candidate === 'string'
               ? createLocationCandidateKey(parseLocationCandidateKey(candidate))
               : createLocationCandidateKey(candidate)
-          const range =
-            typeof count === 'object' ? count : { min: Number(count), max: Number(count) }
-          if (range.min < 0 || range.max < range.min) {
-            throw new RangeError('位置名额必须满足 0 <= min <= max')
+          const range = typeof count === 'number' ? { min: count, max: count } : count
+          if (
+            !Number.isSafeInteger(range.min) ||
+            !Number.isSafeInteger(range.max) ||
+            range.min < 0 ||
+            range.max < range.min
+          ) {
+            throw new RangeError('位置名额必须为安全整数且满足 0 <= min <= max')
           }
           return [key, { min: range.min, max: range.max }]
         })

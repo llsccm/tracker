@@ -30,7 +30,7 @@ function setup(cardIDs: number[]) {
         SpellID: spell,
         FromZone: from,
         ToZone: to,
-        FromID: from === 8 ? spell : 255,
+        FromID: from === 8 ? spell : from === 5 ? seat : 255,
         ToID: to === 5 ? seat : 255,
         CardIDs: ids,
         CardCount: count,
@@ -41,6 +41,53 @@ function setup(cardIDs: number[]) {
 }
 
 describe('临时弹窗空间通用收敛', () => {
+  it.each([1, 2])('连续暗取更新空间与目标手牌名额，第二次交给座位 %s', (secondSeat) => {
+    const { room, move } = setup([1, 2, 3, 4])
+    move(3544, 1, 8, [1, 2, 3, 4])
+    move(3544, 8, 5, [], 1, 2)
+    move(3544, 8, 5, [], 1, secondSeat)
+
+    const group = Array.from(room.constraintGroups.values()).find((entry) =>
+      entry.expectedSlotsByLocation.has('popup:3544')
+    )!
+    expect(group.expectedSlotsByLocation.get('popup:3544')).toEqual({ min: 2, max: 2 })
+    expect(group.expectedSlotsByLocation.get('player:2:hand:none')).toEqual({
+      min: secondSeat === 2 ? 2 : 1,
+      max: secondSeat === 2 ? 2 : 1
+    })
+    expect(room.getPlayer(secondSeat)!.getCandidateHandSlotCount()).toBe(secondSeat === 2 ? 2 : 1)
+    if (secondSeat === 1) {
+      expect(group.expectedSlotsByLocation.get('player:1:hand:none')).toEqual({ min: 1, max: 1 })
+    }
+    expect(room.cards).toHaveLength(4)
+
+    move(3544, 8, 2, [4])
+    expect(group.expectedSlotsByLocation.get('popup:3544')).toEqual({ min: 1, max: 1 })
+    // 最后一次暗取耗尽空间；身份仍由两个目标的名额决定。
+    move(3544, 8, 5, [], 1, 2)
+    expect(getPopupSpaceCards(room, 3544)).toEqual([])
+    expect(room.getPlayer(2)!.getCandidateHandSlotCount()).toBe(secondSeat === 2 ? 0 : 2)
+    if (secondSeat === 2) {
+      expect(
+        room
+          .getPlayer(2)!
+          .knownHandCards.map((card) => card.id)
+          .sort()
+      ).toEqual([1, 2, 3])
+    } else {
+      move(3544, 5, 2, [1], 1, 1)
+      expect(
+        room
+          .getPlayer(2)!
+          .knownHandCards.map((card) => card.id)
+          .sort()
+      ).toEqual([2, 3])
+    }
+    room.assertLocationIndexConsistency()
+    room.assertAmbiguousKnownIndexConsistency()
+    expect(room.assertPileIdentityLedgerConsistency('popup:successive')).toEqual([])
+  })
+
   it.each([
     [1, 3],
     [3, 2],

@@ -15,7 +15,9 @@ export class ExchangeBatch {
 
   get cards(): Card[] {
     if (this.pendingSnapshot) {
-      this.members = this.zone.cards.filter((card) => !this.pendingSnapshot!.has(card))
+      const candidates = this.candidateCards
+      const captured = this.zone.cards.filter((card) => !this.pendingSnapshot!.has(card))
+      this.members = [...new Set([...captured, ...candidates])]
       this.pendingSnapshot = null
     }
     return this.members.filter(
@@ -50,10 +52,14 @@ export class ExchangeBatch {
     position: PublicPosition = POSITION_TOP
   ): boolean {
     const selected = new Set(cards)
-    this.members = this.cards.filter((card) => !selected.has(card))
-    target.members = target.cards.filter((card) => !selected.has(card))
-    const inserted = insertCardsAtProtocolPosition(target.members, cards, position)
-    if (!inserted) target.members.push(...cards)
+    this.members = [...new Set([...this.cards, ...this.candidateCards])].filter(
+      (card) => !selected.has(card)
+    )
+    const targetCards = target.cards.filter((card) => !selected.has(card))
+    const candidates = target.candidateCards.filter((card) => !selected.has(card))
+    const inserted = insertCardsAtProtocolPosition(targetCards, cards, position)
+    if (!inserted) targetCards.push(...cards)
+    target.members = [...new Set([...targetCards, ...candidates])]
     return inserted
   }
 

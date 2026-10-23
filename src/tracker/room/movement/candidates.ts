@@ -6,6 +6,7 @@ import {
 } from '@/tracker/candidate/locationCandidate'
 import { createPublicCandidate, normalizePublicPosition } from '@/tracker/candidate/publicCandidate'
 import type { Card } from '@/tracker/model'
+import { getConstraintSlotState } from '@/tracker/constraint/constraintSlots'
 import type {
   PlayerLocationCandidate,
   PublicLocationCandidate,
@@ -273,14 +274,13 @@ export class RoomMovementCandidates {
 
     const isPopup = fromPopupSpaceID !== undefined
     const spaceCards = isPopup ? getPopupSpaceCards(this.room, fromPopupSpaceID) : []
-    // 混合明暗或旧批尚有未决分支时，不能把可见身份数冒充空间总数。
-    if (isPopup && spaceCards.some((card) => !card.isKnown || card.hasLocationCandidates()))
-      return false
+    // 混合明暗不能把可见身份数冒充空间总数。
+    if (isPopup && spaceCards.some((card) => !card.isKnown)) return false
     const markCards = isPopup
       ? spaceCards
       : getVisibleMarkSpaceCards(this.room, fromSeat, fromSpellID)
     // 只有可见牌多于协议张数时才是“多选一”；唯一解仍由来源取牌直接搬走。
-    if (markCards.length <= count) return false
+    if (!isPopup && markCards.length <= count) return false
 
     const markCandidate = isPopup
       ? { type: 'popup' as const, spaceID: fromPopupSpaceID }
@@ -298,9 +298,39 @@ export class RoomMovementCandidates {
     }
     const markKey = createLocationCandidateKey(markCandidate)
     const handKey = createLocationCandidateKey(handCandidate)
+    const hasPopupCandidates = isPopup && markCards.some((card) => card.hasLocationCandidates())
+    // 连续暗取复用覆盖整个空间的精确名额，不能将候选身份数量当作剩余物理张数。
+    const previousGroup = hasPopupCandidates
+      ? Array.from(this.room.constraintGroups.values()).find((group) => {
+          const slots = group.expectedSlotsByLocation.get(markKey)
+          return (
+            slots !== undefined &&
+            slots.min === slots.max &&
+            markCards.every((card) => group.cards.has(card))
+          )
+        })
+      : undefined
+    if (hasPopupCandidates && !previousGroup) return false
+    const sourceCount = previousGroup?.expectedSlotsByLocation.get(markKey)?.min ?? markCards.length
+    if (previousGroup ? sourceCount < count : sourceCount <= count) return false
+
+    const slots = new Map(previousGroup?.expectedSlotsByLocation)
+    const handState = previousGroup
+      ? getConstraintSlotState(previousGroup.cards, handCandidate, { min: 0, max: 0 })
+      : null
+    const previousHandSlots = slots.get(handKey) ?? {
+      min: handState?.exactCards.length ?? 0,
+      max: handState ? handState.exactCards.length + handState.candidateCards.length : 0
+    }
+    slots.set(markKey, { min: sourceCount - count, max: sourceCount - count })
+    slots.set(handKey, {
+      min: previousHandSlots.min + count,
+      max: previousHandSlots.max + count
+    })
 
     // 先按移动前的确定位置扣减旧组名额，再扩展候选；扩展后已无法辨认原来的槽位。
-    this.room.removeCardsFromConstraintGroups(markCards)
+    // 连续弹窗暗取仍保留旧目标手牌名额与成员，只更新本次两个端点。
+    if (!previousGroup) this.room.removeCardsFromConstraintGroups(markCards)
 
     markCards.forEach((card) => {
       const otherCandidates = card.locationCandidates.filter((candidate) => {
@@ -314,16 +344,14 @@ export class RoomMovementCandidates {
       if (gainSpellID !== undefined) card.recordHandGain(toSeat, gainSpellID)
     })
 
-    // 全部参与牌共同竞争两个位置：标记区留 N-K 张，目标手牌得 K 张。
+    // 全部参与牌共同竞争空间与历次目标手牌名额。
     // 候选数一开始大于名额，不会触发强锁；某张牌离场、名额恰好等于剩余候选数时才收敛。
     this.room.createConstraintGroup({
+      id: previousGroup?.id,
       cards: markCards,
       candidateSeats: isPopup ? [toSeat] : Array.from(new Set([fromSeat, toSeat])),
-      expectedSlotsByLocation: new Map([
-        [markKey, markCards.length - count],
-        [handKey, count]
-      ]),
-      known: true,
+      expectedSlotsByLocation: slots,
+      known: previousGroup?.known ?? true,
       sourceEvent: sourceEvent ?? { type: 'markStoredToHandCandidates' }
     })
 
@@ -333,8 +361,8 @@ export class RoomMovementCandidates {
       toSeat,
       count,
       cardIDs: markCards.map((card) => card.id),
-      markSlots: markCards.length - count,
-      handSlots: count,
+      markSlots: sourceCount - count,
+      handSlots: slots.get(handKey),
       locationCandidates: markCards.map((card) =>
         card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate))
       )
