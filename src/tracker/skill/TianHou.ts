@@ -201,9 +201,12 @@ function decorateHandStage(event: MoveEventDraft, room: Room, actorSeat: SeatID)
 
   room.publicZones.getExchangeBatch(batch.handBatchKey).stage(outgoingCards)
   batch.knownHandCards = knownHandCards
-  // N 张手牌中有 K 张明牌：暗牌最多填满 N-K 个换出名额，明牌最多换出 min(x, K) 张。
-  batch.minKnownOut = Math.max(0, count - hiddenCapacity)
+  // 仅观测到 N 张手牌时才能用 N-K 估计暗牌容量；未观测时不能据实体数强制明牌换出。
   batch.maxKnownOut = Math.min(count, knownHandCards.length)
+  batch.minKnownOut =
+    player?.hasObservedHandCount === true
+      ? Math.min(Math.max(0, count - hiddenCapacity), batch.maxKnownOut)
+      : 0
   batch.phase = 'hand-staged'
 
   trackerLogger.info('天候记录其他视角换牌候选', {

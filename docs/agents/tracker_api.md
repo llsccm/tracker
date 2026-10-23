@@ -35,7 +35,7 @@ if (!room) return
 `cards` 读取当前物理成员，`candidateCards` 读取逻辑候选，`transferTo(target, cards, position)` 调整批次归属，
 结算后调用 `deleteExchangeBatch(batchKey)`。这些 API 不代替 `Room.moveCards()` 的物理移动与身份事务。
 
-数量约束通过 `room.createConstraintGroup({ cards, expectedSlotsByLocation })` 提交：值接受数字、数字字符串
+数量约束通过 `room.createConstraintGroup({ cards, expectedSlotsByLocation })` 提交：值仅接受数字
 或 `{ min, max }`，运行时统一为区间。弹窗位置为 `{ type: 'popup', spaceID }`，不能使用伪座位。
 
 弹窗入区使用 `room.moveCards(ids, 'popup', { fromZone: 'pile', toPopupSpaceID: 35, cardCount })`；出区使用 `fromZone: 'popup', fromPopupSpaceID: 35` 并明确目标。玩家标记继续使用 `toSeatID/subZone: 'mark'/spellID`，来源空间通过 `fromSpellID` 表达。`414` 标记返回时来源仍为 `414`，不能用动作技能 `3389` 查找标记空间。
