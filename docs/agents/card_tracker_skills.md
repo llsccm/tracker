@@ -17,7 +17,7 @@
 - `Room.decorateMoveEvent()` 接收完整标准事件；领域直调仍使用 `Room.moveCards()`。
   使用技能、目标通知、选择回复和角色数据通过 `dispatchSkillProtocolEvent()` 输入已迁移插件，
   `SkillProtocolEvent` 的判别联合保持各协议字段语义，不套用移动契约。
-- 默认插件集中注册于 `src/tracker/skill/registerHandlers.ts`；清议/联句、迁附、生墨、择行、椒遇和
+- 默认插件集中注册于 `src/tracker/skill/registerHandlers.ts`；清议/联句、迁附、生墨、择行和
   佐练使用归一化前补牌，下书使用成功提交钩子。状态统一在 `tracker` scope；称象 UI 暂存仍在 Handler。
 - 插件顺序、异常处理、defer、成功通知与销毁边界见 [`room.md`](room.md)；相关集成回归为
   `tests/tracker/skillLifecycle.test.ts` 和 `tests/tracker/skillCardPatches.test.ts`。
@@ -31,7 +31,7 @@
 | 反间展示与手牌移交           | `SpellID=713`、`MoveType=27`                   | `docs/protocols/PubGsCMoveCard-713.md`；现有列表解码条件不匹配该样例         |
 | 问卦候选来源筛选             | `SpellID=780`、暗交牌 `MoveType=27` 后紧邻回堆 | `src/tracker/skill/WenGua.ts`；`tests/tracker/wenGuaCandidateSource.test.ts` |
 | 权变牌堆顶观看与获得         | `SpellID=7011`、`MoveType=21/18`               | `docs/protocols/GsCRoleOptTargetNtf-7011.md`                                 |
-| 暗置标记区候选               | `FromZone=5`、`ToZone=4/8`、全暗 `CardIDs`     | `RoomMovementHiddenMarks.handleHiddenMarkMove()`、`hiddenMarkCandidates`     |
+| 暗置标记区候选               | `FromZone=5`、`ToZone=4`、全暗 `CardIDs`       | `RoomMovementHiddenMarks.handleHiddenMarkMove()`、`hiddenMarkCandidates`     |
 | 观虚目标视角交换             | `SpellID=987/988`                              | `src/tracker/skill/GuanXu.ts`、`tests/tracker/guanXuExchange.test.ts`        |
 | 整手牌交换                   | `MoveType=11` + `5<->10` + 整手张数            | `src/tracker/skill/HandExchange.ts`                                          |
 | 骋烈其他视角的暗中交换与弃置 | `SpellID=3208`                                 | `src/tracker/skill/ChengLie.ts`、`tests/tracker/chengLie.test.ts`            |
@@ -99,26 +99,27 @@
 零张通知不建立座位观测，普通手牌暗置可以更新观测但不接管空间迁移；现有
 `sourceSeat:muniu:161` 记录键与 `hidden_mark_` 约束组前缀保持不变。
 
-当协议出现 `FromZone=5`、`ToZone=4/8`、`CardIDs` 全暗且 `CardCount > 0` 时，记牌器会检查来源手牌是否存在明牌候选：
+当协议出现 `FromZone=5`、`ToZone=4`、`CardIDs` 全暗且 `CardCount > 0` 时，记牌器会检查来源手牌是否存在明牌候选：
 
 1. 若没有来源明牌，沿用普通暗牌占位移动逻辑。
 2. 若存在来源明牌，由 `RoomMovementHiddenMarks.handleHiddenMarkMove()` 接管默认暗牌移动，并通过
    `Room.readSkillState('hiddenMarkCandidates')` 访问统一状态仓库中的候选账本。
-3. 账本记录来源座位、当前投影目标座位、`spellID`、候选明牌、已确认手牌/标记牌，以及本次暗置的明牌落入标记区数量范围。这里的 `spellID` 表示标记空间 ID：协议 `zone 4` 按旧 `Zone` 规则优先取 `ZoneParam || SpellID`，`zone 8` 优先取 `SpellID || ZoneParam`；木牛流马（木马）的标记空间 ID 固定为 `700`。普通标记账本 ID 为 `sourceSeat:targetSeat:spellID`；唯一可迁座的木牛流马使用 `sourceSeat:muniu:161`，不同来源手牌分别记账，承载座位变化不改变账本或约束组 ID。
+3. 账本记录来源座位、当前投影目标座位、`spellID`、候选明牌、已确认手牌/标记牌，以及本次暗置的明牌落入标记区数量范围。这里的 `spellID` 表示标记空间 ID：协议区域 `4` 优先取 `ZoneParam || SpellID`；木牛流马（木马）的标记空间 ID 固定为 `700`。普通标记账本 ID 为 `sourceSeat:targetSeat:spellID`；唯一可迁座的木牛流马使用 `sourceSeat:muniu:161`，不同来源手牌分别记账，承载座位变化不改变账本或约束组 ID。
 4. 先将候选明牌投影为完整位置候选：保留原有 `A 手牌 / B 手牌` 等候选，再追加目标标记位置。普通标记追加 `目标座位 标记`；木马追加装备容器候选 `container:equipment:161:700`，再由索引按 mark700 协议记录的空间座位显示到玩家标记区。尚未观察到标记协议时，才以装备位置作初始兜底。这一步不会丢掉既有跨角色候选。
-5. 当范围 `knownMarkMin === knownMarkMax` 且候选全集只剩 `来源手牌 / 目标标记` 时，创建 `ConstraintGroup.expectedSlotsByLocation` 精确约束，支持 4 选 1、4 选 2、4 选 3 等 N 选 K。普通标记与木马容器均只维护完整位置名额，不再生成子区槽位镜像。
+5. 候选全集只剩 `来源手牌 / 目标标记` 时，创建 `ConstraintGroup.expectedSlotsByLocation` 区间约束；全明时上下界相等，支持 N 选 K。普通标记与木马容器共用完整位置名额。
 6. 后续某张候选明牌明确从同一标记空间进入弃牌区时，确认它占用该标记区名额；明确从来源手牌移动时，确认它占用手牌名额。普通标记要求座位与标记 ID 同时匹配；木马标记 `700` 若 `markID` 一致但座位变化，会先把账本的当前投影座位重定向，再继续使用同一个装备容器候选收敛。装备本体 `6 -> 6` 不迁移内部牌；收到来源与目标标记 ID 都为 `700` 的跨座位 `mark -> mark` 协议后，才迁移标记实体、暗占位与候选账本，并同步精确约束的座位读面，不重命名或合并账本。`hiddenMarkCandidates.muniuMarkSeat` 记录该空间的显式观测座位，使两条协议之间的候选投影也留在旧座位。候选明牌与来源标记占位置换时，优先选用该候选所属账本的可用占位，避免消耗另一来源的占位后又触发本账本重复回收。
-7. 技能 `414` 的标记牌暗置回手牌时，返回协议可能使用 `3389` 作为 `SpellID`；同样由 `3389` 触发的标记也会以 `3389` 返回。因此从标记区按暗牌数量取源牌时，`414` 与 `3389` 作为兼容标记空间互扫，避免明牌仍残留在 `414` 标记区。
+7. 技能 `414` 的标记牌返回手牌时，`FromZoneParam=414` 始终标识来源存储空间，`SpellID=3389` 只表示本次返回动作。按 `fromSpellID=414` 精确查询，不在 `414/3389` 间互扫；普通手牌的获得来源独立记录为 `gainSpellID=3389`。
 8. 洗牌发现承担 cohort 未决身份的正 ID 暗标记实体时，会将同一实体原地匿名化为稳定负 `id/entityID`；标记位置、候选集合及 `hiddenMarkCandidates` 中的对象引用保持不变，不再暂停原实体或创建替身。
 9. 来源手牌被完整揭示时，`Room.moveCards()` 会在 `resolveKnownMoveCards()` 之前调用 `resolveHiddenMarkCandidatesFromFullHandReveal()`：未出现在完整手牌快照中的弱候选会先确认到标记空间，再让已知牌物化读取修正后的匿名手牌槽。这个前置时序仍是当前运行时契约。
 10. 正 ID 确认占用标记名额后，`reconcileMarkSpace(record, reason)` 按账本累计暗置额度统一回收溢出的匿名标记占位；`hiddenCount` 不是当前标记区容量，牌离开造成不足时不会在这里补造实体。无论目标是普通 player mark 还是木马装备容器，只要占位来自来源手牌，就必须挤回 `sourceSeat` 手牌，不能丢到 `outside`；只有全明装备容器快照清零后、失去手牌物理背书的孤儿占位由 `clearHiddenMarkPlaceholdersForObservedSnapshot()` 独立移出玩家区。
-11. `ConstraintGroup.expectedSlotsByLocation` 继续只承载精确数量约束。弱记录的范围求解与容器对称增强已经评估并暂缓：部分揭示的“未出现”不是负向证据，完整揭示又必须先于已知牌物化，观察快照还包含实体物化与孤儿清理，现阶段引入通用范围求解器不能替代这些局部流程。
+11. 区间约束负责上下界消元，不替代完整手牌揭示、容器观察快照及孤儿占位清理。部分揭示中“未出现”仍不是负向证据。
 
 示例：
 
 - 4 明 0 暗，暗置 1 张：普通标记形成 `A 手牌 = 3`、`A 标记 = 1` 的精确约束；木马形成 `A 手牌 = 3`、`container:equipment:161:700 = 1` 的精确约束。
 - 4 明 0 暗，暗置 3 张：形成 `A 手牌 = 1`、`A 标记 = 3` 的精确约束。
-- 2 明 2 暗，暗置 2 张：只记录这 2 张明牌可能在标记区；由于 `knownMarkMin=0`、`knownMarkMax=2`，不会创建强约束。
+- 2 明 2 暗，暗置 2 张：两张明牌在手牌和标记区的名额都是 `[0,2]`，保留候选。
+- 3 明 2 暗，暗置 1 张：明牌手牌名额 `[2,3]`，标记名额 `[0,1]`；一张明牌确认从标记离开后，其余明牌排除该标记位置。
 - 若一张牌原本是 `A 手牌 / B 手牌`，暗置到 A 标记后会变成 `A 手牌 / B 手牌 / A 标记`；排除 B 后仍是 `A 手牌 / A 标记`，不会因为 owner 确定而误判具体区域。
 
 ## 标记区暗交手牌后的来源确认（SpellID=3658）
@@ -128,6 +129,18 @@
   单独的 `seats` 投影把整批来源改成标记区。候选身份不应消耗同批未知身份需要的匿名槽。
 - 原始协议、装备与手牌分别移出的顺序及回归入口见
   [标记区暗交与手牌弃置](../protocols/PubGsCMoveCard-3658.md)。
+
+## 临时弹窗空间（巧织 3544、椒遇 3571）
+
+- 协议区域 `8` 独立映射为 `popup`，不属于玩家 `mark`。进入时按 `SpellID` 定位空间；移出时按 `FromID` 定位（`255` 时使用 `SpellID`）。领域移动使用 `toPopupSpaceID` / `fromPopupSpaceID`，不使用伪座位。实体登记在 `popupSpaces`；完整位置为 `{ type: 'popup', spaceID }`，
+  key 为 `popup:<spaceID>`，不把技能 ID 或 255 投影成玩家座位。
+- 确定弹窗牌的 `Card.location='popup'`、`popupSpaceID` 表达空间，`subZone/spellID/owner` 为空；含手牌分支的未决身份继续保留完整候选。空间引用在收敛尾部清理，空空间释放；新 Room 不复用旧成员。
+- 技能 `35` 的匿名五张暂存、四张回顶、一张回底复用原实体，回堆位置遵循 `ToPosition`，不能从随机来源或本地数组次序猜出身份。协议回归见 `tests/tracker/popupProtocol.test.ts`。
+- 全明 N 张暗取 K 张时建立原空间 N-K、目标手牌 K 的精确名额；默认管线保留候选，剩余明弃或
+  已知手牌来源使候选自动收敛。不同空间隔离，明暗混合及旧批未决时不套用全明分配。
+- 巧织的 `DataID=3544` 通过默认 `qiaoZhiReveal` 插件提交零手牌增量的明确身份；无需私有差集状态。
+- 椒遇不保存颜色选择、不回填 CardIDs；剩余组明弃后确认获得组。主视角正 ID 直接走明确移动。
+- 巧织默认协议、身份通知与获得来源回归集中在 `qiaoZhi.test.ts`；通用空间隔离见 `popupCandidates.test.ts`。
 
 ## 观虚目标视角交换（SpellID=987/988）
 
@@ -142,8 +155,8 @@
   携带本地已知换出手牌，因此不会 `known-fallback/createExternal`，也不会把该牌遗留在交换区。
 - `ToPosition` 是 `PubGsCMoveCard` 的通用位置语义，详见 `docs/protocols/move-position.md`；
   普通非负小整数按公共区底 -> 顶顺序表示零基精确插槽，`0` 与 `POSITION_BOTTOM` 一致。
-- 观虚只因全局 `exchange` 无法表达牌堆侧/手牌侧两个归属而保留逻辑桶；桶内同样按底 -> 顶
-  保存，并复用 `insertCardsAtProtocolPosition()`，不能在技能内另行定义位置坐标。
+- 观虚通过 `room.publicZones.getExchangeBatch(batchKey)` 管理两侧成员；批次按底 -> 顶
+  保存，`transferTo()` 复用通用插槽语义，不另行定义位置坐标。
 - `POSITION_BOTTOM/POSITION_TOP` 与有效普通数值都是确定位置，不叠加弱候选；只有
   `ToPosition` 缺失、越界或为 `POSITION_RANDOM` 时才降级为“牌顶前 N 张”公共范围候选。
   发动者主视角的回堆 `CardIDs` 若完整覆盖整桶，同样保留该精确信息，避免覆盖
@@ -214,7 +227,7 @@
   `10->5`、`10->1`。`src/tracker/skill/TianHou.ts` 按批次区分原牌顶与原手牌匿名实体，
   两条 `10->10` 只视为动画消息。
 - 原手牌确定明牌建立“发动者手牌 / 牌堆顶前 x 张”候选。明牌换出数量范围为
-  `knownOutMin=max(0,x-(N-K))`、`knownOutMax=min(x,K)`；仅上下界相等时建立精确完整位置约束。
+  `knownOutMin=max(0,x-(N-K))`、`knownOutMax=min(x,K)`；建立区间完整位置约束，手牌容量使用上界。
 - 配对的 `PubGsCMoveCard` 同区展示（`MoveType=21`、牌堆两端 `255`）只亮牌顶三张中的一张，
   **不能**确定是第几张。基础归一保持 `noop`，再由天候装饰器转换为公共区范围揭示：
   命中原手牌候选时收紧到牌顶前 `x` 张，否则建立牌顶前三候选；`x=1` 时即确定牌顶。

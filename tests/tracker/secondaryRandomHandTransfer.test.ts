@@ -140,8 +140,14 @@ describe('二次随机手牌转移时的候选传播', () => {
     const firstGroup = Array.from(room.constraintGroups.values()).find(
       (group) => (group.sourceEvent as { type?: string } | null)?.type === 'case:first-transfer'
     )
-    expect(firstGroup?.expectedSlotsByLocation.get('player:2:hand:none')).toBe(allIDs.length)
-    expect(firstGroup?.expectedSlotsByLocation.get('player:7:hand:none')).toBe(0)
+    expect(firstGroup?.expectedSlotsByLocation.get('player:2:hand:none')).toEqual({
+      min: allIDs.length,
+      max: allIDs.length
+    })
+    expect(firstGroup?.expectedSlotsByLocation.get('player:7:hand:none')).toEqual({
+      min: 0,
+      max: 0
+    })
 
     // 模拟整手转移后才揭示 129；它仍属于第一次转移的实体批次。
     const card129 = getCard(room, 129)
@@ -160,8 +166,14 @@ describe('二次随机手牌转移时的候选传播', () => {
     const secondGroup = Array.from(room.constraintGroups.values()).find(
       (group) => (group.sourceEvent as { type?: string } | null)?.type === 'case:second-transfer'
     )
-    expect(secondGroup?.expectedSlotsByLocation.get('player:2:hand:none')).toBe(4)
-    expect(secondGroup?.expectedSlotsByLocation.get('player:7:hand:none')).toBe(3)
+    expect(secondGroup?.expectedSlotsByLocation.get('player:2:hand:none')).toEqual({
+      min: 4,
+      max: 4
+    })
+    expect(secondGroup?.expectedSlotsByLocation.get('player:7:hand:none')).toEqual({
+      min: 3,
+      max: 3
+    })
     expectSeats([10, 129], room, [2, 7])
     ;[2, 7].forEach((seatID) => {
       expect(

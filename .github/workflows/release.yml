@@ -3,9 +3,11 @@ name: Release
 on:
   push:
     tags:
-      - '*'
+      - 'v*'
 
 permissions:
+  actions: read
+  checks: read
   contents: write
 
 concurrency:
@@ -17,66 +19,54 @@ jobs:
   release:
     name: Build and publish release
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Set release version
-        run: echo "VITE_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-
-      - name: Build production userscript
-        run: pnpm build:prod
-
       - name: Check release eligibility
         id: release-check
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if is_draft="$(gh release view "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json isDraft \
-            --jq '.isDraft' 2>/dev/null)"; then
-            if [ "$is_draft" = "true" ]; then
-              echo "::error::Release $GITHUB_REF_NAME exists as a draft. Publish or delete the draft before rerunning."
-              exit 1
-            fi
-            echo "Release $GITHUB_REF_NAME already exists; skipping publish."
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          version_pattern='(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v${version_pattern}$ ]]; then
+            echo "::error::Release tags must use vMAJOR.MINOR.PATCH without a prerelease suffix."
+            exit 1
           fi
 
-          latest_release_tag="$(gh release list \
-            --repo "$GITHUB_REPOSITORY" \
-            --limit 1 \
-            --exclude-drafts \
-            --exclude-pre-releases \
-            --json tagName \
-            --jq '.[0].tagName')"
+          # 分页读取所有 Release；API 错误直接失败，不能当成“尚未发布”。
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
+          existing_release="$(jq --arg tag "$GITHUB_REF_NAME" \
+            '[.[][] | select(.tag_name == $tag)][0] // null' "$RUNNER_TEMP/releases.json")"
+          if jq -e '.draft == true or .prerelease == true' <<< "$existing_release" > /dev/null; then
+            echo "::error::Release $GITHUB_REF_NAME is a draft or prerelease. Resolve it before rerunning."
+            exit 1
+          fi
+
           current_version="${GITHUB_REF_NAME#v}"
-          latest_version="${latest_release_tag#v}"
-          if [[ "$current_version" =~ ^[0-9]+(\.[0-9]+)*$ ]] && [[ "$latest_version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+          latest_version="$(jq -r --arg pattern "^v?${version_pattern}$" \
+            '.[][] | select(.draft == false and .prerelease == false) | .tag_name |
+            select(test($pattern)) | ltrimstr("v")' "$RUNNER_TEMP/releases.json" | sort -V | tail -n 1)"
+          if [ -n "$latest_version" ]; then
             newest_version="$(printf '%s\n' "$latest_version" "$current_version" | sort -V | tail -n 1)"
             if [ "$newest_version" != "$current_version" ]; then
-              echo "Release $GITHUB_REF_NAME is older than $latest_release_tag; skipping publish."
+              echo "Release $GITHUB_REF_NAME is older than v$latest_version; skipping publish."
               echo "publish=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
           fi
 
           echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "exists=$(jq '. != null' <<< "$existing_release")" >> "$GITHUB_OUTPUT"
+          echo "VITE_version=$current_version" >> "$GITHUB_ENV"
+
+      - name: Checkout repository
+        if: steps.release-check.outputs.publish == 'true'
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Checkout releases branch
         if: steps.release-check.outputs.publish == 'true'
@@ -86,23 +76,81 @@ jobs:
           path: release-branch
           persist-credentials: true
 
-      - name: Push userscripts to releases branch
+      - name: Check releases branch version
         if: steps.release-check.outputs.publish == 'true'
+        id: branch-check
         working-directory: release-branch
         run: |
-          cp ../dist/daxiaochao.user.js ../dist/daxiaochao.meta.js .
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- daxiaochao.user.js daxiaochao.meta.js
-          if git diff --cached --quiet; then
-            echo "Userscripts are already up to date."
+          # 兼容旧流程已推送分支、但尚未创建 Release 的中间状态。
+          branch_version="$(awk '$1 == "//" && $2 == "@version" { print $3 }' daxiaochao.meta.js)"
+          if [[ ! "$branch_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::The releases branch has missing or invalid version metadata."
+            exit 1
+          fi
+          newest_version="$(printf '%s\n' "$branch_version" "$VITE_version" | sort -V | tail -n 1)"
+          if [ "$newest_version" != "$VITE_version" ]; then
+            echo "The releases branch already contains v$branch_version; skipping publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          git commit -m "chore(release): publish ${GITHUB_REF_NAME}"
-          git push origin HEAD:refs/heads/releases
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify CI for the tagged commit
+        if: steps.branch-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          commit="$(git rev-parse HEAD)"
+          run_id="$(gh run list --repo "$GITHUB_REPOSITORY" \
+            --workflow ci.yml --branch main --event push --commit "$commit" \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          if [ -z "$run_id" ]; then
+            echo "::error::No main-branch CI run exists for $commit. Merge to main and wait for CI before releasing."
+            exit 1
+          fi
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
+
+      - name: Setup pnpm
+        if: steps.branch-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        if: steps.branch-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.branch-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build production userscript
+        if: steps.branch-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
+        run: pnpm build:prod
+
+      - name: Download published userscripts for retry
+        if: steps.branch-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --pattern daxiaochao.user.js --pattern daxiaochao.meta.js --dir dist
+
+      - name: Validate release artifacts
+        if: steps.branch-check.outputs.publish == 'true'
+        run: |
+          for file in dist/daxiaochao.user.js dist/daxiaochao.meta.js; do
+            test -s "$file"
+            artifact_version="$(awk '$1 == "//" && $2 == "@version" { print $3 }' "$file")"
+            if [ "$artifact_version" != "$VITE_version" ]; then
+              echo "::error::$file has version $artifact_version; expected $VITE_version."
+              exit 1
+            fi
+          done
 
       - name: Create and publish GitHub Release
-        if: steps.release-check.outputs.publish == 'true'
+        if: steps.branch-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -121,6 +169,23 @@ jobs:
             dist/daxiaochao.user.js \
             dist/daxiaochao.meta.js \
             --verify-tag \
+            --latest \
             --notes-file "$RUNNER_TEMP/release-notes.md" \
             --generate-notes \
             --title "$GITHUB_REF_NAME"
+
+      - name: Push userscripts to releases branch
+        if: steps.branch-check.outputs.publish == 'true'
+        working-directory: release-branch
+        run: |
+          # Release 已发布后才更新 CDN 分支；重跑使用已发布附件继续同步。
+          cp ../dist/daxiaochao.user.js ../dist/daxiaochao.meta.js .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- daxiaochao.user.js daxiaochao.meta.js
+          if git diff --cached --quiet; then
+            echo "Userscripts are already up to date."
+            exit 0
+          fi
+          git commit -m "chore(release): publish ${GITHUB_REF_NAME}"
+          git push origin HEAD:refs/heads/releases

@@ -6,6 +6,7 @@ import {
 import type { Card } from './Card'
 import type { Room } from '@/tracker/Room'
 import type { PublicPosition, PublicZoneName } from '@/tracker/types'
+import { ExchangeBatch } from './ExchangeBatch'
 
 /**
  * 公共区域类
@@ -16,6 +17,26 @@ export class Zone {
   declare room: Room
   /** 私有有序关系索引：外部只通过 cards getter 与方法访问。 */
   declare _orderedCards: Card[]
+  private readonly exchangeBatches = new Map<string, ExchangeBatch>()
+
+  getExchangeBatch(key: string): ExchangeBatch {
+    if (this.zoneID !== 'exchange') throw new Error('命名交换批次只能属于 exchange 区')
+    let batch = this.exchangeBatches.get(key)
+    if (!batch) {
+      batch = new ExchangeBatch(key, this)
+      this.exchangeBatches.set(key, batch)
+    }
+    return batch
+  }
+
+  deleteExchangeBatch(key: string): void {
+    this.exchangeBatches.get(key)?.clear()
+    this.exchangeBatches.delete(key)
+  }
+
+  completeExchangeMove(): void {
+    this.exchangeBatches.forEach((batch) => batch.completeMove())
+  }
 
   /**
    * @param zoneID - 区域 ID ('outside' | 'pile' | 'discard' | 'exile' | 'process' | 'exchange')
@@ -52,6 +73,7 @@ export class Zone {
    * @returns 是否命中旧牌并完成替换
    */
   replaceCard(oldCard: Card, nextCard: Card): boolean {
+    this.exchangeBatches.forEach((batch) => batch.replaceCard(oldCard, nextCard))
     this.room.zones.forEach((zone) => {
       if (zone !== this) {
         zone.removeCard(nextCard)
@@ -164,6 +186,8 @@ export class Zone {
    * 清空该区域
    */
   clear(): void {
+    this.exchangeBatches.forEach((batch) => batch.clear())
+    this.exchangeBatches.clear()
     const hadCards = this._orderedCards.length > 0
     this._orderedCards.forEach((card) => {
       card.moveToPublicZone('exile')

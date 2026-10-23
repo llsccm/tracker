@@ -11,6 +11,7 @@
  */
 import { trackerLogger } from '@/utils/logger'
 import type { Card } from '@/tracker/model/Card'
+import type { SlotCountRange } from '../constraint/ConstraintGroup'
 import { POSITION_RANDOM, POSITION_TOP } from '../candidate/cardPositions'
 import { createLocationCandidateKey } from '../candidate/locationCandidate'
 import { createPublicCandidate } from '../candidate/publicCandidate'
@@ -32,16 +33,14 @@ type TianHouBatch = {
   /** 本轮交换张数 x，同时也是换出手牌落在牌堆顶的范围大小。 */
   count: number
   /** 从牌堆暂存到交换区、随后进入手牌的实体引用。 */
-  selectedPileCards: Card[]
+  pileBatchKey: string
   /** 代表换出手牌、实际经过交换区并回到牌堆的实体引用。 */
-  outgoingCards: Card[]
+  handBatchKey: string
   /** 交换前可确定身份的手牌；它们是否被换出只能用候选表达。 */
   knownHandCards: Card[]
   /** 已知手牌中被换出张数的可证明上下界。 */
   minKnownOut: number
   maxKnownOut: number
-  /** 上下界相等时建立的精确数量约束；弱候选阶段保持为空。 */
-  constraintGroupID: string | null
   phase: TianHouPhase
 }
 
@@ -60,6 +59,10 @@ function ensureTianHouState(room: Room): TianHouRoomState {
 function clearBatch(room: Room, cleanupTemporaryCandidates = false): void {
   const state = getTianHouState(room)
   const batch = state?.batch
+  if (batch) {
+    room.publicZones.deleteExchangeBatch(batch.pileBatchKey)
+    room.publicZones.deleteExchangeBatch(batch.handBatchKey)
+  }
   // 中途失配时撤销尚在交换区的临时候选；结算后的牌堆候选必须继续保留。
   if (cleanupTemporaryCandidates && batch && batch.phase !== 'awaiting-reveal') {
     batch.knownHandCards.forEach((card) => {
@@ -89,16 +92,15 @@ function getActorHandCards(room: Room, actorSeat: SeatID): Card[] {
   )
 }
 
-function createExactKnownOutConstraint(
+function createKnownOutConstraint(
   room: Room,
   batch: TianHouBatch,
   cards: Card[],
-  knownOutCount: number,
+  knownOut: SlotCountRange,
   label: string
 ): string | null {
   if (cards.length === 0) return null
 
-  // ConstraintGroup 表达的是精确槽位数，因此只在调用方已证明 knownOutCount 时创建。
   const handCandidate: PlayerLocationCandidate = {
     type: 'player',
     seatID: batch.actorSeat,
@@ -115,8 +117,14 @@ function createExactKnownOutConstraint(
     id: groupID,
     cards,
     expectedSlotsByLocation: new Map([
-      [createLocationCandidateKey(handCandidate), cards.length - knownOutCount],
-      [createLocationCandidateKey(pileCandidate), knownOutCount]
+      [
+        createLocationCandidateKey(handCandidate),
+        {
+          min: cards.length - knownOut.max,
+          max: cards.length - knownOut.min
+        }
+      ],
+      [createLocationCandidateKey(pileCandidate), knownOut]
     ]),
     known: true,
     sourceEvent: {
@@ -124,7 +132,7 @@ function createExactKnownOutConstraint(
       raw: {
         actorSeat: batch.actorSeat,
         count: batch.count,
-        knownOutCount
+        knownOut
       }
     }
   })
@@ -142,15 +150,17 @@ function decoratePileStage(event: MoveEventDraft, room: Room, actorSeat: SeatID)
   if (selectedPileCards.length !== count) return event
 
   clearBatch(room, true)
+  const pileBatchKey = `${TIAN_HOU_SPELL_ID}:pile:${actorSeat}`
+  const handBatchKey = `${TIAN_HOU_SPELL_ID}:seat:${actorSeat}`
+  room.publicZones.getExchangeBatch(pileBatchKey).stage(selectedPileCards)
   ensureTianHouState(room).batch = {
     actorSeat,
     count,
-    selectedPileCards,
-    outgoingCards: [],
+    pileBatchKey,
+    handBatchKey,
     knownHandCards: [],
     minKnownOut: 0,
     maxKnownOut: 0,
-    constraintGroupID: null,
     phase: 'pile-staged'
   }
 
@@ -189,11 +199,14 @@ function decorateHandStage(event: MoveEventDraft, room: Room, actorSeat: SeatID)
 
   knownHandCards.forEach((card) => card.addPublicCandidate(exchangeCandidate))
 
-  batch.outgoingCards = outgoingCards
+  room.publicZones.getExchangeBatch(batch.handBatchKey).stage(outgoingCards)
   batch.knownHandCards = knownHandCards
-  // N 张手牌中有 K 张明牌：暗牌最多填满 N-K 个换出名额，明牌最多换出 min(x, K) 张。
-  batch.minKnownOut = Math.max(0, count - hiddenCapacity)
+  // 仅观测到 N 张手牌时才能用 N-K 估计暗牌容量；未观测时不能据实体数强制明牌换出。
   batch.maxKnownOut = Math.min(count, knownHandCards.length)
+  batch.minKnownOut =
+    player?.hasObservedHandCount === true
+      ? Math.min(Math.max(0, count - hiddenCapacity), batch.maxKnownOut)
+      : 0
   batch.phase = 'hand-staged'
 
   trackerLogger.info('天候记录其他视角换牌候选', {
@@ -245,7 +258,7 @@ function decorateReturnToHand(
     return event
   }
 
-  const selectedPileCards = batch.selectedPileCards.filter((card) => card.location === 'exchange')
+  const selectedPileCards = room.publicZones.getExchangeBatch(batch.pileBatchKey).cards
   if (selectedPileCards.length !== batch.count) {
     clearBatch(room, true)
     return event
@@ -281,7 +294,7 @@ function decorateReturnToPile(
     return event
   }
 
-  const outgoingCards = batch.outgoingCards.filter((card) => card.location === 'exchange')
+  const outgoingCards = room.publicZones.getExchangeBatch(batch.handBatchKey).cards
   if (outgoingCards.length !== batch.count) {
     clearBatch(room, true)
     return event
@@ -294,16 +307,13 @@ function decorateReturnToPile(
     card.addPublicCandidate(pileCandidate)
   })
 
-  if (batch.minKnownOut === batch.maxKnownOut) {
-    // 当前模型只建立精确数量约束；上下界不同则保留逐牌弱候选，等待单牌展示继续收紧。
-    batch.constraintGroupID = createExactKnownOutConstraint(
-      room,
-      batch,
-      batch.knownHandCards,
-      batch.minKnownOut,
-      'exchange'
-    )
-  }
+  createKnownOutConstraint(
+    room,
+    batch,
+    batch.knownHandCards,
+    { min: batch.minKnownOut, max: batch.maxKnownOut },
+    'exchange'
+  )
   batch.phase = 'awaiting-reveal'
 
   return patchEvent(event, {
@@ -332,16 +342,6 @@ function decorateFinalReveal(event: MoveEventDraft, room: Room): MoveEventDraft 
   const matchedCard = batch?.knownHandCards.find((card) => card.id === cardID) ?? null
   // 命中原手牌可证明它属于换出的 x 张；未命中时只能采用协议公开的牌顶三张范围。
   const candidateCount = matchedCard && batch ? batch.count : TIAN_HOU_VIEW_COUNT
-
-  if (matchedCard && batch && !batch.constraintGroupID) {
-    // 展示牌已占用一个已知换出名额，扣除它后其余明牌的上下界可能收敛为精确值。
-    const remainingCards = batch.knownHandCards.filter((card) => card !== matchedCard)
-    const remainingMin = Math.max(0, batch.minKnownOut - 1)
-    const remainingMax = Math.max(0, batch.maxKnownOut - 1)
-    if (remainingMin === remainingMax) {
-      createExactKnownOutConstraint(room, batch, remainingCards, remainingMin, 'reveal')
-    }
-  }
 
   clearBatch(room)
 

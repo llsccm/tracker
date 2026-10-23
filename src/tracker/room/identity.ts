@@ -1,6 +1,7 @@
 import type { Zone } from '@/tracker/model'
 import { Card } from '@/tracker/model'
 import { trackerLogger } from '@/utils/logger'
+import { replacePopupSpaceCard } from './movement/popupSpaces'
 import { POSITION_BOTTOM, POSITION_RANDOM } from '../candidate/cardPositions'
 import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
@@ -420,10 +421,14 @@ export class RoomIdentity {
     const room = this.room
     if (target.hasRealIdentity) return
 
-    if (existing.location === 'player' && existing.isKnown !== true) {
+    if (
+      (existing.location === 'player' || existing.location === 'popup') &&
+      existing.isKnown !== true
+    ) {
       const oldSubZone = existing.subZone ?? 'hand'
       const oldSeats = Array.from(existing.seats, Number)
       const oldSpellID = existing.spellID
+      const oldPopupSpaceID = existing.popupSpaceID
       const oldLocationCandidates = existing.locationCandidates
       const targetZoneEntry = this.findPublicZoneEntry(target)
 
@@ -436,11 +441,14 @@ export class RoomIdentity {
       targetZone.replaceCard(target, existing)
 
       target.bindCandidates(oldSeats, oldSubZone, oldSpellID, { known: false })
+      if (oldPopupSpaceID !== null)
+        target.resolveLocationCandidate({ type: 'popup', spaceID: oldPopupSpaceID })
       if (oldLocationCandidates.length > 0) {
         target.setLocationCandidates(oldLocationCandidates, 'materialize:interop:placeholder')
       }
 
       room.movement.hiddenMarks.replaceHiddenMarkPlaceholder(existing, target)
+      replacePopupSpaceCard(room, existing, target)
       return
     }
 

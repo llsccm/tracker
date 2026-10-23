@@ -22,9 +22,12 @@ export function summarizeMoveEvent(event: NormalizedMoveEvent, options: MoveSumm
     toZone: event.toZone,
     ...(options.includeEventCardCount ? { cardCount: event.cardCount } : {}),
     options: {
+      fromPopupSpaceID: eventOptions.fromPopupSpaceID,
+      toPopupSpaceID: eventOptions.toPopupSpaceID,
       toSeatID: eventOptions.toSeatID,
       subZone: eventOptions.subZone,
       spellID: eventOptions.spellID,
+      gainSpellID: eventOptions.gainSpellID ?? eventOptions.sourceEvent?.spellID,
       combinationID: eventOptions.combinationID,
       fromZone: eventOptions.fromZone,
       fromSeatID: eventOptions.fromSeatID,
@@ -43,11 +46,14 @@ export function summarizeMoveEvent(event: NormalizedMoveEvent, options: MoveSumm
 
 export function summarizeMoveContext(context: RoomMoveContext, options: MoveSummaryOptions = {}) {
   return {
+    fromPopupSpaceID: context.fromPopupSpaceID,
+    toPopupSpaceID: context.toPopupSpaceID,
     cardIDs: context.cardIDs,
     toZone: context.toZone,
     toSeatID: context.toSeatID,
     subZone: context.subZone,
     spellID: context.spellID,
+    gainSpellID: context.gainSpellID,
     combinationID: context.combinationID,
     fromZone: context.fromZone,
     fromSeat: context.fromSeat,

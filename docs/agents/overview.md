@@ -37,7 +37,7 @@
     - `PubGsCMoveCard.js`：移动协议预处理与同步到 `tracker`。
     - `gameFlowState.js`：开局发牌/摸牌局流副作用与权道展示等。
     - `specialZones.js` / `spellEffects.js`：特殊区域与技能辅助副作用。
-    - `skills/`（如 `JiaoYu.ts`、`XiaShu.ts`）：从 `spellEffects` 拆出的技能特化处理；未接入的旧和衷、吉占、宴戏及反间处理器已删除。
+    - `skills/`：外围技能展示辅助；记牌器协议推断插件集中在 `src/tracker/skill/`。
     - `GsCRoleOptTargetNtf.js`：角色操作目标通知（严教、宜城、裴秀相关等）。
     - `RogueLike.js`：山河图消息与提示。
     - `index.js`：主动导出入口。

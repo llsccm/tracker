@@ -34,6 +34,14 @@ export class RoomPublicZones {
     this.room = room
   }
 
+  getExchangeBatch(batchKey: string) {
+    return this.room.zones.get('exchange')!.getExchangeBatch(batchKey)
+  }
+
+  deleteExchangeBatch(batchKey: string): void {
+    this.room.zones.get('exchange')!.deleteExchangeBatch(batchKey)
+  }
+
   resizeShuffledPile(cards: Card[], cardCount: number): Card[] {
     const missingCount = cardCount - cards.length
     if (missingCount >= 0) {

@@ -260,8 +260,9 @@ function inferEventType(event: RawMoveCardEvent, cardIDs: readonly CardID[]): Ra
   if (toZone === 2 && known) return 'discardKnown'
   // 回到牌堆的来源可能是手牌、选择区或弹窗区，统一走 returnToPile。
   if (toZone === 1 && [2, 5, 10, 11].includes(fromZone)) return 'returnToPile'
-  // 标记区和弹窗标记区都按标记移动处理，具体技能空间由 spellID 继续细分。
-  if (toZone === 4 || toZone === 8) return 'moveToMark'
+  // 区域 4 是玩家标记存储；区域 8 使用独立弹窗端点。
+  if (toZone === 4) return 'moveToMark'
+  if (toZone === 8) return known ? 'moveKnown' : 'moveUnknown'
   if (toZone === 6) return 'moveToEquip'
   if (toZone === 7) return 'moveToJudge'
   // 判定获得会暴露判定牌，但目标区域可能不是展示区，需额外转成 showCards。
@@ -290,7 +291,15 @@ function normalizeMoveEndpoints(
   move: RawMoveCardEvent
 ): Pick<
   MoveOptions,
-  'toSeatID' | 'fromSeatID' | 'fromZone' | 'subZone' | 'fromSubZone' | 'fromSpellID' | 'spellID'
+  | 'toSeatID'
+  | 'fromSeatID'
+  | 'fromZone'
+  | 'subZone'
+  | 'fromSubZone'
+  | 'fromSpellID'
+  | 'spellID'
+  | 'fromPopupSpaceID'
+  | 'toPopupSpaceID'
 > {
   const fromPublicZone = getProtocolPublicZone(move.FromZone)
   const targetIsPlayerZone = isProtocolPlayerZone(move.ToZone)
@@ -322,13 +331,16 @@ function normalizeMoveEndpoints(
   const spellID = targetIsPlayerZone ? targetSpellID : (fromSpellID ?? move.SpellID)
 
   // FromID/ToID 的含义依赖具体 Zone，不能一律解释成玩家座位。
-  // 例如 FromZone=8 弹窗标记回牌堆时，FromID 可能是技能/标记空间 ID；
+  // 例如 FromZone=8 回牌堆时，FromID 是弹窗空间 ID；
   // FromZone=1 牌堆来源时，FromID=255 也只是牌堆/无座位占位。
   // fromSeatID/toSeatID 分别描述来源和目标玩家区端点，
-  // 后续移动逻辑必须结合 fromZone/fromSubZone/spellID 判断它是否真是座位。
+  // 弹窗空间由独立字段表达，不再把技能 ID 放入座位字段。
 
   // 观看公共区时不应默认把 subZone 推导为 hand；公共区来源的 subZone 置为 undefined。
   return {
+    fromPopupSpaceID:
+      move.FromZone === 8 ? (move.FromID === 255 ? move.SpellID : move.FromID) : undefined,
+    toPopupSpaceID: move.ToZone === 8 ? move.SpellID : undefined,
     toSeatID: targetIsPlayerZone ? move.ToID : undefined,
     fromSeatID: sourceIsPlayerZone ? move.FromID : undefined,
     fromZone: fromPublicZone,
@@ -372,6 +384,7 @@ export function normalizeMoveEvent(
       fromPosition: patched.FromPosition,
       sourceEvent: {
         type,
+        spellID: patched.SpellID,
         label: getProtocolMoveSpecialLabel(patched) ?? patched.Label,
         moveType: patched.MoveType,
         raw

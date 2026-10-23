@@ -23,6 +23,18 @@
 - 界面 HTML 已改为从外部 URL 加载（通过 `src/utils/htmlResource.js`），不再依赖构建时 HTML 转 JS 生成链。
 - `html/iframe.html` 是界面 HTML 源文件，部署到远端后由脚本运行时加载。
 
+## 发布流程
+
+- `.github/workflows/release.yml` 只发布 `vMAJOR.MINOR.PATCH` 格式的正式版本标签，不支持预发布后缀或数字前导零。
+- 新版本标签对应的提交必须已有 `main` 分支的 push CI；发布流程等待该次 CI 成功后再构建。若 CI 尚未创建或未通过，处理后重跑发布任务。
+- 发布前按版本号比较所有正式 Release 与 `releases` 分支元信息，旧版本直接跳过，避免覆盖较新版本。
+- 发布先上传 GitHub Release 附件，再将相同文件同步到 `releases` 分支。新版本显式标记为 Latest。
+- 如果 Release 已发布但分支同步失败，重跑会下载该版本的已发布附件继续同步，不会重新构建或覆盖 Release 附件。
+- 草稿或预发布 Release 会阻止同名标签继续发布；需先核查其来源和附件，处理该 Release 后再重跑。
+- Release 与分支更新不是原子操作；两条安装渠道可能短暂不同步，CDN 还可能存在缓存延迟。
+
+## 相关文档
+
 - 测试策略、补测约定与手工验收见 [testing.md](testing.md)。
 - 记牌器常用方法调用速查见 [tracker_api.md](tracker_api.md)。
 - 协议回放文档与 `tests/replay/` 仅在任务明确涉及回放时读取，见 [replay.md](replay.md)。

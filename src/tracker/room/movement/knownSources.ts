@@ -4,7 +4,7 @@ import { normalizePublicPosition } from '@/tracker/candidate/publicCandidate'
 import type { Room } from '@/tracker/Room'
 import type { CardID, PublicZoneName, SeatID } from '@/tracker/types'
 import type { RoomMovementSources } from './sources'
-import { getUnknownPlayerSourceCards } from './sourceQueries'
+import { getUnknownPlayerSourceCards, getUnknownStoredSourceCards } from './sourceQueries'
 import type { KnownCardCreationReason, RoomMoveContext } from './types'
 
 interface KnownMoveResolution {
@@ -29,7 +29,7 @@ export class RoomMovementKnownSources {
     if (typeof fromZone === 'string' && this.room.zones.has(fromZone)) {
       return this.resolvePublicSource(context, fromZone, isExternalSource)
     }
-    if (fromSeat !== null && !Number.isNaN(fromSeat) && fromSubZone) {
+    if (fromZone === 'popup' || (fromSeat !== null && !Number.isNaN(fromSeat) && fromSubZone)) {
       return this.resolvePlayerSource(context, fromSeat, isExternalSource)
     }
 
@@ -257,12 +257,12 @@ export class RoomMovementKnownSources {
     let sourceTargets =
       explicitTargets.length > 0
         ? explicitTargets
-        : getUnknownPlayerSourceCards(this.room, fromSeat, fromSubZone, markSpellID)
+        : getUnknownStoredSourceCards(this.room, context)
             .filter((card) => card.isAnonymous)
             .slice(0, knownIDs.length)
 
     // 手牌路径只保留 hand 匿名，绝不纳入 mark 占位。
-    if (fromSubZone === 'hand') {
+    if (context.fromZone !== 'popup' && fromSubZone === 'hand') {
       sourceTargets = sourceTargets.filter((card) => card.subZone === 'hand')
     }
 
@@ -299,7 +299,7 @@ export class RoomMovementKnownSources {
         const existingInSource = Boolean(
           existing &&
           !this.room.detachedKnownCards.has(existing) &&
-          this.sources.isCardInPlayerSource(existing, context)
+          this.sources.isCardInStoredSource(existing, context)
         )
         const target = existingInSource ? existing : availableTargets.shift()
         const ledgerBefore = {

@@ -5,7 +5,7 @@ import type { Room } from '@/tracker/Room'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
 
 type HandExchangeState = {
-  bySpell: Record<string, { batches: Record<string, { cards: unknown[] }[]> }>
+  bySpell: Record<string, { batches: Record<string, { batchID: string }[]> }>
 }
 
 describe('整手牌经交换区互易（通用协议模式）', () => {
@@ -262,7 +262,8 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
 
     const state = room.readSkillState<HandExchangeState>(HAND_EXCHANGE_STATE_KEY)!
     expect(state.bySpell['121'].batches[String(seatB)]).toHaveLength(1)
-    expect(state.bySpell['121'].batches[String(seatB)][0].cards).toHaveLength(8)
+    const batchID = state.bySpell['121'].batches[String(seatB)][0].batchID
+    expect(room.publicZones.getExchangeBatch(batchID).cards).toHaveLength(0)
   })
 
   it('技能 121：完整协议序列后双方手牌互换，明牌保持公开、暗牌不被误公开', () => {

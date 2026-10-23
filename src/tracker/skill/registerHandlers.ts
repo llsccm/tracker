@@ -36,7 +36,6 @@ import handleQingYiLianJu, { recordSharedCardIDs } from './QingYiLianJu'
 import handleQianFu, { recordQianFu } from './QianFu'
 import handleShengMo, { recordShengMo } from './ShengMo'
 import handleZeXing from './ZeXing'
-import handleJiaoYu, { recordJiaoYu } from './JiaoYu'
 import type { SkillUseSpellMessage } from './protocolEvents'
 import type { PatchedMoveCardFields } from '../types'
 
@@ -218,16 +217,34 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
   room.registerSkillPlugin(storedCardsPlugin('shengMo', [3434], handleShengMo, recordShengMo))
   room.registerSkillPlugin(storedCardsPlugin('zeXing', [3854], handleZeXing, recordSharedCardIDs))
 
-  // 椒遇
+  // 巧织角色数据只补明确身份；暗取数量已由移动协议记录。
   room.registerSkillPlugin({
-    id: 'jiaoYu',
-    spellIDs: [3571],
-    beforeNormalizeMove: (patched, raw, currentRoom) => handleJiaoYu(patched, currentRoom),
+    id: 'qiaoZhiReveal',
+    spellIDs: [3544],
     onProtocolEvent(event, currentRoom) {
-      if (event.type === 'roleData' && event.message.DataID === 3571)
-        recordJiaoYu(currentRoom, event.message)
-    },
-    onDeckInitialized: (currentRoom) => currentRoom.deleteSkillState(3571)
+      if (event.type !== 'roleData' || event.message.DataID !== 3544) return
+      const { SeatID, Datas } = event.message
+      const cardID = Datas?.[0]
+      if (SeatID === undefined || !currentRoom.seatIDs.includes(SeatID) || !(cardID > 0)) return
+      if (
+        currentRoom.moveCards([cardID], 'player', {
+          fromSeatID: SeatID,
+          fromSubZone: 'hand',
+          toSeatID: SeatID,
+          subZone: 'hand',
+          spellID: null,
+          gainSpellID: 3544,
+          handMoveCount: 0,
+          sourceEvent: {
+            type: 'qiaozhi:update-role-data',
+            spellID: 3544,
+            label: 'GsCUpdateRoleDataExNtf:3544',
+            raw: { ...event.message }
+          }
+        })
+      )
+        currentRoom.notifyCardsRevealed([cardID])
+    }
   })
 
   // 下书

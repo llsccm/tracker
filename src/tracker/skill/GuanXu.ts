@@ -6,7 +6,7 @@
  * 最后的空 CardIDs 回牌堆也会漏掉已经换入牌堆侧的已知手牌。
  */
 import type { Card } from '@/tracker/model/Card'
-import { POSITION_TOP, insertCardsAtProtocolPosition } from '../candidate/cardPositions'
+import { POSITION_TOP, POSITION_RANDOM } from '../candidate/cardPositions'
 import { createPublicCandidate } from '../candidate/publicCandidate'
 import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
@@ -18,7 +18,7 @@ export const GUAN_XU_STATE_KEY = 'guanXuExchange'
 const GUAN_XU_SPELL_IDS = new Set([987, 988])
 
 type GuanXuBucket = {
-  cards: Card[]
+  batchKey: string
   expectedCount: number
 }
 
@@ -72,6 +72,10 @@ function getBatch(room: Room, spellID: number): GuanXuBatch | undefined {
 function clearBatch(room: Room, spellID: number): void {
   const state = getGuanXuState(room)
   if (!state) return
+
+  Object.values(state.bySpell[String(spellID)]?.buckets ?? {}).forEach((bucket) =>
+    room.publicZones.deleteExchangeBatch(bucket.batchKey)
+  )
 
   delete state.bySpell[String(spellID)]
   if (Object.keys(state.bySpell).length === 0) {
@@ -211,10 +215,13 @@ function stagePileToExchange(event: MoveEventDraft, room: Room, spellID: number)
     return event
   }
 
+  clearBatch(room, spellID)
+  const batchKey = `${spellID}:pile:${pileBucketID}`
+  room.publicZones.getExchangeBatch(batchKey).stage(selectedCards)
   ensureGuanXuState(room).bySpell[String(spellID)] = {
     buckets: {
       [String(pileBucketID)]: {
-        cards: selectedCards,
+        batchKey,
         expectedCount: count
       }
     },
@@ -248,8 +255,10 @@ function stageHandToExchange(event: MoveEventDraft, room: Room, spellID: number)
   }
   const selectedCards = selection.cards
 
+  const batchKey = `${spellID}:seat:${bucketID}`
+  room.publicZones.getExchangeBatch(batchKey).stage(selectedCards)
   batch.buckets[String(bucketID)] = {
-    cards: selectedCards,
+    batchKey,
     expectedCount: getCount(event)
   }
 
@@ -274,7 +283,9 @@ function transferExchangeBucket(
   const targetBucket = batch?.buckets[toKey]
   if (!batch || !sourceBucket || !targetBucket || fromKey === toKey) return event
 
-  const exchangeCards = sourceBucket.cards.filter((card) => card.location === 'exchange')
+  const sourceBatch = room.publicZones.getExchangeBatch(sourceBucket.batchKey)
+  const targetBatch = room.publicZones.getExchangeBatch(targetBucket.batchKey)
+  const exchangeCards = sourceBatch.cards
   const selection = selectCardsForKnownMove(event, room, exchangeCards)
   if (
     selection.cards.length !== getCount(event) ||
@@ -284,19 +295,14 @@ function transferExchangeBucket(
   }
   const selectedCards = selection.cards
 
-  const selectedSet = new Set(selectedCards)
-  sourceBucket.cards = sourceBucket.cards.filter((card) => !selectedSet.has(card))
   const targetIsPileBucket = move.ToID === batch.pileBucketID
   // 目标桶按存活实体过滤后再计算 ToPosition/插入，保证桶索引与 returnBucketToPile 的
   // exchange 存活集合一致，避免残留实体让协议插槽算错落点。
-  targetBucket.cards = targetBucket.cards.filter((card) => card.location === 'exchange')
-  const cardsToInsert = selectedCards.filter((card) => !targetBucket.cards.includes(card))
-  const insertedAtExactPosition = targetIsPileBucket
-    ? insertCardsAtProtocolPosition(targetBucket.cards, cardsToInsert, move.ToPosition)
-    : false
-  if (!insertedAtExactPosition) {
-    targetBucket.cards.push(...cardsToInsert)
-  }
+  const insertedAtExactPosition = sourceBatch.transferTo(
+    targetBatch,
+    selectedCards,
+    targetIsPileBucket ? move.ToPosition : POSITION_RANDOM
+  )
 
   if (move.FromID === batch.pileBucketID) {
     selectedCards.forEach((card) => batch.pileRangeCards.delete(card))
@@ -327,7 +333,7 @@ function returnBucketToPile(event: MoveEventDraft, room: Room, spellID: number):
   if (!batch || !bucket || move.FromID !== batch.pileBucketID) return event
 
   // 牌堆逻辑桶与 Zone 都按底 -> 顶保存，空 CardIDs 回堆时可直接作为 sourceCards 使用。
-  const cardsBottomFirst = bucket.cards.filter((card) => card.location === 'exchange')
+  const cardsBottomFirst = room.publicZones.getExchangeBatch(bucket.batchKey).cards
   if (
     cardsBottomFirst.length !== getCount(event) ||
     cardsBottomFirst.length !== bucket.expectedCount
@@ -350,6 +356,7 @@ function returnBucketToPile(event: MoveEventDraft, room: Room, spellID: number):
         .filter((card) => batch.pileRangeCards.has(card) && card.id > 0 && card.isKnown === true)
         .map((card) => ({ card, candidate: pileCandidate }))
 
+  room.publicZones.deleteExchangeBatch(bucket.batchKey)
   delete batch.buckets[bucketKey]
   clearBatchIfEmpty(room, spellID, batch)
 
@@ -370,7 +377,7 @@ function returnBucketToHand(event: MoveEventDraft, room: Room, spellID: number):
   // 牌堆逻辑桶只能整批回堆；异常协议若把牌堆桶回写玩家手牌，对称拒绝以免污染手牌区。
   if (!batch || !bucket || move.FromID === batch.pileBucketID) return event
 
-  const cards = bucket.cards.filter((card) => card.location === 'exchange')
+  const cards = room.publicZones.getExchangeBatch(bucket.batchKey).cards
   if (cards.length !== getCount(event) || cards.length !== bucket.expectedCount) return event
 
   // 保留协议原始 cardIDs，本地推断来源只经 options.sourceCards 传递，不回写明牌列表。
@@ -380,6 +387,7 @@ function returnBucketToHand(event: MoveEventDraft, room: Room, spellID: number):
   ])
   const sourceCards = cards.filter((card) => !knownIDSet.has(card.id))
 
+  room.publicZones.deleteExchangeBatch(bucket.batchKey)
   delete batch.buckets[bucketKey]
   clearBatchIfEmpty(room, spellID, batch)
 

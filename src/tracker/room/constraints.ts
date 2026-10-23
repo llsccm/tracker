@@ -4,7 +4,11 @@ import {
   createLocationCandidateKey,
   parseLocationCandidateKey
 } from '../candidate/locationCandidate'
-import { ConstraintGroup, type ConstraintGroupOptions } from '../constraint/ConstraintGroup'
+import {
+  ConstraintGroup,
+  type ConstraintGroupOptions,
+  type SlotCountRange
+} from '../constraint/ConstraintGroup'
 import { getHandSlotKindForSeat } from '../constraint/handSlotCounts'
 import { computeHandSlotAllocation, type HandSlotAllocation } from '../constraint/handSlotUsage'
 import { isAmbiguousKnownCard } from '../projection/AmbiguousKnownIndex'
@@ -25,10 +29,14 @@ function areNumberSetsEqual(left: Set<number>, right: Set<number>): boolean {
 }
 
 // Map 中的期望槽位值如果没有变化，就不应触发 AmbiguousKnownIndex 全量重建。
-function areNumberMapsEqual<Key>(left: Map<Key, number>, right: Map<Key, number>): boolean {
+function areSlotMapsEqual<Key>(
+  left: Map<Key, SlotCountRange>,
+  right: Map<Key, SlotCountRange>
+): boolean {
   if (left.size !== right.size) return false
   for (const [key, value] of left) {
-    if (right.get(key) !== value) return false
+    const other = right.get(key)
+    if (!other || other.min !== value.min || other.max !== value.max) return false
   }
   return true
 }
@@ -348,6 +356,10 @@ export class RoomConstraints {
    * 约束组移除实体牌时，尽量解析唯一完整位置；container 候选也保持为 location。
    */
   getResolvedExpectedLocationCandidate(card: Card): LocationCandidate | null {
+    const possibleLocations = card.getPossibleLocations()
+    if (possibleLocations.length === 1 && possibleLocations[0].type === 'popup') {
+      return possibleLocations[0]
+    }
     if (card.hasLocationCandidates()) {
       const locationCandidates = card.locationCandidates
       // owner 已确定也不能裁掉公共区、容器或同座位的其它子区候选。
@@ -406,7 +418,10 @@ export class RoomConstraints {
           const locationKey = createLocationCandidateKey(resolvedLocationCandidate)
           if (locationKey && group.expectedSlotsByLocation.has(locationKey)) {
             const currentExpected = group.expectedSlotsByLocation.get(locationKey)
-            group.expectedSlotsByLocation.set(locationKey, Math.max(0, currentExpected - 1))
+            group.expectedSlotsByLocation.set(locationKey, {
+              min: Math.max(0, currentExpected.min - 1),
+              max: Math.max(0, currentExpected.max - 1)
+            })
           }
           group.cards.delete(card)
           changed = true
@@ -593,7 +608,7 @@ export class RoomConstraints {
         const nextExpectedSlotsByLocation = group.normalizeExpectedLocationSlots(
           options.expectedSlotsByLocation
         )
-        if (!areNumberMapsEqual(group.expectedSlotsByLocation, nextExpectedSlotsByLocation)) {
+        if (!areSlotMapsEqual(group.expectedSlotsByLocation, nextExpectedSlotsByLocation)) {
           group.expectedSlotsByLocation = nextExpectedSlotsByLocation
           structureChanged = true
         }

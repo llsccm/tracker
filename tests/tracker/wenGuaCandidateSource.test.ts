@@ -87,7 +87,7 @@ describe('问卦候选来源筛选', () => {
       const transferGroups = [...room.constraintGroups.values()].filter(
         (group) =>
           group.cards.has(sourceCards[0]) &&
-          group.expectedSlotsByLocation.get('player:4:hand:none') === 1
+          group.expectedSlotsByLocation.get('player:4:hand:none')?.max === 1
       )
       expect(transferGroups.length).toBeGreaterThan(0)
 

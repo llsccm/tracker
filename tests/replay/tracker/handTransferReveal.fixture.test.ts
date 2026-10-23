@@ -31,8 +31,8 @@ describe('真实录制回放：连续整手转移 + 中途揭示', () => {
     const sharedGroup = report.finalState.room?.constraints.find(
       (group) =>
         WATCHED_CARDS.every((cardID) => group.cardIDs.includes(cardID)) &&
-        group.expectedSlotsByLocation['player:2:hand:none'] > 0 &&
-        group.expectedSlotsByLocation['player:7:hand:none'] > 0
+        group.expectedSlotsByLocation['player:2:hand:none']?.min > 0 &&
+        group.expectedSlotsByLocation['player:7:hand:none']?.min > 0
     )
     expect(sharedGroup).toBeDefined()
     expect(sharedGroup).not.toHaveProperty('expectedSlotsBySeat')
@@ -74,6 +74,10 @@ describe('真实录制回放：连续整手转移 + 中途揭示', () => {
       expect(group.expectedSlotsByLocation).toEqual(snapshot!.expectedSlotsByLocation)
       expect(group).not.toHaveProperty('expectedSlotsBySeat')
     })
+    const output = formatTrackerProtocolReplayReport(report)
+    const slots = liveGroups.flatMap((group) => Object.entries(group.expectedSlotsByLocation))
+    expect(slots.length).toBeGreaterThan(0)
+    slots.forEach(([key, range]) => expect(output).toContain(`${key}=[${range.min},${range.max}]`))
   })
 
   it('fast / watch / deep 三档的最终状态一致', () => {

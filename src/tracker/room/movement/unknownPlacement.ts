@@ -2,7 +2,7 @@ import { trackerLogger } from '@/utils/logger'
 import type { Room } from '@/tracker/Room'
 import type { RoomMovementCandidates } from './candidates'
 import type { RoomMovementSources } from './sources'
-import { registerUnassignedMarkSpaceCards } from './unassignedMarkSpaces'
+import { registerPopupSpaceCards } from './popupSpaces'
 import type { RoomMoveContext } from './types'
 
 /** Unknown-identity movement stage; source taking and target-specific gap rules stay distinct. */
@@ -50,6 +50,7 @@ export class RoomMovementUnknownPlacement {
 
     if (toZone === 'player') {
       const movedUnknownCards = this.sources.takeSourceCards(unknownCount, {
+        fromPopupSpaceID: context.fromPopupSpaceID,
         toZone,
         sourceIsOutside,
         fromSeat,
@@ -67,19 +68,21 @@ export class RoomMovementUnknownPlacement {
       context.movedUnknownCards = movedUnknownCards
 
       movedUnknownCards.forEach((card) => {
-        this.sources.resolveSourcePlayerCandidate(card, context)
+        this.sources.resolveStoredSourceCandidate(card, context)
       })
       this.room.removeCardsFromConstraintGroups(movedUnknownCards)
 
       movedUnknownCards.forEach((card) => {
-        card.bindCandidates(targetSeats, subZone, spellID, { known: false })
+        card.bindCandidates(
+          targetSeats,
+          subZone,
+          subZone === 'hand' && fromSubZone === 'mark' ? null : spellID,
+          { known: card.isKnown }
+        )
+        if (context.targetHandSeat !== null && context.gainSpellID !== undefined) {
+          card.recordHandGain(context.targetHandSeat, context.gainSpellID)
+        }
       })
-
-      // toSeatID=255 会被 normalizeSeats 过滤为空；这代表无席位技能空间而非某个玩家。
-      // 这里按 spellID 建账本，后续从弹窗 mark 回牌堆时直接取这个空间里的占位。
-      if (subZone === 'mark' && targetSeats.length === 0) {
-        registerUnassignedMarkSpaceCards(this.room, spellID, movedUnknownCards)
-      }
 
       if (movedUnknownCards.length > 0 && targetSeats.length > 0) {
         this.room.createConstraintGroup({
@@ -111,6 +114,7 @@ export class RoomMovementUnknownPlacement {
     }
 
     const movedUnknownCards = this.sources.takeSourceCards(unknownCount, {
+      fromPopupSpaceID: context.fromPopupSpaceID,
       toZone,
       sourceIsOutside,
       fromSeat,
@@ -151,11 +155,19 @@ export class RoomMovementUnknownPlacement {
 
     context.movedUnknownCards = movedUnknownCards
     movedUnknownCards.forEach((card) => {
-      this.sources.resolveSourcePlayerCandidate(card, context)
+      this.sources.resolveStoredSourceCandidate(card, context)
     })
     this.room.removeCardsFromConstraintGroups(movedUnknownCards)
 
     const targetZone = this.room.zones.get(toZone)
+
+    if (toZone === 'popup') {
+      movedUnknownCards.forEach((card) =>
+        card.resolveLocationCandidate({ type: 'popup', spaceID: context.toPopupSpaceID })
+      )
+      registerPopupSpaceCards(this.room, context.toPopupSpaceID, movedUnknownCards)
+      return
+    }
 
     if (targetZone) {
       targetZone.add(movedUnknownCards, position)

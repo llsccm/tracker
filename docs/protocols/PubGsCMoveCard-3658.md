@@ -69,6 +69,6 @@ ToZoneParam: 0
 - 弃置后 3 号手牌数减少三张，另一张标记候选收敛回 0 号标记区。调整 `CardIDs` 顺序不能改变
   实体数量、物化结果或剩余标记牌的位置。
 
-实现入口为 `TrackerController.syncTrackerMove()`、`RoomMovementSources.isCardInPlayerSource()`
-和 `RoomMovementCandidates.markMarkToHandCandidates()`；连续协议回归位于
+实现入口为 `TrackerController.syncTrackerMove()`、`RoomMovementSources.isCardInStoredSource()`
+和 `RoomMovementCandidates.markStoredToHandCandidates()`；连续协议回归位于
 `tests/tracker/markToHandAmbiguous.test.ts`。

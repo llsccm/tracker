@@ -4,7 +4,6 @@ import { tracker } from '@/tracker/runtime/browser'
 import { renderPeiXiuMapWindow, setPeiXiuMapWindowVisible } from '@/ui/PeiXiuMapWindow'
 import { getRenderedPeiXiuHandSuitColors } from '@/ui/PeiXiuHandMirror'
 import { parsePeiXiuRoleData, solvePeiXiuRoleData } from '@/utils/peixiuRouteFeature'
-import { handleQiaoZhi } from './skills/QiaoZhi'
 import { laya } from '@/runtime/gameAdapter'
 
 // GsCUpdateRoleDataExNtf
@@ -85,12 +84,6 @@ export function handleUpdateRoleDataExNtf(msg) {
       if (SeatID !== undefined && SeatID == Game.myID && import.meta.env.DEV) {
         console.info(msg)
       }
-      break
-
-    // 巧织 获得的牌
-    case 3544:
-      // 其他视角的移动协议只有暗牌数量，3544 通知补充实际 CardID；主视角已从移动协议获知。
-      handleQiaoZhi(msg, Game.myID)
       break
 
     // 尽览

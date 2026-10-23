@@ -13,11 +13,13 @@ describe('周群天候其他视角换牌候选', () => {
   function setupHand({
     knownIDs,
     hiddenCount,
-    extraIDs = []
+    extraIDs = [],
+    observeHandCount = true
   }: {
     knownIDs: number[]
     hiddenCount: number
     extraIDs?: number[]
+    observeHandCount?: boolean
   }) {
     const { controller, view } = createTrackerControllerHarness()
     controller.initTrackerRoom()
@@ -44,10 +46,12 @@ describe('周群天候其他视角换牌候选', () => {
     room.clearCardsFromPublicZones([...knownCards, ...hiddenCards])
     knownCards.forEach((card) => card.bindCandidates([actorSeat], 'hand', null, { known: true }))
     hiddenCards.forEach((card) => card.bindCandidates([actorSeat], 'hand', null, { known: false }))
-    room.getPlayer(actorSeat)!.syncObservedHandCount(knownCards.length + hiddenCards.length)
+    if (observeHandCount) {
+      room.getPlayer(actorSeat)!.syncObservedHandCount(knownCards.length + hiddenCards.length)
+    }
     room.resolveConstraints()
 
-    return { controller, knownCards, room, view }
+    return { controller, knownCards, hiddenCards, room, view }
   }
 
   function runExchange(
@@ -158,7 +162,7 @@ describe('周群天候其他视角换牌候选', () => {
     expect(room.getPlayer(actorSeat)!.observedHandCount).toBe(2)
   })
 
-  it('明暗混合交换两张时保留逐牌弱候选，展示命中后确认该明牌换出', () => {
+  it('明暗混合交换两张时保留区间约束，展示命中后确认该明牌换出', () => {
     const { controller, knownCards, room } = setupHand({
       knownIDs: [88, 146],
       hiddenCount: 2
@@ -166,6 +170,10 @@ describe('周群天候其他视角换牌候选', () => {
 
     runExchange(controller, 2)
     knownCards.forEach((card) => expectHandOrPileTop(card, 2))
+    const group = Array.from(room.constraintGroups.values()).find((item) =>
+      item.expectedSlotsByLocation.has('public:pile:top:2')
+    )!
+    expect(group.expectedSlotsByLocation.get('public:pile:top:2')).toEqual({ min: 0, max: 2 })
 
     const pileBeforeShow = room.zones.get('pile')!.cards.map((card) => card.id)
     showFinalCard(controller, 88)
@@ -176,6 +184,52 @@ describe('周群天候其他视角换牌候选', () => {
     expectHandOrPileTop(knownCards[1], 2)
     expect(room.zones.get('pile')!.cards.map((card) => card.id)).toEqual(pileBeforeShow)
     expect(room.hasSkillState(TIAN_HOU_STATE_KEY)).toBe(false)
+  })
+
+  it.each([1, 2])('未观测手牌总数且暗牌有位置候选时，交换 %i 张保留明牌去留区间', (count) => {
+    const { controller, knownCards, hiddenCards, room } = setupHand({
+      knownIDs: [88],
+      hiddenCount: 2,
+      observeHandCount: false
+    })
+    hiddenCards.forEach((card) => {
+      card.setLocationCandidates([playerHand(actorSeat), playerHand(viewerSeat)])
+    })
+    room.resolveConstraints()
+    expect(room.getPlayer(actorSeat)!.hasObservedHandCount).toBe(false)
+
+    runExchange(controller, count)
+
+    const group = Array.from(room.constraintGroups.values()).find((item) =>
+      item.expectedSlotsByLocation.has(`public:pile:top:${count}`)
+    )!
+    expect(group.expectedSlotsByLocation.get(`public:pile:top:${count}`)).toEqual({
+      min: 0,
+      max: 1
+    })
+    expect(
+      group.expectedSlotsByLocation.get(createLocationCandidateKey(playerHand(actorSeat)))
+    ).toEqual({
+      min: 0,
+      max: 1
+    })
+    expectHandOrPileTop(knownCards[0], count)
+    expect(room.zones.get('exchange')!.cards).toHaveLength(0)
+  })
+
+  it('已观测三张手牌含两张明牌时，交换两张至少换出一张明牌', () => {
+    const { controller, knownCards, room } = setupHand({
+      knownIDs: [88, 146],
+      hiddenCount: 1
+    })
+
+    runExchange(controller, 2)
+
+    const group = Array.from(room.constraintGroups.values()).find((item) =>
+      item.expectedSlotsByLocation.has('public:pile:top:2')
+    )!
+    expect(group.expectedSlotsByLocation.get('public:pile:top:2')).toEqual({ min: 1, max: 2 })
+    knownCards.forEach((card) => expectHandOrPileTop(card, 2))
   })
 
   it('交换一张且展示命中原手牌时，该牌确定为牌顶并排除其余换出候选', () => {

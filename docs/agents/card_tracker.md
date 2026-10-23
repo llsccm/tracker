@@ -59,7 +59,7 @@
 - `RoomConstraints` 位于 `src/tracker/room/constraints.ts`，集中实现不动点收敛、E1/E2 手牌槽懒缓存、匿名手牌实体对账、约束组维护、实体牌解析及稳定态的索引/视图组/计数器同步。Room 保留 `resolveConstraints()` 公开入口和状态所有权，DEV 诊断按需传入。
 - `RoomPublicZones` 位于 `src/tracker/room/publicZones.ts`，负责公共区一致性检查、洗牌槽位校准及玩家手牌 ID 查询。公共区牌序直接读取 `Room.getPublicZone()` 返回的 `Zone.cards`。
 - `RoomDiagnostics` 位于 `src/tracker/room/diagnostics.ts`，负责 DEV 身份/槽位与身份账本守恒、玩家快照和影子索引检查、抽样门控及收敛轮数告警；Room 的公开断言 API 保持不变。
-- `protocol/protocolZones.ts` 负责把协议区域编号映射为新版公共区与玩家子区；`MoveEventNormalizer` 只做分类与字段映射，不直接修改 `Room` 状态。`FromID` / `ToID` 的含义依赖具体 `FromZone` / `ToZone`，不能一律当作座位 ID：例如 `FromZone=8` 弹窗标记回牌堆时，`FromID` 可能是技能/标记空间 ID；`FromZone=1` 牌堆来源时，`FromID=255` 可能只是牌堆/无座位占位。
+- `protocol/protocolZones.ts` 将区域 `4` 映射为玩家标记、区域 `8` 映射为独立临时弹窗 `popup`。`MoveEventNormalizer` 只做分类与字段映射，不直接修改 `Room` 状态。玩家端点使用 seat 字段，弹窗端点使用 `fromPopupSpaceID/toPopupSpaceID`；区域 `8` 的 `FromID` 是空间 ID，不是玩家座位。玩家标记空间优先使用端点 `ZoneParam`，与触发移动的 `SpellID` 分开。
 - `Room.moveCards()`、`Room.resolveConstraints()`、`Room.shufflePile()`、`Room.getPublicZone()` 是高频核心入口，应优先留在 `Room` 中；新增内部辅助方法时优先放入对应行为模块，再由 `Room` 暴露必要的薄入口。
 
 ### `Card` / `Player` / `Zone`
