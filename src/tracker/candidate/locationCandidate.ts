@@ -17,6 +17,7 @@ import type {
 } from '../types'
 
 export interface LocationCandidateInput {
+  spaceID?: number | string | null
   type?: LocationCandidate['type'] | string
   seatID?: SeatID
   subZone?: SubZone | null
@@ -60,6 +61,11 @@ export function normalizeLocationCandidate(
   if (!candidate) return null
 
   const type = candidate.type ?? (candidate.seatID !== undefined ? 'player' : 'public')
+
+  if (type === 'popup') {
+    const spaceID = normalizeCandidateSpellID(candidate.spaceID)
+    return spaceID === null ? null : { type, spaceID }
+  }
 
   if (type === 'player') {
     const normalized = normalizeSubZoneCandidate(candidate)
@@ -123,6 +129,8 @@ export function createLocationCandidateKey(candidate: LocationCandidateInput = {
   const normalized = normalizeLocationCandidate(candidate)
   if (!normalized) return ''
 
+  if (normalized.type === 'popup') return `popup:${normalized.spaceID}`
+
   if (normalized.type === 'player') {
     return [
       'player',
@@ -167,6 +175,8 @@ export function createLocationCandidateKey(candidate: LocationCandidateInput = {
 export function parseLocationCandidateKey(key: string): LocationCandidate | null {
   const parts = String(key).split(':')
   const type = parts[0]
+
+  if (type === 'popup') return normalizeLocationCandidate({ type, spaceID: parts[1] })
 
   if (type === 'player') {
     return normalizeLocationCandidate({

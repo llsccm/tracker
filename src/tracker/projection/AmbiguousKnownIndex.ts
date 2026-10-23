@@ -144,6 +144,9 @@ export class AmbiguousKnownIndex {
       const playerCandidates = getPlayerLocationCandidates(card.locationCandidates)
       const containerCandidates = getContainerLocationCandidates(card.locationCandidates)
       const publicCandidates = getPublicLocationCandidates(card.locationCandidates)
+      card.locationCandidates.forEach((candidate) => {
+        if (candidate.type === 'popup') locations.push(`弹窗区${candidate.spaceID}`)
+      })
 
       const projectedPlayerCandidates = [
         ...playerCandidates,

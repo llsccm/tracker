@@ -129,7 +129,7 @@ function countCandidateHandSlots(
     if (slot.location.type !== 'player' || slot.location.seatID !== seatID) continue
     const cards = slot.candidateCards.filter((card) => allowedCards.has(card))
     if (cards.length === 0) continue
-    budgets.push({ cards: new Set(cards), count: slot.remainingCount })
+    budgets.push({ cards: new Set(cards), count: slot.remainingMax })
   }
 
   // 不相交的组独立求值，避免把多个小问题乘成全局状态空间。
@@ -246,15 +246,24 @@ function collectHiddenHandCoverage(
   countKnownSlots: (seatID: SeatID, cards: readonly Card[]) => number
 ): { coveredBySeat: Map<SeatID, number>; unresolvedSeats: Set<SeatID> } {
   const packagesByGroup = new Map<ConstraintGroup, HiddenHandCoveragePackage>()
+  const unresolvedSeats = new Set<SeatID>()
   for (const slot of slots) {
-    if (slot.location.type !== 'player' || slot.remainingCount === 0) continue
+    if (slot.location.type !== 'player') continue
     const seatID = slot.location.seatID
+    // 暗实体的区间占用还不能确定，补位可能和它重复承担物理手牌。
+    if (
+      slot.remainingMin !== slot.remainingMax &&
+      slot.candidateCards.some((card) => !card.isKnown)
+    ) {
+      unresolvedSeats.add(seatID)
+    }
+    if (slot.remainingMin === 0) continue
     const knownCount = countKnownSlots(
       seatID,
       slot.candidateCards.filter((card) => card.isKnown)
     )
     const hiddenCards = slot.candidateCards.filter((card) => !card.isKnown)
-    const count = Math.min(hiddenCards.length, Math.max(0, slot.remainingCount - knownCount))
+    const count = Math.min(hiddenCards.length, Math.max(0, slot.remainingMin - knownCount))
     if (count === 0) continue
     const coverage = packagesByGroup.get(slot.group) ?? {
       coverageBySeat: new Map<SeatID, number>(),
@@ -271,7 +280,6 @@ function collectHiddenHandCoverage(
     packagesByGroup.set(slot.group, coverage)
   }
   const coverageBySeat = new Map<SeatID, number>()
-  const unresolvedSeats = new Set<SeatID>()
   collectCoverageComponents(Array.from(packagesByGroup.values())).forEach((component) => {
     if (addCoverageComponent(component, coverageBySeat)) return
     component.forEach((coverage) =>

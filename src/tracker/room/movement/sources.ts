@@ -1,5 +1,4 @@
 import { POSITION_BOTTOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { getCompatibleMarkSpellIDs } from '@/tracker/candidate/markSpellID'
 import type { Card, Zone } from '@/tracker/model'
 import { MOVE_TYPE } from '@/tracker/protocol/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
@@ -15,7 +14,7 @@ import { trackerLogger } from '@/utils/logger'
 import type { RoomMovementHiddenMarks } from './hiddenMarks'
 import {
   getCardPlayerLocationCandidates,
-  getUnknownPlayerSourceCards,
+  getUnknownStoredSourceCards,
   isExactUnknownPlayerSourceCard,
   takeUnknownCardsFromPlayer
 } from './sourceQueries'
@@ -25,11 +24,7 @@ import type {
   TakeSourceCardsOptions,
   TakeSpecificSourceFallback
 } from './types'
-import {
-  getUnassignedMarkSpaceSpellIDFromProtocolID,
-  removeUnassignedMarkSpaceCards,
-  takeUnassignedMarkSpaceCards
-} from './unassignedMarkSpaces'
+import { removePopupSpaceCards, takePopupSpaceCards } from './popupSpaces'
 
 // 来源操作只依赖标记占位维护，不持有暗置标记组件的其它能力。
 type HiddenMarkPlaceholderAccess = Pick<
@@ -95,8 +90,8 @@ export class RoomMovementSources {
     uniqueCards.forEach((card) => {
       this.room.zones.forEach((zone) => zone.removeCard(card))
     })
-    // 显式 sourceCards 可能直接指向无席位 mark 空间里的实体，取走后必须同步摘账本。
-    removeUnassignedMarkSpaceCards(this.room, uniqueCards)
+    // 显式 sourceCards 可能直接指向弹窗空间里的实体，取走后必须同步摘账本。
+    removePopupSpaceCards(this.room, uniqueCards)
 
     if (uniqueCards.length >= count) return uniqueCards
 
@@ -124,7 +119,7 @@ export class RoomMovementSources {
   ): Card[] {
     const playerCards: Card[] = []
     if (!(count > 0)) return playerCards
-    const markSpellIDs = subZone === 'mark' ? getCompatibleMarkSpellIDs(spellID) : []
+    const markSpellIDs = subZone === 'mark' && spellID != null ? [spellID] : []
 
     // 标记区到手牌的多选已由候选层接管；其余路径仍须按张数消费来源实体。
     for (const card of this.room.refreshPlayerSnapshot()) {
@@ -162,9 +157,15 @@ export class RoomMovementSources {
    * 这样标记/手牌的数量约束能看到明确移出的那一张。
    * 须先确认来源再移出约束组，保证对应位置名额随实体离开而扣减；返回候选是否变化。
    */
-  resolveSourcePlayerCandidate(card: Card, context: RoomMoveContext): boolean {
+  resolveStoredSourceCandidate(card: Card, context: RoomMoveContext): boolean {
     const { fromSeat, fromSubZone } = context
     const sourceSpellID = this.getSourceSpellID(context)
+    if (context.fromZone === 'popup') {
+      const candidate = { type: 'popup', spaceID: context.fromPopupSpaceID } as const
+      if (card.hasLocationCandidate(candidate))
+        return card.resolveLocationCandidate(candidate, 'move:sourcePopup')
+      return false
+    }
     if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone) {
       return false
     }
@@ -187,9 +188,17 @@ export class RoomMovementSources {
    * 判断明牌实体是否已经处在协议声明的玩家来源区。
    * 按当前投影核对来源席位、子区和标记 ID，不把模糊候选当作已落区。
    */
-  isCardInPlayerSource(card: Card, context: RoomMoveContext): boolean {
+  isCardInStoredSource(card: Card, context: RoomMoveContext): boolean {
     const { fromSeat, fromSubZone } = context
     const sourceSpellID = this.getSourceSpellID(context)
+    if (context.fromZone === 'popup') {
+      return card
+        .getPossibleLocations()
+        .some(
+          (candidate) =>
+            candidate.type === 'popup' && candidate.spaceID === context.fromPopupSpaceID
+        )
+    }
     if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone) {
       return false
     }
@@ -223,26 +232,22 @@ export class RoomMovementSources {
   /**
    * 从协议声明的玩家来源区寻找可被明牌置换的暗占位。
    */
-  private findUnknownPlayerSourcePlaceholder(
+  private findUnknownStoredSourcePlaceholder(
     context: RoomMoveContext,
     excludeCard: Card | null = null
   ): Card | null {
     const { fromSeat, fromSubZone } = context
-    const sourceSpellID = this.getSourceSpellID(context)
-    if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone) {
+    if (
+      context.fromZone !== 'popup' &&
+      (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone)
+    ) {
       return null
     }
 
     const excludedCards = [excludeCard, ...context.knownCards].filter((card): card is Card =>
       Boolean(card)
     )
-    const sourceCards = getUnknownPlayerSourceCards(
-      this.room,
-      fromSeat,
-      fromSubZone,
-      sourceSpellID,
-      excludedCards
-    )
+    const sourceCards = getUnknownStoredSourceCards(this.room, context, excludedCards)
     if (fromSubZone === 'mark' && excludeCard) {
       const placeholder = this.hiddenMarks.findHiddenMarkSourcePlaceholder(excludeCard, sourceCards)
       if (placeholder) return placeholder
@@ -254,13 +259,15 @@ export class RoomMovementSources {
    * 在协议来源子区查找位置已确定的暗占位；排除当前牌和同批已知移动牌。
    * 模糊候选不能作为精确占位，以免把尚未确定的身份过早落定。
    */
-  findExactUnknownPlayerSourcePlaceholder(
+  findExactUnknownStoredSourcePlaceholder(
     context: RoomMoveContext,
     excludeCard: Card | null = null
   ): Card | null {
     const { fromSeat, fromSubZone } = context
-    const sourceSpellID = this.getSourceSpellID(context)
-    if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone) {
+    if (
+      context.fromZone !== 'popup' &&
+      (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone)
+    ) {
       return null
     }
 
@@ -268,13 +275,11 @@ export class RoomMovementSources {
       Boolean(card)
     )
     return (
-      getUnknownPlayerSourceCards(
-        this.room,
-        fromSeat,
-        fromSubZone,
-        sourceSpellID,
-        excludedCards
-      ).find((card) => isExactUnknownPlayerSourceCard(card, fromSeat)) ?? null
+      getUnknownStoredSourceCards(this.room, context, excludedCards).find((card) =>
+        context.fromZone === 'popup'
+          ? !card.hasLocationCandidates()
+          : isExactUnknownPlayerSourceCard(card, fromSeat)
+      ) ?? null
     )
   }
 
@@ -388,7 +393,7 @@ export class RoomMovementSources {
    * 返回被置换的占位实体；没有可用来源占位时返回 null。
    */
   swapKnownCardWithPlayerSourcePlaceholder(card: Card, context: RoomMoveContext): Card | null {
-    const placeholder = this.findUnknownPlayerSourcePlaceholder(context, card)
+    const placeholder = this.findUnknownStoredSourcePlaceholder(context, card)
     if (!placeholder) return null
 
     const { fromSeat, fromSubZone } = context
@@ -398,6 +403,7 @@ export class RoomMovementSources {
     const oldSubZone = card.subZone
     const oldSeats = new Set(Array.from(card.seats, Number))
     const oldSpellID = card.spellID
+    const oldPopupSpaceID = card.popupSpaceID
     const oldLocationCandidates = card.locationCandidates
     const keepPlaceholderAtPreviousPublicPosition = this.hasPublicCandidateAt(card, oldLocation)
     const preserveAmbiguousIdentity =
@@ -407,15 +413,20 @@ export class RoomMovementSources {
 
     // 协议已经证明被替换的暗实体来自该玩家区。必须先确认来源位置，再移出约束组，
     // 否则多席位暗实体仍是未解析状态，组内对应位置名额不会随实体离开而扣减。
-    this.resolveSourcePlayerCandidate(placeholder, context)
+    this.resolveStoredSourceCandidate(placeholder, context)
     this.room.removeCardsFromConstraintGroups([placeholder])
     if (preserveAmbiguousIdentity) {
       this.room.constraints.replaceCardInConstraintGroups(card, placeholder)
     }
 
-    card.bindCandidates([fromSeat], fromSubZone, fromSubZone === 'mark' ? sourceSpellID : null, {
-      known: true
-    })
+    if (context.fromZone === 'popup') {
+      card.resolveLocationCandidate({ type: 'popup', spaceID: context.fromPopupSpaceID })
+      card.confirmKnown()
+    } else {
+      card.bindCandidates([fromSeat], fromSubZone, fromSubZone === 'mark' ? sourceSpellID : null, {
+        known: true
+      })
+    }
 
     if (preserveAmbiguousIdentity) {
       placeholder.bindCandidates(oldSeats, oldSubZone, oldSpellID)
@@ -446,6 +457,8 @@ export class RoomMovementSources {
         replacementCandidate.spellID,
         { known: false }
       )
+    } else if (oldLocation === 'popup') {
+      placeholder.resolveLocationCandidate({ type: 'popup', spaceID: oldPopupSpaceID })
     } else if (oldLocation === 'player') {
       placeholder.bindCandidates(oldSeats, oldSubZone, oldSpellID)
     } else {
@@ -578,7 +591,7 @@ export class RoomMovementSources {
     const previousPublicZoneEntry = Array.from(this.room.zones.entries()).find(([, zone]) => {
       return zone.cards.includes(card)
     })
-    const isPlayerResidue = card.location === 'player'
+    const isPlayerResidue = card.location === 'player' || card.location === 'popup'
     // 已知身份既不在玩家区，也不在其它公共区时，没有可由来源占位回补的旧位置。
     if (!isPlayerResidue && !previousPublicZoneEntry) return null
 
@@ -620,6 +633,8 @@ export class RoomMovementSources {
 
     replacement.isKnown = false
     replacement.bindCandidates(Array.from(oldSeats), oldSubZone, oldSpellID, { known: false })
+    if (card.popupSpaceID !== null)
+      replacement.resolveLocationCandidate({ type: 'popup', spaceID: card.popupSpaceID })
 
     this.hiddenMarks.replaceHiddenMarkPlaceholder(card, replacement)
 
@@ -661,8 +676,8 @@ export class RoomMovementSources {
     if (sourceCards?.length) {
       if (fromSeat !== null && !Number.isNaN(fromSeat)) {
         const explicitCards = Array.from(new Set(sourceCards)).filter(Boolean).slice(0, count)
-        // 显式 sourceCards 也可能指向无席位 mark 空间实体，不能绕过账本清理。
-        removeUnassignedMarkSpaceCards(this.room, explicitCards)
+        // 显式 sourceCards 也可能指向弹窗空间实体，不能绕过账本清理。
+        removePopupSpaceCards(this.room, explicitCards)
         // 弃牌获得可能同时携带来源席位，仍需补齐未确定的数量。
         if (isDiscardGain && explicitCards.length < count) {
           explicitCards.push(...this.room.createExternalCards([], count - explicitCards.length))
@@ -703,14 +718,13 @@ export class RoomMovementSources {
     // 弃牌来源优先于附带的席位；未公开身份时创建暗牌，不消费玩家或标记区实体。
     if (isDiscardGain) return this.room.createExternalCards([], count)
 
+    if (fromZone === 'popup') {
+      return takePopupSpaceCards(this.room, count, options.fromPopupSpaceID)
+    }
+
     if (fromSeat !== null && !Number.isNaN(fromSeat)) {
       const sourceSubZone = fromSubZone ?? subZone ?? 'hand'
-      const inferredSourceSpellID =
-        sourceSubZone === 'mark'
-          ? getUnassignedMarkSpaceSpellIDFromProtocolID(this.room, fromSeat)
-          : null
-      const sourceSpellID =
-        sourceSubZone === 'mark' ? (fromSpellID ?? spellID ?? inferredSourceSpellID) : spellID
+      const sourceSpellID = sourceSubZone === 'mark' ? (fromSpellID ?? spellID) : spellID
       const unknownCards = takeUnknownCardsFromPlayer(
         this.room,
         fromSeat,
@@ -718,27 +732,9 @@ export class RoomMovementSources {
         sourceSubZone,
         sourceSpellID
       )
+      removePopupSpaceCards(this.room, unknownCards)
 
-      // 弹窗 mark 回牌堆时 FromID 可能是技能空间 ID，不一定能按座位取到实体。
-      // 先从 spellID 对应的无席位 mark 空间补足，避免误创建匿名 fallback。
-      const unassignedUnknownCards =
-        sourceSubZone === 'mark' && unknownCards.length < count
-          ? takeUnassignedMarkSpaceCards(this.room, count - unknownCards.length, sourceSpellID)
-          : []
-
-      if (unassignedUnknownCards.length > 0) {
-        trackerLogger.debug('使用无席位标记暗占位补足来源', {
-          requestedCount: count,
-          takenBySeatCount: unknownCards.length,
-          takenUnassignedCount: unassignedUnknownCards.length,
-          fromSeat,
-          sourceSubZone,
-          sourceSpellID,
-          cardIDs: unassignedUnknownCards.map((card) => card.id)
-        })
-      }
-
-      const selectedUnknownCards = [...unknownCards, ...unassignedUnknownCards]
+      const selectedUnknownCards = unknownCards
 
       if (selectedUnknownCards.length >= count || sourceSubZone === 'hand') {
         return selectedUnknownCards.slice(0, count)

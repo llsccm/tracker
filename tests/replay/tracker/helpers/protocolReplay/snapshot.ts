@@ -5,6 +5,7 @@ import type { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
 import type { GameState } from '@/tracker/Game'
 import type { Player } from '@/tracker/model/Player'
 import type { Room } from '@/tracker/Room'
+import { snapshotLocationSlots } from './constraintSlots'
 import { NOOP_REPLAY_METRICS, type ReplayMetricsSink } from './metrics'
 import type {
   TrackerReplayConstraintSnapshot,
@@ -142,7 +143,7 @@ function createConstraintSnapshot(group: ConstraintGroup) {
     cardIDs: Array.from(group.cards, (card) => card.id),
     entityIDs: Array.from(group.cards, (card) => card.entityID),
     candidateSeats: sortNumbers(group.candidateSeats),
-    expectedSlotsByLocation: mapNumberEntries(group.expectedSlotsByLocation)
+    expectedSlotsByLocation: snapshotLocationSlots(group.expectedSlotsByLocation)
   }
   return snapshot
 }
@@ -247,14 +248,6 @@ function collectPlayerSnapshotIssues(room: Room, issues: unknown[]): void {
       currentEntityIDs: current.map((card) => card.entityID)
     })
   }
-}
-
-function mapNumberEntries(map: Map<unknown, number>): Record<string, number> {
-  const entries: [string, number][] = Array.from(map.entries(), ([key, value]) => [
-    String(key),
-    value
-  ])
-  return Object.fromEntries(entries.sort(([left], [right]) => left.localeCompare(right)))
 }
 
 function sortNumbers(values: Iterable<number>): number[] {

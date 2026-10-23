@@ -133,19 +133,28 @@ describe('下书', () => {
       const existingGroup = room.constraintGroups.get('xia-shu-existing-candidate-group')
       expect(existingGroup?.expectedSlotsByLocation.get('player:7:hand:none')).toBeUndefined()
       expect(existingGroup?.expectedSlotsByLocation.get('player:3:hand:none')).toBeUndefined()
-      expect(existingGroup?.expectedSlotsByLocation.get('player:6:hand:none')).toBe(1)
+      expect(existingGroup?.expectedSlotsByLocation.get('player:6:hand:none')).toEqual({
+        min: 1,
+        max: 1
+      })
       expect(existingGroup?.expectedSlotsByLocation.get(targetHandKey)).toBeUndefined()
       expect(existingGroup?.expectedSlotsByLocation.get(actorHandKey)).toBeUndefined()
-      expect(existingGroup?.expectedSlotsByLocation.get(otherHandKey)).toBe(1)
+      expect(existingGroup?.expectedSlotsByLocation.get(otherHandKey)).toEqual({ min: 1, max: 1 })
 
       const transferGroup = Array.from(room.constraintGroups.values()).find(
         (group) =>
           (group.sourceEvent as { type?: string } | null)?.type === 'test:xiaShu-hidden-transfer'
       )
-      expect(transferGroup?.expectedSlotsByLocation.get('player:7:hand:none')).toBe(0)
-      expect(transferGroup?.expectedSlotsByLocation.get('player:3:hand:none')).toBe(5)
-      expect(transferGroup?.expectedSlotsByLocation.get(targetHandKey)).toBe(0)
-      expect(transferGroup?.expectedSlotsByLocation.get(actorHandKey)).toBe(5)
+      expect(transferGroup?.expectedSlotsByLocation.get('player:7:hand:none')).toEqual({
+        min: 0,
+        max: 0
+      })
+      expect(transferGroup?.expectedSlotsByLocation.get('player:3:hand:none')).toEqual({
+        min: 5,
+        max: 5
+      })
+      expect(transferGroup?.expectedSlotsByLocation.get(targetHandKey)).toEqual({ min: 0, max: 0 })
+      expect(transferGroup?.expectedSlotsByLocation.get(actorHandKey)).toEqual({ min: 5, max: 5 })
       expect(room.readSkillState(361)).toBeUndefined()
     } finally {
       room.destroy()

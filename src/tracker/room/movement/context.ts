@@ -62,6 +62,14 @@ export function createMoveContext(
     fromSeat !== null && !Number.isNaN(fromSeat) ? room.getPlayer(fromSeat) : null
 
   const context: RoomMoveContext = {
+    fromPopupSpaceID: opt.fromPopupSpaceID,
+    toPopupSpaceID: opt.toPopupSpaceID,
+    gainSpellID:
+      opt.gainSpellID !== undefined
+        ? opt.gainSpellID
+        : targetHandSeat !== null && targetHandSeat !== sourceHandSeat
+          ? (opt.pileIdentityEvent?.protocol.SpellID ?? sourceEvent?.spellID ?? spellID ?? null)
+          : undefined,
     pileIdentityCardIDs: opt.pileIdentityCardIDs,
     pileIdentityEvent: opt.pileIdentityEvent,
     cardIDs,

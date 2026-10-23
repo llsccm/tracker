@@ -220,7 +220,7 @@ describe('技能插件归一化前补牌', () => {
     expect(room.readSkillState(3750)).toBeUndefined()
   })
 
-  it('椒遇从无席位 mark 回手时按选择颜色补全其他视角的 CardIDs', () => {
+  it('椒遇从弹窗区 暗取后通过剩余明弃收敛，不按颜色回填 CardIDs', () => {
     const selectedCardIDs = [147, 148, 149, 150, 151]
     const otherCardID = 152
     const { controller } = createTrackerControllerHarness()
@@ -278,6 +278,20 @@ describe('技能插件归一化前补牌', () => {
 
     controller.syncTrackerMove(context.patched, context.raw)
     expect(context.patched.CardIDs).toEqual([])
+    expect(room.getPlayer(5)!.candidateHandCards).toHaveLength(6)
+    expect(room.getPlayer(5)!.getCandidateHandSlotCount()).toBe(5)
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [otherCardID],
+        CardCount: 1,
+        FromID: 3571,
+        FromZone: 8,
+        ToID: 255,
+        ToZone: 2,
+        MoveType: 4,
+        SpellID: 3571
+      })
+    )
 
     selectedCardIDs.forEach((cardID) => {
       const card = room.cardIndex.get(cardID)
@@ -286,9 +300,9 @@ describe('技能插件归一化前补牌', () => {
       expect(card.seats.has(5)).toBe(true)
     })
     const otherCard = room.cardIndex.get(otherCardID)
-    expect(otherCard.location).toBe('player')
-    expect(otherCard.subZone).toBe('mark')
-    expect(otherCard.spellID).toBe(3571)
+    expect(otherCard.location).toBe('discard')
+    expect(otherCard.subZone).toBeNull()
+    expect(otherCard.spellID).toBeNull()
     expect(otherCard.seats.size).toBe(0)
   })
 

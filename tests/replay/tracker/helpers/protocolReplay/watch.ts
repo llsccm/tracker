@@ -1,9 +1,10 @@
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import type { Card } from '@/tracker/model/Card'
-import type { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
+import type { ConstraintGroup, SlotCountRange } from '@/tracker/constraint/ConstraintGroup'
 import type { Room } from '@/tracker/Room'
 import { NOOP_REPLAY_METRICS, type ReplayMetricsSink } from './metrics'
 import { normalizePositive } from './normalize'
+import { snapshotLocationSlots } from './constraintSlots'
 
 /** 单次协议前后可观察到的 watched card 状态。 */
 export interface ReplayWatchedCardState {
@@ -45,7 +46,7 @@ export interface ReplayConstraintProvenance {
   sourceEvent: Record<string, unknown> | string | null
   cardIDs: number[]
   candidateSeats: number[]
-  expectedSlotsByLocation: Record<string, number>
+  expectedSlotsByLocation: Record<string, SlotCountRange>
 }
 
 export interface ReplayWatchOptions {
@@ -381,7 +382,7 @@ function createProvenance(
     sourceEvent: summarizeSourceEvent(group.sourceEvent),
     cardIDs: Array.from(group.cards, (card) => card.id).sort((left, right) => left - right),
     candidateSeats: Array.from(group.candidateSeats).sort((left, right) => left - right),
-    expectedSlotsByLocation: mapNumberEntries(group.expectedSlotsByLocation)
+    expectedSlotsByLocation: snapshotLocationSlots(group.expectedSlotsByLocation)
   }
 }
 
@@ -389,7 +390,7 @@ function createGroupSignature(group: ConstraintGroup): string {
   return JSON.stringify([
     Array.from(group.cards, (card) => card.entityID).sort((left, right) => left - right),
     Array.from(group.candidateSeats).sort((left, right) => left - right),
-    mapNumberEntries(group.expectedSlotsByLocation)
+    snapshotLocationSlots(group.expectedSlotsByLocation)
   ])
 }
 
@@ -429,14 +430,6 @@ function isSameWatchedState(left: ReplayWatchedCardState, right: ReplayWatchedCa
     sameNumbers(left.seats, right.seats) &&
     sameStrings(left.constraintGroupIDs, right.constraintGroupIDs)
   )
-}
-
-function mapNumberEntries(map: Map<unknown, number>): Record<string, number> {
-  const entries: [string, number][] = Array.from(map.entries(), ([key, value]) => [
-    String(key),
-    value
-  ])
-  return Object.fromEntries(entries.sort(([left], [right]) => left.localeCompare(right)))
 }
 
 function difference(left: string[], right: string[]): string[] {

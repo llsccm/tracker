@@ -21,15 +21,29 @@ if (!room) return
 测试需要隔离状态时，优先使用 `tests/tracker/helpers/room.ts` 的 `createTestRoom()`，不要在每个用例里
 手写 Room、玩家和牌堆初始化。
 
-| 目标 | 首选入口 | 说明 |
-| --- | --- | --- |
-| 消费真实协议移动 | `tracker.syncTrackerMove(patched, raw)` | 直接消费完整 `patched`，`raw` 只作追溯；不再合并局部补丁，不要在 handler 中直接改牌。 |
-| 读取当前局 | `tracker.getReadyTrackerRoom()` | 未开局、已销毁、断线状态或牌堆未就绪时返回 `null`。 |
-| 写入技能确认的明牌 | `tracker.revealTrackerCards(target, cardIDs)` | 统一处理玩家区/公共区、物化和索引。 |
-| 按协议 Zone 写入明牌 | `tracker.revealTrackerCardsInZone(protocolZone, cardIDs)` | 先做 Zone 映射，再复用上面的明牌路径。 |
-| 直接编排测试或已归一化移动 | `room.moveCards(cardIDs, toZone, options)` | 所有普通移动的 Room 级主入口。 |
+| 目标                       | 首选入口                                                  | 说明                                                                                  |
+| -------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 消费真实协议移动           | `tracker.syncTrackerMove(patched, raw)`                   | 直接消费完整 `patched`，`raw` 只作追溯；不再合并局部补丁，不要在 handler 中直接改牌。 |
+| 读取当前局                 | `tracker.getReadyTrackerRoom()`                           | 未开局、已销毁、断线状态或牌堆未就绪时返回 `null`。                                   |
+| 写入技能确认的明牌         | `tracker.revealTrackerCards(target, cardIDs)`             | 统一处理玩家区/公共区、物化和索引。                                                   |
+| 按协议 Zone 写入明牌       | `tracker.revealTrackerCardsInZone(protocolZone, cardIDs)` | 先做 Zone 映射，再复用上面的明牌路径。                                                |
+| 直接编排测试或已归一化移动 | `room.moveCards(cardIDs, toZone, options)`                | 所有普通移动的 Room 级主入口。                                                        |
 
 ## PubGsCMoveCard 完整输入契约
+
+交换区技能可用 `room.publicZones.getExchangeBatch(batchKey)` 取得命名视图，`stage(cards)` 登记待入区成员，
+`cards` 读取当前物理成员，`candidateCards` 读取逻辑候选，`transferTo(target, cards, position)` 调整批次归属，
+结算后调用 `deleteExchangeBatch(batchKey)`。这些 API 不代替 `Room.moveCards()` 的物理移动与身份事务。
+
+数量约束通过 `room.createConstraintGroup({ cards, expectedSlotsByLocation })` 提交：值接受数字、数字字符串
+或 `{ min, max }`，运行时统一为区间。弹窗位置为 `{ type: 'popup', spaceID }`，不能使用伪座位。
+
+弹窗入区使用 `room.moveCards(ids, 'popup', { fromZone: 'pile', toPopupSpaceID: 35, cardCount })`；出区使用 `fromZone: 'popup', fromPopupSpaceID: 35` 并明确目标。玩家标记继续使用 `toSeatID/subZone: 'mark'/spellID`，来源空间通过 `fromSpellID` 表达。`414` 标记返回时来源仍为 `414`，不能用动作技能 `3389` 查找标记空间。
+巧织明确身份通过 `tracker.dispatchSkillProtocolEvent({ type: 'roleData', message })` 进入默认技能管线。
+
+读取当前确定手牌的获得技能用 `card.gainSpellID`；候选分支用 `card.getHandGainSpellID(seatID)`。
+`Room.moveCards()` 的 `gainSpellID` 可显式提供来源，默认从获得协议读取；同座位揭示省略该参数时保留已有来源。
+日志分别输出标记归属 `spellID` 与获得来源 `gainSpellID`，巧织揭示后分别为 `null` 与 `3544`。
 
 `RawMoveCardEvent` 的 12 个核心字段全部必填：
 
@@ -94,17 +108,17 @@ if (!room) return
 
 先确定你要的是“牌实体”“身份 ID”“候选可能性”还是“数量”。这些入口不能互相替代：
 
-| 需求 | 调用方式 | 返回/语义 | 适合场景 |
-| --- | --- | --- | --- |
-| 确定归属的已知手牌实体 | `room.getPlayer(seatID)?.knownHandCards` | `Card[]`；只包含确定在该角色普通手牌中的明牌 | 视图、技能逻辑、需要继续调用 `Card` 方法 |
-| 仍可能在该角色手牌中的已知牌 | `room.getPlayer(seatID)?.candidateHandCards` | `Card[]`；身份已知，但位置仍是手牌候选/模糊位置 | 候选展示、约束诊断 |
-| 所有物理手牌实体（含匿名暗牌） | `room.getPlayer(seatID)?.cards.filter((card) => card.subZone === 'hand')` | `Card[]`；按 `Player.cards` 的动态关系读取 | 需要把匿名槽也纳入一次性归组；不要放在高频渲染循环 |
-| 只要确定正 ID | `room.getPlayerHandCardIDs(seatID)` | `number[]`；默认 `knownOnly: true`、`includeCandidates: false`，只返回 `id > 0` | 协议兼容、旧 handler、低频查询 |
-| 包含候选手牌的正 ID | `room.getPlayerHandCardIDs(seatID, { includeCandidates: true })` | `number[]`；仍只返回正 ID | 需要把模糊明牌也列入 ID 集合 |
-| 放宽 `isKnown` 过滤 | `room.getPlayerHandCardIDs(seatID, { knownOnly: false, includeCandidates: true })` | `number[]`；匿名实体仍会因负 ID 被过滤 | 只在确实需要“已出现身份”集合时使用 |
-| 高频读取的增量投影 | `room.locationIndex.knownHandBySeat.get(seatID) ?? []` | `Card[]`；索引维护的确定手牌桶 | 视图/高频派生计算；只读，不要直接修改数组 |
-| 高频读取手牌候选投影 | `room.locationIndex.candidateHandBySeat.get(seatID) ?? []` | `Card[]`；索引维护的候选手牌桶 | 候选按钮或局部重绘 |
-| 一致的全玩家区快照 | `room.refreshPlayerSnapshot()` | 所有 `location === 'player'` 的 `Card[]` | 一次性批处理；返回后再按座位/子区归组 |
+| 需求                           | 调用方式                                                                           | 返回/语义                                                                       | 适合场景                                           |
+| ------------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------- |
+| 确定归属的已知手牌实体         | `room.getPlayer(seatID)?.knownHandCards`                                           | `Card[]`；只包含确定在该角色普通手牌中的明牌                                    | 视图、技能逻辑、需要继续调用 `Card` 方法           |
+| 仍可能在该角色手牌中的已知牌   | `room.getPlayer(seatID)?.candidateHandCards`                                       | `Card[]`；身份已知，但位置仍是手牌候选/模糊位置                                 | 候选展示、约束诊断                                 |
+| 所有物理手牌实体（含匿名暗牌） | `room.getPlayer(seatID)?.cards.filter((card) => card.subZone === 'hand')`          | `Card[]`；按 `Player.cards` 的动态关系读取                                      | 需要把匿名槽也纳入一次性归组；不要放在高频渲染循环 |
+| 只要确定正 ID                  | `room.getPlayerHandCardIDs(seatID)`                                                | `number[]`；默认 `knownOnly: true`、`includeCandidates: false`，只返回 `id > 0` | 协议兼容、旧 handler、低频查询                     |
+| 包含候选手牌的正 ID            | `room.getPlayerHandCardIDs(seatID, { includeCandidates: true })`                   | `number[]`；仍只返回正 ID                                                       | 需要把模糊明牌也列入 ID 集合                       |
+| 放宽 `isKnown` 过滤            | `room.getPlayerHandCardIDs(seatID, { knownOnly: false, includeCandidates: true })` | `number[]`；匿名实体仍会因负 ID 被过滤                                          | 只在确实需要“已出现身份”集合时使用                 |
+| 高频读取的增量投影             | `room.locationIndex.knownHandBySeat.get(seatID) ?? []`                             | `Card[]`；索引维护的确定手牌桶                                                  | 视图/高频派生计算；只读，不要直接修改数组          |
+| 高频读取手牌候选投影           | `room.locationIndex.candidateHandBySeat.get(seatID) ?? []`                         | `Card[]`；索引维护的候选手牌桶                                                  | 候选按钮或局部重绘                                 |
+| 一致的全玩家区快照             | `room.refreshPlayerSnapshot()`                                                     | 所有 `location === 'player'` 的 `Card[]`                                        | 一次性批处理；返回后再按座位/子区归组              |
 
 ### 计数与“已知”不要混淆
 
@@ -179,13 +193,17 @@ room.moveCards(ids, 'player', {
 用长度表示未知牌，`0` 只是“匿名牌输入”，不是稳定身份：
 
 ```ts
-room.moveCards(Array.from({ length: count }, () => 0), 'player', {
-  toSeatID: seatID,
-  subZone: 'hand',
-  fromZone: 'pile',
-  cardCount: count,
-  handMoveCount: count
-})
+room.moveCards(
+  Array.from({ length: count }, () => 0),
+  'player',
+  {
+    toSeatID: seatID,
+    subZone: 'hand',
+    fromZone: 'pile',
+    cardCount: count,
+    handMoveCount: count
+  }
+)
 ```
 
 Room 会从来源端点取现有匿名实体；来源不足时才补建匿名占位，并通过约束收敛到目标座位。不要把
@@ -213,10 +231,7 @@ room.resolveConstraints()
 公开入口是 `tracker.revealTrackerCards()`：
 
 ```ts
-tracker.revealTrackerCards(
-  { type: 'player', seatID, subZone: 'hand', fromZone: 'pile' },
-  cardIDs
-)
+tracker.revealTrackerCards({ type: 'player', seatID, subZone: 'hand', fromZone: 'pile' }, cardIDs)
 ```
 
 - `type: 'player'` 必须带有效 `seatID`；`255` 表示无席位技能空间，不应当成角色座位。
@@ -232,10 +247,7 @@ tracker.revealTrackerCards(
 数字/`null`；不再接受旧 `zoneID` 字符串。公共牌堆的 `id` 使用 `255`：
 
 ```ts
-tracker.revealTrackerCardsInZone(
-  { zone: 1, id: 255 },
-  cardIDs
-)
+tracker.revealTrackerCardsInZone({ zone: 1, id: 255 }, cardIDs)
 ```
 
 玩家区 Zone 会映射为 `type: 'player'`；公共区 Zone 会映射为 `type: 'public'`。牌堆 Zone（协议 `zone: 1`）
@@ -298,14 +310,14 @@ publicCandidateReveal: { zone: 'pile', position: 'top', count: N }
 
 ## 身份与候选低层原语
 
-| 原语 | 用途 | 注意 |
-| --- | --- | --- |
-| `room.findCardsByIDs(ids)` | 从 `cardIndex` 找现有实体 | 找不到不会自动创建。 |
-| `room.materialize(cardID, target?)` | 将真实身份绑定到匿名槽 | 保留目标槽的位置/候选；公共区正 ID 不能覆盖其它正 ID 实体。 |
-| `card.confirmKnown()` | 标记物理牌面已公开 | 不负责移动到目标区。 |
-| `card.bindTo(seats, subZone, spellID?)` | 绑定确定玩家/子区并默认明牌 | 适合低层夹具；生产协议优先用 `moveCards`/Controller。 |
-| `card.bindCandidates(seats, subZone, spellID?, { known: false })` | 建立隐藏或模糊候选 | 调用后通常要 `room.resolveConstraints()`。 |
-| `card.setLocationCandidates(candidates, reason)` | 替换完整位置候选 | 技能/候选模块专用；普通 handler 不应直接维护。 |
+| 原语                                                              | 用途                        | 注意                                                        |
+| ----------------------------------------------------------------- | --------------------------- | ----------------------------------------------------------- |
+| `room.findCardsByIDs(ids)`                                        | 从 `cardIndex` 找现有实体   | 找不到不会自动创建。                                        |
+| `room.materialize(cardID, target?)`                               | 将真实身份绑定到匿名槽      | 保留目标槽的位置/候选；公共区正 ID 不能覆盖其它正 ID 实体。 |
+| `card.confirmKnown()`                                             | 标记物理牌面已公开          | 不负责移动到目标区。                                        |
+| `card.bindTo(seats, subZone, spellID?)`                           | 绑定确定玩家/子区并默认明牌 | 适合低层夹具；生产协议优先用 `moveCards`/Controller。       |
+| `card.bindCandidates(seats, subZone, spellID?, { known: false })` | 建立隐藏或模糊候选          | 调用后通常要 `room.resolveConstraints()`。                  |
+| `card.setLocationCandidates(candidates, reason)`                  | 替换完整位置候选            | 技能/候选模块专用；普通 handler 不应直接维护。              |
 
 匿名牌的 `id/entityID` 使用稳定负数；`isKnown` 与真实身份是两件事。正 ID 不自动代表“已对所有视角公开”。
 

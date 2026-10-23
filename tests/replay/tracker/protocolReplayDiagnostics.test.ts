@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { Room } from '@/tracker/Room'
+import { GameState } from '@/tracker/Game'
 import {
   expectCardIncludesSeatsAt,
   expectCardLocationCandidatesAt,
@@ -12,6 +13,7 @@ import {
   type TrackerProtocolReplayReport
 } from './helpers/protocolReplay'
 import { ReplayWatchTracker } from './helpers/protocolReplay/watch'
+import { createTrackerReplaySnapshot } from './helpers/protocolReplay/snapshot'
 
 describe('回放诊断：解析、指标、watch 与断言', () => {
   it('允许区间截取后的 JSONL 从非 1 的 seq 开始，但仍要求片段内连续', () => {
@@ -122,6 +124,71 @@ describe('回放诊断：解析、指标、watch 与断言', () => {
     expect(change?.reasons.length).toBeGreaterThan(0)
     expect(report.diagnostics.watchStats.watchedCards).toBeGreaterThan(0)
     expect(report.diagnostics.metrics.counters.watchSeatScans).toBe(1)
+  })
+
+  it('区间名额在快照和 provenance 中保持完整，上下界变化被签名识别', () => {
+    const game = new GameState()
+    const room = new Room({ gameState: game })
+    const handKey = 'player:1:hand:none'
+    const markKey = 'popup:3544'
+    const group = room.createConstraintGroup({
+      id: 'range-slots',
+      expectedSlotsByLocation: {
+        [handKey]: { min: 0, max: 2 },
+        [markKey]: 1
+      }
+    })
+    const watch = new ReplayWatchTracker({ cardIDs: [1] })
+    watch.beginProtocol(room)
+    watch.endProtocol(1, 'TestProtocol', room)
+    const snapshot = createTrackerReplaySnapshot(game, room)
+    const initialProvenance = watch.getProvenance([String(group.id)])[0]
+    const initialSlots = initialProvenance.expectedSlotsByLocation
+    expect(snapshot.room!.constraints[0].expectedSlotsByLocation).toEqual({
+      [handKey]: { min: 0, max: 2 },
+      [markKey]: { min: 1, max: 1 }
+    })
+    expect(initialProvenance.expectedSlotsByLocation).toEqual(
+      snapshot.room!.constraints[0].expectedSlotsByLocation
+    )
+
+    // 插入顺序和区间对象引用不影响签名。
+    room.createConstraintGroup({
+      id: group.id,
+      expectedSlotsByLocation: {
+        [markKey]: { max: 1, min: 1 },
+        [handKey]: { max: 2, min: 0 }
+      }
+    })
+    watch.beginProtocol(room)
+    watch.endProtocol(2, 'TestProtocol', room)
+    expect(watch.getProvenance([String(group.id)])[0].lastUpdatedAtSeq).toBe(1)
+
+    for (const [seq, range] of [
+      [3, { min: 1, max: 2 }],
+      [4, { min: 1, max: 1 }]
+    ] as const) {
+      room.createConstraintGroup({
+        id: group.id,
+        expectedSlotsByLocation: {
+          [handKey]: range,
+          [markKey]: 1
+        }
+      })
+      watch.beginProtocol(room)
+      watch.endProtocol(seq, 'TestProtocol', room)
+      const updated = watch.getProvenance([String(group.id)])[0]
+      expect(updated.lastUpdatedAtSeq).toBe(seq)
+      expect(updated.expectedSlotsByLocation[handKey]).toEqual(range)
+      expect(updated.expectedSlotsByLocation).toEqual(
+        createTrackerReplaySnapshot(game, room).room!.constraints[0].expectedSlotsByLocation
+      )
+    }
+    expect(initialSlots[handKey]).toEqual({ min: 0, max: 2 })
+    expect(snapshot.room!.constraints[0].expectedSlotsByLocation[handKey]).toEqual({
+      min: 0,
+      max: 2
+    })
   })
 
   it('provenance 无法淘汰时报告仍保留的超限数量', () => {

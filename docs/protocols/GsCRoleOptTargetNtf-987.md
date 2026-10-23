@@ -146,7 +146,7 @@ ToZone: 10
    复用通用 `insertCardsAtProtocolPosition()` 处理精确槽位，否则追加逻辑代表并记录范围不确定性。
 3. 若 `[142]` 尚在 `unlocatedIdentities`，直接物化到牌堆侧桶中的匿名实体；不能因为交换区
    物理顶端碰巧是 16，就走 `known-fallback/createExternal`。
-4. `10->1` 与 `10->5` 分别按桶引用拆回；牌堆逻辑桶与公共 `Zone` 均按 bottom-first 保存，
+4. `10->1` 与 `10->5` 分别通过 `RoomPublicZones.getExchangeBatch()` 按命名批次拆回；批次与公共 `Zone` 均按 bottom-first 保存，
    空或不完整 `CardIDs` 回堆时直接传递同序 `sourceCards`。
 
 视角信息强度需要分开处理：发动者主视角若在 `10->1` 收到完整、无重复且覆盖整个回堆桶的

@@ -26,9 +26,9 @@ describe('tracker protocol replay runner', () => {
     })
     const records = replayer.metrics.time('parse', () => parseTrackerProtocolJsonl(source))
     const report = replayer.replay(records)
-    const formatted = formatTrackerProtocolReplayReport(report)
-
-    stdout.write(`${formatted}\n`)
+    if (!report.success || trace) {
+      stdout.write(`${formatTrackerProtocolReplayReport(report)}\n`)
+    }
     if (!report.success) throw new Error(formatFailureSummary(report))
   })
 })

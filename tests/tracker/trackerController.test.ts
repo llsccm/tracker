@@ -970,7 +970,7 @@ describe('TrackerController', () => {
     controller.revealTrackerCardsInZone(
       {
         id: 4,
-        zone: 8,
+        zone: 4,
         spellID: 700
       },
       [152, 153]

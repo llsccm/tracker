@@ -193,7 +193,7 @@ describe('弃牌堆未知获得', () => {
       emptySource: true
     },
     {
-      scenario: '无席位标记区',
+      scenario: '弹窗区',
       seatID: 255,
       fromSeat: 35,
       subZone: 'mark' as const,
@@ -202,7 +202,8 @@ describe('弃牌堆未知获得', () => {
   ])('弃牌获得不消费 fromSeat 指向的$scenario', (testCase) => {
     const { room } = createRoomWithDiscard()
     const playerSourceCards = [...room.zones.get('pile')!.cards]
-    room.moveCards([], 'player', {
+    room.moveCards([], testCase.seatID === 255 ? 'popup' : 'player', {
+      toPopupSpaceID: testCase.seatID === 255 ? 35 : undefined,
       toSeatID: testCase.seatID,
       subZone: testCase.subZone,
       spellID: 35,
@@ -238,7 +239,8 @@ describe('弃牌堆未知获得', () => {
     // 同一来源随后仍可按正常玩家/标记路径取出，证明弃牌获得没有消费其实体或空间账本。
     const regularSourceCards = room.movement.sources.takeSourceCards(2, {
       ...sourceOptions,
-      fromZone: null
+      fromZone: testCase.seatID === 255 ? 'popup' : null,
+      fromPopupSpaceID: testCase.seatID === 255 ? 35 : undefined
     })
     expect(new Set(regularSourceCards)).toEqual(new Set(playerSourceCards))
     expect(room.cards).toHaveLength(entityCountBefore + 2)

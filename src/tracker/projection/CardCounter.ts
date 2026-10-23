@@ -255,6 +255,7 @@ export class CardCounter {
       card.location === 'player' ||
       card.location === 'process' ||
       card.location === 'exchange' ||
+      card.location === 'popup' ||
       card.location === 'suspended'
     ) {
       return CARD_INSTANCE_STATUS.APPEARED

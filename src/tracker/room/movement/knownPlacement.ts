@@ -6,10 +6,7 @@ import type { CardID, PublicZoneName, SeatID } from '@/tracker/types'
 import type { RoomMovementHiddenMarks } from './hiddenMarks'
 import type { RoomMovementSources } from './sources'
 import { getPlayerHandCardsBySeat } from './sourceQueries'
-import {
-  registerUnassignedMarkSpaceCards,
-  removeUnassignedMarkSpaceCards
-} from './unassignedMarkSpaces'
+import { registerPopupSpaceCards, removePopupSpaceCards } from './popupSpaces'
 import type { RoomMoveContext } from './types'
 
 interface KnownMovePlacement {
@@ -51,8 +48,8 @@ export class RoomMovementKnownPlacement {
       return null
     }
 
-    // 已知牌移动可能揭示无席位暗占位，先摘除空间账本旧引用，再定位有效来源座位。
-    removeUnassignedMarkSpaceCards(this.room, knownCards)
+    // 已知牌可能物化弹窗暗槽，先摘除旧空间引用，再完成来源校正与目标落区。
+    removePopupSpaceCards(this.room, knownCards)
 
     const swappedCardIDs: CardID[] = []
     const handledSpellCardIDs: CardID[] = []
@@ -91,20 +88,21 @@ export class RoomMovementKnownPlacement {
       // 木牛流马完整快照通常只给目标座位；此时把目标座位视为 mark:700 来源座位，
       // 让明牌与木马里的实体暗占位交换，而不是额外残留一张占位牌。
       const isFromPlayerSource =
-        effectiveFromSeat !== null &&
-        effectiveFromSeat !== undefined &&
-        !Number.isNaN(effectiveFromSeat) &&
-        Boolean(fromSubZone)
+        context.fromZone === 'popup' ||
+        (effectiveFromSeat !== null &&
+          effectiveFromSeat !== undefined &&
+          !Number.isNaN(effectiveFromSeat) &&
+          Boolean(fromSubZone))
 
       const shouldSwapSpeculativePlayerIdentity =
         isFromPlayerSource &&
         card.isKnown !== true &&
         card.locationCandidates.length > 1 &&
-        Boolean(this.sources.findExactUnknownPlayerSourcePlaceholder(playerSourceContext, card))
+        Boolean(this.sources.findExactUnknownStoredSourcePlaceholder(playerSourceContext, card))
 
       if (
         isFromPlayerSource &&
-        (!this.sources.isCardInPlayerSource(card, playerSourceContext) ||
+        (!this.sources.isCardInStoredSource(card, playerSourceContext) ||
           shouldSwapSpeculativePlayerIdentity)
       ) {
         this.swapPlayerSourceCard(card, context, placement)
@@ -119,12 +117,12 @@ export class RoomMovementKnownPlacement {
         const placeholder = this.sources.swapKnownCardWithPublicSourcePlaceholder(card, context)
         if (placeholder) {
           swappedCardIDs.push(card.id)
-          this.registerUnassignedReplacement(placeholder)
+          this.registerPopupReplacement(placeholder)
         }
       }
 
       this.hiddenMarks.resolveHiddenMarkCandidateFromMove(card, context)
-      if (this.sources.resolveSourcePlayerCandidate(card, context)) {
+      if (this.sources.resolveStoredSourceCandidate(card, context)) {
         resolvedSourceCardIDs.push(card.id)
       }
 
@@ -144,7 +142,15 @@ export class RoomMovementKnownPlacement {
 
       if (toZone === 'player') {
         this.room.clearCardsFromPublicZones([card])
-        card.bindCandidates(targetSeats, subZone, spellID, { known: true })
+        card.bindCandidates(
+          targetSeats,
+          subZone,
+          subZone === 'hand' && fromSubZone === 'mark' ? null : spellID,
+          { known: true }
+        )
+        if (context.targetHandSeat !== null && context.gainSpellID !== undefined) {
+          card.recordHandGain(context.targetHandSeat, context.gainSpellID)
+        }
       }
     })
   }
@@ -166,7 +172,7 @@ export class RoomMovementKnownPlacement {
       playerSourceContext
     )
     let fallbackPlaceholder: Card | null = null
-    if (!placeholder && fromSubZone === 'hand') {
+    if (!placeholder && context.fromZone !== 'popup' && fromSubZone === 'hand') {
       const canDeferToKnownSourcePlaceholder =
         context.sourceHandTotalObserved &&
         context.sourceHandTotalBefore <= context.handMoveCount &&
@@ -209,8 +215,8 @@ export class RoomMovementKnownPlacement {
         })
       }
     }
-    this.registerUnassignedReplacement(placeholder)
-    this.registerUnassignedReplacement(fallbackPlaceholder)
+    this.registerPopupReplacement(placeholder)
+    this.registerPopupReplacement(fallbackPlaceholder)
     playerSourceSwapAttempts.push({
       knownCardID: card.id,
       locationBeforeSwap,
@@ -228,9 +234,10 @@ export class RoomMovementKnownPlacement {
     swappedCardIDs.push(card.id)
   }
 
-  private registerUnassignedReplacement(placeholder: Card | null | undefined): void {
-    // 置换回补可能把暗占位放回旧的无席位 mark 位置，必须重新入账供后续回牌堆复用。
-    if (placeholder) registerUnassignedMarkSpaceCards(this.room, placeholder.spellID, [placeholder])
+  private registerPopupReplacement(placeholder: Card | null | undefined): void {
+    // 置换回补可能把暗占位放回原弹窗，必须重新入账供后续移动复用。
+    if (placeholder?.popupSpaceID !== null && placeholder?.popupSpaceID !== undefined)
+      registerPopupSpaceCards(this.room, placeholder.popupSpaceID, [placeholder])
   }
 
   finishMove(context: RoomMoveContext, placement: KnownMovePlacement): void {
@@ -246,6 +253,13 @@ export class RoomMovementKnownPlacement {
       toZone
     } = context
     const { swappedCardIDs, handledSpellCardIDs, resolvedSourceCardIDs } = placement
+    if (toZone === 'popup') {
+      knownCards.forEach((card) =>
+        card.resolveLocationCandidate({ type: 'popup', spaceID: context.toPopupSpaceID })
+      )
+      registerPopupSpaceCards(this.room, context.toPopupSpaceID, knownCards)
+      return
+    }
     if (toZone === 'player') {
       this.hiddenMarks.resolveHiddenMarkCandidatesFromObservedMarkSnapshot(context)
 

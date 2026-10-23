@@ -161,7 +161,7 @@ ToZoneParam: 0
 
 记牌器动作：
 
-1. 用 `SpellID + FromID=5` 读取批次，筛仍在 `exchange` 的实体。
+1. 用 `SpellID + FromID=5` 读取批次 key，由 `room.publicZones.getExchangeBatch(key).cards` 取得仍在物理交换区的成员；逻辑候选单独由 `candidateCards` 表达，不增加槽位。
 2. 回填：
    - 明牌进 `cardIDs`
    - 暗实体进 `sourceCards`

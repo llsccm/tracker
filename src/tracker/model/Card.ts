@@ -63,12 +63,15 @@ export class Card extends BaseCard {
   declare subZone: SubZone | null
   declare isKnown: boolean
   declare spellID: SpellID | null
+  popupSpaceID: number | null = null
   declare turn: number
   declare round: number
   declare phase: number
   declare owner: SeatID | null
   /** 唯一候选存储；写入时冻结，读面可安全共享，不另存兼容投影。 */
   private _locationCandidates: readonly Readonly<LocationCandidate>[] = Object.freeze([])
+  /** 按手牌位置保存获得来源；不参与位置 key 或数量约束。 */
+  private readonly handGainSpellIDs = new Map<SeatID, SpellID>()
   declare suspended: boolean
 
   /**
@@ -103,6 +106,38 @@ export class Card extends BaseCard {
 
   get hasRealIdentity(): boolean {
     return this.id > 0
+  }
+
+  /** 当前确定手牌的获得技能；位置未定时不把某个分支来源冒充确定事实。 */
+  get gainSpellID(): SpellID | null {
+    if (this.location !== 'player' || this.subZone !== 'hand' || this.hasLocationCandidates())
+      return null
+    return this.owner === null ? null : this.getHandGainSpellID(this.owner)
+  }
+
+  /** 指定座位手牌分支的获得技能，供候选展示或查询。 */
+  getHandGainSpellID(seatID: SeatID): SpellID | null {
+    return this.handGainSpellIDs.get(seatID) ?? null
+  }
+
+  recordHandGain(seatID: SeatID, spellID: SpellID | null): void {
+    const next = spellID > 0 ? spellID : null
+    if (this.getHandGainSpellID(seatID) === next) return
+    if (next === null) this.handGainSpellIDs.delete(seatID)
+    else this.handGainSpellIDs.set(seatID, next)
+    this.room?.notifyCardChanged(this, { type: 'card-hand-gain-source', seatID, gainSpellID: next })
+  }
+
+  private pruneHandGainSources(): void {
+    if (this.handGainSpellIDs.size === 0) return
+    const seats = new Set(
+      this.getPossibleLocations().flatMap((candidate) =>
+        candidate.type === 'player' && candidate.subZone === 'hand' ? [candidate.seatID] : []
+      )
+    )
+    for (const seatID of this.handGainSpellIDs.keys()) {
+      if (!seats.has(seatID)) this.handGainSpellIDs.delete(seatID)
+    }
   }
 
   get isAnonymous(): boolean {
@@ -424,6 +459,7 @@ export class Card extends BaseCard {
     const hasContainerCandidate = this.locationCandidates.some(
       (candidate) => candidate.type === 'container'
     )
+    const popupCandidate = this.locationCandidates.find((candidate) => candidate.type === 'popup')
     const hasExchangeBatchCandidate = this.locationCandidates.some(
       (candidate) =>
         candidate.type === 'outside' && candidate.zone === 'exchange' && Boolean(candidate.batchID)
@@ -433,7 +469,10 @@ export class Card extends BaseCard {
 
     // 玩家/容器/交换批次候选都不能继续残留在真实公共 Zone 被后续摸牌再次取到。
     if (
-      (playerCandidates.length > 0 || hasContainerCandidate || hasExchangeBatchCandidate) &&
+      (playerCandidates.length > 0 ||
+        hasContainerCandidate ||
+        hasExchangeBatchCandidate ||
+        popupCandidate) &&
       !hasPublicCandidate
     ) {
       this.room?.clearCardsFromPublicZones?.([this])
@@ -441,11 +480,20 @@ export class Card extends BaseCard {
 
     if (playerCandidates.length > 0 || hasContainerCandidate) {
       this.location = 'player'
+      this.popupSpaceID = null
+      changed = previousLocation !== this.location
+      this.syncTimestamp()
+    } else if (popupCandidate) {
+      this.location = 'popup'
+      this.popupSpaceID = popupCandidate.spaceID
+      this.subZone = null
+      this.spellID = null
       changed = previousLocation !== this.location
       this.syncTimestamp()
     } else if (hasExchangeBatchCandidate) {
       // 批次令牌只记逻辑 exchange 位置，不加入公共 Zone；与 HandExchange 的读面契约一致。
       this.location = 'exchange'
+      this.popupSpaceID = null
       this.subZone = null
       this.spellID = null
       changed = previousLocation !== this.location
@@ -481,12 +529,16 @@ export class Card extends BaseCard {
   getPossibleLocations(): readonly LocationCandidate[] {
     if (this.suspended || this.location === 'suspended') return []
     if (this.locationCandidates.length > 0) return this.locationCandidates
-    if (this.location === 'player') return this.getResolvedLocationCandidates()
+    if (this.location === 'player' || this.location === 'popup')
+      return this.getResolvedLocationCandidates()
     const candidate = normalizeLocationCandidate({ type: 'public', zone: this.location })
     return candidate ? [candidate] : []
   }
 
   private getResolvedLocationCandidates(): LocationCandidate[] {
+    if (this.location === 'popup' && this.popupSpaceID !== null) {
+      return [{ type: 'popup', spaceID: this.popupSpaceID }]
+    }
     if (this.location !== 'player' || this.owner === null) return []
     const candidate = fromSubZoneCandidate({
       seatID: this.owner,
@@ -513,7 +565,7 @@ export class Card extends BaseCard {
     const nextCandidates = Array.from(uniqueCandidates.values())
 
     // 单一玩家位置在写入事务内落定；投影同步不负责再次改写候选。
-    if (nextCandidates.length === 1 && nextCandidates[0].type === 'player') {
+    if (nextCandidates.length === 1 && ['player', 'popup'].includes(nextCandidates[0].type)) {
       return this.resolveLocationCandidate(nextCandidates[0], reason)
     }
 
@@ -536,6 +588,7 @@ export class Card extends BaseCard {
     const previousSeats = this.seats
     this.storeLocationCandidates(nextCandidates)
     this.reconcileLocationStateFromCandidates(reason, previousSeats)
+    this.pruneHandGainSources()
 
     this.room?.notifyCardChanged?.(this, {
       type: 'card-location-candidates-changed',
@@ -581,28 +634,30 @@ export class Card extends BaseCard {
       return true
     }
 
-    if (normalized.type !== 'player') return false
+    if (normalized.type !== 'player' && normalized.type !== 'popup') return false
 
     const previousSubZone = this.subZone
     const previousSpellID = this.spellID
     const previousLocation = this.location
     const hadCandidates = this.hasLocationCandidates()
+    const previousPopupSpaceID = this.popupSpaceID
     // 清空候选前捕获席位集合：落定到他座时被收缩掉的座位不会出现在后续 setSeats 事件里。
     const previousSeats = this.seats
 
     // 明确绑定到玩家区前先清公共区引用，避免同一实体同时出现在牌堆/弃牌堆顺序中。
     this.room?.clearCardsFromPublicZones?.([this])
-    this.location = 'player'
-    this.subZone = normalized.subZone
-    this.spellID = normalized.spellID
+    this.location = normalized.type === 'popup' ? 'popup' : 'player'
+    this.popupSpaceID = normalized.type === 'popup' ? normalized.spaceID : null
+    this.subZone = normalized.type === 'popup' ? null : normalized.subZone
+    this.spellID = normalized.type === 'popup' ? null : normalized.spellID
     this.storeLocationCandidates([])
     this.suspended = false
     this.syncTimestamp()
-    const nextSeats = new Set([normalized.seatID])
+    const nextSeats = new Set(normalized.type === 'player' ? [normalized.seatID] : [])
     const seatsChanged = this.syncOwnerFromSeats(`${reason}:seat`, {
       previousSeats,
       nextSeats,
-      nextResolvedSeat: normalized.seatID,
+      nextResolvedSeat: normalized.type === 'player' ? normalized.seatID : null,
       seatsChanged:
         previousSeats.size !== nextSeats.size ||
         Array.from(previousSeats).some((seat) => !nextSeats.has(seat))
@@ -613,7 +668,9 @@ export class Card extends BaseCard {
       previousLocation !== this.location ||
       previousSubZone !== this.subZone ||
       previousSpellID !== this.spellID ||
+      previousPopupSpaceID !== this.popupSpaceID ||
       seatsChanged
+    this.pruneHandGainSources()
 
     if (changed) {
       this.room?.notifyCardChanged?.(this, {
@@ -682,6 +739,7 @@ export class Card extends BaseCard {
     const previousSeats = this.seats
     this.location = 'player'
     this.subZone = subZone
+    this.popupSpaceID = null
     this.spellID = spellID
     this.syncTimestamp()
     this.storeLocationCandidates([])
@@ -692,6 +750,7 @@ export class Card extends BaseCard {
     }
 
     this.setSeats(seats, 'bindCandidates')
+    this.pruneHandGainSources()
     this.room?.markCounterDirty?.(this)
     // location/subZone/spellID 可能在 owner 不变时改变（如 equip→mark 同座位），
     // setSeats 此时不发席位事件；显式通知增量索引按新子区/技能重投影。
@@ -724,9 +783,11 @@ export class Card extends BaseCard {
    */
   moveToPublicZone(destination: PublicZoneName): void {
     const previous = this.capturePublicMigrationSnapshot()
+    this.handGainSpellIDs.clear()
 
     const seatsChanged = this.clearSeats(`moveToPublicZone:${destination}`)
     this.location = destination
+    this.popupSpaceID = null
     this.subZone = null
     this.spellID = null
     const candidatesChanged = this.clearSubZoneCandidates(`moveToPublicZone:${destination}`)
@@ -762,6 +823,7 @@ export class Card extends BaseCard {
     if (this.location === 'discard') return '弃牌堆'
     if (this.location === 'exile') return '销毁'
     if (this.location === 'exchange') return '交换临时区'
+    if (this.location === 'popup') return `弹窗区 ${this.popupSpaceID}`
     if (this.location === 'process') return '处理区'
     if (this.location === 'player') {
       const parts: string[] = []
@@ -823,10 +885,12 @@ export class Card extends BaseCard {
    */
   reset(): void {
     const previous = this.capturePublicMigrationSnapshot()
+    this.handGainSpellIDs.clear()
 
     const seatsChanged = this.clearSeats('reset')
     this.location = 'pile'
     this.subZone = null
+    this.popupSpaceID = null
     this.isKnown = false
     this.spellID = null
     this.storeLocationCandidates([])
@@ -866,6 +930,7 @@ export class Card extends BaseCard {
 
     const needsCardDirty =
       previous.location === 'player' ||
+      previous.location === 'popup' ||
       previous.subZone !== null ||
       previous.spellID !== null ||
       previous.candidateCount > 0 ||

@@ -11,11 +11,11 @@ const XING_ZUO_SPELL_ID = 3776
 
 interface XingZuoBatch {
   actorSeat: SeatID
-  pileCards: Card[]
+  pileBatchKey: string
+  pileCount: number
   handSeat: SeatID | null
   handCount: number
-  exchangeBeforeHand: Set<Card> | null
-  handCards: Card[] | null
+  handBatchKey: string | null
   returnedToHand: boolean
 }
 
@@ -28,13 +28,16 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
 
   if (move.FromZone === 1 && move.ToZone === 10) {
     const pileCards = room.getPublicEndpointCards('pile', getCount(event), POSITION_BOTTOM)
+    clearBatch(room)
+    const pileBatchKey = `${XING_ZUO_SPELL_ID}:pile:${move.ToID}`
+    room.publicZones.getExchangeBatch(pileBatchKey).stage(pileCards)
     room.setSkillState<XingZuoBatch>(XING_ZUO_SPELL_ID, {
       actorSeat: move.ToID,
-      pileCards,
+      pileBatchKey,
+      pileCount: pileCards.length,
       handSeat: null,
       handCount: 0,
-      exchangeBeforeHand: null,
-      handCards: null,
+      handBatchKey: null,
       returnedToHand: false
     })
     // 该技能的 RANDOM 来源实际指牌底；显式来源同时保留端点明牌和匿名实体。
@@ -49,7 +52,8 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
   if (move.FromZone === 5 && move.ToZone === 10 && move.ToID === batch.actorSeat) {
     batch.handSeat = move.FromID
     batch.handCount = getCount(event)
-    batch.exchangeBeforeHand = new Set(room.zones.get('exchange')?.cards ?? [])
+    batch.handBatchKey = `${XING_ZUO_SPELL_ID}:seat:${move.FromID}`
+    room.publicZones.getExchangeBatch(batch.handBatchKey).captureNextMove()
     const player = room.getPlayer(move.FromID)
     // 兴作必定换出全部手牌，无需依赖本地观测张数来判断是否为整手交换。
     if (!hasPositiveID(event.cardIDs) && player) {
@@ -61,12 +65,10 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
   }
 
   if (move.FromZone !== 10 || move.FromID !== batch.actorSeat) return event
-  if (!batch.exchangeBeforeHand) return event
+  if (!batch.handBatchKey) return event
 
   // 在下一条协议到达时记录上一条实际移入的实体，包含通用移动创建的暗占位。
-  batch.handCards ??= (room.zones.get('exchange')?.cards ?? []).filter(
-    (card) => !batch.exchangeBeforeHand!.has(card)
-  )
+  const handCards = room.publicZones.getExchangeBatch(batch.handBatchKey).cards
 
   if (move.ToZone === 10 && move.ToID === batch.actorSeat) {
     // 两条同区通知只描述交换动画，不提供重新混合两批牌的身份或顺序信息。
@@ -76,30 +78,37 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
   if (
     move.ToZone === 5 &&
     move.ToID === batch.handSeat &&
-    getCount(event) === batch.pileCards.length &&
+    getCount(event) === batch.pileCount &&
     !batch.returnedToHand
   ) {
     batch.returnedToHand = true
-    return patchBatchCards(event, room, batch.pileCards)
+    return patchBatchCards(event, room, room.publicZones.getExchangeBatch(batch.pileBatchKey).cards)
   }
 
   if (move.ToZone === 1 && getCount(event) === batch.handCount && batch.returnedToHand) {
-    room.deleteSkillState(XING_ZUO_SPELL_ID)
+    clearBatch(room)
     const candidate = createPublicCandidate('pile', POSITION_BOTTOM, batch.handCount)
     const hasCompleteOrder = getPositiveIDs(event.cardIDs).length === batch.handCount
-    return patchEvent(patchBatchCards(event, room, batch.handCards), {
+    return patchEvent(patchBatchCards(event, room, handCards), {
       options: {
         // 无 ID 的原手牌只确定回到底部这批，不能把实体枚举顺序当成真实牌序。
         postMovePublicCandidates: hasCompleteOrder
           ? []
-          : batch.handCards
-              .filter((card) => card.isKnown === true)
-              .map((card) => ({ card, candidate }))
+          : handCards.filter((card) => card.isKnown === true).map((card) => ({ card, candidate }))
       }
     })
   }
 
   return event
+}
+
+function clearBatch(room: Room): void {
+  const batch = room.readSkillState<XingZuoBatch>(XING_ZUO_SPELL_ID)
+  if (batch) {
+    room.publicZones.deleteExchangeBatch(batch.pileBatchKey)
+    if (batch.handBatchKey) room.publicZones.deleteExchangeBatch(batch.handBatchKey)
+  }
+  room.deleteSkillState(XING_ZUO_SPELL_ID)
 }
 
 function patchBatchCards(event: MoveEventDraft, room: Room, cards: Card[]): MoveEventDraft {
@@ -115,7 +124,7 @@ function patchBatchCards(event: MoveEventDraft, room: Room, cards: Card[]): Move
       (target, index) => !target || room.probeMaterialize(protocolIDs[index], target) !== target
     )
   ) {
-    room.deleteSkillState(XING_ZUO_SPELL_ID)
+    clearBatch(room)
     return event
   }
   targets.forEach((target, index) => room.materialize(protocolIDs[index], target!))

@@ -9,6 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    silent: 'passed-only',
     include: ['tests/replay/tracker/protocolReplay.runner.js']
   }
 })

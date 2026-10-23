@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
-import type { UnassignedMarkSpaceState } from '@/tracker/room/movement/types'
+import type { PopupSpaceState } from '@/tracker/room/movement/types'
 import { createTestRoom, getCard } from './helpers/room'
 import { locationKeys, playerHand, publicLocation } from './helpers/locationCandidates'
 
@@ -72,42 +72,32 @@ describe('Room.moveCards 组合路线', () => {
     expect(room.zones.get('pile').cards).not.toContain(knownCard)
   })
 
-  it('无席位弹窗标记暗占位回到牌堆时复用原实体', () => {
+  it('弹窗暗占位回到牌堆时复用原实体', () => {
     const { room } = createTestRoom({ cardIDs: [31, 71, 97, 32, 92, 150], seatIDs: [1] })
 
-    room.moveCards([], 'player', {
-      toSeatID: 255,
-      subZone: 'mark',
-      spellID: 35,
+    room.moveCards([], 'popup', {
+      toPopupSpaceID: 35,
       fromZone: 'pile',
       cardCount: 5,
       position: POSITION_TOP,
       sourceEvent: { type: 'test:popup-mark-placeholders' }
     })
 
-    const markPlaceholders = room.cards.filter(
-      (card) =>
-        card.location === 'player' &&
-        card.subZone === 'mark' &&
-        card.spellID === 35 &&
-        card.isKnown !== true
+    const popupPlaceholders = room.cards.filter(
+      (card) => card.location === 'popup' && card.popupSpaceID === 35 && card.isKnown !== true
     )
 
-    expect(markPlaceholders).toHaveLength(5)
-    markPlaceholders.forEach((card) => {
+    expect(popupPlaceholders).toHaveLength(5)
+    popupPlaceholders.forEach((card) => {
       expect(card.seats.size).toBe(0)
     })
-    const markSpaceState = room.readSkillState<UnassignedMarkSpaceState>('unassignedMarkSpaces')!
-    expect(markSpaceState.spaces.get(35)).toEqual(expect.arrayContaining(markPlaceholders))
-    expect(markSpaceState.spaces.get(35)).toHaveLength(5)
+    const popupState = room.readSkillState<PopupSpaceState>('popupSpaces')!
+    expect(popupState.spaces.get(35)).toEqual(expect.arrayContaining(popupPlaceholders))
+    expect(popupState.spaces.get(35)).toHaveLength(5)
 
     room.moveCards([], 'pile', {
-      fromSeatID: 35,
-      fromZone: null,
-      fromSubZone: 'mark',
-      fromSpellID: 35,
-      subZone: 'mark',
-      spellID: 35,
+      fromZone: 'popup',
+      fromPopupSpaceID: 35,
       cardCount: 4,
       position: POSITION_TOP,
       fromPosition: 65282,
@@ -118,40 +108,35 @@ describe('Room.moveCards 组合路线', () => {
 
     // 回牌堆必须复用原占位实体，不能额外创建匿名回退实体。
     expect(room.cards).toHaveLength(6)
-    expect(markPlaceholders.filter((card) => pileCards.includes(card))).toHaveLength(4)
-    const remainingMarkPlaceholders = markPlaceholders.filter((card) => card.location === 'player')
-    expect(remainingMarkPlaceholders).toHaveLength(1)
-    expect(markSpaceState.spaces.get(35)).toEqual(remainingMarkPlaceholders)
+    expect(popupPlaceholders.filter((card) => pileCards.includes(card))).toHaveLength(4)
+    const remainingPopupPlaceholders = popupPlaceholders.filter((card) => card.location === 'popup')
+    expect(remainingPopupPlaceholders).toHaveLength(1)
+    expect(popupState.spaces.get(35)).toEqual(remainingPopupPlaceholders)
   })
 
-  it('弹窗标记回牌堆缺少显式 spell 时用 FromID 定位无席位空间', () => {
+  it('弹窗回牌堆按空间 ID 隔离来源', () => {
     const { room } = createTestRoom({ cardIDs: [31, 32, 71, 72, 150], seatIDs: [1] })
 
-    room.moveCards([], 'player', {
-      toSeatID: 255,
-      subZone: 'mark',
-      spellID: 35,
+    room.moveCards([], 'popup', {
+      toPopupSpaceID: 35,
       fromZone: 'pile',
       cardCount: 2,
       sourceEvent: { type: 'test:popup-mark-35' }
     })
-    room.moveCards([], 'player', {
-      toSeatID: 255,
-      subZone: 'mark',
-      spellID: 36,
+    room.moveCards([], 'popup', {
+      toPopupSpaceID: 36,
       fromZone: 'pile',
       cardCount: 2,
       sourceEvent: { type: 'test:popup-mark-36' }
     })
 
-    const markSpaceState = room.readSkillState<UnassignedMarkSpaceState>('unassignedMarkSpaces')!
-    const spell35Cards = [...markSpaceState.spaces.get(35)]
-    const spell36Cards = [...markSpaceState.spaces.get(36)]
+    const popupState = room.readSkillState<PopupSpaceState>('popupSpaces')!
+    const spell35Cards = [...popupState.spaces.get(35)]
+    const spell36Cards = [...popupState.spaces.get(36)]
 
     room.moveCards([], 'pile', {
-      fromSeatID: 35,
-      fromZone: null,
-      fromSubZone: 'mark',
+      fromZone: 'popup',
+      fromPopupSpaceID: 35,
       cardCount: 1,
       position: POSITION_TOP,
       sourceEvent: { type: 'test:popup-mark-return-with-from-id-only' }
@@ -163,32 +148,26 @@ describe('Room.moveCards 组合路线', () => {
     expect(room.cards).toHaveLength(5)
     expect(spell35Cards.filter((card) => pileCards.includes(card))).toHaveLength(1)
     expect(spell36Cards.some((card) => pileCards.includes(card))).toBe(false)
-    expect(markSpaceState.spaces.get(35)).toHaveLength(1)
-    expect(markSpaceState.spaces.get(36)).toEqual(spell36Cards)
+    expect(popupState.spaces.get(35)).toHaveLength(1)
+    expect(popupState.spaces.get(36)).toEqual(spell36Cards)
   })
 
-  it('显式来源牌取走无席位 mark 占位时同步清理空间账本', () => {
+  it('显式来源牌取走弹窗 占位时同步清理空间账本', () => {
     const { room } = createTestRoom({ cardIDs: [31, 71, 97], seatIDs: [1] })
 
-    room.moveCards([], 'player', {
-      toSeatID: 255,
-      subZone: 'mark',
-      spellID: 35,
+    room.moveCards([], 'popup', {
+      toPopupSpaceID: 35,
       fromZone: 'pile',
       cardCount: 2,
       sourceEvent: { type: 'test:popup-mark-explicit-source' }
     })
 
-    const markSpaceState = room.readSkillState<UnassignedMarkSpaceState>('unassignedMarkSpaces')!
-    const explicitSourceCard = markSpaceState.spaces.get(35)[0]
+    const popupState = room.readSkillState<PopupSpaceState>('popupSpaces')!
+    const explicitSourceCard = popupState.spaces.get(35)[0]
 
     room.moveCards([], 'pile', {
-      fromSeatID: 35,
-      fromZone: null,
-      fromSubZone: 'mark',
-      fromSpellID: 35,
-      subZone: 'mark',
-      spellID: 35,
+      fromZone: 'popup',
+      fromPopupSpaceID: 35,
       sourceCards: [explicitSourceCard],
       cardCount: 1,
       position: POSITION_TOP,
@@ -196,18 +175,16 @@ describe('Room.moveCards 组合路线', () => {
     })
 
     expect(room.zones.get('pile').cards).toContain(explicitSourceCard)
-    expect(markSpaceState.spaces.get(35)).not.toContain(explicitSourceCard)
-    expect(markSpaceState.spaces.get(35)).toHaveLength(1)
+    expect(popupState.spaces.get(35)).not.toContain(explicitSourceCard)
+    expect(popupState.spaces.get(35)).toHaveLength(1)
   })
 
-  it('已知牌置换无席位 mark 时将回补暗占位重新入账', () => {
+  it('已知牌置换弹窗 时将回补暗占位重新入账', () => {
     const { room } = createTestRoom({ cardIDs: [31, 71, 97], seatIDs: [1] })
     const knownMarkCard = getCard(room, 31)
 
-    room.moveCards([31], 'player', {
-      toSeatID: 255,
-      subZone: 'mark',
-      spellID: 35,
+    room.moveCards([31], 'popup', {
+      toPopupSpaceID: 35,
       fromZone: 'pile',
       cardCount: 1,
       sourceEvent: { type: 'test:known-seatless-mark' }
@@ -237,26 +214,24 @@ describe('Room.moveCards 组合路线', () => {
       sourceEvent: { type: 'test:known-source-replaced-from-hand' }
     })
 
-    const markSpaceState = room.readSkillState<UnassignedMarkSpaceState>('unassignedMarkSpaces')!
+    const popupState = room.readSkillState<PopupSpaceState>('popupSpaces')!
 
     expect(knownMarkCard.location).toBe('discard')
     expect(room.zones.get('discard').cards).toContain(knownMarkCard)
-    expect(handPlaceholder.location).toBe('player')
-    expect(handPlaceholder.subZone).toBe('mark')
-    expect(handPlaceholder.spellID).toBe(35)
+    expect(handPlaceholder.location).toBe('popup')
+    expect(handPlaceholder.subZone).toBeNull()
+    expect(handPlaceholder.popupSpaceID).toBe(35)
     expect(handPlaceholder.seats.size).toBe(0)
-    expect(markSpaceState.spaces.get(35)).toEqual([handPlaceholder])
+    expect(popupState.spaces.get(35)).toEqual([handPlaceholder])
   })
 
-  it('无席位弹窗 mark 明牌进入弃牌堆时刷新 player 快照', () => {
+  it('弹窗明牌进入弃牌堆后不残留玩家快照', () => {
     const { room } = createTestRoom({ cardIDs: [87, 41, 12], seatIDs: [7] })
     const takenCard = getCard(room, 87)
     const discardedCard = getCard(room, 41)
 
-    room.moveCards([87, 41], 'player', {
-      toSeatID: 255,
-      subZone: 'mark',
-      spellID: 3544,
+    room.moveCards([87, 41], 'popup', {
+      toPopupSpaceID: 3544,
       fromZone: 'pile',
       cardCount: 2,
       sourceEvent: { type: 'test:spell-3544-popup-mark' }
@@ -264,10 +239,8 @@ describe('Room.moveCards 组合路线', () => {
 
     room.moveCards([87], 'player', {
       toSeatID: 7,
-      fromSeatID: 216,
-      fromZone: null,
-      fromSubZone: 'mark',
-      fromSpellID: 3544,
+      fromZone: 'popup',
+      fromPopupSpaceID: 3544,
       subZone: 'hand',
       spellID: 3544,
       cardCount: 1,
@@ -275,11 +248,8 @@ describe('Room.moveCards 组合路线', () => {
     })
 
     room.moveCards([41], 'discard', {
-      fromSeatID: 216,
-      fromZone: null,
-      fromSubZone: 'mark',
-      fromSpellID: 3544,
-      subZone: 'mark',
+      fromZone: 'popup',
+      fromPopupSpaceID: 3544,
       spellID: 3544,
       cardCount: 1,
       sourceEvent: { type: 'test:spell-3544-discard-known' }

@@ -22,8 +22,7 @@
  * 3. card.location / subZone / spellID 兼容读面由 projectCandidateRecord 同步；
  *    当通用约束删掉最后一个玩家分支时，改由 Card.reconcileLocationStateFromCandidates
  *    的 exchange 分支兜底为 location='exchange'。改其一必须同步其二。
- * 4. 逻辑暂存的候选牌 location 记为 'exchange'，但刻意不加入 zones.get('exchange')；
- *    因此按 Zone 成员统计的口径不会计入它们，按 card.location 统计的口径才会。
+ * 4. 命名 ExchangeBatch 同时提供物理 cards 与逻辑 candidateCards；逻辑引用不占物理槽。
  */
 import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import { trackerLogger } from '@/utils/logger'
@@ -51,8 +50,6 @@ export const HAND_EXCHANGE_STATE_KEY = 'handExchangeBatches'
 type HandExchangeBatch = {
   /** 唯一批次令牌；候选位置在进出交换区时通过该令牌完成可逆置换。 */
   batchID: string
-  /** 进区时快照的实体列表；回手时只取仍在 exchange 的成员。 */
-  cards: Card[]
   /** 是否有候选位置由逻辑账本迁移；此时实体数与协议手牌变化量需要解耦。 */
   hasCandidateAlternatives: boolean
   /** 原持有座位；也是 batches 字典的 key。 */
@@ -506,10 +503,10 @@ function stageHandToExchange(event: MoveEventDraft, room: Room, spellID: number)
   )
   // 候选身份已有 batchID 承载，不能再次放入 cardIDs/sourceCards，否则会被实锤到来源座位。
   const batchCards = handCards.filter((card) => !stagedCandidates.has(card))
+  room.publicZones.getExchangeBatch(batchID).stage([...batchCards, ...stagedCandidates])
   // 内层交换后结算先于外层；同座位批次按后进先出保存才能对应协议回手顺序。
   batchStack.push({
     batchID,
-    cards: batchCards.slice(),
     hasCandidateAlternatives: stagedCandidates.size > 0,
     fromSeat,
     spellID
@@ -548,7 +545,7 @@ function returnExchangeBatchToHand(
   if (!batch || !state || !batchStack) return event
 
   // 批次可能被中途打断；只取仍停在 exchange 的实体，避免把已离开的牌再搬一次。
-  const stagedCards = batch.cards.filter((card) => card.location === 'exchange')
+  const stagedCards = room.publicZones.getExchangeBatch(batch.batchID).cards
   // 仅当前座位的全部嵌套批次均已结算时，才删除它的账本入口。
   if (batchStack.length === 0) {
     delete state.batches[batchKey]
@@ -570,6 +567,7 @@ function returnExchangeBatchToHand(
 
   // 批次与候选都结算后再清理该 SpellID 账本；共享账本空了顺带删除 tracker 状态 key。
   clearSpellExchangeStateIfEmpty(room, spellID)
+  room.publicZones.deleteExchangeBatch(batch.batchID)
 
   // 即使所有成员都已离开 exchange，也必须保留协议手牌变化量；不能退回原事件去抽取其它批次。
   // 回手协议也可能带正 ID；与进区一致，先对齐批次内对应实体的公开状态。

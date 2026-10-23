@@ -233,10 +233,10 @@ export class RoomMovementHiddenMarks {
 
   /**
    * 只有当这批候选牌的位置全集只剩“来源手牌/目标标记”时，
-   * 才能把暗置数量升级为精确完整位置约束。
+   * 才能把暗置明牌上下界写为完整位置约束。
    * 如果仍存在 B 手牌等其他候选位置，只记录候选，不做 N 选 K 强收敛。
    */
-  private canCreateExactHiddenMarkConstraint(
+  private canCreateHiddenMarkConstraint(
     record: HiddenMarkRecord,
     candidateLists: LocationCandidate[][]
   ): boolean {
@@ -647,7 +647,7 @@ export class RoomMovementHiddenMarks {
    * 将当前一局的 tracker 状态账本投影到卡牌与约束组。
    *
    * 弱记录：只给卡牌追加“可能在标记区”的完整位置候选。
-   * 强约束：当 min/max 相等且候选全集只剩来源手牌/目标标记时，
+   * 数量约束：当候选全集只剩来源手牌/目标标记时，
    * 创建 expectedSlotsByLocation，使 4 选 1、4 选 3 等 N 选 K 自动收敛。
    */
   private applyHiddenMarkProjection(record: HiddenMarkRecord): boolean {
@@ -665,32 +665,35 @@ export class RoomMovementHiddenMarks {
     const candidateLists = activeCards.map((card) =>
       this.getHiddenMarkLocationCandidates(card, record)
     )
-    const canCreateExactConstraint = this.canCreateExactHiddenMarkConstraint(record, candidateLists)
+    const canCreateConstraint = this.canCreateHiddenMarkConstraint(record, candidateLists)
     activeCards.forEach((card, index) => {
       card.confirmKnown()
       changed =
         card.setLocationCandidates(candidateLists[index], 'hiddenMark:projection') || changed
     })
 
-    return this.syncHiddenMarkConstraint(record, activeCards, canCreateExactConstraint) || changed
+    return this.syncHiddenMarkConstraint(record, activeCards, canCreateConstraint) || changed
   }
 
-  /** 同步精确数量约束；范围或其他位置分支尚未收敛时，只保留候选投影。 */
+  /** 同步明牌数量区间；仍有其他位置分支时只保留候选投影。 */
   private syncHiddenMarkConstraint(
     record: HiddenMarkRecord,
     activeCards: Card[],
-    canCreateExactConstraint: boolean
+    canCreateConstraint: boolean
   ): boolean {
-    if (record.knownMarkMin !== record.knownMarkMax || !canCreateExactConstraint) {
+    if (!canCreateConstraint) {
       this.removeHiddenMarkConstraint(record)
       return false
     }
 
-    const remainingMarkCount = Math.max(
+    const remainingMarkMin = Math.max(
       0,
       Math.min(activeCards.length, record.knownMarkMin - record.confirmedMarkCards.size)
     )
-    const remainingHandCount = Math.max(0, activeCards.length - remainingMarkCount)
+    const remainingMarkMax = Math.max(
+      0,
+      Math.min(activeCards.length, record.knownMarkMax - record.confirmedMarkCards.size)
+    )
     const handCandidate: PlayerLocationCandidate = {
       type: 'player',
       seatID: record.sourceSeat,
@@ -700,14 +703,23 @@ export class RoomMovementHiddenMarks {
     const markCandidate = this.createHiddenMarkTargetLocationCandidate(record)
 
     // expectedSlotsByLocation 同时承载普通标记和装备容器的 N 选 K：
-    // activeCards 中还应有 remainingHandCount 张在手牌，remainingMarkCount 张在标记区。
+    // 只约束本批明牌，不把暗占位实体纳入明牌名额。
     this.room.createConstraintGroup({
       id: record.groupID,
       cards: activeCards,
       candidateSeats: Array.from(new Set([record.sourceSeat, record.targetSeat])),
       expectedSlotsByLocation: new Map([
-        [createLocationCandidateKey(handCandidate), remainingHandCount],
-        [createLocationCandidateKey(markCandidate), remainingMarkCount]
+        [
+          createLocationCandidateKey(handCandidate),
+          {
+            min: activeCards.length - remainingMarkMax,
+            max: activeCards.length - remainingMarkMin
+          }
+        ],
+        [
+          createLocationCandidateKey(markCandidate),
+          { min: remainingMarkMin, max: remainingMarkMax }
+        ]
       ]),
       known: true,
       sourceEvent: record.sourceEvent

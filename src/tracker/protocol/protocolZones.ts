@@ -22,7 +22,7 @@ export const PROTOCOL_ZONE = Object.freeze({
   HAND: 5,
   EQUIP: 6,
   JUDGE: 7,
-  POPUP_MARK: 8,
+  POPUP: 8,
   SHUFFLE_PILE: 9,
   EXCHANGE: 10,
   DISCARD_TEMP: 11,
@@ -41,6 +41,7 @@ const PROTOCOL_PUBLIC_ZONE_MAP = new Map<number, PublicZoneName>([
   [PROTOCOL_ZONE.PILE, 'pile'],
   [PROTOCOL_ZONE.DISCARD, 'discard'],
   [PROTOCOL_ZONE.PROCESS, 'process'],
+  [PROTOCOL_ZONE.POPUP, 'popup'],
   [PROTOCOL_ZONE.SHUFFLE_PILE, 'pile'],
   [PROTOCOL_ZONE.EXCHANGE, 'exchange'],
   [PROTOCOL_ZONE.DISCARD_TEMP, 'process'],
@@ -51,8 +52,7 @@ const PROTOCOL_PLAYER_SUB_ZONE_MAP = new Map<number, ProtocolPlayerSubZone>([
   [PROTOCOL_ZONE.MARK, 'mark'],
   [PROTOCOL_ZONE.HAND, 'hand'],
   [PROTOCOL_ZONE.EQUIP, 'equip'],
-  [PROTOCOL_ZONE.JUDGE, 'judge'],
-  [PROTOCOL_ZONE.POPUP_MARK, 'mark']
+  [PROTOCOL_ZONE.JUDGE, 'judge']
 ])
 
 export function getProtocolPublicZone(
@@ -77,9 +77,8 @@ export function getProtocolMarkSpellID(
   const paramID = params.param || params.toZoneParam || params.fromZoneParam || null
   const spellID = params.spellID || null
 
-  // 旧 Zone 的标记区分桶规则：zone 4 使用 ZoneParam 优先，zone 8 使用 SpellID 优先。
+  // 玩家标记空间由端点 ZoneParam 标识，独立于触发本次移动的技能。
   if (zone === PROTOCOL_ZONE.MARK) return paramID ?? spellID ?? fallback
-  if (zone === PROTOCOL_ZONE.POPUP_MARK) return spellID ?? paramID ?? fallback
 
   return params.spellID ?? fallback
 }

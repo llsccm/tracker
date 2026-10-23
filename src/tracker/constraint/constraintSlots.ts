@@ -3,15 +3,16 @@ import {
   parseLocationCandidateKey
 } from '../candidate/locationCandidate'
 import type { Card } from '@/tracker/model/Card'
-import type { ConstraintGroup } from './ConstraintGroup'
+import type { ConstraintGroup, SlotCountRange } from './ConstraintGroup'
 import type { LocationCandidate } from '../types'
 
 export interface ConstraintSlotState {
   location: LocationCandidate
-  expectedCount: number
+  range: SlotCountRange
   exactCards: Card[]
   candidateCards: Card[]
-  remainingCount: number
+  remainingMin: number
+  remainingMax: number
 }
 
 export interface ConstraintHandSlotState extends ConstraintSlotState {
@@ -22,7 +23,7 @@ export interface ConstraintHandSlotState extends ConstraintSlotState {
 export function getConstraintSlotState(
   cards: Iterable<Card>,
   location: LocationCandidate,
-  expectedCount: number
+  range: SlotCountRange
 ): ConstraintSlotState {
   const key = createLocationCandidateKey(location)
   const exactCards: Card[] = []
@@ -30,7 +31,11 @@ export function getConstraintSlotState(
   for (const card of cards) {
     if (card.suspended) continue
     if (card.hasLocationCandidates()) {
-      if (card.hasLocationCandidate(key)) candidateCards.push(card)
+      if (card.hasLocationCandidate(key)) {
+        // 公共端点与容器保留单值候选作为确定位置读面，同样已占用名额。
+        if (card.locationCandidates.length === 1) exactCards.push(card)
+        else candidateCards.push(card)
+      }
       continue
     }
 
@@ -42,10 +47,11 @@ export function getConstraintSlotState(
   }
   return {
     location,
-    expectedCount,
+    range,
     exactCards,
     candidateCards,
-    remainingCount: Math.max(0, expectedCount - exactCards.length)
+    remainingMin: Math.max(0, range.min - exactCards.length),
+    remainingMax: Math.max(0, range.max - exactCards.length)
   }
 }
 

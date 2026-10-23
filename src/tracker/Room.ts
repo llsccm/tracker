@@ -1,4 +1,5 @@
 import { trackerLogger } from '@/utils/logger'
+import { reconcilePopupSpaces } from './room/movement/popupSpaces'
 import { POSITION_RANDOM } from './candidate/cardPositions'
 import type { LocationCandidateInput } from './candidate/locationCandidate'
 import { normalizePublicPosition } from './candidate/publicCandidate'
@@ -914,6 +915,7 @@ export class Room extends RoomBase {
   /** 房间级收敛的稳定入口；求解、座位懒缓存与稳定态同步由 RoomConstraints 实现。 */
   resolveConstraints(): void {
     this.constraints.resolveConstraints(import.meta.env.DEV ? this.diagnostics : undefined)
+    reconcilePopupSpaces(this)
   }
 
   /**
@@ -1049,6 +1051,7 @@ export class Room extends RoomBase {
     })
 
     this.movement.createPublicMoveConstraintGroup(context)
+    this.zones.get('exchange')?.completeExchangeMove()
 
     // 账本投影也可能匿名化实体，必须先提交，再统一同步稳定索引和计数器。
     this.identity.commitPileIdentityForMove(context, pileSnapshot)
