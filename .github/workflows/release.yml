@@ -76,27 +76,8 @@ jobs:
           path: release-branch
           persist-credentials: true
 
-      - name: Check releases branch version
-        if: steps.release-check.outputs.publish == 'true'
-        id: branch-check
-        working-directory: release-branch
-        run: |
-          # 兼容旧流程已推送分支、但尚未创建 Release 的中间状态。
-          branch_version="$(awk '$1 == "//" && $2 == "@version" { print $3 }' daxiaochao.meta.js)"
-          if [[ ! "$branch_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error::The releases branch has missing or invalid version metadata."
-            exit 1
-          fi
-          newest_version="$(printf '%s\n' "$branch_version" "$VITE_version" | sort -V | tail -n 1)"
-          if [ "$newest_version" != "$VITE_version" ]; then
-            echo "The releases branch already contains v$branch_version; skipping publish."
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "publish=true" >> "$GITHUB_OUTPUT"
-
       - name: Verify CI for the tagged commit
-        if: steps.branch-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
+        if: steps.release-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -111,26 +92,26 @@ jobs:
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
 
       - name: Setup pnpm
-        if: steps.branch-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
+        if: steps.release-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
         uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        if: steps.branch-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
+        if: steps.release-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
         uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
 
       - name: Install dependencies
-        if: steps.branch-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
+        if: steps.release-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
         run: pnpm install --frozen-lockfile
 
       - name: Build production userscript
-        if: steps.branch-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
+        if: steps.release-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
         run: pnpm build:prod
 
       - name: Download published userscripts for retry
-        if: steps.branch-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'true'
+        if: steps.release-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -138,7 +119,7 @@ jobs:
             --pattern daxiaochao.user.js --pattern daxiaochao.meta.js --dir dist
 
       - name: Validate release artifacts
-        if: steps.branch-check.outputs.publish == 'true'
+        if: steps.release-check.outputs.publish == 'true'
         run: |
           for file in dist/daxiaochao.user.js dist/daxiaochao.meta.js; do
             test -s "$file"
@@ -150,7 +131,7 @@ jobs:
           done
 
       - name: Create and publish GitHub Release
-        if: steps.branch-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
+        if: steps.release-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -175,7 +156,7 @@ jobs:
             --title "$GITHUB_REF_NAME"
 
       - name: Push userscripts to releases branch
-        if: steps.branch-check.outputs.publish == 'true'
+        if: steps.release-check.outputs.publish == 'true'
         working-directory: release-branch
         run: |
           # Release 已发布后才更新 CDN 分支；重跑使用已发布附件继续同步。
