@@ -27,7 +27,7 @@
 
 - `.github/workflows/release.yml` 只发布 `vMAJOR.MINOR.PATCH` 格式的正式版本标签，不支持预发布后缀或数字前导零。
 - 新版本标签对应的提交必须已有 `main` 分支的 push CI；发布流程等待该次 CI 成功后再构建。若 CI 尚未创建或未通过，处理后重跑发布任务。
-- 发布前按版本号比较所有正式 Release 与 `releases` 分支元信息，旧版本直接跳过，避免覆盖较新版本。
+- 发布前按版本号比较所有正式 Release，旧版本直接跳过；发布成功后将产物覆盖同步到 `releases` 分支。
 - 发布先上传 GitHub Release 附件，再将相同文件同步到 `releases` 分支。新版本显式标记为 Latest。
 - 如果 Release 已发布但分支同步失败，重跑会下载该版本的已发布附件继续同步，不会重新构建或覆盖 Release 附件。
 - 草稿或预发布 Release 会阻止同名标签继续发布；需先核查其来源和附件，处理该 Release 后再重跑。
