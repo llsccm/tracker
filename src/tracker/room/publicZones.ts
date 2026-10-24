@@ -86,7 +86,7 @@ export class RoomPublicZones {
   ): void {
     const room = this.room
     const position = options.position ?? POSITION_TOP
-    const targetZone = room.getZone(zoneName)
+    const targetZone = room.zones.get(zoneName)
 
     const placeableCards: Card[] = []
     const skippedCards: Card[] = []
@@ -97,7 +97,7 @@ export class RoomPublicZones {
         return
       }
 
-      if (targetZone.cards.includes(card) || card.location === zoneName) {
+      if (targetZone?.cards.includes(card) || card.location === zoneName) {
         placeableCards.push(card)
         return
       }
@@ -129,19 +129,20 @@ export class RoomPublicZones {
       card.confirmKnown()
     })
 
-    const missingCards = placeableCards.filter((card) => !targetZone.cards.includes(card))
+    const missingCards = placeableCards.filter((card) => !targetZone?.cards.includes(card))
     const repositionCards =
       options.cardIDsTopFirst === true && position === POSITION_TOP
         ? [...placeableCards].reverse()
         : placeableCards
     const shouldReposition =
       options.reposition === true &&
+      targetZone !== undefined &&
       placeableCards.length > 0 &&
       !hasCardsAtPublicPosition(targetZone.cards, repositionCards, position)
     const cardsToPlace = shouldReposition ? repositionCards : missingCards
 
     if (cardsToPlace.length > 0) {
-      targetZone.add(cardsToPlace, position)
+      targetZone?.add(cardsToPlace, position)
     }
 
     room.resolveConstraints()

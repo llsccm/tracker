@@ -484,7 +484,8 @@ export class Room extends RoomBase {
    * 按协议端点顺序取得公共区槽位；返回顺序始终是“端点向内”。
    */
   getPublicEndpointCards(zoneID: PublicZoneName, count: number, position: PublicPosition): Card[] {
-    const cards = this.getZone(zoneID).cards
+    // 协议展示可能携带未注册区域，该区域没有可用于物化的公共端点。
+    const cards = this.zones.get(zoneID)?.cards ?? []
     if (!(count > 0)) return []
     // PublicPosition 兼容数值常量与 'bottom'/'top' 字符串；未归一化的 bottom 必须走牌底。
     if (normalizePublicPosition(position) === 'bottom') return cards.slice(0, count)

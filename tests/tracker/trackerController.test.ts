@@ -196,6 +196,38 @@ describe('TrackerController', () => {
     expect(room.getPlayerHandCardIDs).toHaveBeenCalledWith(1)
   })
 
+  it.each([4, 5, 6, 7])('玩家区域 %s 的 255 座位展示不访问不存在的公共区', (zone) => {
+    const { controller } = createTrackerControllerHarness()
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2])
+    const room = controller.getTrackerRoom()!
+    const pileBefore = [...room.getZone('pile').cards]
+    const errorSpy = createErrorSpy()
+
+    try {
+      controller.syncTrackerMove(
+        protocolMove({
+          CardIDs: [99],
+          FromZone: zone,
+          FromID: 255,
+          ToZone: zone,
+          ToID: 255,
+          MoveType: 21
+        })
+      )
+
+      expect(errorSpy).not.toHaveBeenCalled()
+      expect(room.cardIndex.get(99)).toMatchObject({ location: 'outside', isKnown: true })
+      expect(room.getZone('pile').cards).toEqual(pileBefore)
+      expect(room.zones.has('player')).toBe(false)
+      expect(room.assertPileIdentityLedgerConsistency('unregistered-public-show')).toEqual([])
+    } finally {
+      errorSpy.mockRestore()
+      controller.destroyTrackerRoom()
+    }
+  })
+
   it('牌堆明牌同步将已有卡牌定位到牌顶且重复消息保持幂等', () => {
     const { controller } = createTrackerControllerHarness()
     const revealedIDs = [158, 2, 63, 125]
