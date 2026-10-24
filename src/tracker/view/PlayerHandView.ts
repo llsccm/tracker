@@ -197,7 +197,7 @@ function createMarkedCardNode(
 
   cards.forEach((card) => {
     const button = createCardButton(doc, card, {
-      ambiguous: card.hasSubZoneCandidates?.() === true
+      ambiguous: card.hasSubZoneCandidates()
     })
     markedCard.appendChild(button)
   })
@@ -292,15 +292,13 @@ function getPlayerHandPanel(doc: Document): HTMLElement | null {
  * 连续暗牌合并为单张占位按钮
  */
 export function renderPublicZones(room: Room, doc: Document): void {
-  const publicByZone = room.locationIndex?.publicByZone
-  const pileCards = publicByZone?.get('pile') ?? room.zones.get('pile')?.cards ?? []
+  const publicByZone = room.locationIndex.publicByZone
+  const pileCards = publicByZone.get('pile') ?? room.getZone('pile').cards
   renderCardList(doc, 'paiduiCards', getPileDisplayCards(pileCards))
 
-  const discardCards = (
-    publicByZone?.get('discard') ??
-    room.zones.get('discard')?.cards ??
-    []
-  ).filter((card) => card.turn === Game.turn && card.round === Game.round)
+  const discardCards = (publicByZone.get('discard') ?? room.getZone('discard').cards).filter(
+    (card) => card.turn === Game.turn && card.round === Game.round
+  )
   renderCardList(doc, 'qipaiCards', discardCards)
 
   const fieldCards = getPublicFieldCandidateCards(room)

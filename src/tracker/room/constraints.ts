@@ -164,7 +164,7 @@ export class RoomConstraints {
             for (const card of playerCards) {
               if (
                 card.location === 'player' &&
-                card.hasLocationCandidates?.() &&
+                card.hasLocationCandidates() &&
                 getHandSlotKindForSeat(card, seatID) === 'candidate'
               ) {
                 const handLocationCandidates = card.locationCandidates.filter(
@@ -186,7 +186,7 @@ export class RoomConstraints {
                 card.location === 'player' &&
                 card.subZone === 'hand' &&
                 // 完整位置候选由 expectedSlotsByLocation 处理，不参与座位级排除。
-                !card.hasSubZoneCandidates?.() &&
+                !card.hasSubZoneCandidates() &&
                 card.seats.size > 1 &&
                 card.seats.has(seatID)
               ) {

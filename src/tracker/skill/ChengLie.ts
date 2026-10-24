@@ -55,8 +55,7 @@ export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEve
 
     // 暗中换牌后，交换区的代表顺序不能证明某张展示牌进入了手牌或标记。
     // 展示牌暂存在本轮待弃置队列，物理数量由匿名槽承接。
-    const exchange = room.zones.get('exchange')
-    if (!exchange) return event
+    const exchange = room.getZone('exchange')
     const knownCards = exchange.cards.filter((card) => card.id > 0)
     const placeholders = room.createExternalCards([], knownCards.length)
     knownCards.forEach((card, index) => {
@@ -94,7 +93,7 @@ export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEve
 // 马承【骋烈】：记录亮出集合，并在标记牌最终明置进弃牌堆时做前后集合差分。
 export function decorateChengLie(event: MoveEventDraft, room: Room): MoveEventDraft {
   const move = event.protocol
-  const cardIDs = event.cardIDs ?? []
+  const cardIDs = event.cardIDs
   const ids = getPositiveIDs(cardIDs)
   const fromZone = move.FromZone
   const toZone = move.ToZone
@@ -122,14 +121,14 @@ export function decorateChengLie(event: MoveEventDraft, room: Room): MoveEventDr
   const state = getChengLieState(room)
   state.casterSeatID = getChengLieCasterSeat(move, state)
 
-  const exchangeCards = room.zones.get('exchange')?.cards ?? []
+  const exchangeCards = room.getZone('exchange').cards
   const groupedCards = exchangeCards.slice(0, Math.max(0, exchangeCards.length - 1))
 
   if (groupedCards.length > 0) {
     room.createConstraintGroup({
       id: nextGroupID(room, 3208, 'chenglie_remain'),
       cards: groupedCards,
-      sourceEvent: event.options?.sourceEvent
+      sourceEvent: event.options.sourceEvent
     })
   }
 
@@ -174,7 +173,7 @@ export function observePendingChengLieFinalDiscard(event: MoveEventDraft, room: 
   if (!state) return
 
   const move = event.protocol
-  const ids = getPositiveIDs(event.cardIDs ?? [])
+  const ids = getPositiveIDs(event.cardIDs)
   if (!isChengLieFinalDiscard(move, ids, state)) return
 
   observeChengLieFinalDiscard(event, room, ids, {

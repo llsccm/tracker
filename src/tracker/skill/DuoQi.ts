@@ -271,9 +271,9 @@ function decorateGainAll(event: MoveEventDraft, room: Room, state: DuoQiState): 
   const activation = state.activations.get(DUO_QI_GAIN_ALL_SPELL_ID)
   if (!activation || activation.skipInference || !activationMatchesMove(activation, event))
     return event
-  if (event.cardIDs?.some?.((cardID: CardID) => cardID > 0)) return event
+  if (event.cardIDs.some((cardID: CardID) => cardID > 0)) return event
 
-  const sourceZone = event.options?.fromZone === 'discard' ? 2 : 5
+  const sourceZone = event.options.fromZone === 'discard' ? 2 : 5
   resolveRandomHandCandidatesForGainAll(event, room, state, activation, sourceZone)
   const sourceCards = collectGainAllSourceCards(
     room,
@@ -436,9 +436,9 @@ function collectRecentDiscardSourceCards(
   const targetInitialCardIDsInDiscard = new Set(
     targetInitialCardIDs.filter((cardID) => room.cardIndex.get(cardID)?.location === 'discard')
   )
-  const sourceCandidates = (room.zones.get('discard')?.cards ?? []).filter((card) =>
-    targetInitialCardIDsInDiscard.has(card.id)
-  )
+  const sourceCandidates = room
+    .getZone('discard')
+    .cards.filter((card) => targetInitialCardIDsInDiscard.has(card.id))
   const gainedCount = getCount(event)
   if (gainedCount <= 0 || sourceCandidates.length < gainedCount) return []
 
@@ -454,10 +454,7 @@ function decorateRandomDiscardGain(
   const activation = state.activations.get(DUO_QI_RANDOM_GAIN_SPELL_ID)
   if (!activation || activation.skipInference || !activationMatchesMove(activation, event))
     return event
-  if (
-    event.options?.fromZone !== 'discard' ||
-    event.cardIDs?.some?.((cardID: CardID) => cardID > 0)
-  ) {
+  if (event.options.fromZone !== 'discard' || event.cardIDs.some((cardID: CardID) => cardID > 0)) {
     return event
   }
 
@@ -493,10 +490,10 @@ function decorateRandomHandGain(event: MoveEventDraft, state: DuoQiState): MoveE
     return event
   }
   if (
-    event.options?.fromZone != null ||
-    event.options?.fromSubZone !== 'hand' ||
-    event.cardIDs?.some?.((cardID: CardID) => cardID > 0) ||
-    event.options?.sourceCards?.length
+    event.options.fromZone != null ||
+    event.options.fromSubZone !== 'hand' ||
+    event.cardIDs.some((cardID: CardID) => cardID > 0) ||
+    event.options.sourceCards?.length
   ) {
     return event
   }
@@ -536,9 +533,9 @@ export function decorateDuoQiKnownMove(event: MoveEventDraft, room: Room): MoveE
 
   const fromSeatID = event.options.fromSeatID
   if (
-    event.options?.fromSubZone !== 'hand' ||
+    event.options.fromSubZone !== 'hand' ||
     !Number.isFinite(fromSeatID) ||
-    !event.cardIDs?.some?.((cardID: CardID) => cardID > 0)
+    !event.cardIDs.some((cardID: CardID) => cardID > 0)
   ) {
     return event
   }
@@ -571,7 +568,7 @@ export function decorateDuoQiEntitySafety(event: MoveEventDraft, room: Room): Mo
   const spellID = move.SpellID
   const fromSeatID = move.FromID
   const isUnknownHandSelection =
-    move.FromZone === 5 && !event.cardIDs?.some?.((cardID: CardID) => cardID > 0)
+    move.FromZone === 5 && !event.cardIDs.some((cardID: CardID) => cardID > 0)
 
   if (!isUnknownHandSelection || spellID === DUO_QI_GAIN_ALL_SPELL_ID) return event
 
@@ -637,7 +634,7 @@ function finishRandomHandGroupsAfterGainAll(
   const spellID = event.protocol.SpellID
   if (
     spellID !== DUO_QI_GAIN_ALL_SPELL_ID ||
-    event.options?.fromSubZone !== 'hand' ||
+    event.options.fromSubZone !== 'hand' ||
     !Number.isFinite(event.options.fromSeatID)
   ) {
     return

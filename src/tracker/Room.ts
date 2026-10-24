@@ -28,10 +28,12 @@ import {
   RoomMovement,
   RoomPublicZones
 } from './room/index'
+import { shouldRevealAsFullHand } from './protocol/protocolRules'
 import type {
   AnonymizeLocatedIdentityOptions,
   MoveEventHandler,
   PlayerHandCardIDOptions,
+  PublicRevealPlacementOptions,
   RoomSkillPlugin,
   SkillHandler
 } from './room/index'
@@ -47,7 +49,8 @@ import type {
   SeatID,
   SeatInfo,
   SpellID,
-  SubZoneCandidate
+  SubZoneCandidate,
+  TrackerLogger
 } from './types'
 import type { PendingSkillMove, SkillProtocolEvent } from './skill/protocolEvents'
 
@@ -185,7 +188,7 @@ export class Room extends RoomBase {
     this.pileIdentityLedger = new PileIdentityLedger()
 
     // 8. 绑定当前房间的对局状态；浏览器入口会注入真实 Game，测试可注入纯状态对象。
-    this.game?.bindRoom?.(this)
+    this.game.bindRoom(this)
   }
 
   initDeck(cardIDs: CardID[]): void {
@@ -203,7 +206,7 @@ export class Room extends RoomBase {
     this.anonymousEntitySeq = -1
 
     // 牌堆只保存匿名物理槽，真实身份在揭示前统一留在 unlocatedIdentities。
-    const pile = this.zones.get('pile')
+    const pile = this.getZone('pile')
     this.zones.forEach((zone) => zone.clear())
 
     const deckCards: Card[] = []
@@ -240,8 +243,8 @@ export class Room extends RoomBase {
 
       this.pileIdentityLedger.applyMove({
         ...move,
-        pileCountAfter: this.zones.get('pile')?.cards.length ?? 0,
-        discardCountAfter: this.zones.get('discard')?.cards.length ?? 0
+        pileCountAfter: this.getZone('pile').cards.length,
+        discardCountAfter: this.getZone('discard').cards.length
       })
 
       this.identity.anonymizePileCohortIdentityEntities(context)
@@ -298,8 +301,8 @@ export class Room extends RoomBase {
         this.pileIdentityLedger.applyReveal({
           cardIDs: groupedCardIDs,
           location: revealLocation,
-          pileCountAfter: this.zones.get('pile')?.cards.length ?? 0,
-          discardCountAfter: this.zones.get('discard')?.cards.length ?? 0
+          pileCountAfter: this.getZone('pile').cards.length,
+          discardCountAfter: this.getZone('discard').cards.length
         })
 
         this.assertPileIdentityLedgerConsistency(`reveal:${revealLocation}`)
@@ -355,7 +358,7 @@ export class Room extends RoomBase {
     // 排序物理座位
     this.seatIDs.sort((a, b) => a - b)
     this.size = this.seatIDs.length
-    this.game?.syncRoomSeats(this)
+    this.game.syncRoomSeats(this)
 
     // 观看别人录像时
     this.game.isRecord = this.mySeatID === undefined
@@ -481,7 +484,7 @@ export class Room extends RoomBase {
    * 按协议端点顺序取得公共区槽位；返回顺序始终是“端点向内”。
    */
   getPublicEndpointCards(zoneID: PublicZoneName, count: number, position: PublicPosition): Card[] {
-    const cards = this.zones.get(zoneID)?.cards ?? []
+    const cards = this.getZone(zoneID).cards
     if (!(count > 0)) return []
     // PublicPosition 兼容数值常量与 'bottom'/'top' 字符串；未归一化的 bottom 必须走牌底。
     if (normalizePublicPosition(position) === 'bottom') return cards.slice(0, count)
@@ -566,6 +569,29 @@ export class Room extends RoomBase {
     return this.identity.materializeAtPublicEndpoint(cardIDs, zoneID, position)
   }
 
+  /**
+   * 按物理 ID 取得公共区展示所需的 Card 实体，优先在指定端点匿名槽物化。
+   */
+  resolvePublicKnownCards(
+    ids: CardID[],
+    target: { zoneName: PublicZoneName; position: PublicPosition } | null = null,
+    logger?: Pick<TrackerLogger, 'warn'>
+  ): Card[] {
+    return this.identity.resolvePublicKnownCards(ids, target, logger)
+  }
+
+  /**
+   * 公共区明牌落点与按需端点重排。
+   */
+  placePublicRevealCards(
+    knownCards: Card[],
+    zoneName: PublicZoneName,
+    options: PublicRevealPlacementOptions = {},
+    logger?: Pick<TrackerLogger, 'info'>
+  ): void {
+    this.publicZones.placePublicRevealCards(knownCards, zoneName, options, logger)
+  }
+
   /** 所有新实体统一追加并登记顺序；不触发脏事件或改变牌的位置。 */
   registerCardEntity(card: Card): void {
     this.cards.push(card)
@@ -603,12 +629,18 @@ export class Room extends RoomBase {
   }
 
   /**
+   * 按确定公共区名称取得非空 Zone。
+   */
+  getZone(zoneID: PublicZoneName): Zone {
+    return this.zones.get(zoneID)!
+  }
+
+  /**
    * 获取公共 Zone；协议未给出来源或给出未知来源时，默认回退到牌堆。
    * 这是 Room 的高频基础读入口，保留在 Room 中便于追踪移动主流程。
    */
   getPublicZone(zoneID: PublicZoneName | null | undefined): Zone {
-    if (!zoneID || !this.zones.has(zoneID)) return this.zones.get('pile')
-    return this.zones.get(zoneID)
+    return zoneID && this.zones.has(zoneID) ? this.getZone(zoneID) : this.getZone('pile')
   }
 
   /**
@@ -627,6 +659,25 @@ export class Room extends RoomBase {
    */
   getPlayerHandCardIDs(seatID: SeatID, options: PlayerHandCardIDOptions = {}) {
     return this.publicZones.getPlayerHandCardIDs(seatID, options)
+  }
+
+  /**
+   * 判断部分手牌揭示在张数恰好等于目标当前手牌数时，是否应按整手揭示同步。
+   */
+  shouldRevealPlayerHandAsFullHand(seatID: SeatID, handCount: number): boolean {
+    const player = this.getPlayer(seatID)
+    if (player?.hasObservedHandCount) {
+      return shouldRevealAsFullHand({
+        handCount,
+        observedHandCount: player.observedHandCount
+      })
+    }
+
+    const normalizedSeat = Number(seatID)
+    const localHandCount = this.playerCardsSnapshot.filter(
+      (card) => card.subZone === 'hand' && card.seats.has(normalizedSeat)
+    ).length
+    return shouldRevealAsFullHand({ handCount, localHandCount })
   }
 
   // 约束收敛主入口与辅助方法；低频约束辅助位于 room/constraints.ts。
@@ -699,8 +750,8 @@ export class Room extends RoomBase {
       cardIDs: cards.map((card) => card.id),
       location:
         candidate.zone === 'pile' ? 'pile' : candidate.zone === 'discard' ? 'discard' : 'outside',
-      pileCountAfter: this.zones.get('pile')!.cards.length,
-      discardCountAfter: this.zones.get('discard')!.cards.length
+      pileCountAfter: this.getZone('pile').cards.length,
+      discardCountAfter: this.getZone('discard').cards.length
     })
     this.resolveConstraints()
     this.assertPileIdentityLedgerConsistency('revealPublicCandidate')
@@ -717,7 +768,7 @@ export class Room extends RoomBase {
    */
   markPublicZoneDirty(zoneID: PublicZoneName | null | undefined): void {
     if (zoneID === null || zoneID === undefined) return
-    this.dirtyPublicZones?.add(zoneID)
+    this.dirtyPublicZones.add(zoneID)
     this.markViewDirty(`public-zone:${zoneID}`)
   }
 
@@ -738,9 +789,8 @@ export class Room extends RoomBase {
    * 身份仍由暗实体承载，原实体会先原地匿名化并保留位置，再创建 detached 展示实体。
    */
   shufflePile(options: ShufflePileOptions = {}): void {
-    const pile = this.zones.get('pile')
-    const discard = this.zones.get('discard')
-    if (!pile || !discard) return
+    const pile = this.getZone('pile')
+    const discard = this.getZone('discard')
 
     const normalizedCardCount =
       options.cardCount !== null && options.cardCount !== undefined
@@ -867,7 +917,7 @@ export class Room extends RoomBase {
     this.identity.anonymizePileCohortIdentityEntities(identityContext)
     this.detachedKnownCards.forEach((card) => {
       card.removePublicCandidates(
-        (candidate) => candidate?.zone === 'pile' || candidate?.zone === 'discard'
+        (candidate) => candidate.zone === 'pile' || candidate.zone === 'discard'
       )
     })
     this.resolveConstraints()
@@ -1051,7 +1101,7 @@ export class Room extends RoomBase {
     })
 
     this.movement.createPublicMoveConstraintGroup(context)
-    this.zones.get('exchange')?.completeExchangeMove()
+    this.getZone('exchange').completeExchangeMove()
 
     // 账本投影也可能匿名化实体，必须先提交，再统一同步稳定索引和计数器。
     this.identity.commitPileIdentityForMove(context, pileSnapshot)
@@ -1073,7 +1123,7 @@ export class Room extends RoomBase {
    * 销毁房间，释放资源防止内存泄漏
    */
   destroy(): void {
-    if (this.game?.room === this) {
+    if (this.game.room === this) {
       this.game.bindRoom(null)
     }
 
@@ -1087,7 +1137,6 @@ export class Room extends RoomBase {
     this.players.forEach((player) => player.reset())
     this.players.clear()
     this.zones.forEach((zone) => zone.clear())
-    this.zones.clear()
     this.trackedCards.forEach((card) => card.reset())
     this.detachedKnownCards.clear()
     this.detachedIdentitySeq = 0

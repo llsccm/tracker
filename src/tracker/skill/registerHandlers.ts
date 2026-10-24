@@ -3,7 +3,7 @@ import { decorateChengLieMove } from './ChengLie'
 import decorateFenChao from './FenChao'
 import decorateGuanXu from './GuanXu'
 import decorateHandExchange from './HandExchange'
-import decorateJieLi from './JieLi'
+import { jieLiPlugin } from './JieLi'
 import decorateXingZuo from './XingZuo'
 import decorateSiQi from './SiQi'
 import decorateTianHou from './TianHou'
@@ -122,7 +122,7 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
   room.registerSkillPlugin({ id: 'chengLie', spellIDs: [3208], decorateMove: decorateChengLieMove })
 
   // 族钟繇【诫厉】：目标视角定位换出槽位，第三方视角保留手牌/牌顶范围弱候选。
-  room.registerSkillPlugin({ id: 'jieLi', spellIDs: [3483], decorateMove: decorateJieLi })
+  room.registerSkillPlugin(jieLiPlugin)
 
   // 徐氏【问卦】：相邻的主动交牌/回堆消息只筛选候选来源，不追踪单个实体。
   room.registerSkillPlugin({

@@ -26,9 +26,9 @@ export abstract class RoomBase {
 
   getCurrentTimestamp(): { turn: number; round: number; phase: number } {
     return {
-      turn: this.game?.turn ?? 0,
-      round: this.game?.round ?? 0,
-      phase: this.game?.phase ?? 0
+      turn: this.game.turn ?? 0,
+      round: this.game.round ?? 0,
+      phase: this.game.phase ?? 0
     }
   }
 

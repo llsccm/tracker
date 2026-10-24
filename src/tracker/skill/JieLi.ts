@@ -18,8 +18,10 @@ import { POSITION_TOP } from '../candidate/cardPositions'
 import { createPublicCandidate } from '../candidate/publicCandidate'
 import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
+import type { RoomSkillPlugin } from '../room/moveEvents'
 import { getPositiveIDs } from '../helper/cardIDs'
 import { getCount, getEventSourceCards, patchEvent, type MoveEventDraft } from './moveEventUtils'
+import type { SkillChoiceMessage } from './protocolEvents'
 
 export const JIE_LI_SPELL_ID = 3483
 
@@ -34,6 +36,11 @@ export type JieLiSelectionData = {
   targetSeat: number
   handCardIDs: number[]
   pileCardIDs: number[]
+}
+
+export interface JieLiParsedNotice extends JieLiContextData {
+  pileCardIDs: number[] | null
+  handCardIDs: number[] | null
 }
 
 type JieLiInformationMode = 'full' | 'limited'
@@ -151,6 +158,72 @@ export function recordJieLiSelection(room: Room, data: JieLiSelectionData): bool
     pileToHandSlots
   }
   return true
+}
+
+export function parseJieLiNotice(msg: {
+  Params?: readonly number[]
+  SeatID?: number
+  SrcSeatID?: number
+  targetSeatID?: number
+}): JieLiParsedNotice | null {
+  const { Params, SeatID, SrcSeatID, targetSeatID } = msg
+  if (targetSeatID === undefined || !Array.isArray(Params) || Params.length === 0) {
+    return null
+  }
+
+  const actorSeat = (SrcSeatID ?? SeatID) as number
+  const targetSeat = targetSeatID
+  const [pileCount, handCount] = Params
+  if (!Number.isInteger(pileCount) || pileCount <= 0) return null
+
+  if (Params.length === 1) {
+    return { actorSeat, targetSeat, pileCount, pileCardIDs: null, handCardIDs: null }
+  }
+
+  if (
+    !Number.isInteger(handCount) ||
+    handCount < 0 ||
+    Params.length !== 2 + pileCount + handCount
+  ) {
+    return null
+  }
+
+  return {
+    actorSeat,
+    targetSeat,
+    pileCount,
+    pileCardIDs: Params.slice(2, 2 + pileCount),
+    handCardIDs: Params.slice(2 + pileCount)
+  }
+}
+
+export function handleJieLiChoice(room: Room, msg: SkillChoiceMessage): boolean {
+  const { Datas, Type } = msg
+  if (Type !== 53 || !Array.isArray(Datas) || room.mySeatID !== Datas[1]) return false
+
+  // Datas: [actorSeat, targetSeat, handCount, ...handToPile, pileCount, ...pileToHand]
+  const [actorSeat, targetSeat, handCount] = Datas
+  const handEnd = 3 + handCount
+  const pileStart = handEnd + 1
+  const pileCount = Datas[handEnd]
+
+  if (
+    !Number.isInteger(handCount) ||
+    !Number.isInteger(pileCount) ||
+    handCount <= 0 ||
+    pileCount <= 0 ||
+    handCount !== pileCount ||
+    Datas.length !== pileStart + pileCount
+  ) {
+    return false
+  }
+
+  return recordJieLiSelection(room, {
+    actorSeat,
+    targetSeat,
+    handCardIDs: Datas.slice(3, handEnd),
+    pileCardIDs: Datas.slice(pileStart, pileStart + pileCount)
+  })
 }
 
 function resolveViewMode(room: Room, eventActorSeat?: number): JieLiViewMode {
@@ -366,10 +439,10 @@ function stagePileToExchange(
   const state = getJieLiState(room)
   const context = state?.context
   const count = getCount(event)
-  const pileProtocolCardIDs = getPositiveIDs(event.cardIDs ?? [])
+  const pileProtocolCardIDs = getPositiveIDs(event.cardIDs)
   const actorSeat = move.ToID
   // 牌堆内部是底 -> 顶；3483 进交换区的 ID 正好按这段的底 -> 顶排列。
-  const pileZoneCards = room.zones.get('pile')?.cards ?? []
+  const pileZoneCards = room.getZone('pile').cards
   const physicalPileSlots = pileZoneCards.slice(-count)
 
   if (
@@ -443,7 +516,7 @@ function stageTargetHandToExchange(
   const move = event.protocol
   const batch = getBatch(room)
   const count = getCount(event)
-  const cardIDs = getPositiveIDs(event.cardIDs ?? [])
+  const cardIDs = getPositiveIDs(event.cardIDs)
   const actorSeat = move.ToID
   const targetSeat = move.FromID
   const handCards = getEventSourceCards(event, room)
@@ -488,7 +561,7 @@ function returnTargetViewCardsToPile(
   }
 
   // 开发模式若已经拿到完整回堆 ID，直接走默认精确移动即可。
-  if (informationMode === 'full' && getPositiveIDs(event.cardIDs ?? []).length > 0) {
+  if (informationMode === 'full' && getPositiveIDs(event.cardIDs).length > 0) {
     clearJieLiState(room)
     return event
   }
@@ -502,7 +575,7 @@ function returnTargetViewCardsToPile(
     count !== batch.pileSlots.length ||
     pileSlots.length !== batch.pileSlots.length ||
     handCards.length !== batch.handCards.length ||
-    event.options?.position !== POSITION_TOP ||
+    event.options.position !== POSITION_TOP ||
     !finalPileCards ||
     finalPileCards.some((card) => card.location !== 'exchange')
   ) {
@@ -540,7 +613,7 @@ function returnCardsToTargetHand(
     return failTargetInference(event, room, informationMode)
   }
 
-  const cardIDs = getPositiveIDs(event.cardIDs ?? [])
+  const cardIDs = getPositiveIDs(event.cardIDs)
   const pileSlotByResultID = new Map(
     selection.pileToHandCardIDs.map((cardID, index) => [cardID, selection.pileToHandSlots[index]])
   )
@@ -620,4 +693,40 @@ export default function decorateJieLi(event: MoveEventDraft, room: Room): MoveEv
   }
 
   return noOp(event)
+}
+
+export const jieLiPlugin: RoomSkillPlugin = {
+  id: 'jieLi',
+  spellIDs: [JIE_LI_SPELL_ID],
+  decorateMove: decorateJieLi,
+  onProtocolEvent(event, room) {
+    const msg = event.message
+    if (!('SpellID' in msg) || msg.SpellID !== JIE_LI_SPELL_ID) return
+
+    if (event.type === 'targetNotice') {
+      const noticeMsg = event.message
+      if (
+        noticeMsg.targetSeatID !== undefined &&
+        noticeMsg.Param == 1 &&
+        noticeMsg.Params &&
+        noticeMsg.Params.length > 0
+      ) {
+        const notice = parseJieLiNotice(noticeMsg)
+        if (!notice) {
+          clearJieLiState(room)
+          return
+        }
+        recordJieLiContext(room, {
+          actorSeat: notice.actorSeat,
+          targetSeat: notice.targetSeat,
+          pileCount: notice.pileCount
+        })
+      }
+      return
+    }
+
+    if (event.type === 'choice') {
+      handleJieLiChoice(room, event.message)
+    }
+  }
 }

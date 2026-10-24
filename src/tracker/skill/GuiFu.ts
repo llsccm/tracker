@@ -78,10 +78,10 @@ export function completeGuiFuMove(
 
 // 弃牌已公开，必须精确命中来源实体；牌堆沿用普通已知牌移动，不在技能层推断身份位置。
 function hasDiscardSourceCards(room: Room, cardIDs: readonly CardID[]): boolean {
-  const discard = room.zones.get('discard')
+  const discard = room.getZone('discard')
   return cardIDs.every((cardID) => {
     const card = room.cardIndex.get(cardID)
-    return card?.location === 'discard' && card.isKnown && discard?.cards.includes(card) === true
+    return card?.location === 'discard' && card.isKnown && discard.cards.includes(card)
   })
 }
 
