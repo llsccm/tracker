@@ -75,10 +75,11 @@ ToZone: 5
 `Datas` 格式为：
 
 ```text
-[当前持有数量, ...当前仍持有的诡伏牌ID, ...补位零]
+[当前持有数量, ...当前仍持有的诡伏牌ID, ...其它技能状态字段]
 ```
 
-它不是本次新增牌的独立列表。与获得移动配对时，新获得的 ID 在前面，仍持有的旧 ID 保留在尾部：
+它不是本次新增牌的独立列表，数量之后只读取对应张数的 ID；尾部可能是补零或其它技能状态。
+新增 ID 不保证排在前面。以下是新增牌恰好位于首项的样例：
 
 ```yaml
 # 第一次获得后：当前持有 132
@@ -90,8 +91,19 @@ Datas: [1, 132, 0, 0, 0, 0]
 Datas: [2, 2, 132, 0, 0, 0, 0]
 ```
 
-对于第二条角色数据，若前置移动 `CardCount=1`，只取身份列表的第一项 `[2]` 补齐移动，
-不能把 `[2,132]` 都视为本次获得。`Datas[0]` 的当前持有数量与移动的 `CardCount` 含义不同。
+对于第二条角色数据，若前置移动 `CardCount=1` 且 `132` 已确定在目标手牌中，排除 `132` 后
+得到本次获得的 `[2]`，不能把 `[2,132]` 都视为本次获得。
+`Datas[0]` 的当前持有数量与移动的 `CardCount` 含义不同。
+
+录像已出现新增牌位于列表中间的情况：
+
+```yaml
+# 已有诡伏牌：128、19、2、28、20；本次从弃牌堆获得一张 129
+Datas: [6, 128, 129, 19, 2, 28, 20, 1, 1, 1, 13091, 0, 0]
+```
+
+此时必须排除已在目标手牌的五张旧牌，得到 `[129]`。若按前缀选择 `128`，会因它不在弃牌堆
+而取消合法获得，使手牌计数持续少一张，并在后续亮手牌时暴露匿名实体缺口。
 
 ## 当前处理流程
 
@@ -99,13 +111,16 @@ Datas: [2, 2, 132, 0, 0, 0, 0]
 
 1. 暂存一条待补全移动，分别保留原始协议 `raw` 和已有预处理结果 `patched`。
    此时不增加手牌数、不创建匿名手牌，也不改变来源区、约束或身份账本。
-2. 相邻角色数据到达后，核对目标座位及获得张数；弃牌来源还需精确命中对应已知弃牌实体。
-3. 按前置 `CardCount` 取新增 ID 前缀，只补入 `patched.CardIDs`，保持 `raw` 不变。
+2. 相邻角色数据到达后，从完整持有列表排除已确定在目标手牌的旧身份。
+   只有完整位置唯一且为目标手牌才可排除，同座位手牌/标记等弱候选不能视为已持有。
+3. 核对目标座位，剩余身份必须互不重复且数量恰好等于前置 `CardCount`；弃牌来源还需精确命中
+   对应已知弃牌实体。不能截取过多候选来猜测身份；验证成功后只补入 `patched.CardIDs`，保持 `raw` 不变。
 4. 清除暂存，通过 `TrackerController.syncTrackerMove(patched, raw)` 提交一次普通明牌移动。
    配对判断直接读取 `patched`，放在标准事件归一化之前；暂存阶段不构造移动事件。
    来源区、手牌数、约束、索引和身份账本均由通用管线更新。
 
-无需 FIFO、历史快照差量、额外匿名手牌、占位退役或 `handMoveCount: 0` 补偿。
+旧身份直接读取 Room 的当前确定位置，无需 FIFO、历史快照差量、额外匿名手牌、占位退役或
+`handMoveCount: 0` 补偿。配对只解析身份，仍由前置获得移动提供手牌数量事实。
 
 ## `raw` 与 `patched` 的日志语义
 
@@ -152,11 +167,13 @@ patched:
 ## 代码与验证
 
 - 移动预处理入口：`src/handler/PubGsCMoveCard.js`。
-- 角色数据入口：`src/handler/skills/GuiFu.ts` 的 `parseGuiFuCardIDs()`、`handleGuiFu()`。
+- 角色数据入口：`src/handler/GsCUpdateRoleDataExNtf.js` 分发通用 `SkillProtocolEvent`，
+  `src/tracker/skill/GuiFu.ts` 的 `guiFuPlugin` 接收并解析持有列表。
 - 配对状态与补全：`src/tracker/skill/GuiFu.ts` 的 `deferGuiFuMove()`、`completeGuiFuMove()`。
 - 运行时连接：`src/tracker/runtime/trackerController.ts` 的 `syncTrackerMove()`、
-  `syncTrackerGuiFuRoleData()`；`Room` 和通用移动模块不包含诡伏专属分支。
-- 回归：`tests/tracker/roleData3709.test.ts`，覆盖相邻配对、累计列表前缀、数量与身份守恒、
+  `dispatchSkillProtocolEvent()`；`Room` 和通用移动模块不包含诡伏专属分支。
+- 回归：`tests/tracker/roleData3709.test.ts`，覆盖相邻配对、累计列表乱序、数量与身份守恒、
+  乱序获得后失牌与终局匿名槽物化、
   用牌后及获得技能时的独立状态更新、重复及失配通知、生命周期，以及 `raw` / `patched` 日志和输入不被改写。
 - 相关入口：[协议索引](README.md)、[角色扩展数据](GsCUpdateRoleDataExNtf.md)、
   [技能状态仓库](../agents/skill_state.md)。

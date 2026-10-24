@@ -45,7 +45,7 @@ export function deferGuiFuMove(
   return true
 }
 
-/** 当前持有列表把新增身份放在前面；前置移动的张数就是这次应消费的前缀长度。 */
+/** 当前持有列表无新增优先顺序；排除已确定在手中的旧身份，再核对本次获得张数。 */
 export function completeGuiFuMove(
   room: Room,
   seatID: SeatID,
@@ -58,7 +58,7 @@ export function completeGuiFuMove(
   room.deleteSkillState(GUI_FU_ROLE_DATA_ID)
   const { raw, patched } = pending
   const count = patched.CardCount
-  const gainedIDs = cardIDs.slice(0, count)
+  const gainedIDs = cardIDs.filter((cardID) => !isHeldGuiFuCard(room, seatID, cardID))
   if (
     patched.ToID !== seatID ||
     gainedIDs.length !== count ||
@@ -76,6 +76,18 @@ export function completeGuiFuMove(
   return { raw, patched: { ...patched, CardIDs: gainedIDs } }
 }
 
+function isHeldGuiFuCard(room: Room, seatID: SeatID, cardID: CardID): boolean {
+  const locations = room.cardIndex.get(cardID)?.getPossibleLocations() ?? []
+  const location = locations[0]
+  // 座位唯一不代表手牌位置确定，例如同座位 hand / mark 候选不能据此排除。
+  return (
+    locations.length === 1 &&
+    location.type === 'player' &&
+    location.seatID === seatID &&
+    location.subZone === 'hand'
+  )
+}
+
 // 弃牌已公开，必须精确命中来源实体；牌堆沿用普通已知牌移动，不在技能层推断身份位置。
 function hasDiscardSourceCards(room: Room, cardIDs: readonly CardID[]): boolean {
   const discard = room.getZone('discard')
@@ -85,7 +97,7 @@ function hasDiscardSourceCards(room: Room, cardIDs: readonly CardID[]): boolean 
   })
 }
 
-/** 角色数据首项为数量，后续身份按新增在前排列；尾部补零不属于持有牌。 */
+/** 角色数据首项为持有数量，后续身份无新增顺序保证；数量之外的字段不是持有牌。 */
 export function parseGuiFuCardIDs(datas: unknown): CardID[] {
   if (!Array.isArray(datas)) return []
   const count = datas[0]
