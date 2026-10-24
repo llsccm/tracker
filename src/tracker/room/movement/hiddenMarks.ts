@@ -183,8 +183,8 @@ export class RoomMovementHiddenMarks {
         card.isKnown === true &&
         card.suspended !== true &&
         card.seats.has(sourceSeat) &&
-        ((card.subZone === 'hand' && !card.hasSubZoneCandidates?.()) ||
-          card.hasSubZoneCandidate?.({
+        ((card.subZone === 'hand' && !card.hasSubZoneCandidates()) ||
+          card.hasSubZoneCandidate({
             seatID: sourceSeat,
             subZone: 'hand',
             spellID: null
@@ -500,8 +500,8 @@ export class RoomMovementHiddenMarks {
 
     if (candidate.type === 'container') {
       // 容器候选：身份确认后挂 container 候选；展示座位由 mark 空间观测决定。
-      if (card.location === 'player' && !card.hasLocationCandidate?.(candidate)) {
-        const next = [...(card.locationCandidates ?? []), candidate]
+      if (card.location === 'player' && !card.hasLocationCandidate(candidate)) {
+        const next = [...card.locationCandidates, candidate]
         changed = card.setLocationCandidates(next, reason) || changed
       }
     } else if (candidate.type === 'player') {
@@ -617,7 +617,7 @@ export class RoomMovementHiddenMarks {
     if (inMarkSpace) return true
 
     const candidate = this.createHiddenMarkTargetLocationCandidate(record)
-    return candidate.type === 'container' && card.hasLocationCandidate?.(candidate) === true
+    return candidate.type === 'container' && card.hasLocationCandidate(candidate)
   }
 
   /** 实体 ID 被公共来源替换时，隐藏标记账本要继续指向新的暗占位实体 *   * 身份物化也使用此入口迁移成员引用；不搬牌，也不创建缺失账本。
@@ -859,14 +859,14 @@ export class RoomMovementHiddenMarks {
         this.setHiddenMarkConfirmation(record, card, 'mark')
         changed =
           this.bindConfirmedMarkCardToMarkSpace(record, card, 'hiddenMark:confirmedMark') || changed
-        if (candidate.type === 'container' && card.hasLocationCandidate?.(candidate)) {
+        if (candidate.type === 'container' && card.hasLocationCandidate(candidate)) {
           // 明确来自装备容器时只锁成容器候选；显示座位由 mark 空间观测决定。
           changed = card.setLocationCandidates([candidate], 'hiddenMark:confirmedMark') || changed
-        } else if (card.hasLocationCandidate?.(candidate)) {
+        } else if (card.hasLocationCandidate(candidate)) {
           changed = card.resolveLocationCandidate(candidate, 'hiddenMark:confirmedMark') || changed
         } else {
           const subZoneCandidate = toSubZoneCandidate(candidate)
-          if (subZoneCandidate && card.hasSubZoneCandidate?.(subZoneCandidate)) {
+          if (subZoneCandidate && card.hasSubZoneCandidate(subZoneCandidate)) {
             changed =
               card.resolveSubZoneCandidate(subZoneCandidate, 'hiddenMark:confirmedMark') || changed
           }
@@ -898,9 +898,9 @@ export class RoomMovementHiddenMarks {
         // 从手牌离开 = 占用 hand 名额，不能同时算 mark
         this.setHiddenMarkConfirmation(record, card, 'hand')
 
-        if (card.hasLocationCandidate?.(candidate)) {
+        if (card.hasLocationCandidate(candidate)) {
           changed = card.resolveLocationCandidate(candidate, 'hiddenMark:confirmedHand') || changed
-        } else if (card.hasSubZoneCandidate?.(candidate)) {
+        } else if (card.hasSubZoneCandidate(candidate)) {
           changed = card.resolveSubZoneCandidate(candidate, 'hiddenMark:confirmedHand') || changed
         }
         trackerLogger.info('手牌暗置标记区候选确认回手牌', {
@@ -1018,7 +1018,7 @@ export class RoomMovementHiddenMarks {
         }
         this.setHiddenMarkConfirmation(record, card, 'hand')
 
-        if (card.hasLocationCandidate?.(targetCandidate)) {
+        if (card.hasLocationCandidate(targetCandidate)) {
           changed =
             card.removeLocationCandidate(targetCandidate, 'hiddenMark:observedContainerSnapshot') ||
             changed

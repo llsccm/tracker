@@ -128,7 +128,7 @@ export class RoomMovementSources {
         card.seats.has(seatID) !== true ||
         card.isKnown !== true ||
         card.suspended === true ||
-        card.hasSubZoneCandidates?.()
+        card.hasSubZoneCandidates()
       ) {
         continue
       }
@@ -177,7 +177,7 @@ export class RoomMovementSources {
       spellID: fromSubZone === 'mark' ? sourceSpellID : null
     }
 
-    if (card.hasLocationCandidate?.(candidate)) {
+    if (card.hasLocationCandidate(candidate)) {
       return card.resolveLocationCandidate(candidate, 'move:sourcePlayerCandidate')
     }
 
@@ -357,7 +357,7 @@ export class RoomMovementSources {
       card.seats.size !== 1 ||
       sourceSubZone === null ||
       sourceSubZone === 'hand' ||
-      card.hasLocationCandidates?.()
+      card.hasLocationCandidates()
     ) {
       return false
     }

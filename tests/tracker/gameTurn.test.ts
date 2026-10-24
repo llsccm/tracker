@@ -16,7 +16,7 @@ const {
   return {
     Game: {
       size: 4,
-      room: { getMyDisplayID: vi.fn() },
+      myDisplayID: 2 as number | undefined,
       setTurn: vi.fn<(turn: number) => void>()
     },
     drawSeatUIs: vi.fn(),
@@ -47,8 +47,7 @@ import { handleGameTurn } from '@/handler/MsgGameTurnNtf'
 
 describe('MsgGameTurnNtf', () => {
   beforeEach(() => {
-    Game.room.getMyDisplayID.mockReset()
-    Game.room.getMyDisplayID.mockReturnValue(2)
+    Game.myDisplayID = 2
     Game.setTurn.mockReset()
     hideSelfOrderContainer.mockReset()
     scheduleTrackerRender.mockReset()

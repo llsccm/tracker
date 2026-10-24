@@ -623,7 +623,7 @@ function getVisibleMarkSpaceCards(room: Room, seatID: SeatID, spellID: SpellID):
         card.suspended !== true &&
         card.seats.size === 1 &&
         card.seats.has(seatID) &&
-        !card.hasSubZoneCandidates?.() &&
+        !card.hasSubZoneCandidates() &&
         (markSpellIDs.length === 0 ||
           (card.spellID !== null && markSpellIDs.includes(card.spellID)))
     )

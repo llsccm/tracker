@@ -109,6 +109,11 @@ export class GameState {
     return this.room?.mySeatID ?? undefined
   }
 
+  /** 获取主视角在牌局中的显示顺位 */
+  get myDisplayID(): number | undefined {
+    return this.room?.getMyDisplayID()
+  }
+
   getCurrentTimestamp(): { turn: number; round: number; phase: number } {
     return {
       turn: this.turn ?? 0,

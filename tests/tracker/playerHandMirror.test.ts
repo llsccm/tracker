@@ -198,7 +198,8 @@ function createCard(id: number, title = ''): Card {
     color: 3,
     number: 1,
     name: '杀',
-    getLocationDescription: () => title
+    getLocationDescription: () => title,
+    hasSubZoneCandidates: () => false
   } as unknown as Card
 }
 
@@ -228,9 +229,7 @@ function createPlayerFromCards(
 }
 
 function getNodeByKey(container: TestElement, key: string): TestElement {
-  const node = container.children.find(
-    (child) => child.getAttribute(RENDER_KEY_ATTRIBUTE) === key
-  )
+  const node = container.children.find((child) => child.getAttribute(RENDER_KEY_ATTRIBUTE) === key)
   if (!node) throw new Error(`missing rendered node: ${key}`)
   return node
 }

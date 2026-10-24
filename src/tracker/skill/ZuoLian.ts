@@ -77,7 +77,7 @@ export default function decorateZuoLian(event: MoveEventDraft, room: Room): Move
     return event
   }
 
-  const discardCards = room.zones.get('discard')?.cards ?? []
+  const discardCards = room.getZone('discard').cards
   // 公共区按底 -> 顶保存，逆序查找即优先后入弃牌堆的牌。
   const selectedCard =
     findLastCardByName(discardCards, '火杀') ?? findLastCardByName(discardCards, '雷杀')

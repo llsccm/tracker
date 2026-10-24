@@ -1,37 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
 
-const {
-  getReadyTrackerRoom,
-  recordJieLiSelection,
-  revealTrackerCards,
-  revealTrackerCardsInZone,
-  setTrackerFirstHand,
-  destroyPingJianWindow
-} = vi.hoisted(() => ({
-  getReadyTrackerRoom: vi.fn(),
-  recordJieLiSelection: vi.fn(),
-  revealTrackerCards: vi.fn(),
-  revealTrackerCardsInZone: vi.fn(),
-  setTrackerFirstHand: vi.fn(),
-  destroyPingJianWindow: vi.fn()
-}))
+const { revealTrackerCards, revealTrackerCardsInZone, setTrackerFirstHand, destroyPingJianWindow } =
+  vi.hoisted(() => ({
+    revealTrackerCards: vi.fn(),
+    revealTrackerCardsInZone: vi.fn(),
+    setTrackerFirstHand: vi.fn(),
+    destroyPingJianWindow: vi.fn()
+  }))
 
 vi.mock('../../src/tracker/runtime/browser', () => ({
   tracker: {
     dispatchSkillProtocolEvent(event) {
       return Game.room?.dispatchSkillProtocolEvent?.(event)
     },
-    getReadyTrackerRoom,
     revealTrackerCards,
     revealTrackerCardsInZone,
     setTrackerFirstHand
   }
-}))
-
-vi.mock('../../src/tracker/skill/JieLi', () => ({
-  default: (event) => event,
-  recordJieLiSelection
 }))
 
 vi.mock('@/ui/PingJianWindow', () => ({
@@ -44,10 +30,28 @@ import { Room } from '@/tracker/Room'
 import { getDuoQiState } from '@/tracker/skill/DuoQi'
 import { registerDefaultMoveEventHandlers } from '@/tracker/skill/registerHandlers'
 
+function seedJieLiBatch(
+  room: Room,
+  selection: { actorSeat: number; targetSeat: number; handCardIDs: number[]; pileCardIDs: number[] }
+) {
+  const handCards = selection.handCardIDs.map((id) => ({ id }))
+  const pileSlots = selection.pileCardIDs.map((_, index) => ({ id: -(index + 1) }))
+  const batch = {
+    actorSeat: selection.actorSeat,
+    targetSeat: selection.targetSeat,
+    informationMode: 'production-limited',
+    pileProtocolCardIDs: selection.pileCardIDs.slice(),
+    pileSlots,
+    handCards,
+    selection: null as unknown,
+    returnedToPile: false
+  }
+  room.setSkillState(3483, { batch })
+  return { batch, handCards, pileSlots }
+}
+
 describe('CGsRoleSpellOptRep', () => {
   beforeEach(() => {
-    getReadyTrackerRoom.mockReset()
-    recordJieLiSelection.mockReset()
     revealTrackerCards.mockClear()
     revealTrackerCardsInZone.mockClear()
     setTrackerFirstHand.mockClear()
@@ -79,8 +83,10 @@ describe('CGsRoleSpellOptRep', () => {
       selection: { actorSeat: 3, targetSeat: 4, handCardIDs: [91, 158], pileCardIDs: [124, 4] }
     }
   ])('诫厉 Type 53 在目标视角解析两组牌 ID，支持 0 号座位：$datas', ({ datas, selection }) => {
-    const room = { mySeatID: selection.targetSeat }
-    getReadyTrackerRoom.mockReturnValue(room)
+    const room = new Room({ gameState: Game })
+    registerDefaultMoveEventHandlers(room)
+    room.setMySeatID(selection.targetSeat)
+    const { batch, handCards, pileSlots } = seedJieLiBatch(room, selection)
     Object.freeze(datas)
 
     handleRoleSpellOptRep({
@@ -90,11 +96,24 @@ describe('CGsRoleSpellOptRep', () => {
       Type: 53
     })
 
-    expect(recordJieLiSelection).toHaveBeenCalledExactlyOnceWith(room, selection)
+    expect(batch.selection).toEqual({
+      handToPileCards: handCards,
+      pileToHandCardIDs: selection.pileCardIDs,
+      pileToHandSlots: pileSlots
+    })
+    room.destroy()
   })
 
   it.each([7, 5])('诫厉 Type 53 在座位 %s 视角不处理目标座位 6 的选择', (mySeatID) => {
-    getReadyTrackerRoom.mockReturnValue({ mySeatID })
+    const room = new Room({ gameState: Game })
+    registerDefaultMoveEventHandlers(room)
+    room.setMySeatID(mySeatID)
+    const { batch } = seedJieLiBatch(room, {
+      actorSeat: 7,
+      targetSeat: 6,
+      handCardIDs: [48],
+      pileCardIDs: [110]
+    })
 
     handleRoleSpellOptRep({
       Datas: [7, 6, 1, 48, 1, 110],
@@ -103,16 +122,25 @@ describe('CGsRoleSpellOptRep', () => {
       Type: 53
     })
 
-    expect(recordJieLiSelection).not.toHaveBeenCalled()
+    expect(batch.selection).toBeNull()
+    room.destroy()
   })
 
   it('诫厉其它回复类型不按 Type 53 解析', () => {
-    getReadyTrackerRoom.mockReturnValue({ mySeatID: 6 })
+    const room = new Room({ gameState: Game })
+    registerDefaultMoveEventHandlers(room)
+    room.setMySeatID(6)
+    const { batch } = seedJieLiBatch(room, {
+      actorSeat: 7,
+      targetSeat: 6,
+      handCardIDs: [48],
+      pileCardIDs: [110]
+    })
 
     handleRoleSpellOptRep({ Datas: [], SeatID: 7, SpellID: 3483, Type: 50 })
 
-    expect(getReadyTrackerRoom).not.toHaveBeenCalled()
-    expect(recordJieLiSelection).not.toHaveBeenCalled()
+    expect(batch.selection).toBeNull()
+    room.destroy()
   })
 
   it('Type 44 叫分回包不设置先手', () => {

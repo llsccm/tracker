@@ -8,6 +8,21 @@ import {
 import { createTestRoom } from './helpers/room'
 
 describe('getPublicEndpointCards 位置归一化', () => {
+  it('未注册公共区没有端点，揭示只确认身份且不移动实体', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2] })
+    const pileBefore = [...room.getZone('pile').cards]
+    const [card] = room.createExternalCards([99])
+
+    expect(room.getPublicEndpointCards('player', 1, POSITION_TOP)).toEqual([])
+    expect(room.getPublicEndpointCards('player', 1, POSITION_BOTTOM)).toEqual([])
+    room.placePublicRevealCards([card], 'player', { reposition: true })
+
+    expect(card.isKnown).toBe(true)
+    expect(card.location).toBe('outside')
+    expect(room.zones.has('player')).toBe(false)
+    expect(room.getZone('pile').cards).toEqual(pileBefore)
+  })
+
   it('通用协议位置只接受当前区域范围内的普通数值插槽', () => {
     expect(getProtocolInsertionIndex(POSITION_BOTTOM, 4)).toBe(0)
     expect(getProtocolInsertionIndex(2, 4)).toBe(2)

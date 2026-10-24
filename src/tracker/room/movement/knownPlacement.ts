@@ -208,8 +208,8 @@ export class RoomMovementKnownPlacement {
             isKnown: sourceCard.isKnown,
             suspended: sourceCard.suspended,
             seats: Array.from(sourceCard.seats, Number),
-            hasLocationCandidates: sourceCard.hasLocationCandidates?.() ?? false,
-            hasSubZoneCandidates: sourceCard.hasSubZoneCandidates?.() ?? false
+            hasLocationCandidates: sourceCard.hasLocationCandidates(),
+            hasSubZoneCandidates: sourceCard.hasSubZoneCandidates()
           })),
           sourceEvent
         })
@@ -326,8 +326,8 @@ export class RoomMovementKnownPlacement {
           cardLocation: card.location,
           cardSubZone: card.subZone,
           cardSeats: Array.from(card.seats, Number),
-          hasLocationCandidates: card.hasLocationCandidates?.() ?? false,
-          hasSubZoneCandidates: card.hasSubZoneCandidates?.() ?? false
+          hasLocationCandidates: card.hasLocationCandidates(),
+          hasSubZoneCandidates: card.hasSubZoneCandidates()
         })
       })
 

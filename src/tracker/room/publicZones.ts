@@ -1,11 +1,42 @@
 import { trackerLogger } from '@/utils/logger'
+import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
 import { CARD_INSTANCE_STATUS } from '../projection/CardCounter'
 import type { Card } from '@/tracker/model'
 import type { Room } from '../Room'
-import type { CardID, PublicZoneName, SeatID } from '../types'
+import type { CardID, PublicPosition, PublicZoneName, SeatID, TrackerLogger } from '../types'
 
 const ORDERED_PUBLIC_ZONE_IDS = new Set<PublicZoneName>(['pile', 'discard', 'process', 'exchange'])
 const PLAYER_HAND_CARD_STATUSES = [CARD_INSTANCE_STATUS.UNKNOWN, CARD_INSTANCE_STATUS.APPEARED]
+
+export interface PublicRevealPlacementOptions {
+  position?: PublicPosition
+  reposition?: boolean
+  cardIDsTopFirst?: boolean
+}
+
+/**
+ * 判断目标牌组是否已经位于公共区指定端点。
+ * Zone 内部按底到顶保存；插入底部时会反转输入，所以底部比较也要使用反序。
+ */
+function hasCardsAtPublicPosition(
+  zoneCards: Card[],
+  cards: Card[],
+  position: PublicPosition
+): boolean {
+  if (cards.length === 0 || zoneCards.length < cards.length) return false
+
+  if (position === POSITION_TOP) {
+    const offset = zoneCards.length - cards.length
+    return cards.every((card, index) => zoneCards[offset + index] === card)
+  }
+
+  if (position === POSITION_BOTTOM) {
+    const len = cards.length
+    return cards.every((_, index) => zoneCards[index] === cards[len - 1 - index])
+  }
+
+  return false
+}
 
 interface PublicZoneIssue {
   type: string
@@ -35,11 +66,86 @@ export class RoomPublicZones {
   }
 
   getExchangeBatch(batchKey: string) {
-    return this.room.zones.get('exchange')!.getExchangeBatch(batchKey)
+    return this.room.getZone('exchange').getExchangeBatch(batchKey)
   }
 
   deleteExchangeBatch(batchKey: string): void {
-    this.room.zones.get('exchange')!.deleteExchangeBatch(batchKey)
+    this.room.getZone('exchange').deleteExchangeBatch(batchKey)
+  }
+
+  /**
+   * 公共区明牌落点：确认牌面，并按需把已有实体纠正到指定端点。
+   * 普通明牌只补缺失实体；牌堆端点明牌还要纠正已有实体的位置。
+   * 先比较端点序列，避免重复协议再次改动 Zone 并制造无效脏渲染。
+   */
+  placePublicRevealCards(
+    knownCards: Card[],
+    zoneName: PublicZoneName,
+    options: PublicRevealPlacementOptions = {},
+    logger: Pick<TrackerLogger, 'info'> = trackerLogger
+  ): void {
+    const room = this.room
+    const position = options.position ?? POSITION_TOP
+    const targetZone = room.zones.get(zoneName)
+
+    const placeableCards: Card[] = []
+    const skippedCards: Card[] = []
+
+    knownCards.forEach((card) => {
+      if (card.location === 'player') {
+        skippedCards.push(card)
+        return
+      }
+
+      if (targetZone?.cards.includes(card) || card.location === zoneName) {
+        placeableCards.push(card)
+        return
+      }
+
+      if (card.location === 'outside' || card.location === 'suspended') {
+        placeableCards.push(card)
+        return
+      }
+
+      if (!room.zones.has(card.location as PublicZoneName)) {
+        placeableCards.push(card)
+        return
+      }
+
+      // 其它公共区（如 discard/process）留给跨区移动分支，避免把弃牌直接拽回牌顶。
+      skippedCards.push(card)
+    })
+
+    if (skippedCards.length > 0) {
+      logger.info('公共区展示跳过无法回收的实体', {
+        zoneName,
+        skippedIDs: skippedCards.map((card) => card.id),
+        skippedLocations: skippedCards.map((card) => card.location)
+      })
+    }
+
+    placeableCards.forEach((card) => {
+      room.removeCardsFromConstraintGroups([card])
+      card.confirmKnown()
+    })
+
+    const missingCards = placeableCards.filter((card) => !targetZone?.cards.includes(card))
+    const repositionCards =
+      options.cardIDsTopFirst === true && position === POSITION_TOP
+        ? [...placeableCards].reverse()
+        : placeableCards
+    const shouldReposition =
+      options.reposition === true &&
+      targetZone !== undefined &&
+      placeableCards.length > 0 &&
+      !hasCardsAtPublicPosition(targetZone.cards, repositionCards, position)
+    const cardsToPlace = shouldReposition ? repositionCards : missingCards
+
+    if (cardsToPlace.length > 0) {
+      targetZone?.add(cardsToPlace, position)
+    }
+
+    room.resolveConstraints()
   }
 
   resizeShuffledPile(cards: Card[], cardCount: number): Card[] {
@@ -125,8 +231,8 @@ export class RoomPublicZones {
     this.room.cards.forEach((card) => {
       if (!ORDERED_PUBLIC_ZONE_IDS.has(card.location)) return
 
-      const zone = this.room.zones.get(card.location)
-      if (!zone?.cards.includes(card)) {
+      const zone = this.room.getZone(card.location)
+      if (!zone.cards.includes(card)) {
         issues.push({
           type: 'missing-public-zone-order',
           cardID: card.id,
@@ -177,7 +283,7 @@ export class RoomPublicZones {
           card.location === 'player' &&
           card.subZone === 'hand' &&
           // 默认只返回确定手牌，避免技能辅助把 A 手牌/A 标记候选误读成确定手牌。
-          (includeCandidates || !card.hasSubZoneCandidates?.()) &&
+          (includeCandidates || !card.hasSubZoneCandidates()) &&
           card.seats.has(normalizedSeat) &&
           (!knownOnly || card.isKnown === true)
       )

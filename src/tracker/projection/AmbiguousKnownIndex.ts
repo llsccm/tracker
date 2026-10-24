@@ -140,7 +140,7 @@ export class AmbiguousKnownIndex {
     const zoneName = this.getSubZoneName(card)
     const locations: string[] = []
 
-    if (card.hasLocationCandidates?.()) {
+    if (card.hasLocationCandidates()) {
       const playerCandidates = getPlayerLocationCandidates(card.locationCandidates)
       const containerCandidates = getContainerLocationCandidates(card.locationCandidates)
       const publicCandidates = getPublicLocationCandidates(card.locationCandidates)
@@ -209,7 +209,7 @@ export class AmbiguousKnownIndex {
   }
 
   private hasContainerLocationCandidates(card: Card): boolean {
-    if (!card.hasLocationCandidates?.()) return false
+    if (!card.hasLocationCandidates()) return false
     return getContainerLocationCandidates(card.locationCandidates).length > 0
   }
 }

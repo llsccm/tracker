@@ -87,8 +87,8 @@ function getActorHandCards(room: Room, actorSeat: SeatID): Card[] {
       card.subZone === 'hand' &&
       card.seats.size === 1 &&
       card.seats.has(actorSeat) &&
-      !card.hasLocationCandidates?.() &&
-      !card.hasSubZoneCandidates?.()
+      !card.hasLocationCandidates() &&
+      !card.hasSubZoneCandidates()
   )
 }
 
@@ -144,7 +144,7 @@ function decoratePileStage(event: MoveEventDraft, room: Room, actorSeat: SeatID)
   const count = getCount(event)
   if (!(count > 0) || count > TIAN_HOU_VIEW_COUNT || !isOtherView(room, actorSeat)) return event
 
-  const pileCards = room.zones.get('pile')?.cards ?? []
+  const pileCards = room.getZone('pile').cards
   // CardIDs 为空时，这些引用负责让 x 张牌在交换区往返，不能据此公开其牌面。
   const selectedPileCards = pileCards.slice(-count).reverse()
   if (selectedPileCards.length !== count) return event
@@ -326,7 +326,7 @@ function decorateReturnToPile(
 
 function isKnownExactPileTopThree(room: Room, cardID: number): boolean {
   const card = room.cardIndex.get(cardID)
-  if (!card || card.isKnown !== true || card.hasLocationCandidates?.()) return false
+  if (!card || card.isKnown !== true || card.hasLocationCandidates()) return false
   return room.getPublicEndpointCards('pile', TIAN_HOU_VIEW_COUNT, POSITION_TOP).includes(card)
 }
 
