@@ -150,14 +150,79 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
     expect(discard.cards.every((card) => card.isKnown)).toBe(true)
   })
 
-  it('累计列表只消费本次获得数量对应的新增前缀', () => {
+  it.each([{ cardIDs: [30, 20, 10] }, { cardIDs: [30, 10, 20] }, { cardIDs: [10, 30, 20] }])(
+    '累计列表 $cardIDs 按既有手牌排除旧身份，不依赖新增牌位置',
+    ({ cardIDs }) => {
+      const { room, gain, receive } = createGuiFuHarness()
+      gain()
+      receive([10])
+      gain({ CardCount: 2 })
+      receive(cardIDs)
+      expectHand(room, [10, 20, 30])
+      expect(room.zones.get('discard')!.cards).toHaveLength(0)
+    }
+  )
+
+  it.each([1, 2])('来源区域 %i 的新增牌排在旧牌后仍只提交一次获得', (fromZone) => {
     const { room, gain, receive } = createGuiFuHarness()
     gain()
     receive([10])
-    gain({ CardCount: 2 })
-    receive([30, 20, 10])
-    expectHand(room, [10, 20, 30])
-    expect(room.zones.get('discard')!.cards).toHaveLength(0)
+    const oldCard = room.cardIndex.get(10)
+    const allCards = [...room.cards]
+    const source = room.getZone(fromZone === 1 ? 'pile' : 'discard')
+    const sourceCount = source.cards.length
+    const newID = fromZone === 1 ? 40 : 20
+    const move = vi.spyOn(room, 'moveCards')
+    const ledgerMove = vi.spyOn(room, 'applyPileIdentityMove')
+
+    gain({ FromZone: fromZone })
+    receive([10, newID])
+    receive([newID, 10])
+
+    expectHand(room, [10, newID])
+    expect(room.cardIndex.get(10)).toBe(oldCard)
+    expect(room.cards).toEqual(allCards)
+    expect(source.cards).toHaveLength(sourceCount - 1)
+    expect(move).toHaveBeenCalledTimes(1)
+    expect(ledgerMove).toHaveBeenCalledTimes(1)
+  })
+
+  it('乱序诡伏获得后再失牌，保留普通暗手牌槽供终局揭示物化', () => {
+    const { controller, room, gain, receive } = createGuiFuHarness()
+    gain()
+    receive([10])
+    controller.syncTrackerMove(protocolMove({ CardIDs: [], CardCount: 1, ToID: 2 }))
+    const anonymousHand = room.cards.find(
+      (card) => card.isAnonymous && card.location === 'player' && card.owner === 2
+    )!
+    const allCards = [...room.cards]
+    const createExternal = vi.spyOn(room, 'createExternalCards')
+
+    gain()
+    receive([10, 20])
+    expect(room.getPlayer(2)?.observedHandCount).toBe(3)
+    expect(room.getPlayer(2)?.unknownCardCount).toBe(1)
+    controller.syncTrackerMove(
+      protocolMove({ CardIDs: [20], FromZone: 5, FromID: 2, ToZone: 2, ToID: 255, MoveType: 4 })
+    )
+    expect(room.getPlayer(2)?.observedHandCount).toBe(2)
+    expect(room.getPlayer(2)?.unknownCardCount).toBe(1)
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [10, 50],
+        CardCount: 2,
+        FromZone: 5,
+        FromID: 2,
+        ToZone: 5,
+        ToID: 2,
+        MoveType: 24
+      })
+    )
+
+    expectHand(room, [10, 50])
+    expect(room.cardIndex.get(50)).toBe(anonymousHand)
+    expect(room.cards).toEqual(allCards)
+    expect(createExternal).not.toHaveBeenCalled()
   })
 
   it('牌堆与弃牌获得各自相邻配对，共用普通移动管线', () => {
@@ -353,6 +418,7 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
   it.each([
     { name: '座位不符', count: 1, seatID: 3, cardIDs: [10] },
     { name: '不足以覆盖本次获得张数', count: 2, seatID: 2, cardIDs: [10] },
+    { name: '未定位到唯一的本次新增身份', count: 1, seatID: 2, cardIDs: [10, 20] },
     { name: '新增身份重复', count: 2, seatID: 2, cardIDs: [10, 10] },
     { name: '身份不在声明的弃牌来源', count: 1, seatID: 2, cardIDs: [40] }
   ])('$name 时告警取消，不部分结算或残留状态', ({ count, seatID, cardIDs }) => {
