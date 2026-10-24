@@ -176,6 +176,55 @@ describe('标记区暗牌进入手牌', () => {
     expect(group?.expectedSlotsByLocation.get(handKey)).toEqual({ min: 1, max: 1 })
   })
 
+  it('连续暗交同一标记空间时累计各目标手牌候选', () => {
+    const { room } = createTestRoom({ cardIDs: [11, 12, 13], seatIDs: [2, 4, 6] })
+    const markCards = bindMarkCards(room, [11, 12, 13], 6, 3657)
+    const targets = [6, 2, 4]
+
+    targets.forEach((toSeatID) => {
+      moveHiddenMarkToHand(room, {
+        fromSeatID: 6,
+        toSeatID,
+        fromZoneParam: 3657,
+        spellID: 3658
+      })
+    })
+
+    const markKey = createLocationCandidateKey({
+      type: 'player',
+      seatID: 6,
+      subZone: 'mark',
+      spellID: 3657
+    })
+    const handKeys = targets.map((seatID) =>
+      createLocationCandidateKey({
+        type: 'player',
+        seatID,
+        subZone: 'hand',
+        spellID: null
+      })
+    )
+
+    markCards.forEach((card) => {
+      expect(card.hasLocationCandidate(markKey)).toBe(false)
+      handKeys.forEach((handKey) => {
+        expect(card.hasLocationCandidate(handKey)).toBe(true)
+      })
+    })
+
+    targets.forEach((seatID) => {
+      expect(room.locationIndex.candidateHandBySeat.get(seatID) ?? []).toHaveLength(3)
+    })
+
+    const group = Array.from(room.constraintGroups.values()).find((item) =>
+      markCards.every((card) => item.cards.has(card))
+    )
+    expect(group?.expectedSlotsByLocation.get(markKey)).toEqual({ min: 0, max: 0 })
+    handKeys.forEach((handKey) => {
+      expect(group?.expectedSlotsByLocation.get(handKey)).toEqual({ min: 1, max: 1 })
+    })
+  })
+
   it('标记区只有唯一可见牌时仍按唯一解取出', () => {
     const { room } = createTestRoom({ cardIDs: [11, 12], seatIDs: [0, 3] })
     const [onlyMark] = bindMarkCards(room, [11], 0, 3657)
