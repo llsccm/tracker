@@ -54,13 +54,13 @@ interface DuoQiUseSpellMessage {
   SeatID?: SeatID
   SkillOwerSeatID?: SeatID
   SrcSeatID?: SeatID
-  SpellID?: number | string
-  EffectIndex?: number | string
+  SpellID?: number
+  EffectIndex?: number
   DestSeatIDs?: SeatID[]
 }
 
 interface DuoQiRoleDataTargetMessage {
-  DataID?: number | string
+  DataID?: number
   Datas?: unknown[]
   SeatID?: SeatID
 }
@@ -163,9 +163,8 @@ export function recordDuoQiActivation(
   game: GameState,
   msg: DuoQiUseSpellMessage
 ): DuoQiActivation | undefined {
-  const spellID = Number(msg.SpellID)
   // 3731 的目标来自 PubGsCUseSpell；3730 必须等待 GsCUpdateRoleDataExNtf(DataID=8)。
-  if (spellID !== DUO_QI_RANDOM_GAIN_SPELL_ID) return undefined
+  if (msg.SpellID !== DUO_QI_RANDOM_GAIN_SPELL_ID) return undefined
 
   const room = game.room
   if (!room) return undefined
@@ -194,7 +193,7 @@ export function recordDuoQiActivation(
     // 主视角的实际获得牌会直接明示，保留初始化标记即可，无需建立技能私有模糊组。
     skipInference: ownerSeatID === room.mySeatID
   }
-  state.activations.set(spellID, activation)
+  state.activations.set(msg.SpellID, activation)
   return activation
 }
 

@@ -3,7 +3,7 @@ import type { SpellID, SubZone, SubZoneCandidate } from '../types'
 export interface SubZoneCandidateInput {
   seatID?: number
   subZone?: SubZone | null
-  spellID?: SpellID | string | null
+  spellID?: SpellID | null
 }
 
 /**

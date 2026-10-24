@@ -17,16 +17,17 @@ import type {
 } from '../types'
 
 export interface LocationCandidateInput {
-  spaceID?: number | string | null
+  spaceID?: number | null
   type?: LocationCandidate['type'] | string
   seatID?: SeatID
   subZone?: SubZone | null
-  spellID?: SpellID | string | null
+  spellID?: SpellID | null
   zone?: PublicZoneName | null
   position?: PublicPosition | null
-  count?: number | string | null
+  /** 公共候选的范围张数；null 或省略表示未知范围，不表示零张。 */
+  count?: number | null
   label?: string | null
-  cardID?: CardID | string
+  cardID?: CardID
   containerCardID?: CardID | string
   containerType?: string | null
   /** 交换区逻辑候选的批次令牌；仅 type=outside 且 zone=exchange 时使用。 */
@@ -176,14 +177,14 @@ export function parseLocationCandidateKey(key: string): LocationCandidate | null
   const parts = String(key).split(':')
   const type = parts[0]
 
-  if (type === 'popup') return normalizeLocationCandidate({ type, spaceID: parts[1] })
+  if (type === 'popup') return normalizeLocationCandidate({ type, spaceID: Number(parts[1]) })
 
   if (type === 'player') {
     return normalizeLocationCandidate({
       type,
       seatID: Number(parts[1]),
       subZone: parts[2],
-      spellID: parts[3] === 'none' ? null : parts[3]
+      spellID: parts[3] === 'none' ? null : Number(parts[3])
     })
   }
 
@@ -192,7 +193,7 @@ export function parseLocationCandidateKey(key: string): LocationCandidate | null
       type,
       zone: parts[1],
       position: parts[2] === 'any' ? null : parts[2],
-      count: parts[3] === 'any' ? null : parts[3]
+      count: parts[3] === 'any' ? null : Number(parts[3])
     })
   }
 
@@ -201,8 +202,8 @@ export function parseLocationCandidateKey(key: string): LocationCandidate | null
     return normalizeLocationCandidate({
       type,
       containerType: parts[1],
-      cardID: parts[2],
-      spellID: parts[3] === 'none' ? null : parts[3]
+      cardID: Number(parts[2]),
+      spellID: parts[3] === 'none' ? null : Number(parts[3])
     })
   }
 

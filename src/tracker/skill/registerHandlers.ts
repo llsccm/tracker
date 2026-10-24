@@ -1,5 +1,3 @@
-import type { MoveEventHandler, RoomSkillPlugin } from '../room/index'
-import { POSITION_RANDOM } from '../candidate/cardPositions'
 import type { Room } from '../Room'
 import { decorateChengLieMove } from './ChengLie'
 import decorateFenChao from './FenChao'
@@ -12,14 +10,7 @@ import decorateTianHou from './TianHou'
 import decorateZuoLian, { prepareZuoLianMove } from './ZuoLian'
 import decorateYanXi from './YanXi'
 import { decorateWenGuaCandidateSource } from './WenGua'
-import {
-  getCount,
-  hasPositiveID,
-  nextGroupID,
-  patchEvent,
-  type MoveEventDraft,
-  getSourceZoneCards
-} from './moveEventUtils'
+import type { MoveEventDraft } from './moveEventUtils'
 import {
   commitDuoQiMove,
   decorateDuoQiEntitySafety,
@@ -32,12 +23,10 @@ import {
 } from './DuoQi'
 import { guiFuPlugin } from './GuiFu'
 import { xiaShuPlugin } from './XiaShu'
-import handleQingYiLianJu, { recordSharedCardIDs } from './QingYiLianJu'
-import handleQianFu, { recordQianFu } from './QianFu'
-import handleShengMo, { recordShengMo } from './ShengMo'
-import handleZeXing from './ZeXing'
-import type { SkillUseSpellMessage } from './protocolEvents'
-import type { PatchedMoveCardFields } from '../types'
+import { qingYiLianJuPlugin } from './QingYiLianJu'
+import { qianFuPlugin } from './QianFu'
+import { shengMoPlugin } from './ShengMo'
+import { zeXingPlugin } from './ZeXing'
 
 export type { MoveEventHandler } from '../room/index'
 
@@ -61,46 +50,6 @@ export function decorateGenericMove(event: MoveEventDraft, room: Room): MoveEven
 
   // 整手牌经交换区互易：按协议模式处理，不绑定单一 SpellID。
   return decorateHandExchange(event, room)
-}
-
-// 佐练 / 兴乱： 会按技能条件从随机公共区优先挑候选牌。
-function createFilteredPublicMoveHandler(
-  spellID: number,
-  label: string,
-  predicate: (card: any) => boolean
-): MoveEventHandler {
-  return (event, room) => {
-    const move = event.protocol
-    const fromZone = move.FromZone
-
-    if (
-      hasPositiveID(event.cardIDs) ||
-      ![1, 2].includes(fromZone) ||
-      move.FromPosition !== POSITION_RANDOM
-    ) {
-      return event
-    }
-
-    const selectedCards: any[] = []
-    const count = getCount(event)
-    const sourceCards = getSourceZoneCards(event, room)
-
-    for (let index = sourceCards.length - 1; index >= 0 && selectedCards.length < count; index--) {
-      const card = sourceCards[index]
-      if (predicate(card)) {
-        selectedCards.push(card)
-      }
-    }
-
-    if (selectedCards.length === 0) return event
-
-    return patchEvent(event, {
-      options: {
-        sourceCards: selectedCards,
-        combinationID: nextGroupID(room, spellID, label)
-      }
-    })
-  }
 }
 
 export function registerDefaultMoveEventHandlers(room: Room): void {
@@ -182,12 +131,6 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
     decorateMove: decorateWenGuaCandidateSource
   })
 
-  // 蒲元【奇思】：优先筛选装备牌候选。
-  // room.registerMoveEventHandler(
-  //   11104,
-  //   createFilteredPublicMoveHandler(11104, 'qisi_candidate', (card) => card.type === 3)
-  // )
-
   // 蔡瑁【佐练】：仅在弃牌堆随机取牌时，优先最后入堆的火杀，其次雷杀。
   room.registerSkillPlugin({
     id: 'zuoLian',
@@ -198,74 +141,14 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
   })
   // 宴戏
   room.registerSkillPlugin({ id: 'yanXi', spellIDs: [7017], decorateMove: decorateYanXi })
-
-  // 樊稠【兴乱】：优先筛选点数为 6 的候选。
-  room.registerSkillPlugin({
-    id: 'xingLuan',
-    spellIDs: [862],
-    decorateMove: createFilteredPublicMoveHandler(
-      862,
-      'xingluan_candidate',
-      (card) => card.number === 6
-    )
-  })
-
-  room.registerSkillPlugin(
-    storedCardsPlugin('qingYiLianJu', [3157, 3511], handleQingYiLianJu, recordSharedCardIDs)
-  )
-  room.registerSkillPlugin(storedCardsPlugin('qianFu', [3750], handleQianFu, recordQianFu))
-  room.registerSkillPlugin(storedCardsPlugin('shengMo', [3434], handleShengMo, recordShengMo))
-  room.registerSkillPlugin(storedCardsPlugin('zeXing', [3854], handleZeXing, recordSharedCardIDs))
-
-  // 巧织角色数据只补明确身份；暗取数量已由移动协议记录。
-  room.registerSkillPlugin({
-    id: 'qiaoZhiReveal',
-    spellIDs: [3544],
-    onProtocolEvent(event, currentRoom) {
-      if (event.type !== 'roleData' || event.message.DataID !== 3544) return
-      const { SeatID, Datas } = event.message
-      const cardID = Datas?.[0]
-      if (SeatID === undefined || !currentRoom.seatIDs.includes(SeatID) || !(cardID > 0)) return
-      if (
-        currentRoom.moveCards([cardID], 'player', {
-          fromSeatID: SeatID,
-          fromSubZone: 'hand',
-          toSeatID: SeatID,
-          subZone: 'hand',
-          spellID: null,
-          gainSpellID: 3544,
-          handMoveCount: 0,
-          sourceEvent: {
-            type: 'qiaozhi:update-role-data',
-            spellID: 3544,
-            label: 'GsCUpdateRoleDataExNtf:3544',
-            raw: { ...event.message }
-          }
-        })
-      )
-        currentRoom.notifyCardsRevealed([cardID])
-    }
-  })
-
+  // 清议连句
+  room.registerSkillPlugin(qingYiLianJuPlugin)
+  // 迁附
+  room.registerSkillPlugin(qianFuPlugin)
+  // 剩墨
+  room.registerSkillPlugin(shengMoPlugin)
+  // 择行
+  room.registerSkillPlugin(zeXingPlugin)
   // 下书
   room.registerSkillPlugin(xiaShuPlugin)
-}
-
-/** 这些技能共享“技能公开牌列表 -> 下一条暗移动补全”的两段契约。 */
-function storedCardsPlugin(
-  id: string,
-  spellIDs: readonly number[],
-  prepare: (patched: PatchedMoveCardFields, room: Room) => void,
-  record: (room: Room, msg: SkillUseSpellMessage) => void
-): RoomSkillPlugin {
-  return {
-    id,
-    spellIDs,
-    beforeNormalizeMove: (patched, raw, room) => prepare(patched, room),
-    onProtocolEvent(event, room) {
-      if (event.type === 'useSpell' && spellIDs.includes(event.message.SpellID))
-        record(room, event.message)
-    },
-    onDeckInitialized: (room) => spellIDs.forEach((spellID) => room.deleteSkillState(spellID))
-  }
 }

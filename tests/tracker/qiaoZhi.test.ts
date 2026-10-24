@@ -46,13 +46,21 @@ describe('巧织默认协议管线', () => {
       gainSpellID: 3544
     })
     expect(summarizeMoveContext(context)).toMatchObject({ spellID: null, gainSpellID: 3544 })
-    controller.dispatchSkillProtocolEvent({
-      type: 'roleData',
-      message: { DataID: 3544, SeatID: 3, Datas: [37, 0] }
-    })
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [92],
+        CardCount: 1,
+        FromZone: 8,
+        FromID: 3544,
+        ToZone: 2,
+        ToID: 255,
+        MoveType: 4,
+        SpellID: 3544
+      })
+    )
     expect(card.gainSpellID).toBe(3544)
     expect(other.getHandGainSpellID(3)).toBeNull()
-    expect(other.popupSpaceID).toBe(3544)
+    expect(other.location).toBe('discard')
     card.reset()
     expect(card.gainSpellID).toBeNull()
     expect(card.getHandGainSpellID(3)).toBeNull()
@@ -267,7 +275,7 @@ describe('巧织默认协议管线', () => {
   })
 
   it.each(['before-discard', 'after-discard', 'visible-move'])(
-    '明确身份通知 %s 不重复增加手牌或残留匿名标记',
+    '角色数据通知 %s 不改变移动协议与通用约束推导的身份',
     (timing) => {
       const { controller } = createTrackerControllerHarness()
       controller.initTrackerRoom()
@@ -297,12 +305,20 @@ describe('巧织默认协议管线', () => {
         })
       )
       const room = controller.getTrackerRoom()!
-      const reveal = () =>
+      const notifyRoleData = () =>
         controller.dispatchSkillProtocolEvent({
           type: 'roleData',
           message: { DataID: 3544, SeatID: 3, Datas: [37, 0] }
         })
-      if (timing !== 'after-discard') reveal()
+      if (timing !== 'after-discard') notifyRoleData()
+      const player = room.getPlayer(3)!
+      expect(player.observedHandCount).toBe(1)
+      expect(player.knownHandCards.map((card) => card.id)).toEqual(
+        timing === 'visible-move' ? [37] : []
+      )
+      expect(player.candidateHandCards.map((card) => card.id).sort((a, b) => a - b)).toEqual(
+        timing === 'visible-move' ? [] : [37, 92]
+      )
       controller.syncTrackerMove(
         protocolMove({
           CardCount: 1,
@@ -315,19 +331,20 @@ describe('巧织默认协议管线', () => {
           SpellID: 3544
         })
       )
-      reveal()
       const revision = room.pileIdentityLedger.getSnapshot().revision
+      notifyRoleData()
       controller.dispatchSkillProtocolEvent({
         type: 'roleData',
         message: { DataID: 3544, SeatID: 3, Datas: [0, 0] }
       })
       expect(room.pileIdentityLedger.getSnapshot().revision).toBe(revision)
-      const player = room.getPlayer(3)!
       expect(player.observedHandCount).toBe(1)
       expect(player.knownHandCards.map((card) => card.id)).toEqual([37])
       expect(player.candidateHandCards).toEqual([])
       expect(player.unknownCardCount).toBe(0)
-      expect(room.cardIndex.get(37)!.spellID).toBeNull()
+      expect(room.cardIndex.get(37)!.getPossibleLocations()).toEqual([
+        { type: 'player', seatID: 3, subZone: 'hand', spellID: null }
+      ])
       expect(room.cardIndex.get(37)!.gainSpellID).toBe(3544)
       expect(room.cardIndex.get(92)!.gainSpellID).toBeNull()
       expect(room.cardIndex.get(92)!.getHandGainSpellID(3)).toBeNull()

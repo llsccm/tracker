@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
-import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
+import {
+  createLocationCandidateKey,
+  parseLocationCandidateKey
+} from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from './helpers/room'
 import {
   equipmentContainer,
@@ -11,6 +14,34 @@ import {
 } from './helpers/locationCandidates'
 
 describe('完整位置候选回归', () => {
+  it.each([
+    { key: 'popup:3544', expected: { type: 'popup', spaceID: 3544 } },
+    {
+      key: 'player:0:mark:0',
+      expected: { type: 'player', seatID: 0, subZone: 'mark', spellID: 0 }
+    },
+    {
+      key: 'player:3:hand:none',
+      expected: { type: 'player', seatID: 3, subZone: 'hand', spellID: null }
+    },
+    {
+      key: 'public:pile:top:3',
+      expected: { type: 'public', zone: 'pile', position: 'top', count: 3, label: null }
+    },
+    {
+      key: 'public:pile:top:any',
+      expected: { type: 'public', zone: 'pile', position: 'top', count: null, label: null }
+    },
+    {
+      key: 'container:equipment:161:700',
+      expected: { type: 'container', containerType: 'equipment', cardID: 161, spellID: 700 }
+    }
+  ])('字符串位置键 $key 解析为数字字段并保留未知范围', ({ key, expected }) => {
+    const candidate = parseLocationCandidateKey(key)
+    expect(candidate).toEqual(expected)
+    expect(createLocationCandidateKey(candidate)).toBe(key)
+  })
+
   it.each([false, true])('旧组座位快照不裁剪共享牌的新位置（逆序收敛：%s）', (reverse) => {
     const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [0, 3] })
     const cards = [getCard(room, 1)!, getCard(room, 2)!]

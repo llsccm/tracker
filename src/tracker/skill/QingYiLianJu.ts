@@ -1,17 +1,15 @@
-import type { CardID } from '@/tracker/types'
 import type { Room } from '../Room'
-import type { PatchedMoveCardFields } from '../types'
-import type { SkillUseSpellMessage } from './protocolEvents'
+import type { CardID, PatchedMoveCardFields } from '../types'
+import { defineStoredCardsPlugin, recordSharedCardIDs } from './storedCardsPlugin'
 
-export function recordSharedCardIDs(room: Room, msg: SkillUseSpellMessage): void {
-  if (room.mySeatID === undefined || msg.SeatID === room.mySeatID) return
-  if (msg.dest_Count === 1 && msg.DestSeatIDs?.[0] === room.mySeatID) return
-  if (msg.CardIDs?.length === msg.card_count) {
-    room.setSkillState(msg.SpellID, [...msg.CardIDs])
-  }
-}
+export const qingYiLianJuPlugin = defineStoredCardsPlugin({
+  id: 'qingYiLianJu',
+  spellIDs: [3157, 3511],
+  prepare: handleQingYiLianJu,
+  record: recordSharedCardIDs
+})
 
-export default function handleQingYiLianJu(patched: PatchedMoveCardFields, room: Room): void {
+function handleQingYiLianJu(patched: PatchedMoveCardFields, room: Room): void {
   const spellCards = room.readSkillState<CardID[]>(patched.SpellID)
   if (
     patched.FromZone == 2 &&

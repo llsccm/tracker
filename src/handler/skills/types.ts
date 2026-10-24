@@ -10,7 +10,7 @@ export interface SkillMoveContext {
 }
 
 export interface RoleDataMessage {
-  SeatID?: SeatID | string | null
+  SeatID?: SeatID | null
   Datas?: unknown
   [key: string]: unknown
 }
