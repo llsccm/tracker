@@ -114,8 +114,8 @@ Game.getSpellState(4022)
 
 ## `DataID = 3544`：巧织暗取牌
 
-巧织的 `PubGsCMoveCard` 在非主视角只提供暗取数量，实际获得的牌面通过角色扩展数据通知补充。
-通知使用零手牌增量揭示；主视角移动已有正 ID、通知重复或晚于剩余牌明弃时，均不重复增加手牌数。
+巧织的 `PubGsCMoveCard` 在非主视角只提供暗取数量。角色扩展数据通知可携带获得的牌 ID，
+但当前通知本身不触发揭示，也不改变手牌总数或已确认身份。
 
 ### 数据结构
 
@@ -128,12 +128,13 @@ Datas: [cardID, 0]
 |  `0` | `cardID` | 巧织暗取到的牌 ID            |
 |  `1` | 截止符   | 固定为 `0`，表示本条数据结束 |
 
-处理入口为 `src/tracker/skill/registerHandlers.ts` 的 `qiaoZhiReveal` 插件，经通用 `SkillProtocolEvent` 分发。
-它将 `cardID` 作为已知身份确认到 `SeatID` 的普通手牌，
-但不再次增加手牌总数；暗取数量已经由前置移动消息记录。
+通知经 `src/handler/GsCUpdateRoleDataExNtf.js` 的 `handleUpdateRoleDataExNtf()` 分发为
+`SkillProtocolEvent`；当前默认技能管线未注册 `qiaoZhiReveal` 插件，不消费此通知确认身份。
 
-无此通知时，全明两张标记牌暗取一张、另一张明弃，也会通过 `popup:3544` 与目标手牌的数量约束
-自动收敛。椒遇同样使用临时弹窗空间；不再通过颜色选择扫描并回填明牌 ID。
+全明两张弹窗牌暗取一张、另一张明弃后，`popup:3544` 与目标手牌的数量约束会自动收敛，
+确认暗取牌的手牌身份；若获得移动本身携带正 ID，则由该移动直接确认身份。
+手牌数量由移动消息记录，身份确认不依赖角色数据通知的到达时序。
+椒遇同样使用临时弹窗空间；不再通过颜色选择扫描并回填明牌 ID。
 
 ## `DataID = 3709`：诡伏当前持有状态
 
@@ -156,7 +157,9 @@ Datas: [cardID, 0]
 ## 代码位置
 
 - 消息路由：`src/logic.js`
-- 3544 处理：`src/tracker/skill/registerHandlers.ts`
+- 角色数据通知分发：`src/handler/GsCUpdateRoleDataExNtf.js`
+- 3544 移动与约束：`src/handler/PubGsCMoveCard.js` → `src/tracker/runtime/trackerController.ts` → `Room.moveCards()` / `Room.resolveConstraints()`
+- 3544 回归测试：`tests/tracker/qiaoZhi.test.ts`
 - 3709 处理：`src/handler/skills/GuiFu.ts`、`src/tracker/skill/GuiFu.ts`
 - 协议解析与路线求解：`src/utils/peixiuRouteFeature.js`
 - 地图浮窗：`src/ui/PeiXiuMapWindow.js`

@@ -51,7 +51,7 @@
 | 文档                                                     | DataID | 场景             | 关键识别                                             |
 | -------------------------------------------------------- | -----: | ---------------- | ---------------------------------------------------- |
 | [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `8` | OPT_DATA_ADD_SPELL_EFFECT | `SeatID` 为目标；`Datas=[3730,技能拥有者座位]` |
-| [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `3544` | 巧织暗取牌       | `Datas=[cardID,0]`；默认技能管线零增量确认手牌；无通知也可由标记区剩余明弃收敛 |
+| [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `3544` | 巧织暗取牌       | `Datas=[cardID,0]`；通知本身不揭示；剩余牌明弃后由数量约束收敛，或由正 ID 移动直接确认 |
 | [诡伏](PubGsCMoveCard-3709.md) | `3709` | 诡伏当前持有状态 | 获得牌、用牌后或获得技能时同步；仅有待配对获得移动时补入 `patched` |
 | [`GsCUpdateRoleDataExNtf.md`](GsCUpdateRoleDataExNtf.md) | `4022` | 裴秀地图状态更新 | `Datas=[mapID,currentCell,historyCount,...]`，仅己方 |
 
@@ -60,7 +60,7 @@
 | 协议 / 模式              | 处理入口                                | 状态 / 装饰                                             |
 | ------------------------ | --------------------------------------- | ------------------------------------------------------- |
 | `GsCRoleOptTargetNtf`    | `src/handler/GsCRoleOptTargetNtf.js`    | `tracker.revealTrackerCards` / `Room.ensureSkillState`  |
-| `GsCUpdateRoleDataExNtf` | `src/handler/GsCUpdateRoleDataExNtf.js` | OPT_DATA_ADD_SPELL_EFFECT 8 / 巧织 3544 / 诡伏 3709 / 裴秀 4022 状态更新 |
+| `GsCUpdateRoleDataExNtf` | `src/handler/GsCUpdateRoleDataExNtf.js` | OPT_DATA_ADD_SPELL_EFFECT 8 / 诡伏 3709 / 裴秀 4022 状态更新；巧织 3544 通知不触发揭示 |
 | `PubGsCMoveCard`         | `src/handler/PubGsCMoveCard.js`         | `src/tracker/protocol/MoveEventNormalizer.ts` → `Room.moveCards` |
 | 整手交换                 | 经 `decorateGenericMove`                | `src/tracker/skill/HandExchange.ts`                     |
 | 骋烈其他视角           | 经 `SpellID=3208` 装饰                  | `src/tracker/skill/ChengLie.ts` 的 `decorateChengLieMove` |
