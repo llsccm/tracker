@@ -1,3 +1,4 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
@@ -16,11 +17,10 @@ import {
 afterEach(() => vi.restoreAllMocks())
 
 function equipMuniu(room: Room, seatID: SeatID): void {
-  room.moveCards([161], 'player', {
-    toSeatID: seatID,
-    subZone: 'equip',
-    fromZone: 'pile',
-    spellID: 700,
+  room.moveCards([161], {
+    from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+    to: { type: 'player', seatID: seatID, subZone: 'equip' },
+    triggerSpellID: 700,
     cardCount: 1,
     sourceEvent: { type: 'test:muniu-equip' }
   })
@@ -121,13 +121,10 @@ describe('木牛流马候选与收敛', () => {
         ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
       })
 
-      room.moveCards([161], 'player', {
-        toSeatID: 2,
-        fromSeatID: 1,
-        fromZone: 6,
-        fromSubZone: 'equip',
-        subZone: 'equip',
-        spellID: 0,
+      room.moveCards([161], {
+        from: { type: 'player', seatID: 1, subZone: 'equip' },
+        to: { type: 'player', seatID: 2, subZone: 'equip' },
+        triggerSpellID: 0,
         cardCount: 1,
         sourceEvent: { type: 'test:move-muniu-equip-by-other-skill' }
       })
@@ -163,11 +160,10 @@ describe('木牛流马候选与收敛', () => {
 
       expect(room.zones.get('pile').cards).not.toContain(card)
 
-      room.moveCards([152], 'process', {
-        fromSeatID: 4,
-        fromZone: null,
-        fromSubZone: 'mark',
-        spellID: 700,
+      room.moveCards([152], {
+        from: { type: 'player', seatID: 4, subZone: 'mark', markSpellID: 700 },
+        to: { type: 'public', zone: 'process', position: POSITION_TOP },
+        triggerSpellID: 700,
         cardCount: 1,
         sourceEvent: { type: 'test:muniu-mark-to-process' }
       })
@@ -197,11 +193,10 @@ describe('木牛流马候选与收敛', () => {
         ])
       })
 
-      room.moveCards([152], 'process', {
-        fromSeatID: 4,
-        fromZone: null,
-        fromSubZone: 'mark',
-        spellID: 700,
+      room.moveCards([152], {
+        from: { type: 'player', seatID: 4, subZone: 'mark', markSpellID: 700 },
+        to: { type: 'public', zone: 'process', position: POSITION_TOP },
+        triggerSpellID: 700,
         cardCount: 1,
         sourceEvent: { type: 'test:muniu-mark-to-process' }
       })
@@ -241,11 +236,10 @@ describe('木牛流马候选与收敛', () => {
       expect(placeholderCard.subZone).toBe('mark')
       expect(placeholderCard.spellID).toBe(700)
 
-      room.moveCards([152], 'process', {
-        fromSeatID: 4,
-        fromZone: null,
-        fromSubZone: 'mark',
-        spellID: 700,
+      room.moveCards([152], {
+        from: { type: 'player', seatID: 4, subZone: 'mark', markSpellID: 700 },
+        to: { type: 'public', zone: 'process', position: POSITION_TOP },
+        triggerSpellID: 700,
         cardCount: 1,
         sourceEvent: { type: 'test:muniu-known-mark-to-process' }
       })
@@ -278,11 +272,10 @@ describe('木牛流马候选与收敛', () => {
       expect(placeholderCard.spellID).toBe(700)
       expect(room.zones.get('pile').cards).toContain(knownCard)
 
-      room.moveCards([152], 'process', {
-        fromSeatID: 4,
-        fromZone: null,
-        fromSubZone: 'mark',
-        spellID: 700,
+      room.moveCards([152], {
+        from: { type: 'player', seatID: 4, subZone: 'mark', markSpellID: 700 },
+        to: { type: 'public', zone: 'process', position: POSITION_TOP },
+        triggerSpellID: 700,
         cardCount: 1,
         sourceEvent: { type: 'test:muniu-hidden-mark-to-process' }
       })
@@ -324,13 +317,10 @@ describe('木牛流马候选与收敛', () => {
         .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
         .records.get('4:muniu:161')!
 
-      room.moveCards([161], 'player', {
-        toSeatID: 5,
-        fromSeatID: 4,
-        fromZone: 6,
-        fromSubZone: 'equip',
-        subZone: 'equip',
-        spellID: 0,
+      room.moveCards([161], {
+        from: { type: 'player', seatID: 4, subZone: 'equip' },
+        to: { type: 'player', seatID: 5, subZone: 'equip' },
+        triggerSpellID: 0,
         cardCount: 1,
         sourceEvent: { type: 'test:move-muniu-equip' }
       })
@@ -365,16 +355,11 @@ describe('木牛流马候选与收敛', () => {
       expect(placeholderCard.seats.has(5)).toBe(true)
       expect(room.locationIndex.markBySeatAndSpell.get(5).get(700)).toContain(knownCard)
 
-      room.moveCards([], 'player', {
-        toSeatID: 5,
-        fromSeatID: 4,
-        fromZone: null,
-        fromSubZone: 'mark',
-        subZone: 'mark',
-        spellID: 700,
+      room.moveCards([], {
+        from: { type: 'player', seatID: 4, subZone: 'mark', markSpellID: 700 },
+        to: { type: 'player', seatID: 5, subZone: 'mark', markSpellID: 700 },
+        triggerSpellID: 700,
         cardCount: 1,
-        position: 65280,
-        fromPosition: 65282,
         sourceEvent: { type: 'test:empty-muniu-mark-sync' }
       })
 
@@ -410,11 +395,10 @@ describe('木牛流马候选与收敛', () => {
 
       expect(room.locationIndex.markBySeatAndSpell.get(4).get(700)).toContain(knownCard)
 
-      room.moveCards([161], 'discard', {
-        fromSeatID: 4,
-        fromZone: 6,
-        fromSubZone: 'equip',
-        spellID: 987,
+      room.moveCards([161], {
+        from: { type: 'player', seatID: 4, subZone: 'equip' },
+        to: { type: 'public', zone: 'discard', position: POSITION_TOP },
+        triggerSpellID: 987,
         cardCount: 1,
         sourceEvent: { type: 'test:muniu-to-discard' }
       })
@@ -437,13 +421,10 @@ describe('木牛流马候选与收敛', () => {
         [1, 2],
         [2, 1]
       ]) {
-        room.moveCards([161], 'player', {
-          toSeatID: seatID,
-          fromSeatID,
-          fromZone: 6,
-          fromSubZone: 'equip',
-          subZone: 'equip',
-          spellID: 987,
+        room.moveCards([161], {
+          from: { type: 'player', seatID: fromSeatID, subZone: 'equip' },
+          to: { type: 'player', seatID: seatID, subZone: 'equip' },
+          triggerSpellID: 987,
           cardCount: 1
         })
         expect(record.targetSeat).toBe(fromSeatID)
@@ -489,13 +470,10 @@ describe('木牛流马候选与收敛', () => {
       const record = state.records.get('1:1:1234')!
       const group = room.constraintGroups.get(record.groupID)
 
-      room.moveCards([161], 'player', {
-        toSeatID: 2,
-        fromSeatID: 1,
-        fromZone: 6,
-        fromSubZone: 'equip',
-        subZone: 'equip',
-        spellID: 987,
+      room.moveCards([161], {
+        from: { type: 'player', seatID: 1, subZone: 'equip' },
+        to: { type: 'player', seatID: 2, subZone: 'equip' },
+        triggerSpellID: 987,
         cardCount: 1
       })
 
@@ -553,29 +531,20 @@ describe('木牛流马候选与收敛', () => {
         ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
       })
 
-      room.moveCards([161], 'player', {
-        toSeatID: 7,
-        fromSeatID: 6,
-        fromZone: 6,
-        fromSubZone: 'equip',
-        subZone: 'equip',
-        spellID: 0,
+      room.moveCards([161], {
+        from: { type: 'player', seatID: 6, subZone: 'equip' },
+        to: { type: 'player', seatID: 7, subZone: 'equip' },
+        triggerSpellID: 0,
         cardCount: 1,
         sourceEvent: { type: 'test:move-muniu-equip' }
       })
 
       // 协议：FromZone=4/FromID=6 → ToZone=4/ToID=7，CardIDs 为首次揭示的明牌。
-      room.moveCards(visibleIDs, 'player', {
-        toSeatID: 7,
-        fromSeatID: 6,
-        fromZone: null,
-        fromSubZone: 'mark',
-        fromSpellID: 700,
-        subZone: 'mark',
-        spellID: 700,
+      room.moveCards(visibleIDs, {
+        from: { type: 'player', seatID: 6, subZone: 'mark', markSpellID: 700 },
+        to: { type: 'player', seatID: 7, subZone: 'mark', markSpellID: 700 },
+        triggerSpellID: 700,
         cardCount: 2,
-        position: 65280,
-        fromPosition: 65282,
         sourceEvent: {
           type: 'test:visible-muniu-mark-snapshot',
           raw: {
@@ -678,13 +647,10 @@ describe('木牛流马候选与收敛', () => {
       expect(placeholders).toHaveLength(2)
       expect(room.cardIndex.has(153)).toBe(false)
 
-      room.moveCards([152, 153], 'player', {
-        toSeatID: 4,
-        fromSeatID: 4,
-        fromZone: null,
-        fromSubZone: 'mark',
-        subZone: 'mark',
-        spellID: 700,
+      room.moveCards([152, 153], {
+        from: { type: 'player', seatID: 4, subZone: 'mark', markSpellID: 700 },
+        to: { type: 'player', seatID: 4, subZone: 'mark', markSpellID: 700 },
+        triggerSpellID: 700,
         cardCount: 2,
         sourceEvent: { type: 'test:reveal-muniu-mark' }
       })
@@ -722,14 +688,10 @@ describe('木牛流马候选与收敛', () => {
 
       room.moveCards(
         visibleMarkCards.map((card) => card.id),
-        'player',
         {
-          toSeatID: 7,
-          fromZone: 700,
-          fromSubZone: 'mark',
-          fromSpellID: 700,
-          subZone: 'mark',
-          spellID: 700,
+          from: { type: 'player', seatID: 7, subZone: 'mark', markSpellID: 700 },
+          to: { type: 'player', seatID: 7, subZone: 'mark', markSpellID: 700 },
+          triggerSpellID: 700,
           cardCount: 2,
           sourceEvent: { type: 'test:observed-mount-mark-snapshot-from-space' }
         }
@@ -789,10 +751,9 @@ describe('木牛流马候选与收敛', () => {
       const warnSpy = vi.spyOn(trackerLogger, 'warn')
 
       // 整手完整离场进处理区，揭示为 [29, 50, 113]，141 不在其中
-      room.moveCards([29, 50, 113], 'process', {
-        fromSeatID: seatID,
-        fromZone: 5,
-        fromSubZone: 'hand',
+      room.moveCards([29, 50, 113], {
+        from: { type: 'player', seatID: seatID, subZone: 'hand' },
+        to: { type: 'public', zone: 'process', position: POSITION_TOP },
         cardCount: 3,
         sourceEvent: { type: 'test:hand-to-process' }
       })

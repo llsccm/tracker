@@ -19,7 +19,10 @@ function verifyReadonlyContracts(
   event: NormalizedMoveEvent
 ): void {
   // @ts-expect-error 单张牌也必须以数组提交。
-  room.moveCards(1, 'discard')
+  room.moveCards(1, {
+    from: { type: 'outside' },
+    to: { type: 'public', zone: 'discard', position: POSITION_TOP }
+  })
   // @ts-expect-error 协议张数不属于可修正字段。
   patched.CardCount = 2
   // @ts-expect-error 协议区域不属于可修正字段。
@@ -28,6 +31,14 @@ function verifyReadonlyContracts(
   event.protocol.FromPosition = POSITION_RANDOM
   // @ts-expect-error 事件牌列表只读，技能必须用新列表替换。
   event.cardIDs.push(2)
+  // @ts-expect-error 来源端点只读。
+  event.from.type = 'outside'
+  if (event.to.type === 'playerCandidates') {
+    // @ts-expect-error 候选目标座位数组只读。
+    event.to.seatIDs.push(2)
+  }
+  // @ts-expect-error 旧移动入口已经删除。
+  room.moveCards([1], 'discard', { fromZone: 'pile' })
 }
 
 void verifyReadonlyContracts
@@ -79,10 +90,18 @@ describe('移动输入的只读直传契约', () => {
     const hiddenIDs = Object.freeze([] as CardID[])
 
     expect(
-      room.moveCards(knownIDs, 'player', { toSeatID: 1, fromZone: 'pile', cardCount: 1 })
+      room.moveCards(knownIDs, {
+        from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+        to: { type: 'player', seatID: 1, subZone: 'hand' },
+        cardCount: 1
+      })
     ).toBe(true)
     expect(
-      room.moveCards(hiddenIDs, 'player', { toSeatID: 1, fromZone: 'pile', cardCount: 1 })
+      room.moveCards(hiddenIDs, {
+        from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+        to: { type: 'player', seatID: 1, subZone: 'hand' },
+        cardCount: 1
+      })
     ).toBe(true)
 
     expect(knownIDs).toEqual([1])
@@ -133,7 +152,11 @@ describe('移动输入的只读直传契约', () => {
     const handler = vi.fn()
     room.registerSkillHandler(42, handler)
 
-    room.moveCards([1], 'player', { toSeatID: 1, fromZone: 'pile', spellID: 42 })
+    room.moveCards([1], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
+      triggerSpellID: 42
+    })
 
     expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([1])
     expect(handler).toHaveBeenCalledOnce()

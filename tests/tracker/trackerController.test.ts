@@ -974,28 +974,23 @@ describe('TrackerController', () => {
     const hiddenCard = getCardFixture(room, 153)!
     hiddenCard.isKnown = false
 
-    room.moveCards([152], 'player', {
-      toSeatID: 4,
-      subZone: 'hand',
-      fromZone: 'pile',
+    room.moveCards([152], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 4, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'test:known-hand' }
     })
-    room.moveCards([0], 'player', {
-      toSeatID: 4,
-      subZone: 'hand',
-      fromZone: 'pile',
+    room.moveCards([0], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 4, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'test:unknown-hand' }
     })
     room.getPlayer(4).syncObservedHandCount(2)
-    room.moveCards([0], 'player', {
-      toSeatID: 4,
-      fromSeatID: 4,
-      fromZone: 5,
-      fromSubZone: 'hand',
-      subZone: 'mark',
-      spellID: 700,
+    room.moveCards([0], {
+      from: { type: 'player', seatID: 4, subZone: 'hand' },
+      to: { type: 'player', seatID: 4, subZone: 'mark', markSpellID: 700 },
+      triggerSpellID: 700,
       cardCount: 1,
       sourceEvent: { type: 'test:hidden-muniu-mark' }
     })

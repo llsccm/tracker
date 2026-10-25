@@ -103,12 +103,9 @@ describe('下书', () => {
         }).patched
       )
 
-      room.moveCards([], 'player', {
-        fromZone: null,
-        fromSeatID: 7,
-        fromSubZone: 'hand',
-        toSeatID: 3,
-        subZone: 'hand',
+      room.moveCards([], {
+        from: { type: 'player', seatID: 7, subZone: 'hand' },
+        to: { type: 'player', seatID: 3, subZone: 'hand' },
         cardCount: 5,
         sourceEvent: { type: 'test:xiaShu-hidden-transfer' }
       })

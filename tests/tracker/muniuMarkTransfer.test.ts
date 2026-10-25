@@ -1,3 +1,4 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import {
   getMoveCallbackSpellID,
   getMoveSubZone,
@@ -71,26 +72,23 @@ function createMuniuRoom(knownHandCount: number) {
     seatIDs: [0, 6],
     materializeDeckIdentities: false
   })
-  room.moveCards([161], 'player', {
-    toSeatID: 0,
-    fromZone: 'pile',
-    subZone: 'equip',
-    spellID: 700,
+  room.moveCards([161], {
+    from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+    to: { type: 'player', seatID: 0, subZone: 'equip' },
+    triggerSpellID: 700,
     cardCount: 1
   })
   if (knownHandCount > 0) {
-    room.moveCards([1, 2].slice(0, knownHandCount), 'player', {
-      toSeatID: 0,
-      fromZone: 'pile',
-      subZone: 'hand',
+    room.moveCards([1, 2].slice(0, knownHandCount), {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 0, subZone: 'hand' },
       cardCount: knownHandCount
     })
   }
   if (knownHandCount < 2) {
-    room.moveCards([], 'player', {
-      toSeatID: 0,
-      fromZone: 'pile',
-      subZone: 'hand',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 0, subZone: 'hand' },
       cardCount: 2 - knownHandCount
     })
   }

@@ -12,13 +12,25 @@ const topThree = fromPublicCandidate(createPublicCandidate('pile', POSITION_TOP,
 describe('Room 身份事务', () => {
   it('直调移动完成摸牌、弃牌、定点回堆与随机回堆账本', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4] })
-    room.moveCards([1, 2], 'player', { toSeatID: 1, fromZone: 'pile' })
+    room.moveCards([1, 2], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' }
+    })
     expect(room.pileIdentityLedger.getSnapshot().locatedIdentityIDs).toEqual([1, 2])
-    room.moveCards([1, 2], 'discard', { fromSeatID: 1, fromSubZone: 'hand' })
+    room.moveCards([1, 2], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP }
+    })
     expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([1, 2])
-    room.moveCards([1], 'pile', { fromZone: 'discard', position: POSITION_BOTTOM })
+    room.moveCards([1], {
+      from: { type: 'public', zone: 'discard', position: POSITION_BOTTOM },
+      to: { type: 'public', zone: 'pile', position: POSITION_BOTTOM }
+    })
     expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([1])
-    room.moveCards([2], 'pile', { fromZone: 'discard', position: POSITION_RANDOM })
+    room.moveCards([2], {
+      from: { type: 'public', zone: 'discard', position: POSITION_RANDOM },
+      to: { type: 'public', zone: 'pile', position: POSITION_RANDOM }
+    })
     expect(room.cardIndex.has(2)).toBe(false)
     expect(room.unlocatedIdentities.has(2)).toBe(true)
     expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([])
@@ -30,11 +42,11 @@ describe('Room 身份事务', () => {
     room.materializeAtPublicEndpoint([1], 'pile', position)
     room.applyPileIdentityReveal([1])
     const physicalCount = room.cards.length
-    room.moveCards([], 'player', {
-      toSeatID: 1,
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: position },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 2,
-      moveType: MOVE_TYPE.DRAW,
-      fromPosition: position
+      moveType: MOVE_TYPE.DRAW
     })
     expect(room.cardIndex.get(1)?.resolvedSeat).toBe(1)
     expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([])
@@ -50,8 +62,9 @@ describe('Room 身份事务', () => {
     const warn = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
     try {
       expect(
-        room.moveCards([], 'player', {
-          toSeatID: 1,
+        room.moveCards([], {
+          from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+          to: { type: 'player', seatID: 1, subZone: 'hand' },
           cardCount: 1,
           anonymizeCards: [pileBefore[0]],
           requireAnonymizeSuccess: true
@@ -114,10 +127,18 @@ describe('公共范围身份的物理容量', () => {
   it('候选暗摸后在玩家匿名槽揭示，不新增牌或残留候选', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4] })
     room.revealPublicCandidates([1], topThree)
-    room.moveCards([], 'player', { toSeatID: 1, cardCount: 1, moveType: MOVE_TYPE.DRAW })
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
+      cardCount: 1,
+      moveType: MOVE_TYPE.DRAW
+    })
     const target = room.cards.find((card) => card.location === 'player' && card.isAnonymous)!
     expect(room.cardIndex.get(1)?.publicCandidates).toHaveLength(1)
-    room.moveCards([1], 'discard', { fromSeatID: 1, fromSubZone: 'hand' })
+    room.moveCards([1], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP }
+    })
     expect(room.cardIndex.get(1)).toBe(target)
     expect(room.getPublicZone('discard').cards).toEqual([target])
     expect(room.detachedKnownCards.size).toBe(0)
@@ -128,7 +149,12 @@ describe('公共范围身份的物理容量', () => {
   it('整个候选范围被摸走后复用手牌匿名槽落定身份', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4] })
     room.revealPublicCandidates([1], topThree)
-    room.moveCards([], 'player', { toSeatID: 1, cardCount: 3, moveType: MOVE_TYPE.DRAW })
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
+      cardCount: 3,
+      moveType: MOVE_TYPE.DRAW
+    })
     expect(room.detachedKnownCards.size).toBe(0)
     expect(room.cards).toHaveLength(4)
     expect(room.cards.filter((card) => card.location === 'player')).toHaveLength(3)
@@ -155,7 +181,12 @@ describe('公共范围身份的物理容量', () => {
     room.locationIndex.rebuild(room)
     room.rebuildPlayerSnapshot()
     room.revealPublicCandidates([1], topThree)
-    room.moveCards([], 'player', { toSeatID: 1, cardCount: 1, moveType: MOVE_TYPE.DRAW })
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
+      cardCount: 1,
+      moveType: MOVE_TYPE.DRAW
+    })
     const incremental = [...room.playerCardsSnapshot]
     const candidates = [...room.getPlayer(1)!.candidateHandCards]
     expect(room.rebuildPlayerSnapshot()).toEqual(incremental)

@@ -113,10 +113,9 @@ describe('弃牌堆未知获得', () => {
   ])('领域移动给出 $cardIDs 时精确移动已知牌，仅为未知部分补位', (testCase) => {
     const { room, errorSpy } = createRoomWithDiscard()
 
-    room.moveCards(testCase.cardIDs, 'player', {
-      fromZone: 'discard',
-      toSeatID: 3,
-      subZone: 'hand',
+    room.moveCards(testCase.cardIDs, {
+      from: { type: 'public', zone: 'discard', position: POSITION_TOP },
+      to: { type: 'player', seatID: 3, subZone: 'hand' },
       cardCount: 4,
       moveType: 18
     })
@@ -147,13 +146,10 @@ describe('弃牌堆未知获得', () => {
     const sourceCards = testCase.sourceIDs.map((id) => room.cardIndex.get(id)!)
     const entityCountBefore = room.cards.length
 
-    room.moveCards([], 'player', {
-      fromZone: 'discard',
-      fromSeatID: 1,
-      fromSubZone: 'mark',
-      toSeatID: 3,
-      subZone: 'mark',
-      spellID: 4023,
+    room.moveCards([], {
+      from: { type: 'public', zone: 'discard', position: POSITION_TOP },
+      to: { type: 'player', seatID: 3, subZone: 'mark', markSpellID: 4023 },
+      triggerSpellID: 4023,
       moveType: 18,
       cardCount: testCase.cardCount,
       sourceCards
@@ -202,12 +198,13 @@ describe('弃牌堆未知获得', () => {
   ])('弃牌获得不消费 fromSeat 指向的$scenario', (testCase) => {
     const { room } = createRoomWithDiscard()
     const playerSourceCards = [...room.zones.get('pile')!.cards]
-    room.moveCards([], testCase.seatID === 255 ? 'popup' : 'player', {
-      toPopupSpaceID: testCase.seatID === 255 ? 35 : undefined,
-      toSeatID: testCase.seatID,
-      subZone: testCase.subZone,
-      spellID: 35,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to:
+        testCase.seatID === 255
+          ? { type: 'popup', spaceID: 35 }
+          : { type: 'player', seatID: testCase.seatID, subZone: testCase.subZone, markSpellID: 35 },
+      triggerSpellID: 35,
       moveType: 1,
       cardCount: 2
     })
@@ -320,11 +317,9 @@ describe('MoveType=15 弃牌堆明确来源兼容', () => {
     const sourceCards = [2, 5].map((id) => room.cardIndex.get(id)!)
     const entityCountBefore = room.cards.length
 
-    room.moveCards([], 'player', {
-      fromZone: 'discard',
-      fromSeatID: null,
-      toSeatID: 3,
-      subZone: 'hand',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'discard', position: POSITION_TOP },
+      to: { type: 'player', seatID: 3, subZone: 'hand' },
       moveType: 15,
       cardCount: 2,
       sourceCards

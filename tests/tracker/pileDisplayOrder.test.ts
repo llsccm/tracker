@@ -129,17 +129,15 @@ describe('牌堆展示顺序', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 127] })
     const originalCards = [...getPile(room).cards]
 
-    room.moveCards([127], 'discard', {
-      fromZone: 'pile',
-      fromPosition: POSITION_TOP,
-      position: POSITION_TOP,
+    room.moveCards([127], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'test:discard-top' }
     })
-    room.moveCards([127], 'pile', {
-      fromZone: 'discard',
-      fromPosition: POSITION_TOP,
-      position: POSITION_BOTTOM,
+    room.moveCards([127], {
+      from: { type: 'public', zone: 'discard', position: POSITION_TOP },
+      to: { type: 'public', zone: 'pile', position: POSITION_BOTTOM },
       cardCount: 1,
       sourceEvent: { type: 'test:return-to-bottom' }
     })
@@ -183,9 +181,9 @@ describe('牌堆展示顺序', () => {
       sourceZone.add(knownCard, POSITION_TOP)
       const cardPoolSize = room.cards.length
 
-      room.moveCards([], toZone, {
-        fromZone,
-        fromPosition: POSITION_TOP,
+      room.moveCards([], {
+        from: { type: 'public', zone: fromZone, position: POSITION_TOP },
+        to: { type: 'public', zone: toZone, position: POSITION_TOP },
         cardCount: 1,
         sourceEvent: { type: `test:${fromZone}-known-count-only-source` }
       })
@@ -449,16 +447,12 @@ describe('牌堆展示顺序', () => {
     expect(suspendedDisplayIdentity.location).toBe('suspended')
 
     withWarnSpy((warnSpy) => {
-      room.moveCards([137, 113], 'process', {
-        fromSeatID: 4,
-        fromSubZone: 'hand',
-        fromZone: null,
-        fromSpellID: 27,
-        spellID: 27,
+      room.moveCards([137, 113], {
+        from: { type: 'player', seatID: 4, subZone: 'hand' },
+        to: { type: 'public', zone: 'process', position: POSITION_TOP },
+        triggerSpellID: 27,
         cardCount: 2,
         moveType: 3,
-        position: POSITION_TOP,
-        fromPosition: 65282,
         sourceEvent: { type: 'test:suspended-known-from-mismatched-player-hand' }
       })
 
@@ -517,16 +511,12 @@ describe('牌堆展示顺序', () => {
     expect(suspendedDisplayIdentity.location).toBe('suspended')
 
     withWarnSpy((warnSpy) => {
-      room.moveCards([137, 113], 'process', {
-        fromSeatID: 4,
-        fromSubZone: 'hand',
-        fromZone: null,
-        fromSpellID: 27,
-        spellID: 27,
+      room.moveCards([137, 113], {
+        from: { type: 'player', seatID: 4, subZone: 'hand' },
+        to: { type: 'public', zone: 'process', position: POSITION_TOP },
+        triggerSpellID: 27,
         cardCount: 2,
         moveType: 3,
-        position: POSITION_TOP,
-        fromPosition: 65282,
         sourceEvent: { type: 'test:suspended-known-from-player-hand' }
       })
 
@@ -605,13 +595,10 @@ describe('牌堆展示顺序', () => {
     hiddenMarkPlaceholder.bindCandidates([1], 'hand', null, { known: false })
     room.getPlayer(1).syncObservedHandCount(2)
 
-    room.moveCards([0], 'player', {
-      toSeatID: 1,
-      fromSeatID: 1,
-      fromZone: 5,
-      fromSubZone: 'hand',
-      subZone: 'mark',
-      spellID: 700,
+    room.moveCards([0], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'player', seatID: 1, subZone: 'mark', markSpellID: 700 },
+      triggerSpellID: 700,
       cardCount: 1,
       sourceEvent: { type: 'test:hidden-mark-before-shuffle' }
     })
@@ -667,13 +654,10 @@ describe('牌堆展示顺序', () => {
     room.getPlayer(7).syncObservedHandCount(3)
     recordHandSetup(room, [1], 3)
 
-    room.moveCards([0, 0], 'player', {
-      toSeatID: 7,
-      fromSeatID: 7,
-      fromZone: 5,
-      fromSubZone: 'hand',
-      subZone: 'mark',
-      spellID: 700,
+    room.moveCards([0, 0], {
+      from: { type: 'player', seatID: 7, subZone: 'hand' },
+      to: { type: 'player', seatID: 7, subZone: 'mark', markSpellID: 700 },
+      triggerSpellID: 700,
       cardCount: 2,
       sourceEvent: { type: 'test:hidden-mount-mark-before-shuffle' }
     })
@@ -705,13 +689,10 @@ describe('牌堆展示顺序', () => {
       zoneName: 'pile',
       position: POSITION_TOP
     })
-    room.moveCards(visibleMarkIdentityIDs, 'player', {
-      toSeatID: 7,
-      fromSeatID: 7,
-      fromSubZone: 'mark',
-      fromSpellID: 700,
-      subZone: 'mark',
-      spellID: 700,
+    room.moveCards(visibleMarkIdentityIDs, {
+      from: { type: 'player', seatID: 7, subZone: 'mark', markSpellID: 700 },
+      to: { type: 'player', seatID: 7, subZone: 'mark', markSpellID: 700 },
+      triggerSpellID: 700,
       cardCount: 2,
       sourceEvent: { type: 'test:observed-mount-mark-full-snapshot' }
     })
@@ -761,10 +742,9 @@ describe('牌堆展示顺序', () => {
     })
     room.getPlayer(1).syncObservedHandCount(2)
 
-    room.moveCards(revealedIDs, 'process', {
-      fromSeatID: 1,
-      fromZone: null,
-      fromSubZone: 'hand',
+    room.moveCards(revealedIDs, {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'process', position: POSITION_TOP },
       cardCount: revealedIDs.length,
       sourceEvent: { type: 'test:reveal-hand-after-known-pile-top' }
     })
@@ -803,9 +783,9 @@ describe('牌堆展示顺序', () => {
     })
     room.getPlayer(1).syncObservedHandCount(2)
 
-    room.moveCards(revealedIDs, 'process', {
-      fromSeatID: 1,
-      fromSubZone: 'hand',
+    room.moveCards(revealedIDs, {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'process', position: POSITION_TOP },
       cardCount: revealedIDs.length,
       sourceEvent: { type: 'test:reveal-hand-after-known-pile-top' }
     })
@@ -864,9 +844,9 @@ describe('牌堆展示顺序', () => {
     setupCandidate?.(room, candidateCard)
     placeholder.bindCandidates([1], 'hand', null, { known: false })
 
-    room.moveCards([2], 'discard', {
-      fromSeatID: 1,
-      fromSubZone: 'hand',
+    room.moveCards([2], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: sourceEvent }
     })
@@ -932,9 +912,9 @@ describe('牌堆展示顺序', () => {
     const placeholder = setup(room)
     const pileCountBefore = pile.cards.length
 
-    room.moveCards([knownId], 'discard', {
-      fromSeatID: 1,
-      fromSubZone: 'hand',
+    room.moveCards([knownId], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: sourceEvent }
     })
@@ -955,9 +935,9 @@ describe('牌堆展示顺序', () => {
     sourceEndpoint.confirmKnown()
     room.applyPileIdentityReveal([2, 4])
 
-    room.moveCards([knownCard.id], 'discard', {
-      fromSeatID: 1,
-      fromSubZone: 'hand',
+    room.moveCards([knownCard.id], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'test:known-public-source-placeholder' }
     })
@@ -979,9 +959,9 @@ describe('牌堆展示顺序', () => {
     const originalPileCards = new Set(pile.cards)
     const pileCountBefore = pile.cards.length
 
-    room.moveCards([2], 'discard', {
-      fromSeatID: 1,
-      fromSubZone: 'hand',
+    room.moveCards([2], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'test:unobserved-player-source-public-residue' }
     })
@@ -1016,9 +996,9 @@ describe('牌堆展示顺序', () => {
       room.getPlayer(1).syncObservedHandCount(2)
       const pileCountBefore = pile.cards.length
 
-      room.moveCards([91, 76], 'discard', {
-        fromSeatID: 1,
-        fromSubZone: 'hand',
+      room.moveCards([91, 76], {
+        from: { type: 'player', seatID: 1, subZone: 'hand' },
+        to: { type: 'public', zone: 'discard', position: POSITION_TOP },
         cardCount: 2,
         sourceEvent: { type: 'test:batch-known-reserved-from-placeholder' }
       })

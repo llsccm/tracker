@@ -22,12 +22,9 @@ describe('二次随机手牌转移时的候选传播', () => {
     room.getPlayer(7).syncObservedHandCount(0)
 
     // 先形成 0/7 双边候选，供后续 7->2 二次转移使用。
-    room.moveCards([], 'player', {
-      fromZone: null,
-      fromSeatID: 0,
-      fromSubZone: 'hand',
-      toSeatID: 7,
-      subZone: 'hand',
+    room.moveCards([], {
+      from: { type: 'player', seatID: 0, subZone: 'hand' },
+      to: { type: 'player', seatID: 7, subZone: 'hand' },
       cardCount: 2,
       sourceEvent: { type: 'seed:random-partial-transfer' }
     })
@@ -84,12 +81,9 @@ describe('二次随机手牌转移时的候选传播', () => {
 
       // 全部手牌场景会把 7 号位观测总数抬到协议整手数，再做整手暗转移。
       room.getPlayer(7).syncObservedHandCount(sourceObservedBefore)
-      room.moveCards([], 'player', {
-        fromZone: null,
-        fromSeatID: 7,
-        fromSubZone: 'hand',
-        toSeatID: 2,
-        subZone: 'hand',
+      room.moveCards([], {
+        from: { type: 'player', seatID: 7, subZone: 'hand' },
+        to: { type: 'player', seatID: 2, subZone: 'hand' },
         cardCount: transferCount,
         sourceEvent: {
           type:
@@ -127,12 +121,9 @@ describe('二次随机手牌转移时的候选传播', () => {
     room.getPlayer(2).syncObservedHandCount(0)
     room.getPlayer(7).syncObservedHandCount(allIDs.length)
 
-    room.moveCards([], 'player', {
-      fromZone: null,
-      fromSeatID: 7,
-      fromSubZone: 'hand',
-      toSeatID: 2,
-      subZone: 'hand',
+    room.moveCards([], {
+      from: { type: 'player', seatID: 7, subZone: 'hand' },
+      to: { type: 'player', seatID: 2, subZone: 'hand' },
       cardCount: allIDs.length,
       sourceEvent: { type: 'case:first-transfer' }
     })
@@ -153,12 +144,9 @@ describe('二次随机手牌转移时的候选传播', () => {
     const card129 = getCard(room, 129)
     card129.confirmKnown()
 
-    room.moveCards([], 'player', {
-      fromZone: null,
-      fromSeatID: 2,
-      fromSubZone: 'hand',
-      toSeatID: 7,
-      subZone: 'hand',
+    room.moveCards([], {
+      from: { type: 'player', seatID: 2, subZone: 'hand' },
+      to: { type: 'player', seatID: 7, subZone: 'hand' },
       cardCount: 3,
       sourceEvent: { type: 'case:second-transfer' }
     })

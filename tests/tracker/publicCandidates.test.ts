@@ -40,12 +40,10 @@ describe('公共候选传播', () => {
     hiddenCard.bindCandidates([1], 'hand', null, { known: false })
     room.getPlayer(1).syncObservedHandCount(2)
 
-    room.moveCards([], 'pile', {
-      fromSeatID: 1,
-      fromZone: null,
-      fromSubZone: 'hand',
+    room.moveCards([], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'pile', position: POSITION_TOP },
       cardCount: 1,
-      position: POSITION_TOP,
       sourceEvent: { type: 'test:spell-743-put-on-pile-top' }
     })
 

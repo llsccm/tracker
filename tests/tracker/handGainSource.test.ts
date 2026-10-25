@@ -1,3 +1,4 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { describe, expect, it } from 'vitest'
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
 
@@ -52,7 +53,10 @@ describe('手牌获得技能来源', () => {
     )
     expect(card.gainSpellID).toBe(780)
     expect(card.getHandGainSpellID(3)).toBeNull()
-    room.moveCards([37], 'pile', { fromSeatID: 1, fromSubZone: 'hand' })
+    room.moveCards([37], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'pile', position: POSITION_TOP }
+    })
     expect(card.gainSpellID).toBeNull()
     controller.syncTrackerMove(
       protocolMove({
@@ -71,7 +75,11 @@ describe('手牌获得技能来源', () => {
 
   it('标记空间与获得技能不同，手牌来源保留协议技能', () => {
     const { controller, room } = setup()
-    room.moveCards([37], 'player', { toSeatID: 1, subZone: 'mark', spellID: 3657 })
+    room.moveCards([37], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'mark', markSpellID: 3657 },
+      triggerSpellID: 3657
+    })
     controller.syncTrackerMove(
       protocolMove({
         CardIDs: [37],

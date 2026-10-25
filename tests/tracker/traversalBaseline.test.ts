@@ -1,3 +1,4 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { protocolMove } from './helpers/trackerController'
 import { describe, expect, it } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
@@ -32,16 +33,15 @@ function createShuffleBaselineRoom(materializeDeckIdentities: boolean) {
     cardIDs: DECK_IDS,
     seatIDs: [1, 2]
   })
-  room.moveCards([10, 11, 12], 'player', {
-    toSeatID: 1,
-    subZone: 'hand',
-    fromZone: 'pile',
+  room.moveCards([10, 11, 12], {
+    from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+    to: { type: 'player', seatID: 1, subZone: 'hand' },
     cardCount: 3,
     sourceEvent: { type: 'baseline:draw-before-discard' }
   })
-  room.moveCards([10, 11, 12], 'discard', {
-    fromSeatID: 1,
-    fromSubZone: 'hand',
+  room.moveCards([10, 11, 12], {
+    from: { type: 'player', seatID: 1, subZone: 'hand' },
+    to: { type: 'public', zone: 'discard', position: POSITION_TOP },
     cardCount: 3,
     sourceEvent: { type: 'baseline:discard' }
   })
@@ -67,10 +67,9 @@ describe('Room.cards 遍历基线', () => {
     const { room } = createTestRoom({ cardIDs: DECK_IDS, seatIDs: [1, 2, 3] })
 
     const { stats } = collectTraversalStats(() => {
-      room.moveCards([1], 'player', {
-        toSeatID: 1,
-        subZone: 'hand',
-        fromZone: 'pile',
+      room.moveCards([1], {
+        from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+        to: { type: 'player', seatID: 1, subZone: 'hand' },
         cardCount: 1,
         sourceEvent: { type: 'baseline:draw-known' }
       })
@@ -95,10 +94,9 @@ describe('Room.cards 遍历基线', () => {
     const { room } = createTestRoom({ cardIDs: DECK_IDS, seatIDs: [1, 2, 3] })
 
     const { stats } = collectTraversalStats(() => {
-      room.moveCards([], 'player', {
-        toSeatID: 2,
-        subZone: 'hand',
-        fromZone: 'pile',
+      room.moveCards([], {
+        from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+        to: { type: 'player', seatID: 2, subZone: 'hand' },
         cardCount: 2,
         sourceEvent: { type: 'baseline:draw-hidden' }
       })

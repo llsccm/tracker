@@ -1,3 +1,4 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { describe, expect, it } from 'vitest'
 import { HAND_EXCHANGE_STATE_KEY } from '@/tracker/skill/HandExchange'
@@ -757,8 +758,9 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     })
 
     const departedCard = getCard(room, 701)
-    room.moveCards([], 'discard', {
-      fromZone: 'exchange',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'exchange', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       sourceCards: [departedCard],
       cardCount: 1,
       sourceEvent: { type: 'test:hand-exchange-interrupted-member' }

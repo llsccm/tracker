@@ -38,11 +38,11 @@ describe('巧织默认协议管线', () => {
     const other = room.cardIndex.get(92)!
     expect(card.gainSpellID).toBeNull()
     expect(card.getHandGainSpellID(3)).toBe(3544)
-    const context = room.movement.createMoveContext([37], 'player', {
-      fromSeatID: 3,
-      toSeatID: 3,
+    const context = room.movement.createMoveContext([37], {
+      from: { type: 'player', seatID: 3, subZone: 'hand' },
+      to: { type: 'player', seatID: 3, subZone: 'hand' },
+      triggerSpellID: null,
       handMoveCount: 0,
-      spellID: null,
       gainSpellID: 3544
     })
     expect(summarizeMoveContext(context)).toMatchObject({ triggerSpellID: null, gainSpellID: 3544 })

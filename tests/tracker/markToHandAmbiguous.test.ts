@@ -1,3 +1,4 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { describe, expect, it, vi } from 'vitest'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
@@ -331,10 +332,9 @@ describe('标记区暗牌进入手牌', () => {
     moveHiddenMarkToHand(room, { fromSeatID: 0, toSeatID: 3, fromZoneParam: 3657, spellID: 3658 })
 
     // 真实被交出的那张从 3 号位手牌弃置：协议明牌来源为 hand，本地仍记在 mark。
-    room.moveCards([12], 'discard', {
-      fromZone: null,
-      fromSeatID: 3,
-      fromSubZone: 'hand',
+    room.moveCards([12], {
+      from: { type: 'player', seatID: 3, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'test:hand-discard' }
     })

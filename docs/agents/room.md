@@ -8,7 +8,7 @@
 
 ## 阅读路由
 
-移动端点结构与迁移记录见 [move_endpoints_plan.md](../plans/move_endpoints_plan.md)。
+移动端点契约与调用示例见 [tracker_api.md](tracker_api.md)。
 当前入口为 `moveCards(cardIDs, request)`，request 的只读 `from/to` 是唯一端点描述；
 上下文只额外保存移动前手牌快照和阶段结果。协议事件同样在顶层携带端点。
 
