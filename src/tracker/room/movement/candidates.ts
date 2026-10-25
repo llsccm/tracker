@@ -287,8 +287,7 @@ export class RoomMovementCandidates {
       markCandidate.type === 'popup'
         ? spaceCards
         : getVisibleMarkSpaceCards(this.room, markCandidate.seatID, markCandidate.spellID)
-    // 只有可见牌多于协议张数时才是“多选一”；唯一解仍由来源取牌直接搬走。
-    if (!isPopup && markCards.length <= count) return false
+    if (markCards.length === 0) return false
 
     const handCandidate: PlayerLocationCandidate = {
       type: 'player',
@@ -311,9 +310,11 @@ export class RoomMovementCandidates {
           )
         })
       : undefined
-    if (hasStoredCandidates && !previousGroup) return false
     const sourceCount = previousGroup?.expectedSlotsByLocation.get(markKey)?.min ?? markCards.length
-    if (previousGroup ? sourceCount < count : sourceCount <= count) return false
+    // 只有确定来源的唯一解才回退直接取牌；弱候选数不代表空间的物理张数。
+    if (previousGroup ? sourceCount < count : !hasStoredCandidates && sourceCount <= count) {
+      return false
+    }
 
     const slots = new Map(previousGroup?.expectedSlotsByLocation)
     const handState = previousGroup
@@ -323,11 +324,14 @@ export class RoomMovementCandidates {
       min: handState?.exactCards.length ?? 0,
       max: handState ? handState.exactCards.length + handState.candidateCards.length : 0
     }
-    slots.set(markKey, { min: sourceCount - count, max: sourceCount - count })
-    slots.set(handKey, {
-      min: previousHandSlots.min + count,
-      max: previousHandSlots.max + count
-    })
+    // 缺少精确旧组的弱候选只建立未决组，不凭身份数补造空间或手牌名额。
+    if (previousGroup || !hasStoredCandidates) {
+      slots.set(markKey, { min: sourceCount - count, max: sourceCount - count })
+      slots.set(handKey, {
+        min: previousHandSlots.min + count,
+        max: previousHandSlots.max + count
+      })
+    }
 
     // 先按移动前的确定位置扣减旧组名额，再扩展候选；扩展后已无法辨认原来的槽位。
     // 连续暗取仍保留旧目标手牌名额与成员，只更新本次两个端点。
@@ -346,7 +350,7 @@ export class RoomMovementCandidates {
     })
 
     // 全部参与牌共同竞争空间与历次目标手牌名额。
-    // 候选数一开始大于名额，不会触发强锁；某张牌离场、名额恰好等于剩余候选数时才收敛。
+    // 有精确名额时按剩余候选收敛；弱候选组保留未决位置，等待后续事实。
     this.room.createConstraintGroup({
       id: previousGroup?.id,
       cards: markCards,
@@ -359,13 +363,13 @@ export class RoomMovementCandidates {
       sourceEvent: sourceEvent ?? { type: 'markStoredToHandCandidates' }
     })
 
-    trackerLogger.info('标记区可见牌多于暗牌张数，建立标记/手牌双边候选', {
+    trackerLogger.info('标记或弹窗空间暗取，建立位置候选', {
       fromSeat,
       fromSpellID,
       toSeat,
       count,
       cardIDs: markCards.map((card) => card.id),
-      markSlots: sourceCount - count,
+      markSlots: slots.get(markKey)?.min,
       handSlots: slots.get(handKey),
       locationCandidates: markCards.map((card) =>
         card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate))

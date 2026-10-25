@@ -10,10 +10,16 @@ import { trackerLogger } from '@/utils/logger'
 /** 复现“第三视角观测标记区暗牌进入手牌”的原始协议。 */
 function moveHiddenMarkToHand(
   room: Room,
-  options: { fromSeatID: number; toSeatID: number; fromZoneParam: number; spellID: number }
+  options: {
+    fromSeatID: number
+    toSeatID: number
+    fromZoneParam: number
+    spellID: number
+    count?: number
+  }
 ) {
   const event = normalizeMoveEvent({
-    CardCount: 1,
+    CardCount: options.count ?? 1,
     CardIDs: [],
     FromID: options.fromSeatID,
     FromPosition: 65282,
@@ -175,6 +181,82 @@ describe('标记区暗牌进入手牌', () => {
     expect(group?.expectedSlotsByLocation.get(markKey)).toEqual({ min: 1, max: 1 })
     expect(group?.expectedSlotsByLocation.get(handKey)).toEqual({ min: 1, max: 1 })
   })
+
+  it.each([
+    { markIDs: [11, 12], count: 1, withOldGroup: false },
+    { markIDs: [11, 12], count: 2, withOldGroup: false },
+    { markIDs: [11], count: 1, withOldGroup: false },
+    { markIDs: [11, 12], count: 1, withOldGroup: true }
+  ])(
+    '缺少全空间精确组时保留全部弱候选，不按身份数取牌：$markIDs/$count/$withOldGroup',
+    ({ markIDs, count, withOldGroup }) => {
+      const { room } = createTestRoom({ cardIDs: [11, 12, 21], seatIDs: [0, 1, 2, 3] })
+      const markCards = bindMarkCards(room, markIDs, 0, 3657)
+      const mark = { type: 'player' as const, seatID: 0, subZone: 'mark' as const, spellID: 3657 }
+      const priorHand = {
+        type: 'player' as const,
+        seatID: 2,
+        subZone: 'hand' as const,
+        spellID: null
+      }
+      const markKey = createLocationCandidateKey(mark)
+      const priorHandKey = createLocationCandidateKey(priorHand)
+      const targetHandKey = createLocationCandidateKey({
+        type: 'player',
+        seatID: 3,
+        subZone: 'hand',
+        spellID: null
+      })
+      const [weakCard] = markCards
+      weakCard.setLocationCandidates([mark, priorHand])
+
+      const [otherMark] = bindMarkCards(room, [21], 1, 3657)
+      const otherMarkKey = createLocationCandidateKey({
+        type: 'player',
+        seatID: 1,
+        subZone: 'mark',
+        spellID: 3657
+      })
+      const oldGroup = withOldGroup
+        ? room.createConstraintGroup({
+            cards: [weakCard, otherMark],
+            expectedSlotsByLocation: new Map([
+              [markKey, { min: 0, max: 1 }],
+              [otherMarkKey, { min: 1, max: 1 }]
+            ])
+          })
+        : null
+
+      moveHiddenMarkToHand(room, {
+        fromSeatID: 0,
+        toSeatID: 3,
+        fromZoneParam: 3657,
+        spellID: 3658,
+        count
+      })
+
+      markCards.forEach((card) => {
+        expect(card.hasLocationCandidate(markKey)).toBe(true)
+        expect(card.hasLocationCandidate(targetHandKey)).toBe(true)
+        expect(card.isKnown).toBe(true)
+      })
+      expect(weakCard.hasLocationCandidate(priorHandKey)).toBe(true)
+      expect(room.locationIndex.candidateHandBySeat.get(3)).toHaveLength(markCards.length)
+      expect(room.getPlayer(3)!.knownHandCards).toEqual([])
+      expect(room.getPlayer(3)!.observedHandCount).toBe(count)
+      const group = Array.from(room.constraintGroups.values()).find((item) =>
+        markCards.every((card) => item.cards.has(card))
+      )!
+      expect(new Set(group.cards)).toEqual(new Set(markCards))
+      expect(group.expectedSlotsByLocation.size).toBe(0)
+      if (oldGroup) {
+        expect(Array.from(oldGroup.cards)).toEqual([otherMark])
+        expect(oldGroup.expectedSlotsByLocation.get(otherMarkKey)).toEqual({ min: 1, max: 1 })
+        expect(otherMark.owner).toBe(1)
+        expect(otherMark.subZone).toBe('mark')
+      }
+    }
+  )
 
   it('连续暗交同一标记空间时累计各目标手牌候选', () => {
     const { room } = createTestRoom({ cardIDs: [11, 12, 13], seatIDs: [2, 4, 6] })

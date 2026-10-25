@@ -41,6 +41,31 @@ function setup(cardIDs: number[]) {
 }
 
 describe('临时弹窗空间通用收敛', () => {
+  it('精确组失效后继续暗取仍覆盖全部空间候选并保留旧目标', () => {
+    const { room, move } = setup([1, 2, 3])
+    move(3544, 1, 8, [1, 2, 3])
+    move(3544, 8, 5, [], 1, 2)
+    const spaceCards = getPopupSpaceCards(room, 3544)
+    room.removeCardsFromConstraintGroups(spaceCards)
+
+    move(3544, 8, 5, [], 1, 1)
+
+    spaceCards.forEach((card) => {
+      expect(card.hasLocationCandidate('popup:3544')).toBe(true)
+      expect(card.hasLocationCandidate('player:2:hand:none')).toBe(true)
+      expect(card.hasLocationCandidate('player:1:hand:none')).toBe(true)
+    })
+    expect(getPopupSpaceCards(room, 3544)).toEqual(spaceCards)
+    const group = Array.from(room.constraintGroups.values()).find((entry) =>
+      spaceCards.every((card) => entry.cards.has(card))
+    )!
+    expect(new Set(group.cards)).toEqual(new Set(spaceCards))
+    expect(group.expectedSlotsByLocation.size).toBe(0)
+    expect(room.getPlayer(1)!.knownHandCards).toEqual([])
+    expect(room.getPlayer(2)!.knownHandCards).toEqual([])
+    expect(room.assertPileIdentityLedgerConsistency('popup:weak-successive')).toEqual([])
+  })
+
   it.each([1, 2])('连续暗取更新空间与目标手牌名额，第二次交给座位 %s', (secondSeat) => {
     const { room, move } = setup([1, 2, 3, 4])
     move(3544, 1, 8, [1, 2, 3, 4])
