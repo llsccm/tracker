@@ -66,17 +66,12 @@ export function initPlayerHandContainers(doc: Document, room: Room): void {
 }
 
 function createPlayerHandContainer(doc: Document, displayID: number): HTMLElement {
-  const container = doc.createElement('div')
-  container.className = 'orderContainer'
-  container.id = 'playerHand' + displayID
-  container.style.setProperty('--No-content', `'${getDisplayIdLabel(displayID)}号位'`)
-
   const body = doc.createElement('div')
   body.className = 'order-body No' + displayID
   body.id = String(displayID)
-  container.appendChild(body)
+  body.style.setProperty('--No-content', `'${getDisplayIdLabel(displayID)}号位'`)
 
-  return container
+  return body
 }
 
 /** 顺位变化时重新绑定容器、武将标签和手牌，隐藏多余的容器。 */
@@ -91,8 +86,8 @@ export function syncPlayerHandContainers(doc: Document, room: Room): boolean {
   }
 
   let changed = false
-  for (const container of panel.querySelectorAll<HTMLElement>(':scope > .orderContainer')) {
-    const displayID = Number(container.id.slice('playerHand'.length))
+  for (const container of panel.querySelectorAll<HTMLElement>(':scope > .order-body')) {
+    const displayID = Number(container.id)
     const player = playersByDisplayID.get(displayID)
     const seatID = player ? String(player.seatID) : ''
     const display = player ? '' : 'none'
@@ -108,13 +103,13 @@ export function syncPlayerHandContainers(doc: Document, room: Room): boolean {
     container.dataset.seatId = seatID
     container.style.display = display
     // 只清除旧顺位的显示节点；调用方随后按 seatID 对应的 Player 数据全量重绘。
-    container.querySelector('.order-body')?.replaceChildren()
+    container.replaceChildren()
     changed = true
   }
   return changed
 }
 
-/** 将玩家武将名和顺位标签写入座位覆盖层。 */
+/** 将玩家武将名和顺位标签写入主面板手牌容器。 */
 export function updateSeatLabel(
   doc: Document,
   player: Pick<Player, 'fixedViewId' | 'generals'>,
@@ -122,7 +117,7 @@ export function updateSeatLabel(
 ): void {
   const fixedViewId = player.fixedViewId
   if (fixedViewId === undefined) return
-  const container = doc.getElementById('playerHand' + fixedViewId)
+  const container = doc.getElementById(String(fixedViewId))
   if (!container) return
 
   const label = `"${formatPlayerSeatLabel(player, { orderLabels })}"`
@@ -133,14 +128,14 @@ export function updateSeatLabel(
 
 /**
  * 渲染单个玩家的武将手牌明牌区：确定明牌 + 模糊明牌(候选席位角标) + 标记牌(按技能分组)
- * 容器 #playerHand<order+1> 内的 .order-body，按 syncViewGroups 稳定顺序增量同步
+ * 容器 .order-body.No<order+1>，按 syncViewGroups 稳定顺序增量同步
  */
 export function renderPlayerHand(doc: Document, player: Player): void {
   const displayID = Number(player.fixedViewId)
   if (!Number.isFinite(displayID)) return
 
   const panel: HTMLElement | null = getPlayerHandPanel(doc)
-  const body = panel?.querySelector<HTMLElement>('#playerHand' + displayID + ' > .order-body')
+  const body = panel?.querySelector<HTMLElement>(':scope > .order-body.No' + displayID)
   if (!body) return
 
   const renderedNodes: Element[] = []
@@ -153,7 +148,7 @@ export function renderPlayerHand(doc: Document, player: Player): void {
     renderedNodes.push(createHandCardNode(doc, card, 'candidate', true))
   }
 
-  const markSpell = SkillsConfig.GetInstance().markSpell
+  const markSpell: Partial<Record<number, string>> = SkillsConfig.GetInstance().markSpell
 
   player.markCards.forEach((cards, spellID) => {
     if (!cards || !cards.length) return
@@ -197,7 +192,7 @@ function createMarkedCardNode(
 
   cards.forEach((card) => {
     const button = createCardButton(doc, card, {
-      ambiguous: card.hasSubZoneCandidates?.() === true
+      ambiguous: card.hasSubZoneCandidates()
     })
     markedCard.appendChild(button)
   })
@@ -237,7 +232,7 @@ function reconcileRenderedNodes(container: Element, desiredNodes: Element[]): vo
     if (!retainedNodes.has(node)) node.remove()
   })
 
-  let cursor = getDirectRenderedNodes(container)[0] ?? null
+  let cursor: Element | null = getDirectRenderedNodes(container)[0] ?? null
   nextNodes.forEach((node) => {
     if (node === cursor) {
       cursor = getNextRenderedSibling(cursor)
@@ -292,15 +287,13 @@ function getPlayerHandPanel(doc: Document): HTMLElement | null {
  * 连续暗牌合并为单张占位按钮
  */
 export function renderPublicZones(room: Room, doc: Document): void {
-  const publicByZone = room.locationIndex?.publicByZone
-  const pileCards = publicByZone?.get('pile') ?? room.zones.get('pile')?.cards ?? []
+  const publicByZone = room.locationIndex.publicByZone
+  const pileCards = publicByZone.get('pile') ?? room.getZone('pile').cards
   renderCardList(doc, 'paiduiCards', getPileDisplayCards(pileCards))
 
-  const discardCards = (
-    publicByZone?.get('discard') ??
-    room.zones.get('discard')?.cards ??
-    []
-  ).filter((card) => card.turn === Game.turn && card.round === Game.round)
+  const discardCards = (publicByZone.get('discard') ?? room.getZone('discard').cards).filter(
+    (card) => card.turn === Game.turn && card.round === Game.round
+  )
   renderCardList(doc, 'qipaiCards', discardCards)
 
   const fieldCards = getPublicFieldCandidateCards(room)

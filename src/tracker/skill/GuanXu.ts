@@ -189,7 +189,7 @@ function selectCardsForKnownMove(
 }
 
 function splitProtocolKnownAndUnknown(event: MoveEventDraft, cards: Card[]): Card[] {
-  const protocolKnownIDs = new Set(getPositiveIDs(event.cardIDs ?? []))
+  const protocolKnownIDs = new Set(getPositiveIDs(event.cardIDs))
   return cards.filter((card) => !protocolKnownIDs.has(card.id))
 }
 
@@ -197,7 +197,7 @@ function stagePileToExchange(event: MoveEventDraft, room: Room, spellID: number)
   const move = event.protocol
   const count = getCount(event)
   const pileBucketID = move.ToID
-  const pileCards = room.zones.get('pile')?.cards ?? []
+  const pileCards = room.getZone('pile').cards
   // 逻辑桶复用公共 Zone 的底 -> 顶顺序，后续可直接套用通用 ToPosition 插槽语义。
   const selectedCards = pileCards.slice(-count)
 
@@ -208,7 +208,7 @@ function stagePileToExchange(event: MoveEventDraft, room: Room, spellID: number)
 
   const knownResolution = resolveProtocolKnownCards(event, room, selectedCards)
   if (
-    knownResolution.cards.length !== getPositiveIDs(event.cardIDs ?? []).length ||
+    knownResolution.cards.length !== getPositiveIDs(event.cardIDs).length ||
     !commitProtocolKnownCards(room, knownResolution)
   ) {
     clearBatch(room, spellID)

@@ -21,7 +21,7 @@ export type MoveEventHandler = (
 export type SkillHandler = (
   card: Card,
   context: Pick<MoveOptions, 'subZone' | 'sourceEvent'> & {
-    toSeatID: SeatInput | null
+    toSeatID?: SeatInput | null
     toZone: NormalizedMoveEvent['toZone']
   }
 ) => unknown

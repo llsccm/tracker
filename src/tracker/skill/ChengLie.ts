@@ -1,7 +1,8 @@
-import type { NormalizedMoveCardFields } from '../types'
+import type { MoveSourceEvent, NormalizedMoveCardFields } from '../types'
 import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
 import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
+import type { Card } from '@/tracker/model'
 import { getPositiveIDs } from '../helper/cardIDs'
 import { trackerLogger } from '@/utils/logger'
 import {
@@ -14,6 +15,14 @@ import {
 import { CARD_INSTANCE_STATUS } from '../projection/CardCounter'
 
 const CHENG_LIE_DISCARD_QUEUE = 'chengLieDiscardQueue'
+
+interface ChengLieState {
+  revealedIDs: number[]
+  finalDiscardIDs: number[]
+  casterSeatID: number | null
+  hadAmbiguousKnownBeforeReveal: boolean
+  sourceEvent?: MoveSourceEvent
+}
 
 /** 骋烈暗标记不绑定身份；按约定在标记弃置时逐张近似回收展示牌。 */
 export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEventDraft {
@@ -55,8 +64,7 @@ export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEve
 
     // 暗中换牌后，交换区的代表顺序不能证明某张展示牌进入了手牌或标记。
     // 展示牌暂存在本轮待弃置队列，物理数量由匿名槽承接。
-    const exchange = room.zones.get('exchange')
-    if (!exchange) return event
+    const exchange = room.getZone('exchange')
     const knownCards = exchange.cards.filter((card) => card.id > 0)
     const placeholders = room.createExternalCards([], knownCards.length)
     knownCards.forEach((card, index) => {
@@ -94,7 +102,7 @@ export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEve
 // 马承【骋烈】：记录亮出集合，并在标记牌最终明置进弃牌堆时做前后集合差分。
 export function decorateChengLie(event: MoveEventDraft, room: Room): MoveEventDraft {
   const move = event.protocol
-  const cardIDs = event.cardIDs ?? []
+  const cardIDs = event.cardIDs
   const ids = getPositiveIDs(cardIDs)
   const fromZone = move.FromZone
   const toZone = move.ToZone
@@ -122,14 +130,14 @@ export function decorateChengLie(event: MoveEventDraft, room: Room): MoveEventDr
   const state = getChengLieState(room)
   state.casterSeatID = getChengLieCasterSeat(move, state)
 
-  const exchangeCards = room.zones.get('exchange')?.cards ?? []
+  const exchangeCards = room.getZone('exchange').cards
   const groupedCards = exchangeCards.slice(0, Math.max(0, exchangeCards.length - 1))
 
   if (groupedCards.length > 0) {
     room.createConstraintGroup({
       id: nextGroupID(room, 3208, 'chenglie_remain'),
       cards: groupedCards,
-      sourceEvent: event.options?.sourceEvent
+      sourceEvent: event.options.sourceEvent
     })
   }
 
@@ -174,7 +182,7 @@ export function observePendingChengLieFinalDiscard(event: MoveEventDraft, room: 
   if (!state) return
 
   const move = event.protocol
-  const ids = getPositiveIDs(event.cardIDs ?? [])
+  const ids = getPositiveIDs(event.cardIDs)
   if (!isChengLieFinalDiscard(move, ids, state)) return
 
   observeChengLieFinalDiscard(event, room, ids, {
@@ -185,7 +193,7 @@ export function observePendingChengLieFinalDiscard(event: MoveEventDraft, room: 
   })
 }
 
-function settleChengLieInference(event: MoveEventDraft, room: Room, state: any): void {
+function settleChengLieInference(event: MoveEventDraft, room: Room, state: ChengLieState): void {
   const revealedSet = new Set(state.revealedIDs)
   const discardSet = new Set(state.finalDiscardIDs)
   const takenToHandIDs = state.revealedIDs.filter((id) => !discardSet.has(id))
@@ -244,7 +252,7 @@ function settleChengLieInference(event: MoveEventDraft, room: Room, state: any):
 function isChengLieFinalDiscard(
   move: NormalizedMoveCardFields,
   ids: number[],
-  state: any
+  state: ChengLieState
 ): boolean {
   if (move.FromZone !== 4 || move.ToZone !== 2 || ids.length === 0) {
     return false
@@ -257,9 +265,9 @@ function getChengLieDiscardHint(move: NormalizedMoveCardFields): boolean {
   return [move.SpellID, move.FromZoneParam, move.ToZoneParam].some((value) => value === 3208)
 }
 
-function getPendingChengLieState(room: Room): any {
-  const state = room.readSkillState<any>(3208)
-  return state?.revealedIDs?.length > 0 ? state : null
+function getPendingChengLieState(room: Room): ChengLieState | null {
+  const state = room.readSkillState<ChengLieState>(3208)
+  return state && state.revealedIDs.length > 0 ? state : null
 }
 
 function recordChengLieReveal(
@@ -292,7 +300,7 @@ function recordChengLieReveal(
   })
 }
 
-function getAmbiguousKnownHandCards(room: Room): any[] {
+function getAmbiguousKnownHandCards(room: Room): Card[] {
   const appearedCards = room.counter?.cardsByStatus?.[CARD_INSTANCE_STATUS.APPEARED]
   const sourceCards = appearedCards ? Array.from(appearedCards) : room.cards
   return sourceCards.filter(
@@ -304,8 +312,8 @@ function getAmbiguousKnownHandCards(room: Room): any[] {
   )
 }
 
-function getChengLieState(room: Room): any {
-  const state = room.ensureSkillState(3208, () => ({
+function getChengLieState(room: Room): ChengLieState {
+  const state = room.ensureSkillState<ChengLieState>(3208, () => ({
     revealedIDs: [],
     finalDiscardIDs: [],
     casterSeatID: null,
@@ -315,7 +323,10 @@ function getChengLieState(room: Room): any {
   return state
 }
 
-function getChengLieCasterSeat(move: NormalizedMoveCardFields, state: any): number | null {
+function getChengLieCasterSeat(
+  move: NormalizedMoveCardFields,
+  state: ChengLieState
+): number | null {
   return (
     getSeatID(move.SrcSeatID) ??
     getSeatID(move.ToID) ??

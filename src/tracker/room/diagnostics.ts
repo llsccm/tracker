@@ -61,16 +61,16 @@ export class RoomDiagnostics {
 
   assertPileIdentityLedgerConsistency(context = ''): PileIdentityConsistencyIssue[] {
     const room = this.room
-    const pile = room.zones.get('pile')
+    const pile = room.getZone('pile')
     const suspendedIdentityIDs = new Set(
       Array.from(room.suspendedKnownCards, (card) => card.id).filter((cardID) => cardID > 0)
     )
-    const issues = room.pileIdentityLedger.assertConsistency(pile?.cards.length ?? 0, context, {
+    const issues = room.pileIdentityLedger.assertConsistency(pile.cards.length, context, {
       deckIdentityIDs: room.deckIdentities,
       unlocatedIdentityIDs: room.unlocatedIdentities,
       suspendedIdentityIDs
     })
-    const hiddenPileIdentityIDs = (pile?.cards ?? [])
+    const hiddenPileIdentityIDs = pile.cards
       .filter((card) => card.id > 0 && card.isKnown !== true)
       .map((card) => card.id)
 

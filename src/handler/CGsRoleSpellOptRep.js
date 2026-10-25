@@ -1,7 +1,6 @@
 import { Game } from '@/tracker'
 import { POSITION_BOTTOM } from '@/tracker/candidate/cardPositions'
 import { tracker } from '@/tracker/runtime/browser'
-import { recordJieLiSelection } from '@/tracker/skill/JieLi'
 import { destroyPingJianWindow } from '@/ui/PingJianWindow'
 
 const PROTOCOL_PILE_ZONE = 1
@@ -75,39 +74,6 @@ export function handleRoleSpellOptRep(msg = {}) {
     case 3571:
       // 这里只有一张牌的消息 有一点点意义
       // if (Type === 10) Game.getSpellState(SpellID)?.add?.(Datas[0])
-      break
-
-    // 诫厉
-    case 3483:
-      // 目标视角能知道换牌结果
-      if (Type === 53) {
-        const room = tracker.getReadyTrackerRoom()
-        if (!room || !Array.isArray(Datas) || room.mySeatID !== Datas[1]) break
-
-        // Datas: [actorSeat, targetSeat, handCount, ...handToPile, pileCount, ...pileToHand]
-        const [actorSeat, targetSeat, handCount] = Datas
-        const handEnd = 3 + handCount
-        const pileStart = handEnd + 1
-        const pileCount = Datas[handEnd]
-
-        if (
-          !Number.isInteger(handCount) ||
-          !Number.isInteger(pileCount) ||
-          handCount <= 0 ||
-          pileCount <= 0 ||
-          handCount !== pileCount ||
-          Datas.length !== pileStart + pileCount
-        ) {
-          break
-        }
-
-        recordJieLiSelection(room, {
-          actorSeat,
-          targetSeat,
-          handCardIDs: Datas.slice(3, handEnd),
-          pileCardIDs: Datas.slice(pileStart, pileStart + pileCount)
-        })
-      }
       break
 
     // 评鉴

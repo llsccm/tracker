@@ -26,9 +26,9 @@ export abstract class RoomBase {
 
   getCurrentTimestamp(): { turn: number; round: number; phase: number } {
     return {
-      turn: this.game?.turn ?? 0,
-      round: this.game?.round ?? 0,
-      phase: this.game?.phase ?? 0
+      turn: this.game.turn ?? 0,
+      round: this.game.round ?? 0,
+      phase: this.game.phase ?? 0
     }
   }
 
@@ -48,11 +48,11 @@ export abstract class RoomBase {
 
   /** 主视角在牌局中的顺位 */
   getMyDisplayID(): number | undefined {
-    return this.getDisplayID(this.mySeatID)
+    return this.mySeatID === undefined ? undefined : this.getDisplayID(this.mySeatID)
   }
 
   getMyPlayer(): Player | undefined {
-    return this.getPlayer(this.mySeatID)
+    return this.mySeatID === undefined ? undefined : this.getPlayer(this.mySeatID)
   }
 
   /**

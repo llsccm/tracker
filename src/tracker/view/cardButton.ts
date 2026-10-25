@@ -28,7 +28,7 @@ export function createCardButton(
   button.id = 'card' + card.id
   button.classList.toggle(RED_CARD_CLASS, card.color > 0 && card.color <= 2)
   button.innerHTML = getCardFaceHtml(card)
-  button.title = card.getLocationDescription?.() ?? ''
+  button.title = card.getLocationDescription()
 
   if (options.ambiguous) {
     button.classList.add('candidate-card')
@@ -68,8 +68,8 @@ export function createQueryButton(
   button.style.backgroundColor = STATUS_COLORS[key] ?? ''
 
   if (key === 1) {
-    const card = room?.cardIndex?.get(inst.id)
-    button.title = card?.getLocationDescription?.() ?? ''
+    const card = room?.cardIndex.get(inst.id)
+    button.title = card?.getLocationDescription() ?? ''
   } else {
     button.title = STATUS_LABELS[key] ?? ''
   }

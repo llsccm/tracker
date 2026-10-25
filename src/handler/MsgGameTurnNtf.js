@@ -22,7 +22,7 @@ export function handleGameTurn(msg) {
     // 战法实例映射
     laya.zhanfaRegister()
     // 此时已具备座位信息
-    hideSelfOrderContainer(Game.room?.getMyDisplayID())
+    hideSelfOrderContainer(Game.myDisplayID)
     if (UI.firstUpdateSeatUI) showOrderContainers()
   }
 

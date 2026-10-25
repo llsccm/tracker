@@ -1,7 +1,6 @@
 import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
 import { fromPublicCandidate } from '../candidate/locationCandidate'
 import { createPublicCandidate } from '../candidate/publicCandidate'
-import type { Card } from '@/tracker/model/Card'
 import { Game, type GameState } from '../Game'
 import { summarizeMoveEvent } from '../helper/moveSummary'
 import { getProtocolMoveSpecialLabel, normalizeMoveEvent } from '../protocol/MoveEventNormalizer'
@@ -45,6 +44,8 @@ interface RevealTarget {
   subZone?: string
   spellID?: SpellID | null
   fullHand?: boolean
+  /** 当部分手牌揭示张数等于当前观测/本地手牌总数时，是否自动按整手揭示同步。 */
+  inferFullHand?: boolean
   handCount?: number
   // 协议已经通过其它消息同步过手牌数量时，只补充已知身份，不重复增加手牌总数。
   handMoveCount?: number
@@ -81,30 +82,6 @@ const noopLogger: TrackerLogger = {
   debug() {},
   info() {},
   warn() {}
-}
-
-/**
- * 判断目标牌组是否已经位于公共区指定端点。
- * Zone 内部按底到顶保存；插入底部时会反转输入，所以底部比较也要使用反序。
- */
-function hasCardsAtPublicPosition(
-  zoneCards: Card[],
-  cards: Card[],
-  position: PublicPosition
-): boolean {
-  if (cards.length === 0 || zoneCards.length < cards.length) return false
-
-  if (position === POSITION_TOP) {
-    const offset = zoneCards.length - cards.length
-    return cards.every((card, index) => zoneCards[offset + index] === card)
-  }
-
-  if (position === POSITION_BOTTOM) {
-    const len = cards.length
-    return cards.every((_, index) => zoneCards[index] === cards[len - 1 - index])
-  }
-
-  return false
 }
 
 /**
@@ -167,17 +144,20 @@ export class TrackerController {
   initTrackerRoom(): void {
     try {
       this.trackerRoom?.destroy()
-      this.trackerRoom = new Room({ gameState: this.gameState })
       this.gameState.beginPlayback()
-      this.gameState.bindRoom(this.trackerRoom)
+      const room = new Room({ gameState: this.gameState })
+      this.trackerRoom = room
       this.controllerLogger.info('Room 初始化')
-      this.registerMoveEventHandlers(this.trackerRoom)
+      this.registerMoveEventHandlers(room)
     } catch (e) {
       trackerLogger.error('Room 初始化失败', e)
       this.controllerView.unmount()
-      this.trackerRoom?.destroy()
-      this.gameState.bindRoom(null)
-      this.trackerRoom = null
+      if (this.trackerRoom) {
+        this.trackerRoom.destroy()
+        this.trackerRoom = null
+      } else {
+        this.gameState.bindRoom(null)
+      }
     }
   }
 
@@ -206,9 +186,8 @@ export class TrackerController {
    */
   registerTrackerPlayers(infos: unknown[], currentUserID?: number): void {
     if (!this.trackerRoom) return
-    // 玩家数据注册
+    // 玩家数据注册（内部已同步 gameState 座位列表与人数）
     this.trackerRoom.registerPlayers(infos as SeatInfo[], currentUserID)
-    this.gameState.syncRoomSeats(this.trackerRoom)
     this.controllerView.mount(this.trackerRoom)
     this.controllerView.scheduleRender()
   }
@@ -226,7 +205,6 @@ export class TrackerController {
 
     this.trackerRoom.setMySeatID(normalizedSeatID)
     this.trackerRoom.updateFixedViewIds()
-    this.gameState.syncRoomSeats(this.trackerRoom)
     this.getSeatUIs()
     this.controllerView.scheduleRender()
   }
@@ -254,7 +232,6 @@ export class TrackerController {
       }
 
       this.trackerRoom.setFirstHand(seatID)
-      this.gameState.syncRoomSeats(this.trackerRoom)
       this.getSeatUIs()
       this.controllerView.scheduleRender()
     } catch (e) {
@@ -309,7 +286,7 @@ export class TrackerController {
             card.suspended ||
             card.hasLocationCandidates() ||
             card.resolvedSeat !== normalizedEvent.options.fromSeatID ||
-            !['equip', 'judge', 'mark'].includes(card.subZone)
+            (card.subZone !== 'equip' && card.subZone !== 'judge' && card.subZone !== 'mark')
           ) {
             return
           }
@@ -351,7 +328,7 @@ export class TrackerController {
           '移动事件分支: revealPublicCandidate',
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
-        if (!this.revealPublicCandidateCards(event)) return
+        if (!this.revealPublicCandidateCards(readyRoom, event)) return
       } else if (event.type === 'noop') {
         this.controllerLogger.info(
           '移动事件跳过',
@@ -363,7 +340,7 @@ export class TrackerController {
           '移动事件分支: showCards',
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
-        if (!this.showTrackerCards(event)) return
+        if (!this.showTrackerCards(readyRoom, event)) return
       } else if (event.type === 'shuffleDiscardIntoPile') {
         this.controllerLogger.info(
           '移动事件分支: shuffleDiscardIntoPile',
@@ -411,18 +388,17 @@ export class TrackerController {
    * - 未定位身份由 Room 创建 detached 载体，不增加物理容量，也不重排匿名槽。
    * - 后续精确揭示或移动由 Room 在真实匿名槽上物化，并回收临时载体。
    */
-  private revealPublicCandidateCards(event: NormalizedMoveEvent): boolean {
-    const readyRoom = this.getReadyTrackerRoom()
+  private revealPublicCandidateCards(room: Room, event: NormalizedMoveEvent): boolean {
     const reveal = event.options.publicCandidateReveal
-    if (!readyRoom || !reveal || !(Number(reveal.count) > 0)) return false
+    if (!reveal || !(Number(reveal.count) > 0)) return false
 
-    const ids = this.normalizeIDs(event.cardIDs).filter((id) => id > 0)
+    const ids = event.cardIDs.filter((id) => id > 0)
     const locationCandidate = fromPublicCandidate(
       createPublicCandidate(reveal.zone, reveal.position, Number(reveal.count))
     )
     if (ids.length === 0 || !locationCandidate) return false
 
-    const cards = readyRoom.revealPublicCandidates(ids, locationCandidate)
+    const cards = room.revealPublicCandidates(ids, locationCandidate)
 
     this.controllerLogger.info('公共区范围揭示完成', {
       ids,
@@ -438,14 +414,11 @@ export class TrackerController {
    * 处理“展示/看牌”类移动事件。
    * 这类协议只说明卡牌变为可见，不一定意味着发生了普通移动，因此单独走明牌同步路径。
    */
-  private showTrackerCards(event: NormalizedMoveEvent): boolean {
-    const readyRoom = this.getReadyTrackerRoom()
-    if (!readyRoom) return false
-
-    const ids = this.normalizeIDs(event.cardIDs).filter((id) => id > 0)
+  private showTrackerCards(room: Room, event: NormalizedMoveEvent): boolean {
+    const ids = event.cardIDs.filter((id) => id > 0)
     if (ids.length === 0) return false
 
-    const raw = event.raw ?? event.options?.sourceEvent?.raw ?? {}
+    const raw = event.raw ?? event.options.sourceEvent?.raw ?? {}
     const move = event.protocol
     const zone = move.ToZone ?? move.FromZone
     const seatID = move.ToID ?? move.FromID
@@ -461,7 +434,7 @@ export class TrackerController {
     )
 
     if (zone === 8) {
-      return readyRoom.moveCards(ids, 'popup', {
+      return room.moveCards(ids, 'popup', {
         fromZone: 'popup',
         fromPopupSpaceID: event.options.toPopupSpaceID,
         toPopupSpaceID: event.options.toPopupSpaceID,
@@ -478,7 +451,7 @@ export class TrackerController {
         spellID
       })
 
-      return readyRoom.moveCards(ids, 'player', {
+      return room.moveCards(ids, 'player', {
         toSeatID: seatID,
         fromSeatID: seatID,
         fromZone: null,
@@ -486,7 +459,7 @@ export class TrackerController {
         subZone,
         spellID,
         cardCount: ids.length,
-        sourceEvent: event.options?.sourceEvent ?? {
+        sourceEvent: event.options.sourceEvent ?? {
           type: 'showCards',
           raw
         }
@@ -494,14 +467,18 @@ export class TrackerController {
     }
 
     const zoneName = getProtocolPublicZone(zone, event.toZone ?? 'process')
-    const position = event.options?.position ?? event.options?.fromPosition ?? POSITION_TOP
+    const position = event.options.position ?? event.options.fromPosition ?? POSITION_TOP
     const sourceZoneName = getProtocolPublicZone(move.FromZone)
     const materializationZone =
       sourceZoneName && sourceZoneName !== zoneName ? sourceZoneName : zoneName
-    const knownCards = this.resolveKnownCards(ids, {
-      zoneName: materializationZone,
-      position: event.options?.fromPosition ?? position
-    })
+    const knownCards = room.resolvePublicKnownCards(
+      ids,
+      {
+        zoneName: materializationZone,
+        position: event.options.fromPosition ?? position
+      },
+      this.controllerLogger
+    )
 
     this.controllerLogger.info('展示明牌进入公共区', {
       ids,
@@ -514,7 +491,7 @@ export class TrackerController {
       // 判定获得既会展示牌面，也会把实体移出来源公共区；复用标准移动链路完成来源置换，
       // 并清空协议残留的玩家槽位，避免公共区来源被误判为手牌。
       knownCards.forEach((card) => card.confirmKnown())
-      return readyRoom.moveCards(ids, zoneName, {
+      return room.moveCards(ids, zoneName, {
         ...event.options,
         fromZone: sourceZoneName,
         fromSeatID: null,
@@ -528,12 +505,17 @@ export class TrackerController {
     const shouldRepositionPile =
       zoneName === 'pile' && (position === POSITION_TOP || position === POSITION_BOTTOM)
 
-    this.placePublicRevealCards(knownCards, zoneName, {
-      position,
-      reposition: shouldRepositionPile,
-      cardIDsTopFirst: shouldRepositionPile && position === POSITION_TOP
-    })
-    readyRoom.applyPileIdentityReveal(ids)
+    room.placePublicRevealCards(
+      knownCards,
+      zoneName,
+      {
+        position,
+        reposition: shouldRepositionPile,
+        cardIDsTopFirst: shouldRepositionPile && position === POSITION_TOP
+      },
+      this.controllerLogger
+    )
+    room.applyPileIdentityReveal(ids)
     return true
   }
 
@@ -556,7 +538,12 @@ export class TrackerController {
         if (Number.isNaN(seatID) || seatID === 255) return
 
         const subZone = target.subZone ?? 'hand'
-        if (target.fullHand && subZone === 'hand') {
+        const isFullHand =
+          target.fullHand === true ||
+          (target.inferFullHand === true &&
+            subZone === 'hand' &&
+            readyRoom.shouldRevealPlayerHandAsFullHand(seatID, ids.length))
+        if (isFullHand && subZone === 'hand') {
           const handCount = Number(target.handCount ?? ids.length)
           readyRoom.syncObservedPlayerHandCount(seatID, handCount, { resolve: false })
         }
@@ -588,12 +575,21 @@ export class TrackerController {
       } else if (target.type === 'public') {
         const zoneName = target.zoneName ?? 'pile'
         const position = target.position ?? POSITION_TOP
-        const knownCards = this.resolveKnownCards(ids, { zoneName, position })
-        this.placePublicRevealCards(knownCards, zoneName, {
-          position,
-          reposition: target.reposition === true,
-          cardIDsTopFirst: target.cardIDsTopFirst === true
-        })
+        const knownCards = readyRoom.resolvePublicKnownCards(
+          ids,
+          { zoneName, position },
+          this.controllerLogger
+        )
+        readyRoom.placePublicRevealCards(
+          knownCards,
+          zoneName,
+          {
+            position,
+            reposition: target.reposition === true,
+            cardIDsTopFirst: target.cardIDsTopFirst === true
+          },
+          this.controllerLogger
+        )
       } else {
         return
       }
@@ -622,86 +618,6 @@ export class TrackerController {
     } catch (error) {
       trackerLogger.error('技能协议处理失败', error, event)
     }
-  }
-
-  /**
-   * 公共区明牌落点：确认牌面，并按需把已有实体纠正到指定端点。
-   * 普通明牌只补缺失实体；牌堆端点明牌还要纠正已有实体的位置。
-   * 先比较端点序列，避免重复协议再次改动 Zone 并制造无效脏渲染。
-   */
-  private placePublicRevealCards(
-    knownCards: Card[],
-    zoneName: PublicZoneName,
-    options: {
-      position?: PublicPosition
-      reposition?: boolean
-      cardIDsTopFirst?: boolean
-    } = {}
-  ): void {
-    const readyRoom = this.getReadyTrackerRoom()
-    if (!readyRoom) return
-
-    const position = options.position ?? POSITION_TOP
-    const targetZone = readyRoom.zones.get(zoneName)
-
-    const placeableCards: Card[] = []
-    const skippedCards: Card[] = []
-
-    knownCards.forEach((card) => {
-      if (card.location === 'player') {
-        skippedCards.push(card)
-        return
-      }
-
-      if (targetZone?.cards.includes(card) || card.location === zoneName) {
-        placeableCards.push(card)
-        return
-      }
-
-      if (card.location === 'outside' || card.location === 'suspended') {
-        placeableCards.push(card)
-        return
-      }
-
-      if (!readyRoom.zones.has(card.location as PublicZoneName)) {
-        placeableCards.push(card)
-        return
-      }
-
-      // 其它公共区（如 discard/process）留给跨区移动分支，避免把弃牌直接拽回牌顶。
-      skippedCards.push(card)
-    })
-
-    if (skippedCards.length > 0) {
-      this.controllerLogger.info('公共区展示跳过无法回收的实体', {
-        zoneName,
-        skippedIDs: skippedCards.map((card) => card.id),
-        skippedLocations: skippedCards.map((card) => card.location)
-      })
-    }
-
-    placeableCards.forEach((card) => {
-      readyRoom.removeCardsFromConstraintGroups([card])
-      card.confirmKnown()
-    })
-
-    const missingCards = placeableCards.filter((card) => !targetZone?.cards.includes(card))
-    const repositionCards =
-      options.cardIDsTopFirst === true && position === POSITION_TOP
-        ? [...placeableCards].reverse()
-        : placeableCards
-    const shouldReposition =
-      options.reposition === true &&
-      Boolean(targetZone) &&
-      placeableCards.length > 0 &&
-      !hasCardsAtPublicPosition(targetZone.cards, repositionCards, position)
-    const cardsToPlace = shouldReposition ? repositionCards : missingCards
-
-    if (cardsToPlace.length > 0) {
-      targetZone?.add(cardsToPlace, position)
-    }
-
-    readyRoom.resolveConstraints()
   }
 
   /**
@@ -794,60 +710,15 @@ export class TrackerController {
     }
   }
 
-  /**
-   * 按物理 ID 取得 Card 实体；公共区展示优先在端点匿名槽物化。
-   * 只有身份既未定位、也不属于本局待定位集合时，才按游戏外新牌补建实体。
-   */
-  private resolveKnownCards(
-    ids: CardID[],
-    target: { zoneName: PublicZoneName; position: PublicPosition } | null = null
-  ): Card[] {
-    const readyRoom = this.getReadyTrackerRoom()
-    if (!readyRoom) return []
-
-    if (target) {
-      readyRoom.materializeAtPublicEndpoint(ids, target.zoneName, target.position)
-    }
-
-    const existingCards = readyRoom
-      .findCardsByIDs(ids)
-      .filter((card) => !readyRoom.detachedKnownCards.has(card))
-    const existingIDs = new Set(existingCards.map((card) => card.id))
-    const missingIDs = ids.filter(
-      (id) =>
-        !existingIDs.has(id) &&
-        !readyRoom.unlocatedIdentities.has(id) &&
-        !readyRoom.cardIndex.has(id)
-    )
-    const createdCards =
-      missingIDs.length > 0 ? readyRoom.createExternalCards(missingIDs, missingIDs.length) : []
-    const cardMap = new Map<CardID, Card>()
-    existingCards.forEach((card) => cardMap.set(card.id, card))
-    createdCards.forEach((card) => cardMap.set(card.id, card))
-
-    // 仍停留在 unlocatedIdentities 的正 ID：既未物化到匿名槽（端点无匿名槽可用），
-    // 也不会被当作游戏外缺失身份补建，最终会静默从 knownCards 掉出。
-    // 这里补一条告警让「揭示丢失」可观测，而不是无声短少。
-    const unresolvedIdentityIDs = ids.filter(
-      (id) => !cardMap.has(id) && readyRoom.unlocatedIdentities.has(id)
-    )
-    if (unresolvedIdentityIDs.length > 0) {
-      this.controllerLogger.warn('揭示身份未能物化到匿名槽，已从已知牌集合中略过', {
-        reason: 'resolveKnownCards:unresolvedUnlocatedIdentity',
-        unresolvedIdentityIDs,
-        target
-      })
-    }
-
-    return ids.map((id) => cardMap.get(id)).filter((card): card is Card => Boolean(card))
-  }
-
   destroyTrackerRoom(): void {
     try {
       this.controllerView.unmount()
-      this.trackerRoom?.destroy()
-      this.gameState.bindRoom(null)
-      this.trackerRoom = null
+      if (this.trackerRoom) {
+        this.trackerRoom.destroy()
+        this.trackerRoom = null
+      } else {
+        this.gameState.bindRoom(null)
+      }
       this.controllerLogger.info('Room 销毁')
     } catch (e) {
       trackerLogger.error('Room 销毁失败', e)

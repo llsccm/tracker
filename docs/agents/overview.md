@@ -29,7 +29,9 @@
     - 记牌器主面板渲染在 `src/tracker/view/`，不在本目录
   - `src/featureFlags.js`：保留能力标记与消息白名单（生命周期、聊天、山河图、牌局状态、记牌器核心消息）。
   - `src/logic.js`：游戏消息路由与记牌器核心编排；非保留消息先经白名单过滤。
-  - `src/handler/`：协议处理器（由 `index.js` 统一导出主动路径）：
+  - `src/handler/`：协议处理器（主要由 `index.js` 聚合导出，部分由 `logic.js` 直接导入）：
+    - `clientEnhancements.js`：特效/皮肤屏蔽、弹窗关闭、心愿池提示与房间口号处理，由 `logic.js` 直接导入。
+    - `userSession.js`：首次用户身份同步、面板初始化与用户信息展示，由 `logic.js` 直接导入。
     - `chat.js`：聊天过滤、房间号链接化、重复消息与广播兼容。
     - `doudizhu.js`：斗地主记牌。
     - `StartGame.js`：开局/录像座位注册（`handleStartGame` / `handleRecordStartGame`）；当前 `logic` 主动接通的是录像座位旗标路径。

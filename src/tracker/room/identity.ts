@@ -5,7 +5,7 @@ import { replacePopupSpaceCard } from './movement/popupSpaces'
 import { POSITION_BOTTOM, POSITION_RANDOM } from '../candidate/cardPositions'
 import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
-import type { CardID, PublicPosition, PublicZoneName } from '../types'
+import type { CardID, PublicPosition, PublicZoneName, TrackerLogger } from '../types'
 import type { RoomMoveContext } from './movement/types'
 
 export interface AnonymizeLocatedIdentityOptions {
@@ -22,7 +22,7 @@ export class RoomIdentity {
   constructor(private readonly room: Room) {}
 
   capturePileMoveSnapshot(context: RoomMoveContext): PileMoveSnapshot {
-    const pileCards = this.room.zones.get('pile')!.cards
+    const pileCards = this.room.getZone('pile').cards
     const pileCountBefore = pileCards.length
     const cardIDs = context.pileIdentityEvent?.protocol.CardIDs ?? context.knownIDs
     if (
@@ -48,7 +48,7 @@ export class RoomIdentity {
 
   commitPileIdentityForMove(context: RoomMoveContext, snapshot: PileMoveSnapshot): void {
     const event = context.pileIdentityEvent
-    const pileCountAfter = this.room.zones.get('pile')!.cards.length
+    const pileCountAfter = this.room.getZone('pile').cards.length
     const cardIDs = (
       context.pileIdentityCardIDs ??
       event?.protocol.CardIDs ??
@@ -90,7 +90,7 @@ export class RoomIdentity {
   }
 
   collectVisiblePileTopIdentityIDs(): CardID[] {
-    const pileCards = this.room.zones.get('pile')!.cards
+    const pileCards = this.room.getZone('pile').cards
     const cardIDs: CardID[] = []
     for (let index = pileCards.length - 1; index >= 0; index -= 1) {
       const card = pileCards[index]
@@ -411,6 +411,50 @@ export class RoomIdentity {
   }
 
   /**
+   * 按物理 ID 取得 Card 实体；公共区展示优先在端点匿名槽物化。
+   * 只有身份既未定位、也不属于本局待定位集合时，才按游戏外新牌补建实体。
+   */
+  resolvePublicKnownCards(
+    ids: CardID[],
+    target: { zoneName: PublicZoneName; position: PublicPosition } | null = null,
+    logger: Pick<TrackerLogger, 'warn'> = trackerLogger
+  ): Card[] {
+    const room = this.room
+    if (target) {
+      room.materializeAtPublicEndpoint(ids, target.zoneName, target.position)
+    }
+
+    const existingCards = room
+      .findCardsByIDs(ids)
+      .filter((card) => !room.detachedKnownCards.has(card))
+    const existingIDs = new Set(existingCards.map((card) => card.id))
+    const missingIDs = ids.filter(
+      (id) => !existingIDs.has(id) && !room.unlocatedIdentities.has(id) && !room.cardIndex.has(id)
+    )
+    const createdCards =
+      missingIDs.length > 0 ? room.createExternalCards(missingIDs, missingIDs.length) : []
+    const cardMap = new Map<CardID, Card>()
+    existingCards.forEach((card) => cardMap.set(card.id, card))
+    createdCards.forEach((card) => cardMap.set(card.id, card))
+
+    // 仍停留在 unlocatedIdentities 的正 ID：既未物化到匿名槽（端点无匿名槽可用），
+    // 也不会被当作游戏外缺失身份补建，最终会静默从 knownCards 掉出。
+    // 这里补一条告警让「揭示丢失」可观测，而不是无声短少。
+    const unresolvedIdentityIDs = ids.filter(
+      (id) => !cardMap.has(id) && room.unlocatedIdentities.has(id)
+    )
+    if (unresolvedIdentityIDs.length > 0) {
+      logger.warn('揭示身份未能物化到匿名槽，已从已知牌集合中略过', {
+        reason: 'resolveKnownCards:unresolvedUnlocatedIdentity',
+        unresolvedIdentityIDs,
+        target
+      })
+    }
+
+    return ids.map((id) => cardMap.get(id)).filter((card): card is Card => Boolean(card))
+  }
+
+  /**
    * 将已有真实身份迁入匿名公共槽。
    *
    * 玩家暗手牌/mark 仍保留旧式正 ID interop：真实身份进入公共端点，匿名槽接管原玩家
@@ -524,8 +568,7 @@ export class RoomIdentity {
    */
   anonymizePileCohortIdentityEntities(context: string): CardID[] {
     const room = this.room
-    const pile = room.zones.get('pile')
-    if (!pile) return []
+    const pile = room.getZone('pile')
 
     const cohortIdentityIDs = new Set(room.pileIdentityLedger.getUnresolvedIdentityIDs())
     if (cohortIdentityIDs.size === 0) return []

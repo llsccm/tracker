@@ -1,14 +1,21 @@
-import type { CardID } from '@/tracker/types'
 import type { Room } from '../Room'
-import type { PatchedMoveCardFields } from '../types'
+import type { CardID, PatchedMoveCardFields } from '../types'
 import type { SkillUseSpellMessage } from './protocolEvents'
+import { defineStoredCardsPlugin } from './storedCardsPlugin'
 
-export function recordShengMo(room: Room, msg: SkillUseSpellMessage): void {
+export const shengMoPlugin = defineStoredCardsPlugin({
+  id: 'shengMo',
+  spellIDs: [3434],
+  prepare: handleShengMo,
+  record: recordShengMo
+})
+
+function recordShengMo(room: Room, msg: SkillUseSpellMessage): void {
   if (room.mySeatID === undefined || msg.SeatID === room.mySeatID) return
-  room.setSkillState(3434, [...(msg.CardIDs ?? [])])
+  room.setSkillState(msg.SpellID, [...(msg.CardIDs ?? [])])
 }
 
-export default function handleShengMo(patched: PatchedMoveCardFields, room: Room): void {
+function handleShengMo(patched: PatchedMoveCardFields, room: Room): void {
   const spellCards = room.readSkillState<CardID[]>(patched.SpellID)
 
   if (

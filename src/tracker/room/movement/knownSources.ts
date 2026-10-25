@@ -1,5 +1,5 @@
 import { trackerLogger } from '@/utils/logger'
-import type { Card } from '@/tracker/model/Card'
+import type { Card } from '@/tracker/model'
 import { normalizePublicPosition } from '@/tracker/candidate/publicCandidate'
 import type { Room } from '@/tracker/Room'
 import type { CardID, PublicZoneName, SeatID } from '@/tracker/types'
@@ -121,7 +121,7 @@ export class RoomMovementKnownSources {
     const cardMap = new Map<CardID, Card>()
     existingCards.forEach((card) => cardMap.set(card.id, card))
     createdCards.forEach((card) => cardMap.set(card.id, card))
-    context.knownCards = knownIDs.map((id) => cardMap.get(id)).filter(Boolean)
+    context.knownCards = knownIDs.map((id) => cardMap.get(id)).filter((card) => card !== undefined)
     return { missingIDs, createdCards, knownCardCreationReason, isExternalSource }
   }
 
@@ -240,7 +240,7 @@ export class RoomMovementKnownSources {
 
   private resolvePlayerSource(
     context: RoomMoveContext,
-    fromSeat: SeatID,
+    fromSeat: SeatID | null,
     isExternalSource: boolean
   ): KnownMoveResolution {
     const { fromSubZone, knownIDs, sourceCards } = context

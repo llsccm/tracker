@@ -123,8 +123,9 @@ export class RoomMovement {
       // 完整候选覆盖已经表达了这次 K 张转移；此时不能再确定性挑选暗实体搬到目标。
       // 返回空数组表示候选建模失败，仍允许默认未知移动路径执行保守回退。
       context.skipUnknownMovement = propagatedCards.length > 0
-      if (context.gainSpellID !== undefined && targetHandSeat !== null) {
-        propagatedCards.forEach((card) => card.recordHandGain(targetHandSeat, context.gainSpellID))
+      const gainSpellID = context.gainSpellID
+      if (gainSpellID !== undefined && targetHandSeat !== null) {
+        propagatedCards.forEach((card) => card.recordHandGain(targetHandSeat, gainSpellID))
       }
     }
 
@@ -156,10 +157,9 @@ export class RoomMovement {
       count: handMoveCount,
       sourceEvent
     })
-    if (context.gainSpellID !== undefined && targetHandSeat !== null) {
-      publicHandCandidates.forEach((card) =>
-        card.recordHandGain(targetHandSeat, context.gainSpellID)
-      )
+    const gainSpellID = context.gainSpellID
+    if (gainSpellID !== undefined && targetHandSeat !== null) {
+      publicHandCandidates.forEach((card) => card.recordHandGain(targetHandSeat, gainSpellID))
     }
   }
 

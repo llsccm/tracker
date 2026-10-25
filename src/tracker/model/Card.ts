@@ -121,11 +121,11 @@ export class Card extends BaseCard {
   }
 
   recordHandGain(seatID: SeatID, spellID: SpellID | null): void {
-    const next = spellID > 0 ? spellID : null
+    const next = spellID !== null && spellID > 0 ? spellID : null
     if (this.getHandGainSpellID(seatID) === next) return
     if (next === null) this.handGainSpellIDs.delete(seatID)
     else this.handGainSpellIDs.set(seatID, next)
-    this.room?.notifyCardChanged(this, { type: 'card-hand-gain-source', seatID, gainSpellID: next })
+    this.room.notifyCardChanged(this, { type: 'card-hand-gain-source', seatID, gainSpellID: next })
   }
 
   private pruneHandGainSources(): void {
@@ -224,11 +224,7 @@ export class Card extends BaseCard {
    * 同步当前游戏回合/轮时间戳信息
    */
   syncTimestamp(): void {
-    const timestamp = this.room?.getCurrentTimestamp?.() ?? {
-      turn: 0,
-      round: 0,
-      phase: 0
-    }
+    const timestamp = this.room.getCurrentTimestamp()
     this.turn = timestamp.turn ?? 0
     this.round = timestamp.round ?? 0
     this.phase = timestamp.phase ?? 0
@@ -240,9 +236,9 @@ export class Card extends BaseCard {
   confirmKnown(): void {
     if (!this.isKnown) {
       this.isKnown = true
-      this.room?.markCounterDirty?.(this)
+      this.room.markCounterDirty(this)
       // 明牌确认会改变投影（暗牌不投影、明牌进入对应展示桶），需通知增量索引重投影。
-      this.room?.notifyCardChanged?.(this, { type: 'card-known-confirmed' })
+      this.room.notifyCardChanged(this, { type: 'card-known-confirmed' })
     }
     this.syncTimestamp()
   }
@@ -277,7 +273,7 @@ export class Card extends BaseCard {
     this.owner = nextOwner
 
     if (seatsChanged || ownerChanged || resolvedSeatChanged) {
-      this.room?.notifyCardChanged?.(this, {
+      this.room.notifyCardChanged(this, {
         type: 'card-seats-changed',
         reason,
         previousResolvedSeat,
@@ -475,7 +471,7 @@ export class Card extends BaseCard {
         popupCandidate) &&
       !hasPublicCandidate
     ) {
-      this.room?.clearCardsFromPublicZones?.([this])
+      this.room.clearCardsFromPublicZones([this])
     }
 
     if (playerCandidates.length > 0 || hasContainerCandidate) {
@@ -516,7 +512,7 @@ export class Card extends BaseCard {
       }) || changed
 
     if (changed) {
-      this.room?.markCounterDirty?.(this)
+      this.room.markCounterDirty(this)
     }
 
     return changed
@@ -590,7 +586,7 @@ export class Card extends BaseCard {
     this.reconcileLocationStateFromCandidates(reason, previousSeats)
     this.pruneHandGainSources()
 
-    this.room?.notifyCardChanged?.(this, {
+    this.room.notifyCardChanged(this, {
       type: 'card-location-candidates-changed',
       reason,
       candidates: this.locationCandidates,
@@ -645,7 +641,7 @@ export class Card extends BaseCard {
     const previousSeats = this.seats
 
     // 明确绑定到玩家区前先清公共区引用，避免同一实体同时出现在牌堆/弃牌堆顺序中。
-    this.room?.clearCardsFromPublicZones?.([this])
+    this.room.clearCardsFromPublicZones([this])
     this.location = normalized.type === 'popup' ? 'popup' : 'player'
     this.popupSpaceID = normalized.type === 'popup' ? normalized.spaceID : null
     this.subZone = normalized.type === 'popup' ? null : normalized.subZone
@@ -662,7 +658,7 @@ export class Card extends BaseCard {
         previousSeats.size !== nextSeats.size ||
         Array.from(previousSeats).some((seat) => !nextSeats.has(seat))
     })
-    this.room?.markCounterDirty?.(this)
+    this.room.markCounterDirty(this)
     const changed =
       hadCandidates ||
       previousLocation !== this.location ||
@@ -673,7 +669,7 @@ export class Card extends BaseCard {
     this.pruneHandGainSources()
 
     if (changed) {
-      this.room?.notifyCardChanged?.(this, {
+      this.room.notifyCardChanged(this, {
         type: 'card-location-resolved',
         reason,
         candidate: normalized,
@@ -719,7 +715,8 @@ export class Card extends BaseCard {
     candidate: SubZoneCandidateInput,
     reason = 'resolveSubZoneCandidate'
   ): boolean {
-    return this.resolveLocationCandidate(fromSubZoneCandidate(candidate), reason)
+    const normalized = fromSubZoneCandidate(candidate)
+    return normalized ? this.resolveLocationCandidate(normalized, reason) : false
   }
 
   /**
@@ -731,7 +728,7 @@ export class Card extends BaseCard {
    */
   bindCandidates(
     seats: SeatInput,
-    subZone: SubZone = 'hand',
+    subZone: SubZone | null = 'hand',
     spellID: SpellID | null = null,
     options: BindOptions = {}
   ): void {
@@ -751,10 +748,10 @@ export class Card extends BaseCard {
 
     this.setSeats(seats, 'bindCandidates')
     this.pruneHandGainSources()
-    this.room?.markCounterDirty?.(this)
+    this.room.markCounterDirty(this)
     // location/subZone/spellID 可能在 owner 不变时改变（如 equip→mark 同座位），
     // setSeats 此时不发席位事件；显式通知增量索引按新子区/技能重投影。
-    this.room?.notifyCardChanged?.(this, {
+    this.room.notifyCardChanged(this, {
       type: 'card-bound',
       subZone,
       spellID,
@@ -800,7 +797,7 @@ export class Card extends BaseCard {
       this.isKnown = false
     }
 
-    this.room?.markCounterDirty?.(this)
+    this.room.markCounterDirty(this)
 
     this.notifyLeftPlayerZoneIfSilent(!seatsChanged && !candidatesChanged, previous, {
       type: 'card-moved-to-public-zone',
@@ -815,7 +812,7 @@ export class Card extends BaseCard {
   getLocationDescription(): string {
     if (this.suspended) return '位置发散，暂停追踪'
 
-    const ambiguousDescription = this.room?.ambiguousKnownIndex?.describe(this.id)
+    const ambiguousDescription = this.room.ambiguousKnownIndex.describe(this.id)
     if (ambiguousDescription) return ambiguousDescription
 
     if (this.location === 'outside') return '游戏外'
@@ -837,9 +834,12 @@ export class Card extends BaseCard {
         return parts.join('/')
       }
 
+      const subZone = this.subZone
+      if (subZone === null) return '未知'
+      const zoneName = getSubZoneName(subZone)
       this.seats.forEach((seatID) => {
         const prefix = this.room.formatSeatPrefix(seatID)
-        parts.push(`${prefix}${getSubZoneName(this.subZone)}`)
+        parts.push(`${prefix}${zoneName}`)
       })
 
       return parts.join('/')
@@ -861,12 +861,14 @@ export class Card extends BaseCard {
         : this.getResolvedLocationCandidates()
 
     return this.setLocationCandidates(
-      [...baseCandidates, fromPublicCandidate(normalized)].filter(Boolean),
+      [...baseCandidates, fromPublicCandidate(normalized)].filter(
+        (candidate) => candidate !== null
+      ),
       'addPublicCandidate'
     )
   }
 
-  removePublicCandidates(predicate: (candidate: PublicCandidate | null) => boolean): boolean {
+  removePublicCandidates(predicate: (candidate: PublicCandidate) => boolean): boolean {
     if (!this.locationCandidates.some((candidate) => candidate.type === 'public')) return false
 
     const nextCandidates = this.locationCandidates.filter((candidate) => {
@@ -875,7 +877,7 @@ export class Card extends BaseCard {
         candidate,
         (zone, position, count) => getPublicCandidateLabel(zone, position, count) ?? null
       )
-      return !predicate(publicCandidate)
+      return publicCandidate === null || !predicate(publicCandidate)
     })
     return this.setLocationCandidates(nextCandidates, 'removePublicCandidates')
   }
@@ -898,7 +900,7 @@ export class Card extends BaseCard {
     this.turn = 0
     this.round = 0
     this.phase = 0
-    this.room?.markCounterDirty?.(this)
+    this.room.markCounterDirty(this)
 
     this.notifyLeftPlayerZoneIfSilent(!seatsChanged, previous, { type: 'card-reset' })
   }
@@ -938,7 +940,7 @@ export class Card extends BaseCard {
 
     if (!needsCardDirty) return
 
-    this.room?.notifyCardChanged?.(this, {
+    this.room.notifyCardChanged(this, {
       ...detail,
       previousLocation: previous.location,
       previousSubZone: previous.subZone,

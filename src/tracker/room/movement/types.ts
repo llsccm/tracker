@@ -1,4 +1,4 @@
-import type { Card } from '@/tracker/model/Card'
+import type { Card } from '@/tracker/model'
 import type { ConstraintGroupOptions } from '@/tracker/constraint/ConstraintGroup'
 import type {
   CardID,
@@ -29,14 +29,14 @@ export interface RoomMovementOptions {
   gainSpellID?: SpellID | null
   pileIdentityCardIDs?: readonly CardID[]
   pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
-  toSeatID?: SeatInput
+  toSeatID?: SeatInput | null
   subZone?: SubZone
-  spellID?: SpellID
+  spellID?: SpellID | null
   combinationID?: string | number | null
   fromZone?: SourceZoneInput
-  fromSeatID?: SeatID
-  fromSubZone?: SubZone
-  fromSpellID?: SpellID
+  fromSeatID?: SeatID | null
+  fromSubZone?: SubZone | null
+  fromSpellID?: SpellID | null
   cardCount?: number
   /** 协议手牌总数变化量；省略时沿用实际移动实体数 cardCount。 */
   handMoveCount?: number
@@ -63,9 +63,9 @@ export interface RoomMoveContext {
   pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
   cardIDs: readonly CardID[]
   toZone: MoveTargetZone
-  toSeatID?: SeatInput
+  toSeatID?: SeatInput | null
   subZone: SubZone
-  spellID: SpellID | null
+  spellID: SpellID | null | undefined
   combinationID?: string | number | null
   fromZone: SourceZoneInput
   fromSeat: SeatID | null

@@ -86,7 +86,7 @@ export class RoomMovementUnknownPlacement {
 
       if (movedUnknownCards.length > 0 && targetSeats.length > 0) {
         this.room.createConstraintGroup({
-          id: combinationID,
+          id: combinationID ?? undefined,
           cards: movedUnknownCards,
           candidateSeats: targetSeats,
           expectedSlotsByLocation,

@@ -13,7 +13,6 @@ vi.mock('@/tracker/runtime/browser', () => ({
     dispatchSkillProtocolEvent(event) {
       return Game.room?.dispatchSkillProtocolEvent?.(event)
     },
-    getReadyTrackerRoom: vi.fn(),
     revealTrackerCards
   }
 }))
@@ -35,7 +34,6 @@ vi.mock('@/draw', () => ({
 import { CardConfig, SpellExtendConfig } from '@/config'
 import { handleRoleOptTargetNtf } from '@/handler/GsCRoleOptTargetNtf'
 import { Game } from '@/tracker'
-import { tracker } from '@/tracker/runtime/browser'
 import { Room } from '@/tracker/Room'
 import { registerDefaultMoveEventHandlers } from '@/tracker/skill/registerHandlers'
 
@@ -46,7 +44,6 @@ describe('GsCRoleOptTargetNtf', () => {
     drawChengXiang.mockClear()
     revealTrackerCards.mockClear()
     renderPingJianWindow.mockClear()
-    vi.mocked(tracker.getReadyTrackerRoom).mockReset()
     Game.bindRoom(null)
     Game.deleteSpellState(361)
     Game.deleteSpellState(441)
@@ -243,13 +240,9 @@ describe('GsCRoleOptTargetNtf', () => {
   })
 
   it('诫厉发动者视角可同步完整牌堆顶与目标部分手牌', () => {
-    const skillState: Record<string, any> = {}
-    const ensureSkillState = vi.fn(() => skillState)
-    vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({
-      mySeatID: 3,
-      ensureSkillState,
-      getPlayer: vi.fn(() => ({ hasObservedHandCount: true, observedHandCount: 5 }))
-    } as any)
+    const room = new Room({ gameState: Game })
+    registerDefaultMoveEventHandlers(room)
+    room.setMySeatID(3)
 
     handleRoleOptTargetNtf({
       Param: 1,
@@ -263,8 +256,9 @@ describe('GsCRoleOptTargetNtf', () => {
       className: 'GsCRoleOptTargetNtf'
     })
 
-    expect(ensureSkillState).toHaveBeenCalledWith(3483, expect.any(Function))
-    expect(skillState.context).toEqual({ actorSeat: 3, targetSeat: 4, pileCount: 4 })
+    expect(room.readSkillState(3483)).toEqual({
+      context: { actorSeat: 3, targetSeat: 4, pileCount: 4 }
+    })
     expect(revealTrackerCards).toHaveBeenCalledTimes(2)
     expect(revealTrackerCards).toHaveBeenNthCalledWith(
       1,
@@ -276,19 +270,21 @@ describe('GsCRoleOptTargetNtf', () => {
       },
       [81, 99, 124, 4]
     )
-    expect(revealTrackerCards).toHaveBeenNthCalledWith(2, { type: 'player', seatID: 4 }, [91, 158])
+    expect(revealTrackerCards).toHaveBeenNthCalledWith(
+      2,
+      { type: 'player', seatID: 4, inferFullHand: true },
+      [91, 158]
+    )
+    room.destroy()
   })
 
   it.each([
     { label: '目标视角', mySeatID: 6, actorSeat: 7, targetSeat: 6 },
     { label: '其它视角', mySeatID: 2, actorSeat: 3, targetSeat: 4 }
   ])('诫厉 $label 只收到牌堆张数并记录上下文', ({ mySeatID, actorSeat, targetSeat }) => {
-    const skillState: Record<string, any> = {}
-    const ensureSkillState = vi.fn(() => skillState)
-    vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({
-      mySeatID,
-      ensureSkillState
-    } as any)
+    const room = new Room({ gameState: Game })
+    registerDefaultMoveEventHandlers(room)
+    room.setMySeatID(mySeatID)
 
     handleRoleOptTargetNtf({
       Param: 1,
@@ -303,16 +299,17 @@ describe('GsCRoleOptTargetNtf', () => {
     })
 
     expect(revealTrackerCards).not.toHaveBeenCalled()
-    expect(skillState.context).toEqual({ actorSeat, targetSeat, pileCount: 4 })
+    expect(room.readSkillState(3483)).toEqual({
+      context: { actorSeat, targetSeat, pileCount: 4 }
+    })
+    room.destroy()
   })
 
   it('诫厉开发模式也不从纯计数通知伪造牌面', () => {
     vi.stubEnv('DEV', true)
-    const skillState: Record<string, any> = {}
-    vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({
-      mySeatID: 2,
-      ensureSkillState: vi.fn(() => skillState)
-    } as any)
+    const room = new Room({ gameState: Game })
+    registerDefaultMoveEventHandlers(room)
+    room.setMySeatID(2)
 
     handleRoleOptTargetNtf({
       Param: 1,
@@ -327,19 +324,19 @@ describe('GsCRoleOptTargetNtf', () => {
     })
 
     expect(revealTrackerCards).not.toHaveBeenCalled()
-    expect(skillState.context).toEqual({ actorSeat: 3, targetSeat: 4, pileCount: 4 })
+    expect(room.readSkillState(3483)).toEqual({
+      context: { actorSeat: 3, targetSeat: 4, pileCount: 4 }
+    })
+    room.destroy()
   })
 
   it.each([
     { Params: [4, 2, 81, 99, 124, 4, 91] },
     { Params: [4, 2, 81, 99, 124, 4, 91, 158, 200] }
   ])('诫厉拒绝与声明张数不匹配的完整 Params: %j', ({ Params }) => {
-    const deleteSkillState = vi.fn()
-    const ensureSkillState = vi.fn(() => ({}))
-    vi.mocked(tracker.getReadyTrackerRoom).mockReturnValue({
-      ensureSkillState,
-      deleteSkillState
-    } as any)
+    const room = new Room({ gameState: Game })
+    registerDefaultMoveEventHandlers(room)
+    room.setSkillState(3483, { context: { actorSeat: 3, targetSeat: 4, pileCount: 4 } })
 
     handleRoleOptTargetNtf({
       Param: 1,
@@ -351,9 +348,9 @@ describe('GsCRoleOptTargetNtf', () => {
       targetSeatID: 4
     })
 
-    expect(ensureSkillState).not.toHaveBeenCalled()
-    expect(deleteSkillState).toHaveBeenCalledWith(3483)
+    expect(room.hasSkillState(3483)).toBe(false)
     expect(revealTrackerCards).not.toHaveBeenCalled()
+    room.destroy()
   })
 
   it('评鉴技能3911按技能数量切割Params并过滤末尾干扰数据', () => {

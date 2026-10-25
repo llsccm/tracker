@@ -37,13 +37,16 @@ if (!room) return
 
 数量约束通过 `room.createConstraintGroup({ cards, expectedSlotsByLocation })` 提交：值仅接受数字
 或 `{ min, max }`，运行时统一为区间。弹窗位置为 `{ type: 'popup', spaceID }`，不能使用伪座位。
+建组入口与 `ConstraintGroup` 共用 `ConstraintGroupOptions`：`cards` 只接受实体数组，
+`candidateSeats` 只接受座位数组，分组标识统一用 `id`。不接收 `cardIDs`、`seatID`、
+`subZone`、`spellID` 或 `combinationID`；查牌及位置写入在建组前完成，候选座位只作为分组快照。
 
 弹窗入区使用 `room.moveCards(ids, 'popup', { fromZone: 'pile', toPopupSpaceID: 35, cardCount })`；出区使用 `fromZone: 'popup', fromPopupSpaceID: 35` 并明确目标。玩家标记继续使用 `toSeatID/subZone: 'mark'/spellID`，来源空间通过 `fromSpellID` 表达。`414` 标记返回时来源仍为 `414`，不能用动作技能 `3389` 查找标记空间。
-巧织明确身份通过 `tracker.dispatchSkillProtocolEvent({ type: 'roleData', message })` 进入默认技能管线。
+巧织暗取通过弹窗与手牌的数量约束保留候选，剩余牌明弃后确认入手身份；角色数据通知不参与揭示，移动自带正 ID 时直接确认。
 
 读取当前确定手牌的获得技能用 `card.gainSpellID`；候选分支用 `card.getHandGainSpellID(seatID)`。
 `Room.moveCards()` 的 `gainSpellID` 可显式提供来源，默认从获得协议读取；同座位揭示省略该参数时保留已有来源。
-日志分别输出标记归属 `spellID` 与获得来源 `gainSpellID`，巧织揭示后分别为 `null` 与 `3544`。
+日志分别输出 `spellID` 与获得来源 `gainSpellID`；标记归属以完整位置为准，普通手牌位置不使用 `spellID`。巧织确认入手后为普通手牌，`gainSpellID` 为 `3544`。
 
 `RawMoveCardEvent` 的 12 个核心字段全部必填：
 
@@ -88,6 +91,21 @@ if (!room) return
 来源标记空间仍由 `options.fromSpellID` 单独表示。
 技能 `MoveEventPatch` 只修改 `type`、`cardIDs`、`cardCount` 和 `options`，不覆盖
 `protocol` 或 `raw`。
+
+### 来源座位与 `NaN` 边界
+
+`protocol/MoveEventNormalizer.ts` 的 `normalizeMoveEndpoints()` 仅在玩家区来源时将协议数字
+`FromID` 原样写入 `fromSeatID`；公共区来源不设置该字段，弹窗使用 `fromPopupSpaceID`。
+`room/movement/context.ts` 的 `createMoveContext()` 优先使用显式 `fromSeatID`；没有显式座位时，
+公共区名或 `null` 得到 `fromSeat: null`，领域直调使用的数字座位得到相应座位。
+`RoomMovementUnknownPlacement.move()` 将该值原样传给 `RoomMovementSources.takeSourceCards()`。
+当前符合协议与领域约定的调用不会产生 `fromSeat: NaN`；无座位也不使用 `NaN` 表达。
+
+这不是 TypeScript `number` 的运行时保证：人为传入 `fromSeatID: NaN` 会直接透传；传入全空白
+`fromZone` 时，`Number(fromZone)` 为 `0` 而 `parseInt(String(fromZone))` 为 `NaN`。
+这些输入违反当前端点语义，不构成消费路径新增防御的依据。`takeSourceCards()` 的两处
+`fromSeat != null` 只区分有无来源座位，保留该判断；周边既有 `Number.isNaN()` 也不证明合法输入可达。
+若出现真实协议或合法调用反例，应先定位产生位置并更新入口契约，再决定修复范围。
 
 ## 协议 CardID 输入约定
 

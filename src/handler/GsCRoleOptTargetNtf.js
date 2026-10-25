@@ -6,10 +6,9 @@ import { Game } from '../tracker'
 import { tracker } from '../tracker/runtime/browser'
 import {
   FULL_HAND_ROLE_OPT_SPELL_IDS,
-  PARTIAL_HAND_ROLE_OPT_SPELL_IDS,
-  shouldRevealAsFullHand
+  PARTIAL_HAND_ROLE_OPT_SPELL_IDS
 } from '../tracker/protocol/protocolRules'
-import { clearJieLiState, recordJieLiContext } from '../tracker/skill/JieLi'
+import { parseJieLiNotice } from '../tracker/skill/JieLi'
 import { laya } from '@/runtime/gameAdapter'
 import { wait } from '@/utils'
 
@@ -30,59 +29,9 @@ function revealPileCards(cardIDs) {
   )
 }
 
-// 部分手牌协议在 handCount 恰好等于目标整手数时，应按 fullHand 同步。
-// 优先信观测手牌数；没有观测时才退回本地手牌实体数。
-function shouldRevealTrackedHandAsFullHand(seatID, handCount) {
-  const room = tracker.getReadyTrackerRoom()
-  if (!room) return false
-
-  const player = room.getPlayer?.(seatID)
-  if (player?.hasObservedHandCount === true) {
-    return shouldRevealAsFullHand({
-      handCount,
-      observedHandCount: player.observedHandCount
-    })
-  }
-
-  const localHandCount = room.playerCardsSnapshot.filter(
-    (card) => card.subZone === 'hand' && card.seats?.has?.(Number(seatID))
-  ).length
-  return shouldRevealAsFullHand({ handCount, localHandCount })
-}
-
 function getCardNumbers(ids) {
   const config = CardConfig.GetInstance()
   return ids.map((id) => config.getCardNumber(id))
-}
-
-function parseJieLiNotice(msg) {
-  const { Params, SeatID, SrcSeatID, targetSeatID } = msg
-  if (!Array.isArray(Params) || Params.length === 0) return null
-
-  const actorSeat = SrcSeatID ?? SeatID
-  const targetSeat = targetSeatID
-  const [pileCount, handCount] = Params
-  if (!Number.isInteger(pileCount) || pileCount <= 0) return null
-
-  if (Params.length === 1) {
-    return { actorSeat, targetSeat, pileCount, pileCardIDs: null, handCardIDs: null }
-  }
-
-  if (
-    !Number.isInteger(handCount) ||
-    handCount < 0 ||
-    Params.length !== 2 + pileCount + handCount
-  ) {
-    return null
-  }
-
-  return {
-    actorSeat,
-    targetSeat,
-    pileCount,
-    pileCardIDs: Params.slice(2, 2 + pileCount),
-    handCardIDs: Params.slice(2 + pileCount)
-  }
 }
 
 // GsCRoleOptTargetNtf
@@ -218,32 +167,12 @@ export function handleRoleOptTargetNtf(msg) {
       // Params: [pileCount, handCount, ...pileTopCardIDs, ...handCardIDs]
       if (Param == 1 && Params?.length > 0) {
         const notice = parseJieLiNotice(msg)
-        const trackerRoom = tracker.getReadyTrackerRoom()
-        if (!notice) {
-          if (trackerRoom) clearJieLiState(trackerRoom)
-          break
-        }
-
-        if (trackerRoom) {
-          recordJieLiContext(trackerRoom, {
-            actorSeat: notice.actorSeat,
-            targetSeat: notice.targetSeat,
-            pileCount: notice.pileCount
-          })
-        }
-
         // 协议已按视角隔离：完整载荷只同步其明确声明的牌面，计数-only 不伪造牌面。
-        if (!notice.pileCardIDs) break
+        if (!notice?.pileCardIDs) break
         revealPileCards(notice.pileCardIDs)
 
         if (notice.handCardIDs.length > 0 && notice.targetSeat !== 255) {
-          revealPlayerHandCards(
-            notice.targetSeat,
-            notice.handCardIDs,
-            shouldRevealTrackedHandAsFullHand(notice.targetSeat, notice.handCardIDs.length)
-              ? { fullHand: true }
-              : {}
-          )
+          revealPlayerHandCards(notice.targetSeat, notice.handCardIDs, { inferFullHand: true })
         }
       }
 

@@ -45,6 +45,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Tracker strict typecheck
+        run: pnpm typecheck:tracker
+
       - name: Tracker tests
         run: pnpm test:tracker
 

@@ -214,8 +214,9 @@ export class CardLocationIndex {
    */
   refreshPublicZones(room: Room, zoneIDs: Iterable<PublicZoneName>): void {
     for (const zoneID of zoneIDs) {
-      const zone = room.zones.get(zoneID)
-      if (zone) this.publicByZone.set(zoneID, [...zone.cards])
+      if (room.zones.has(zoneID)) {
+        this.publicByZone.set(zoneID, [...room.getZone(zoneID).cards])
+      }
     }
   }
 
@@ -260,7 +261,7 @@ export class CardLocationIndex {
    * 是否带装备容器候选（投影座位依赖装备承载座位的跨牌依赖）。
    */
   private cardHasContainerCandidates(card: Card): boolean {
-    if (!card.hasLocationCandidates?.()) return false
+    if (!card.hasLocationCandidates()) return false
     return getContainerLocationCandidates(card.locationCandidates).length > 0
   }
 

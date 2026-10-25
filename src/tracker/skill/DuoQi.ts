@@ -1,4 +1,4 @@
-import type { Card } from '@/tracker/model/Card'
+import type { Card } from '@/tracker/model'
 import type { GameState } from '../Game'
 import { getPositiveIDs } from '../helper/cardIDs'
 import type { Room } from '../Room'
@@ -54,15 +54,15 @@ interface DuoQiUseSpellMessage {
   SeatID?: SeatID
   SkillOwerSeatID?: SeatID
   SrcSeatID?: SeatID
-  SpellID?: number | string
-  EffectIndex?: number | string
+  SpellID?: number
+  EffectIndex?: number
   DestSeatIDs?: SeatID[]
 }
 
 interface DuoQiRoleDataTargetMessage {
-  DataID?: number | string
-  Datas?: unknown[]
-  SeatID?: SeatID
+  DataID?: number
+  Datas: number[]
+  SeatID: SeatID
 }
 
 /** 只读获取当前 Room 的夺炁推断状态，不存在时不创建。 */
@@ -163,9 +163,8 @@ export function recordDuoQiActivation(
   game: GameState,
   msg: DuoQiUseSpellMessage
 ): DuoQiActivation | undefined {
-  const spellID = Number(msg.SpellID)
   // 3731 的目标来自 PubGsCUseSpell；3730 必须等待 GsCUpdateRoleDataExNtf(DataID=8)。
-  if (spellID !== DUO_QI_RANDOM_GAIN_SPELL_ID) return undefined
+  if (msg.SpellID !== DUO_QI_RANDOM_GAIN_SPELL_ID) return undefined
 
   const room = game.room
   if (!room) return undefined
@@ -178,11 +177,7 @@ export function recordDuoQiActivation(
 
   const ownerSeatID = msg.SkillOwerSeatID ?? msg.SeatID ?? msg.SrcSeatID
   const targetSeatID = msg.DestSeatIDs?.[0]
-  if (
-    !Number.isFinite(ownerSeatID) ||
-    !Number.isFinite(targetSeatID) ||
-    ownerSeatID === targetSeatID
-  ) {
+  if (ownerSeatID === undefined || targetSeatID === undefined || ownerSeatID === targetSeatID) {
     return undefined
   }
 
@@ -194,7 +189,7 @@ export function recordDuoQiActivation(
     // 主视角的实际获得牌会直接明示，保留初始化标记即可，无需建立技能私有模糊组。
     skipInference: ownerSeatID === room.mySeatID
   }
-  state.activations.set(spellID, activation)
+  state.activations.set(msg.SpellID, activation)
   return activation
 }
 
@@ -205,16 +200,14 @@ export function recordDuoQiRoleDataTarget(
   const room = game.room
   if (!room) return undefined
 
+  if (msg.Datas?.length < 2) return undefined
+
   const state = getDuoQiState(room)
   if (!state) return undefined
 
   const targetSeatID = msg.SeatID
-  const ownerSeatID = Number(msg.Datas[1])
-  if (
-    !Number.isFinite(targetSeatID) ||
-    !Number.isFinite(ownerSeatID) ||
-    targetSeatID === ownerSeatID
-  ) {
+  const ownerSeatID = msg.Datas[1]
+  if (targetSeatID === ownerSeatID) {
     return undefined
   }
 
@@ -272,9 +265,9 @@ function decorateGainAll(event: MoveEventDraft, room: Room, state: DuoQiState): 
   const activation = state.activations.get(DUO_QI_GAIN_ALL_SPELL_ID)
   if (!activation || activation.skipInference || !activationMatchesMove(activation, event))
     return event
-  if (event.cardIDs?.some?.((cardID: CardID) => cardID > 0)) return event
+  if (event.cardIDs.some((cardID: CardID) => cardID > 0)) return event
 
-  const sourceZone = event.options?.fromZone === 'discard' ? 2 : 5
+  const sourceZone = event.options.fromZone === 'discard' ? 2 : 5
   resolveRandomHandCandidatesForGainAll(event, room, state, activation, sourceZone)
   const sourceCards = collectGainAllSourceCards(
     room,
@@ -437,9 +430,9 @@ function collectRecentDiscardSourceCards(
   const targetInitialCardIDsInDiscard = new Set(
     targetInitialCardIDs.filter((cardID) => room.cardIndex.get(cardID)?.location === 'discard')
   )
-  const sourceCandidates = (room.zones.get('discard')?.cards ?? []).filter((card) =>
-    targetInitialCardIDsInDiscard.has(card.id)
-  )
+  const sourceCandidates = room
+    .getZone('discard')
+    .cards.filter((card) => targetInitialCardIDsInDiscard.has(card.id))
   const gainedCount = getCount(event)
   if (gainedCount <= 0 || sourceCandidates.length < gainedCount) return []
 
@@ -455,10 +448,7 @@ function decorateRandomDiscardGain(
   const activation = state.activations.get(DUO_QI_RANDOM_GAIN_SPELL_ID)
   if (!activation || activation.skipInference || !activationMatchesMove(activation, event))
     return event
-  if (
-    event.options?.fromZone !== 'discard' ||
-    event.cardIDs?.some?.((cardID: CardID) => cardID > 0)
-  ) {
+  if (event.options.fromZone !== 'discard' || event.cardIDs.some((cardID: CardID) => cardID > 0)) {
     return event
   }
 
@@ -494,10 +484,10 @@ function decorateRandomHandGain(event: MoveEventDraft, state: DuoQiState): MoveE
     return event
   }
   if (
-    event.options?.fromZone != null ||
-    event.options?.fromSubZone !== 'hand' ||
-    event.cardIDs?.some?.((cardID: CardID) => cardID > 0) ||
-    event.options?.sourceCards?.length
+    event.options.fromZone != null ||
+    event.options.fromSubZone !== 'hand' ||
+    event.cardIDs.some((cardID: CardID) => cardID > 0) ||
+    event.options.sourceCards?.length
   ) {
     return event
   }
@@ -537,9 +527,9 @@ export function decorateDuoQiKnownMove(event: MoveEventDraft, room: Room): MoveE
 
   const fromSeatID = event.options.fromSeatID
   if (
-    event.options?.fromSubZone !== 'hand' ||
+    event.options.fromSubZone !== 'hand' ||
     !Number.isFinite(fromSeatID) ||
-    !event.cardIDs?.some?.((cardID: CardID) => cardID > 0)
+    !event.cardIDs.some((cardID: CardID) => cardID > 0)
   ) {
     return event
   }
@@ -572,7 +562,7 @@ export function decorateDuoQiEntitySafety(event: MoveEventDraft, room: Room): Mo
   const spellID = move.SpellID
   const fromSeatID = move.FromID
   const isUnknownHandSelection =
-    move.FromZone === 5 && !event.cardIDs?.some?.((cardID: CardID) => cardID > 0)
+    move.FromZone === 5 && !event.cardIDs.some((cardID: CardID) => cardID > 0)
 
   if (!isUnknownHandSelection || spellID === DUO_QI_GAIN_ALL_SPELL_ID) return event
 
@@ -638,7 +628,7 @@ function finishRandomHandGroupsAfterGainAll(
   const spellID = event.protocol.SpellID
   if (
     spellID !== DUO_QI_GAIN_ALL_SPELL_ID ||
-    event.options?.fromSubZone !== 'hand' ||
+    event.options.fromSubZone !== 'hand' ||
     !Number.isFinite(event.options.fromSeatID)
   ) {
     return

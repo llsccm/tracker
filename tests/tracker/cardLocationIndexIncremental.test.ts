@@ -149,7 +149,7 @@ describe('CardLocationIndex 增量维护', () => {
     expectLocationIndexMatchesRebuild(room)
   })
 
-  it('resolveConstraintCards 同席位改子区/技能时发脏牌事件并重投影', () => {
+  it('明确位置同席位改子区/技能时发脏牌事件并重投影', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1, 2] })
     const card = getCard(room, 1)
     room.clearCardsFromPublicZones([card])
@@ -157,12 +157,11 @@ describe('CardLocationIndex 增量维护', () => {
     room.locationIndex.rebuild(room)
     expect(room.locationIndex.knownHandBySeat.get(1)).toEqual([card])
 
-    room.createConstraintGroup({
-      cardIDs: [1],
+    card.resolveLocationCandidate({
+      type: 'player',
       seatID: 1,
       subZone: 'mark',
-      spellID: 700,
-      known: true
+      spellID: 700
     })
     room.locationIndex.applyDirtyCardEvents(room)
 

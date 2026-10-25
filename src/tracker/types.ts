@@ -1,11 +1,14 @@
-import type { Card } from './model/Card'
+import type { Card } from './model'
 import type { GameState } from './Game'
 import type { Room } from './Room'
 
 export type CardID = number
+/** 玩家物理座位为 0–7；协议公共端点 FromID/ToID 另按区域解释。 */
 export type SeatID = number
+/** 协议技能 ID 为数字，0 表示与技能无关；内部状态的 null 由各字段单独声明。 */
 export type SpellID = number
 export type ZoneID = number
+/** 玩家子区域 */
 export type SubZone = 'hand' | 'equip' | 'judge' | 'mark' | string
 
 export type PublicZoneName =
@@ -150,14 +153,14 @@ export interface MoveOptions {
   toPopupSpaceID?: number
   /** 手牌获得来源；undefined 表示揭示时保留已有来源，null 表示无技能来源。 */
   gainSpellID?: SpellID | null
-  toSeatID?: SeatID
+  toSeatID?: SeatID | null
   subZone?: SubZone
-  /** 按端点映射的技能 ID；纯公共区移动保留协议 SpellID。 */
-  spellID?: SpellID
+  /** 按端点映射的技能 ID；纯公共区移动保留协议 SpellID，内部揭示可用 null 表示无标记空间。 */
+  spellID?: SpellID | null
   combinationID?: number | string | null
   fromZone?: PublicZoneName | number | null
-  fromSeatID?: SeatID
-  fromSubZone?: SubZone
+  fromSeatID?: SeatID | null
+  fromSubZone?: SubZone | null
   fromSpellID?: SpellID
   cardCount?: number
   /** 协议手牌总数变化量；候选身份不移动实体时可与 cardCount 不同。 */

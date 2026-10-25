@@ -270,26 +270,25 @@ export class RoomMovementCandidates {
     sourceEvent
   }: StoredToHandCandidatesOptions): boolean {
     if (!(count > 0) || toSeat === null) return false
-    if (fromPopupSpaceID === undefined && (fromSeat === null || fromSpellID == null)) return false
+    const markCandidate =
+      fromPopupSpaceID !== undefined
+        ? { type: 'popup' as const, spaceID: fromPopupSpaceID }
+        : fromSeat !== null && fromSpellID !== null
+          ? { type: 'player' as const, seatID: fromSeat, subZone: 'mark', spellID: fromSpellID }
+          : null
+    if (!markCandidate) return false
 
-    const isPopup = fromPopupSpaceID !== undefined
-    const spaceCards = isPopup ? getPopupSpaceCards(this.room, fromPopupSpaceID) : []
+    const isPopup = markCandidate.type === 'popup'
+    const spaceCards =
+      markCandidate.type === 'popup' ? getPopupSpaceCards(this.room, markCandidate.spaceID) : []
     // 混合明暗不能把可见身份数冒充空间总数。
     if (isPopup && spaceCards.some((card) => !card.isKnown)) return false
-    const markCards = isPopup
-      ? spaceCards
-      : getVisibleMarkSpaceCards(this.room, fromSeat, fromSpellID)
-    // 只有可见牌多于协议张数时才是“多选一”；唯一解仍由来源取牌直接搬走。
-    if (!isPopup && markCards.length <= count) return false
+    const markCards =
+      markCandidate.type === 'popup'
+        ? spaceCards
+        : getVisibleMarkSpaceCards(this.room, markCandidate.seatID, markCandidate.spellID)
+    if (markCards.length === 0) return false
 
-    const markCandidate = isPopup
-      ? { type: 'popup' as const, spaceID: fromPopupSpaceID }
-      : {
-          type: 'player' as const,
-          seatID: fromSeat,
-          subZone: 'mark',
-          spellID: fromSpellID
-        }
     const handCandidate: PlayerLocationCandidate = {
       type: 'player',
       seatID: toSeat,
@@ -298,9 +297,10 @@ export class RoomMovementCandidates {
     }
     const markKey = createLocationCandidateKey(markCandidate)
     const handKey = createLocationCandidateKey(handCandidate)
-    const hasPopupCandidates = isPopup && markCards.some((card) => card.hasLocationCandidates())
+    const hasStoredCandidates = markCards.some((card) => card.hasLocationCandidates())
     // 连续暗取复用覆盖整个空间的精确名额，不能将候选身份数量当作剩余物理张数。
-    const previousGroup = hasPopupCandidates
+    // 玩家标记区和弹窗空间都可能在同一批次内连续收到多条暗交协议。
+    const previousGroup = hasStoredCandidates
       ? Array.from(this.room.constraintGroups.values()).find((group) => {
           const slots = group.expectedSlotsByLocation.get(markKey)
           return (
@@ -310,9 +310,11 @@ export class RoomMovementCandidates {
           )
         })
       : undefined
-    if (hasPopupCandidates && !previousGroup) return false
     const sourceCount = previousGroup?.expectedSlotsByLocation.get(markKey)?.min ?? markCards.length
-    if (previousGroup ? sourceCount < count : sourceCount <= count) return false
+    // 只有确定来源的唯一解才回退直接取牌；弱候选数不代表空间的物理张数。
+    if (previousGroup ? sourceCount < count : !hasStoredCandidates && sourceCount <= count) {
+      return false
+    }
 
     const slots = new Map(previousGroup?.expectedSlotsByLocation)
     const handState = previousGroup
@@ -322,14 +324,17 @@ export class RoomMovementCandidates {
       min: handState?.exactCards.length ?? 0,
       max: handState ? handState.exactCards.length + handState.candidateCards.length : 0
     }
-    slots.set(markKey, { min: sourceCount - count, max: sourceCount - count })
-    slots.set(handKey, {
-      min: previousHandSlots.min + count,
-      max: previousHandSlots.max + count
-    })
+    // 缺少精确旧组的弱候选只建立未决组，不凭身份数补造空间或手牌名额。
+    if (previousGroup || !hasStoredCandidates) {
+      slots.set(markKey, { min: sourceCount - count, max: sourceCount - count })
+      slots.set(handKey, {
+        min: previousHandSlots.min + count,
+        max: previousHandSlots.max + count
+      })
+    }
 
     // 先按移动前的确定位置扣减旧组名额，再扩展候选；扩展后已无法辨认原来的槽位。
-    // 连续弹窗暗取仍保留旧目标手牌名额与成员，只更新本次两个端点。
+    // 连续暗取仍保留旧目标手牌名额与成员，只更新本次两个端点。
     if (!previousGroup) this.room.removeCardsFromConstraintGroups(markCards)
 
     markCards.forEach((card) => {
@@ -345,23 +350,26 @@ export class RoomMovementCandidates {
     })
 
     // 全部参与牌共同竞争空间与历次目标手牌名额。
-    // 候选数一开始大于名额，不会触发强锁；某张牌离场、名额恰好等于剩余候选数时才收敛。
+    // 有精确名额时按剩余候选收敛；弱候选组保留未决位置，等待后续事实。
     this.room.createConstraintGroup({
       id: previousGroup?.id,
       cards: markCards,
-      candidateSeats: isPopup ? [toSeat] : Array.from(new Set([fromSeat, toSeat])),
+      candidateSeats:
+        markCandidate.type === 'popup'
+          ? [toSeat]
+          : Array.from(new Set([markCandidate.seatID, toSeat])),
       expectedSlotsByLocation: slots,
       known: previousGroup?.known ?? true,
       sourceEvent: sourceEvent ?? { type: 'markStoredToHandCandidates' }
     })
 
-    trackerLogger.info('标记区可见牌多于暗牌张数，建立标记/手牌双边候选', {
+    trackerLogger.info('标记或弹窗空间暗取，建立位置候选', {
       fromSeat,
       fromSpellID,
       toSeat,
       count,
       cardIDs: markCards.map((card) => card.id),
-      markSlots: sourceCount - count,
+      markSlots: slots.get(markKey)?.min,
       handSlots: slots.get(handKey),
       locationCandidates: markCards.map((card) =>
         card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate))
@@ -610,21 +618,25 @@ export class RoomMovementCandidates {
   }
 }
 
-/** 收集某标记空间内仍在玩家区、可展示身份且未交给账本管理的牌。 */
+/** 收集某标记空间内仍可能位于该空间、可展示身份且未交给账本管理的牌。 */
 function getVisibleMarkSpaceCards(room: Room, seatID: SeatID, spellID: SpellID): Card[] {
-  const markSpellIDs = spellID != null ? [spellID] : []
+  const markCandidate = {
+    type: 'player' as const,
+    seatID,
+    subZone: 'mark' as const,
+    spellID
+  }
+  const markKey = createLocationCandidateKey(markCandidate)
+
   return room
     .refreshPlayerSnapshot()
     .filter(
       (card) =>
         card.location === 'player' &&
-        card.subZone === 'mark' &&
         card.isKnown === true &&
         card.suspended !== true &&
-        card.seats.size === 1 &&
-        card.seats.has(seatID) &&
-        !card.hasSubZoneCandidates?.() &&
-        (markSpellIDs.length === 0 ||
-          (card.spellID !== null && markSpellIDs.includes(card.spellID)))
+        card
+          .getPossibleLocations()
+          .some((candidate) => createLocationCandidateKey(candidate) === markKey)
     )
 }

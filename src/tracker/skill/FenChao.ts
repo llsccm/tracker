@@ -32,7 +32,7 @@ export default function decorateFenChao(event: MoveEventDraft, room: Room): Move
 
   const sourceCards: Card[] = []
   // 按实测结果推断焚巢优先获得最早入堆的目标牌；弃牌数组按底 -> 顶保存。
-  for (const card of room.zones.get('discard')?.cards ?? []) {
+  for (const card of room.getZone('discard').cards) {
     if (!FEN_CHAO_CARD_SPELL_IDS.has(card.spellId)) continue
     sourceCards.push(card)
     if (sourceCards.length === cardCount) break

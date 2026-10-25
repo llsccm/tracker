@@ -13,7 +13,7 @@ import type {
 export function playerLocation(
   seatID: SeatID,
   subZone: SubZone,
-  spellID: SpellID | string | null = null
+  spellID: SpellID | null = null
 ): LocationCandidateInput {
   return {
     type: 'player',
@@ -30,7 +30,7 @@ export function playerHand(seatID: SeatID): LocationCandidateInput {
 export function publicLocation(
   zone: PublicZoneName,
   position: PublicPosition = 'any',
-  count: number | string | null = null
+  count: number | null = null
 ): LocationCandidateInput {
   return {
     type: 'public',
@@ -42,7 +42,7 @@ export function publicLocation(
 
 export function equipmentContainer(
   cardID: CardID,
-  spellID: SpellID | string | null
+  spellID: SpellID | null
 ): LocationCandidateInput {
   return {
     type: 'container',

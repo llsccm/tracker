@@ -1,8 +1,15 @@
-import type { CardID } from '@/tracker/types'
 import type { Room } from '../Room'
-import type { PatchedMoveCardFields } from '../types'
+import type { CardID, PatchedMoveCardFields } from '../types'
+import { defineStoredCardsPlugin, recordSharedCardIDs } from './storedCardsPlugin'
 
-export default function handleZeXing(patched: PatchedMoveCardFields, room: Room): void {
+export const zeXingPlugin = defineStoredCardsPlugin({
+  id: 'zeXing',
+  spellIDs: [3854],
+  prepare: handleZeXing,
+  record: recordSharedCardIDs
+})
+
+function handleZeXing(patched: PatchedMoveCardFields, room: Room): void {
   const spellCards = room.readSkillState<CardID[]>(patched.SpellID)
 
   if (

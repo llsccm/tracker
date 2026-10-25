@@ -6,7 +6,7 @@ import {
   getPublicLocationCandidates,
   toPublicCandidate
 } from '../candidate/locationCandidate'
-import type { Card } from '../model/Card'
+import type { Card } from '@/tracker/model'
 import type { ConstraintGroup } from '../constraint/ConstraintGroup'
 import type { Room } from '../Room'
 import type { CardID, SeatID } from '../types'
@@ -137,10 +137,9 @@ export class AmbiguousKnownIndex {
   }
 
   formatCardDescription(card: Card, groups: ConstraintGroup[]): string {
-    const zoneName = this.getSubZoneName(card)
     const locations: string[] = []
 
-    if (card.hasLocationCandidates?.()) {
+    if (card.hasLocationCandidates()) {
       const playerCandidates = getPlayerLocationCandidates(card.locationCandidates)
       const containerCandidates = getContainerLocationCandidates(card.locationCandidates)
       const publicCandidates = getPublicLocationCandidates(card.locationCandidates)
@@ -168,7 +167,8 @@ export class AmbiguousKnownIndex {
 
         if (publicCandidate?.label) locations.push(publicCandidate.label)
       })
-    } else if (card.location === 'player') {
+    } else if (card.location === 'player' && card.subZone !== null) {
+      const zoneName = getSubZoneName(card.subZone)
       Array.from(card.seats).forEach((seatID) => {
         const prefix = this.room.formatSeatPrefix(seatID)
         locations.push(`${prefix}${zoneName}`)
@@ -189,10 +189,6 @@ export class AmbiguousKnownIndex {
     return `${locations.join('/')}（${Array.from(new Set(sourceLabels)).join('/')}）`
   }
 
-  getSubZoneName(card: Card): string {
-    return getSubZoneName(card.subZone)
-  }
-
   private getRelatedGroups(card: Card, groups: ConstraintGroup[]): ConstraintGroup[] {
     return groups.filter((group) => group.cards.has(card))
   }
@@ -209,7 +205,7 @@ export class AmbiguousKnownIndex {
   }
 
   private hasContainerLocationCandidates(card: Card): boolean {
-    if (!card.hasLocationCandidates?.()) return false
+    if (!card.hasLocationCandidates()) return false
     return getContainerLocationCandidates(card.locationCandidates).length > 0
   }
 }

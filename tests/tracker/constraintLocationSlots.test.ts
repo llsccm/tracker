@@ -1,12 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
+import type { Card } from '@/tracker/model/Card'
 import { computeHandSlotAllocation } from '@/tracker/constraint/handSlotUsage'
 import type { Room } from '@/tracker/Room'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from './helpers/room'
 import { equipmentContainer, playerLocation, publicLocation } from './helpers/locationCandidates'
 
-function verifyLocationSlotContract(room: Room, group: ConstraintGroup): void {
+function verifyLocationSlotContract(room: Room, group: ConstraintGroup, card: Card): void {
+  // @ts-expect-error 建组只接受实体数组，不兼容单牌。
+  room.createConstraintGroup({ cards: card })
+  // @ts-expect-error 座位快照只接受数组。
+  room.createConstraintGroup({ candidateSeats: 1 })
+  // @ts-expect-error 查找身份与位置写入不属于建组入口。
+  room.createConstraintGroup({ cardIDs: [1] })
+  // @ts-expect-error 不再保留 candidateSeats 的 seatID 别名。
+  room.createConstraintGroup({ seatID: 1 })
+  // @ts-expect-error 协议 combinationID 由调用方明确传入 id。
+  room.createConstraintGroup({ combinationID: 1 })
   // @ts-expect-error 已退役座位名额存储和输入，统一使用完整位置。
   void group.expectedSlotsBySeat
   // @ts-expect-error 约束组不能再接受座位名额输入糖。
@@ -28,6 +39,22 @@ function verifyLocationSlotContract(room: Room, group: ConstraintGroup): void {
 void verifyLocationSlotContract
 
 describe('区间名额', () => {
+  it('建组对实体去重，候选座位快照不移动牌或覆盖已有位置候选', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0, 1] })
+    const card = getCard(room, 1)!
+    card.setLocationCandidates([playerLocation(0, 'hand'), playerLocation(0, 'mark', 700)])
+    const locations = [...card.locationCandidates]
+    const dirtySeq = room.dirtyCardSeq
+
+    const group = room.createConstraintGroup({ cards: [card, card], candidateSeats: [1] })
+
+    expect([...group.cards]).toEqual([card])
+    expect([...group.candidateSeats]).toEqual([1])
+    expect(card.locationCandidates).toEqual(locations)
+    expect(card.seats).toEqual(new Set([0]))
+    expect(room.dirtyCardSeq).toBe(dirtySeq)
+  })
+
   it.each([
     NaN,
     Infinity,

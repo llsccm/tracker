@@ -18,12 +18,12 @@ export function getPublicFieldCandidateCards(room: Room): Card[] {
   const ambiguousCards = [...indexedCards, ...scannedCards]
 
   ambiguousCards.forEach((card) => {
-    if (card?.id > 0) cardsByID.set(card.id, card)
+    if (card.id > 0) cardsByID.set(card.id, card)
   })
 
   // 候选过宽或旧牌堆世代失效都会暂停具体位置追踪；这些身份仍应在“场上候选”中展示。
-  room.suspendedKnownCards?.forEach((card) => {
-    if (card?.id > 0 && card.isKnown) cardsByID.set(card.id, card)
+  room.suspendedKnownCards.forEach((card) => {
+    if (card.id > 0 && card.isKnown) cardsByID.set(card.id, card)
   })
 
   return Array.from(cardsByID.values())
