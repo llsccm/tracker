@@ -1,13 +1,10 @@
-import type { CardID, SeatID, SubZone } from '@/tracker/types'
+import { getMoveZone, getMoveSubZone, getMoveTargetSeats } from '@/tracker/helper/moveEndpoint'
+import type { CardID, MoveRoute, SeatID } from '@/tracker/types'
 
-export interface HiddenMarkMoveContext {
-  toZone: 'player' | string
-  subZone: SubZone
-  fromSubZone: SubZone
+export interface HiddenMarkMoveContext extends MoveRoute {
   knownIDs: readonly CardID[]
   unknownCount: number
   sourceHandSeat: SeatID | null
-  targetSeats: readonly SeatID[]
 }
 
 /**
@@ -18,12 +15,12 @@ export function isHiddenMarkMove(
   context: HiddenMarkMoveContext
 ): context is HiddenMarkMoveContext & { sourceHandSeat: SeatID } {
   return (
-    context.toZone === 'player' &&
-    context.subZone === 'mark' &&
-    context.fromSubZone === 'hand' &&
+    getMoveZone(context.to) === 'player' &&
+    getMoveSubZone(context.to) === 'mark' &&
+    getMoveSubZone(context.from) === 'hand' &&
     context.knownIDs.length === 0 &&
     context.unknownCount > 0 &&
     context.sourceHandSeat !== null &&
-    context.targetSeats.length === 1
+    getMoveTargetSeats(context.to).length === 1
   )
 }

@@ -1,3 +1,4 @@
+import { getMovePosition } from '@/tracker/helper/moveEndpoint'
 import { describe, expect, it } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
@@ -224,7 +225,7 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     room.decorateMoveEvent(normalizeMoveEvent(successMarker()))
     room.decorateMoveEvent(normalizeMoveEvent(successMarker(1)))
     const next = room.decorateMoveEvent(normalizeMoveEvent(yanXiMove({ ToID: 1 })))
-    expect(next.options.fromPosition).toBe(POSITION_TOP)
+    expect(getMovePosition(next.from)).toBe(POSITION_TOP)
     expect(room.readSkillState(7017)).toMatchObject({ toSeatID: 1, remainingPileCards: 1 })
     room.destroy()
     expect(gameState.hasState('tracker', 7017)).toBe(false)

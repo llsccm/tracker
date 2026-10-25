@@ -91,8 +91,8 @@ export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEve
   room.setSkillState(CHENG_LIE_DISCARD_QUEUE, [...new Set([...(pendingIDs ?? []), ...cardIDs])])
   return patchEvent(event, {
     cardIDs,
+    from: event.from.type === 'public' ? { ...event.from, position: POSITION_TOP } : event.from,
     options: {
-      fromPosition: POSITION_TOP,
       sourceCards: cards.filter((card) => !knownCards.has(card)),
       pileIdentityCardIDs: cardIDs
     }
@@ -149,10 +149,8 @@ export function decorateChengLie(event: MoveEventDraft, room: Room): MoveEventDr
   })
 
   return patchEvent(event, {
-    options: {
-      fromPosition: POSITION_BOTTOM,
-      combinationID: nextGroupID(room, 3208, 'chenglie_move')
-    }
+    from: event.from.type === 'public' ? { ...event.from, position: POSITION_BOTTOM } : event.from,
+    options: { combinationID: nextGroupID(room, 3208, 'chenglie_move') }
   })
 }
 

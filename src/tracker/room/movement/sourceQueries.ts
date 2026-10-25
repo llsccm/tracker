@@ -1,3 +1,4 @@
+import { getMoveZone, getPopupSpaceID, getMoveMarkSpellID } from '@/tracker/helper/moveEndpoint'
 import { getPlayerLocationCandidates } from '@/tracker/candidate/locationCandidate'
 import type { Card } from '@/tracker/model'
 import type { Room } from '@/tracker/Room'
@@ -91,18 +92,18 @@ export function getUnknownStoredSourceCards(
   context: RoomMoveContext,
   excludedCards: Iterable<Card> = []
 ): Card[] {
-  if (context.fromZone === 'popup') {
+  if (getMoveZone(context.from) === 'popup') {
     const excluded = new Set(excludedCards)
-    return getPopupSpaceCards(room, context.fromPopupSpaceID).filter(
+    return getPopupSpaceCards(room, getPopupSpaceID(context.from)).filter(
       (card) => !card.isKnown && !card.hasLocationCandidates() && !excluded.has(card)
     )
   }
-  if (context.fromSeat === null) return []
+  if (context.from.type !== 'player') return []
   return getUnknownPlayerSourceCards(
     room,
-    context.fromSeat,
-    context.fromSubZone,
-    context.fromSpellID ?? context.spellID,
+    context.from.seatID,
+    context.from.subZone,
+    getMoveMarkSpellID(context.from),
     excludedCards
   )
 }

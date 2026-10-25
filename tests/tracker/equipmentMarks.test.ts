@@ -1,3 +1,4 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   getEquipmentMarkRecordKey,
@@ -5,13 +6,9 @@ import {
   getObservedEquipmentMarkSnapshot,
   resolveEquipmentContainerLocationCandidates
 } from '@/tracker/room/movement/equipmentMarks'
-import {
-  HIDDEN_MARK_STATE_KEY,
-  type HiddenMarkState,
-  type RoomMovementOptions
-} from '@/tracker/room/movement/types'
+import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/room/movement/types'
 import type { Room } from '@/tracker/Room'
-import type { CardID } from '@/tracker/types'
+import type { CardID, RoomMoveRequest } from '@/tracker/types'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import { createTestRoom, getCard, takeAnonymousCard } from './helpers/room'
 import { equipmentContainer, playerLocation } from './helpers/locationCandidates'
@@ -21,15 +18,11 @@ afterEach(() => vi.restoreAllMocks())
 function createMarkContext(
   room: Room,
   cardIDs: readonly CardID[] = [],
-  options: RoomMovementOptions = {}
+  options: Partial<RoomMoveRequest> = {}
 ) {
-  return room.movement.createMoveContext(cardIDs, 'player', {
-    fromSeatID: 0,
-    fromSubZone: 'mark',
-    fromSpellID: 700,
-    toSeatID: 6,
-    subZone: 'mark',
-    spellID: 700,
+  return room.movement.createMoveContext(cardIDs, {
+    from: { type: 'player', seatID: 0, subZone: 'mark', markSpellID: 700 },
+    to: { type: 'player', seatID: 6, subZone: 'mark', markSpellID: 700 },
     cardCount: 2,
     ...options
   })
@@ -44,11 +37,10 @@ describe('装备标记容器只读规则', () => {
     '座位观测 $observedSeat 对应标记座位 $expectedSeat，查询不写状态',
     ({ observedSeat, expectedSeat }) => {
       const { room } = createTestRoom({ cardIDs: [161], seatIDs: [0, 6] })
-      room.moveCards([161], 'player', {
-        fromZone: 'pile',
-        toSeatID: 6,
-        subZone: 'equip',
-        spellID: 700,
+      room.moveCards([161], {
+        from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+        to: { type: 'player', seatID: 6, subZone: 'equip' },
+        triggerSpellID: 700,
         cardCount: 1
       })
 
@@ -66,7 +58,11 @@ describe('装备标记容器只读规则', () => {
 
   it('装备离开装备区后，旧空间观测不能继续产生标记投影', () => {
     const { room } = createTestRoom({ cardIDs: [161], seatIDs: [0, 6] })
-    room.moveCards([161], 'discard', { fromZone: 'pile', cardCount: 1 })
+    room.moveCards([161], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
+      cardCount: 1
+    })
 
     expect(
       resolveEquipmentContainerLocationCandidates(equipmentContainer(161, 700), room.cardIndex, 0)
@@ -84,9 +80,21 @@ describe('装备标记容器只读规则', () => {
 
   it.each([
     { name: '同空间跨座', options: {}, transferFromSeat: 0 },
-    { name: '手牌放入容器', options: { fromSubZone: 'hand' }, transferFromSeat: null },
-    { name: '同座位通知', options: { fromSeatID: 6 }, transferFromSeat: null },
-    { name: '不同来源标记', options: { fromSpellID: 414 }, transferFromSeat: null }
+    {
+      name: '手牌放入容器',
+      options: { from: { type: 'player', seatID: 0, subZone: 'hand' } },
+      transferFromSeat: null
+    },
+    {
+      name: '同座位通知',
+      options: { from: { type: 'player', seatID: 6, subZone: 'mark', markSpellID: 700 } },
+      transferFromSeat: null
+    },
+    {
+      name: '不同来源标记',
+      options: { from: { type: 'player', seatID: 0, subZone: 'mark', markSpellID: 414 } },
+      transferFromSeat: null
+    }
   ] as const)('$name 区分目标观测与实际迁移，规则不修改上下文', ({ options, transferFromSeat }) => {
     const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [0, 6] })
     const context = Object.freeze(createMarkContext(room, [], options))
@@ -102,9 +110,25 @@ describe('装备标记容器只读规则', () => {
 
   it('装备本体、普通标记、多目标与来源标记不匹配不被识别为同一容器目标', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [0, 6] })
-    expect(getEquipmentMarkSeatChange(createMarkContext(room, [], { subZone: 'equip' }))).toBeNull()
-    expect(getEquipmentMarkSeatChange(createMarkContext(room, [], { spellID: 414 }))).toBeNull()
-    expect(getEquipmentMarkSeatChange(createMarkContext(room, [], { toSeatID: [0, 6] }))).toBeNull()
+    expect(
+      getEquipmentMarkSeatChange(
+        createMarkContext(room, [], { to: { type: 'player', seatID: 6, subZone: 'equip' } })
+      )
+    ).toBeNull()
+    expect(
+      getEquipmentMarkSeatChange(
+        createMarkContext(room, [], {
+          to: { type: 'player', seatID: 6, subZone: 'mark', markSpellID: 414 }
+        })
+      )
+    ).toBeNull()
+    expect(
+      getEquipmentMarkSeatChange(
+        createMarkContext(room, [], {
+          to: { type: 'playerCandidates', seatIDs: [0, 6], subZone: 'mark', markSpellID: 700 }
+        })
+      )
+    ).toBeNull()
     expect(getEquipmentMarkSeatChange(createMarkContext(room), 414)).toBeNull()
     expect(room.readSkillState(HIDDEN_MARK_STATE_KEY)).toBeUndefined()
   })
@@ -118,10 +142,16 @@ describe('装备标记容器只读规则', () => {
     expect(getObservedEquipmentMarkSnapshot(createMarkContext(room))).toBeNull()
     expect(getObservedEquipmentMarkSnapshot(createMarkContext(room, [1, 0]))).toBeNull()
     expect(
-      getObservedEquipmentMarkSnapshot(createMarkContext(room, [1, 2], { fromSubZone: 'hand' }))
+      getObservedEquipmentMarkSnapshot(
+        createMarkContext(room, [1, 2], { from: { type: 'player', seatID: 0, subZone: 'hand' } })
+      )
     ).toBeNull()
     expect(
-      getObservedEquipmentMarkSnapshot(createMarkContext(room, [1, 2], { fromSpellID: null }))
+      getObservedEquipmentMarkSnapshot(
+        createMarkContext(room, [1, 2], {
+          from: { type: 'player', seatID: 0, subZone: 'mark', markSpellID: null }
+        })
+      )
     ).toBeNull()
     expect(room.readSkillState(HIDDEN_MARK_STATE_KEY)).toBeUndefined()
   })
@@ -133,7 +163,9 @@ describe('装备标记容器只读规则', () => {
     expect(zeroCount.skipUnknownMovement).toBe(false)
     expect(room.readSkillState(HIDDEN_MARK_STATE_KEY)).toBeUndefined()
 
-    const putIntoContainer = createMarkContext(room, [], { fromSubZone: 'hand' })
+    const putIntoContainer = createMarkContext(room, [], {
+      from: { type: 'player', seatID: 0, subZone: 'hand' }
+    })
     expect(room.movement.hiddenMarks.handleMuniuMarkMove(putIntoContainer)).toBe(false)
     expect(putIntoContainer.skipUnknownMovement).toBe(false)
     const state = room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!

@@ -1,3 +1,4 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { describe, expect, it, vi } from 'vitest'
 import type { Room } from '@/tracker/Room'
 import type { CardID } from '@/tracker/types'
@@ -139,14 +140,15 @@ describe('身份账本守恒', () => {
       materializeDeckIdentities: false
     })
 
-    room.moveCards([], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 2,
       sourceEvent: { type: 'conservation:draw-unknown' }
     })
-    room.moveCards([1, 2, 3], 'discard', {
-      fromZone: 'pile',
+    room.moveCards([1, 2, 3], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 3,
       sourceEvent: { type: 'conservation:discard' }
     })
@@ -166,14 +168,15 @@ describe('身份账本守恒', () => {
     const pile = room.zones.get('pile')!
     const discard = room.zones.get('discard')!
 
-    room.moveCards([], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 2,
       sourceEvent: { type: 'conservation:draw-unknown' }
     })
-    room.moveCards([1, 2, 3], 'discard', {
-      fromZone: 'pile',
+    room.moveCards([1, 2, 3], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 3,
       sourceEvent: { type: 'conservation:discard' }
     })
@@ -182,8 +185,9 @@ describe('身份账本守恒', () => {
     expectIdentityLedgerIntact(room, [1, 2, 3, 4, 5, 6])
 
     // 第二次洗牌前再制造一次弃牌，让沿用 suspended 与本轮新增混合。
-    room.moveCards([4], 'discard', {
-      fromZone: 'pile',
+    room.moveCards([4], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'conservation:discard-second-round' }
     })
@@ -367,14 +371,15 @@ describe('身份账本守恒', () => {
     })
     const pile = room.zones.get('pile')!
 
-    room.moveCards([], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 2,
       sourceEvent: { type: 'conservation:draw-unknown' }
     })
-    room.moveCards([1, 2, 3], 'discard', {
-      fromZone: 'pile',
+    room.moveCards([1, 2, 3], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 3,
       sourceEvent: { type: 'conservation:discard' }
     })
@@ -390,9 +395,9 @@ describe('身份账本守恒', () => {
     })
 
     const pileCountBefore = pile.cards.length
-    room.moveCards([4], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([4], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'conservation:draw-known-onto-hidden-slot' }
     })
@@ -418,9 +423,9 @@ describe('身份账本守恒', () => {
 
     expect(room.deckIdentities.has(externalID)).toBe(false)
 
-    room.moveCards([externalID], 'player', {
-      toSeatID: 1,
-      fromZone: 'outside',
+    room.moveCards([externalID], {
+      from: { type: 'outside' },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'conservation:external-zone-12' }
     })
@@ -429,9 +434,9 @@ describe('身份账本守恒', () => {
     expectIdentityLedgerIntact(room, [1, 2, 3, externalID])
 
     // 该外部牌进入弃牌堆并参与洗牌后，身份全集不应再次增长。
-    room.moveCards([externalID], 'discard', {
-      toSeatID: 1,
-      fromZone: 'player',
+    room.moveCards([externalID], {
+      from: { type: 'unresolved', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'conservation:external-discard' }
     })

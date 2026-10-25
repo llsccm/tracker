@@ -55,8 +55,8 @@ describe('技能生命周期注册表', () => {
         calls.push('wildcard')
       }
     })
-    const event = normalizeMoveEvent(protocolMove({ SpellID: 42 }))
-    event.options.spellID = 99
+    let event = normalizeMoveEvent(protocolMove({ SpellID: 42 }))
+    event = { ...event, to: { type: 'player', seatID: 1, subZone: 'mark', markSpellID: 99 } }
     room.decorateMoveEvent(event)
     expect(calls).toEqual(['wildcard', 'specific', 'other'])
     expect(() => room.registerSkillPlugin({ id: 'specific' })).toThrow('重复注册')

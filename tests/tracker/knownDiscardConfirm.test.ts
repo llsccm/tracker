@@ -1,3 +1,4 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { describe, expect, it, vi } from 'vitest'
 
 import { trackerLogger } from '@/utils/logger'
@@ -9,10 +10,9 @@ describe('known 路径落弃明牌确认', () => {
     const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
 
     try {
-      room.moveCards([61036], 'player', {
-        fromZone: 'exile',
-        toSeatID: 0,
-        subZone: 'hand',
+      room.moveCards([61036], {
+        from: { type: 'public', zone: 'exile', position: POSITION_TOP },
+        to: { type: 'player', seatID: 0, subZone: 'hand' },
         cardCount: 1
       })
 
@@ -33,10 +33,9 @@ describe('known 路径落弃明牌确认', () => {
     const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
 
     try {
-      room.moveCards([61037], 'player', {
-        fromZone: 'exile',
-        toSeatID: 0,
-        subZone: 'hand',
+      room.moveCards([61037], {
+        from: { type: 'public', zone: 'exile', position: POSITION_TOP },
+        to: { type: 'player', seatID: 0, subZone: 'hand' },
         cardCount: 1
       })
 
@@ -60,8 +59,9 @@ describe('known 路径落弃明牌确认', () => {
     const infoSpy = vi.spyOn(trackerLogger, 'info').mockImplementation(() => {})
 
     try {
-      room.moveCards([50], 'discard', {
-        fromZone: 'process',
+      room.moveCards([50], {
+        from: { type: 'public', zone: 'process', position: POSITION_TOP },
+        to: { type: 'public', zone: 'discard', position: POSITION_TOP },
         cardCount: 1
       })
       expect(infoSpy).toHaveBeenCalledWith(
@@ -96,8 +96,9 @@ describe('known 路径落弃明牌确认', () => {
       processZone.add(card)
     })
 
-    room.moveCards([29, 50, 113], 'discard', {
-      fromZone: 'process',
+    room.moveCards([29, 50, 113], {
+      from: { type: 'public', zone: 'process', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 3
     })
     ;[29, 50, 113].forEach((id) => {
@@ -129,12 +130,11 @@ describe('known 路径落弃明牌确认', () => {
     room.deckIdentities.add(50)
     room.unlocatedIdentities.add(50)
 
-    room.moveCards([29, 50, 113], 'process', {
-      fromSeatID: 3,
-      fromSubZone: 'hand',
-      fromZone: null,
-      cardCount: 3,
-      spellID: 423
+    room.moveCards([29, 50, 113], {
+      from: { type: 'player', seatID: 3, subZone: 'hand' },
+      to: { type: 'public', zone: 'process', position: POSITION_TOP },
+      triggerSpellID: 423,
+      cardCount: 3
     })
 
     expect(
@@ -168,12 +168,11 @@ describe('known 路径落弃明牌确认', () => {
     const markEntityID = markPlaceholder.entityID
     markPlaceholder.bindCandidates([3], 'mark', 700, { known: false })
 
-    room.moveCards([91], 'process', {
-      fromSeatID: 3,
-      fromSubZone: 'hand',
-      fromZone: null,
-      cardCount: 1,
-      spellID: 0
+    room.moveCards([91], {
+      from: { type: 'player', seatID: 3, subZone: 'hand' },
+      to: { type: 'public', zone: 'process', position: POSITION_TOP },
+      triggerSpellID: 0,
+      cardCount: 1
     })
 
     expect(room.cardIndex.get(91)!.location).toBe('process')

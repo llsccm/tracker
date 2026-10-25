@@ -6,6 +6,32 @@ import { createTestRoom, getCard } from './helpers/room'
 import { locationKeys, playerHand, publicLocation } from './helpers/locationCandidates'
 
 describe('Room.moveCards 组合路线', () => {
+  it('候选多目标只移动一份实体，重复座位收敛为单个零号玩家端点', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [0, 2] })
+    const from = { type: 'public', zone: 'pile', position: POSITION_TOP } as const
+    const seats = Object.freeze([0, 2, 0] as const)
+    room.moveCards([1], {
+      from,
+      to: { type: 'playerCandidates', seatIDs: seats, subZone: 'hand' }
+    })
+    expect(room.getPublicZone('pile').cards).toHaveLength(2)
+    expect(room.cards).toHaveLength(3)
+    expect(locationKeys(room.cardIndex.get(1)!)).toEqual([
+      createLocationCandidateKey(playerHand(0)),
+      createLocationCandidateKey(playerHand(2))
+    ])
+    expect(room.getPlayer(0).hasObservedHandCount).toBe(false)
+    expect(room.getPlayer(2).hasObservedHandCount).toBe(false)
+    expect(seats).toEqual([0, 2, 0])
+
+    const context = room.movement.createMoveContext([2], {
+      from,
+      to: { type: 'playerCandidates', seatIDs: [0, 0], subZone: 'hand' }
+    })
+    expect(context.to).toEqual({ type: 'player', seatID: 0, subZone: 'hand' })
+    expect(context.targetHandSeat).toBe(0)
+  })
+
   it.each([
     { subZone: 'equip', hiddenCount: 0, cardCount: 1 },
     { subZone: 'judge', hiddenCount: 0, cardCount: 1 },
@@ -22,12 +48,9 @@ describe('Room.moveCards 组合路线', () => {
       const targetPlayer = room.getPlayer(2)!
       targetPlayer.syncObservedHandCount(0)
 
-      room.moveCards([], 'player', {
-        fromZone: null,
-        fromSeatID: 1,
-        fromSubZone: subZone,
-        toSeatID: 2,
-        subZone: 'hand',
+      room.moveCards([], {
+        from: { type: 'player', seatID: 1, subZone: subZone },
+        to: { type: 'player', seatID: 2, subZone: 'hand' },
         cardCount,
         sourceEvent: { type: 'test:visible-subzone-count-only-transfer' }
       })
@@ -50,10 +73,9 @@ describe('Room.moveCards 组合路线', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1] })
     const knownCard = getCard(room, 1)
 
-    room.moveCards([1, 0], 'player', {
-      toSeatID: 1,
-      subZone: 'hand',
-      fromZone: 'pile',
+    room.moveCards([1, 0], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 2,
       sourceEvent: { type: 'test:mixed-known-hidden-to-hand' }
     })
@@ -75,11 +97,10 @@ describe('Room.moveCards 组合路线', () => {
   it('弹窗暗占位回到牌堆时复用原实体', () => {
     const { room } = createTestRoom({ cardIDs: [31, 71, 97, 32, 92, 150], seatIDs: [1] })
 
-    room.moveCards([], 'popup', {
-      toPopupSpaceID: 35,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'popup', spaceID: 35 },
       cardCount: 5,
-      position: POSITION_TOP,
       sourceEvent: { type: 'test:popup-mark-placeholders' }
     })
 
@@ -95,12 +116,10 @@ describe('Room.moveCards 组合路线', () => {
     expect(popupState.spaces.get(35)).toEqual(expect.arrayContaining(popupPlaceholders))
     expect(popupState.spaces.get(35)).toHaveLength(5)
 
-    room.moveCards([], 'pile', {
-      fromZone: 'popup',
-      fromPopupSpaceID: 35,
+    room.moveCards([], {
+      from: { type: 'popup', spaceID: 35 },
+      to: { type: 'public', zone: 'pile', position: POSITION_TOP },
       cardCount: 4,
-      position: POSITION_TOP,
-      fromPosition: 65282,
       sourceEvent: { type: 'test:popup-mark-return-to-pile' }
     })
 
@@ -117,15 +136,15 @@ describe('Room.moveCards 组合路线', () => {
   it('弹窗回牌堆按空间 ID 隔离来源', () => {
     const { room } = createTestRoom({ cardIDs: [31, 32, 71, 72, 150], seatIDs: [1] })
 
-    room.moveCards([], 'popup', {
-      toPopupSpaceID: 35,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'popup', spaceID: 35 },
       cardCount: 2,
       sourceEvent: { type: 'test:popup-mark-35' }
     })
-    room.moveCards([], 'popup', {
-      toPopupSpaceID: 36,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'popup', spaceID: 36 },
       cardCount: 2,
       sourceEvent: { type: 'test:popup-mark-36' }
     })
@@ -134,11 +153,10 @@ describe('Room.moveCards 组合路线', () => {
     const spell35Cards = [...popupState.spaces.get(35)]
     const spell36Cards = [...popupState.spaces.get(36)]
 
-    room.moveCards([], 'pile', {
-      fromZone: 'popup',
-      fromPopupSpaceID: 35,
+    room.moveCards([], {
+      from: { type: 'popup', spaceID: 35 },
+      to: { type: 'public', zone: 'pile', position: POSITION_TOP },
       cardCount: 1,
-      position: POSITION_TOP,
       sourceEvent: { type: 'test:popup-mark-return-with-from-id-only' }
     })
 
@@ -155,9 +173,9 @@ describe('Room.moveCards 组合路线', () => {
   it('显式来源牌取走弹窗 占位时同步清理空间账本', () => {
     const { room } = createTestRoom({ cardIDs: [31, 71, 97], seatIDs: [1] })
 
-    room.moveCards([], 'popup', {
-      toPopupSpaceID: 35,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'popup', spaceID: 35 },
       cardCount: 2,
       sourceEvent: { type: 'test:popup-mark-explicit-source' }
     })
@@ -165,12 +183,11 @@ describe('Room.moveCards 组合路线', () => {
     const popupState = room.readSkillState<PopupSpaceState>('popupSpaces')!
     const explicitSourceCard = popupState.spaces.get(35)[0]
 
-    room.moveCards([], 'pile', {
-      fromZone: 'popup',
-      fromPopupSpaceID: 35,
+    room.moveCards([], {
+      from: { type: 'popup', spaceID: 35 },
+      to: { type: 'public', zone: 'pile', position: POSITION_TOP },
       sourceCards: [explicitSourceCard],
       cardCount: 1,
-      position: POSITION_TOP,
       sourceEvent: { type: 'test:explicit-seatless-mark-to-pile' }
     })
 
@@ -183,16 +200,15 @@ describe('Room.moveCards 组合路线', () => {
     const { room } = createTestRoom({ cardIDs: [31, 71, 97], seatIDs: [1] })
     const knownMarkCard = getCard(room, 31)
 
-    room.moveCards([31], 'popup', {
-      toPopupSpaceID: 35,
-      fromZone: 'pile',
+    room.moveCards([31], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'popup', spaceID: 35 },
       cardCount: 1,
       sourceEvent: { type: 'test:known-seatless-mark' }
     })
-    room.moveCards([], 'player', {
-      toSeatID: 1,
-      subZone: 'hand',
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'test:unknown-hand-placeholder' }
     })
@@ -206,10 +222,9 @@ describe('Room.moveCards 组合路线', () => {
     )
     if (!handPlaceholder) throw new Error('expected unknown hand placeholder')
 
-    room.moveCards([31], 'discard', {
-      fromSeatID: 1,
-      fromZone: null,
-      fromSubZone: 'hand',
+    room.moveCards([31], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'test:known-source-replaced-from-hand' }
     })
@@ -230,27 +245,25 @@ describe('Room.moveCards 组合路线', () => {
     const takenCard = getCard(room, 87)
     const discardedCard = getCard(room, 41)
 
-    room.moveCards([87, 41], 'popup', {
-      toPopupSpaceID: 3544,
-      fromZone: 'pile',
+    room.moveCards([87, 41], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'popup', spaceID: 3544 },
       cardCount: 2,
       sourceEvent: { type: 'test:spell-3544-popup-mark' }
     })
 
-    room.moveCards([87], 'player', {
-      toSeatID: 7,
-      fromZone: 'popup',
-      fromPopupSpaceID: 3544,
-      subZone: 'hand',
-      spellID: 3544,
+    room.moveCards([87], {
+      from: { type: 'popup', spaceID: 3544 },
+      to: { type: 'player', seatID: 7, subZone: 'hand' },
+      triggerSpellID: 3544,
       cardCount: 1,
       sourceEvent: { type: 'test:spell-3544-take-known' }
     })
 
-    room.moveCards([41], 'discard', {
-      fromZone: 'popup',
-      fromPopupSpaceID: 3544,
-      spellID: 3544,
+    room.moveCards([41], {
+      from: { type: 'popup', spaceID: 3544 },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
+      triggerSpellID: 3544,
       cardCount: 1,
       sourceEvent: { type: 'test:spell-3544-discard-known' }
     })
@@ -266,21 +279,17 @@ describe('Room.moveCards 组合路线', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [1, 2] })
     const cards = [1, 2].map((id) => getCard(room, id))
 
-    room.moveCards([1, 2], 'player', {
-      toSeatID: 1,
-      subZone: 'hand',
-      fromZone: 'pile',
+    room.moveCards([1, 2], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 2,
       sourceEvent: { type: 'test:source-known-hand' }
     })
     room.syncObservedPlayerHandCount(1, 2)
 
-    room.moveCards([0], 'player', {
-      toSeatID: 2,
-      fromSeatID: 1,
-      fromZone: null,
-      fromSubZone: 'hand',
-      subZone: 'hand',
+    room.moveCards([0], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'player', seatID: 2, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'test:hidden-hand-transfer' }
     })
@@ -301,10 +310,9 @@ describe('Room.moveCards 组合路线', () => {
     stalePublicCard.bindCandidates([1], 'hand', null, { known: true })
     room.syncObservedPlayerHandCount(1, 1)
 
-    room.moveCards([1], 'discard', {
-      fromSeatID: 1,
-      fromZone: null,
-      fromSubZone: 'hand',
+    room.moveCards([1], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'test:known-source-stale-public' }
     })
@@ -326,11 +334,9 @@ describe('Room.moveCards 组合路线', () => {
       card.setLocationCandidates([pileTop])
     })
 
-    room.moveCards([0], 'player', {
-      toSeatID: 1,
-      subZone: 'hand',
-      fromZone: 'pile',
-      fromPosition: POSITION_TOP,
+    room.moveCards([0], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'test:draw-public-candidate-route' }
     })

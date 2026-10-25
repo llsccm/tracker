@@ -16,27 +16,18 @@ export function summarizeMoveEvent(event: NormalizedMoveEvent, options: MoveSumm
 
   return {
     type: event.type,
+    triggerSpellID: event.protocol.SpellID,
     cardIDs: options.normalizeCardIDs ? [...event.cardIDs] : event.cardIDs,
     ...(moveType !== undefined ? { moveType } : {}),
     ...(label ? { label } : {}),
-    toZone: event.toZone,
+    from: event.from,
+    to: event.to,
     ...(options.includeEventCardCount ? { cardCount: event.cardCount } : {}),
     options: {
-      fromPopupSpaceID: eventOptions.fromPopupSpaceID,
-      toPopupSpaceID: eventOptions.toPopupSpaceID,
-      toSeatID: eventOptions.toSeatID,
-      subZone: eventOptions.subZone,
-      spellID: eventOptions.spellID,
       gainSpellID: eventOptions.gainSpellID ?? eventOptions.sourceEvent?.spellID,
       combinationID: eventOptions.combinationID,
-      fromZone: eventOptions.fromZone,
-      fromSeatID: eventOptions.fromSeatID,
-      fromSubZone: eventOptions.fromSubZone,
-      fromSpellID: eventOptions.fromSpellID,
       cardCount: eventOptions.cardCount,
       moveType: eventOptions.moveType,
-      position: eventOptions.position,
-      fromPosition: eventOptions.fromPosition,
       ...(options.includeSourceCards
         ? { sourceCards: eventOptions.sourceCards?.map((card) => card.id) }
         : {})
@@ -46,23 +37,13 @@ export function summarizeMoveEvent(event: NormalizedMoveEvent, options: MoveSumm
 
 export function summarizeMoveContext(context: RoomMoveContext, options: MoveSummaryOptions = {}) {
   return {
-    fromPopupSpaceID: context.fromPopupSpaceID,
-    toPopupSpaceID: context.toPopupSpaceID,
+    from: context.from,
+    to: context.to,
+    triggerSpellID: context.triggerSpellID,
     cardIDs: context.cardIDs,
-    toZone: context.toZone,
-    toSeatID: context.toSeatID,
-    subZone: context.subZone,
-    spellID: context.spellID,
     gainSpellID: context.gainSpellID,
     combinationID: context.combinationID,
-    fromZone: context.fromZone,
-    fromSeat: context.fromSeat,
-    fromSubZone: context.fromSubZone,
-    fromSpellID: context.fromSpellID,
     cardCount: context.cardCount,
-    position: context.position,
-    fromPosition: context.fromPosition,
-    targetSeats: context.targetSeats,
     handMoveCount: context.handMoveCount,
     sourceHandSeat: context.sourceHandSeat,
     targetHandSeat: context.targetHandSeat,
@@ -73,7 +54,6 @@ export function summarizeMoveContext(context: RoomMoveContext, options: MoveSumm
     unknownCount: context.unknownCount,
     ...(options.includeSourceCardIDs
       ? { sourceCardIDs: context.sourceCards?.map((card) => card.id) }
-      : {}),
-    sourceIsOutside: context.sourceIsOutside
+      : {})
   }
 }

@@ -32,10 +32,9 @@ function bindHand(room: Room, cardIDs: number[], seatID: number, known = true): 
 }
 
 function dealAnonymousHand(room: Room, seatID: number, count: number): void {
-  room.moveCards([], 'player', {
-    fromZone: 'pile',
-    toSeatID: seatID,
-    subZone: 'hand',
+  room.moveCards([], {
+    from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+    to: { type: 'player', seatID: seatID, subZone: 'hand' },
     cardCount: count
   })
 }
@@ -122,10 +121,9 @@ describe('夺炁初始牌身份', () => {
     bindHand(room, [5, 6, 7, 8], 2)
     initializeDuoQiState(gameState, [1, 2, 3, 4, 5, 6, 7, 8])
 
-    room.moveCards([5, 6], 'discard', {
-      fromSeatID: 2,
-      fromSubZone: 'hand',
-      fromZone: null,
+    room.moveCards([5, 6], {
+      from: { type: 'player', seatID: 2, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 2
     })
     room.applyPileIdentityReveal([5, 6], 'discard')
@@ -247,11 +245,9 @@ describe('夺炁初始牌身份', () => {
       ([, seatID]) => seatID === 1
     )![0]
 
-    room.moveCards([0, 0, 0, 0], 'player', {
-      toSeatID: 2,
-      fromSeatID: 1,
-      fromSubZone: 'hand',
-      fromZone: null,
+    room.moveCards([0, 0, 0, 0], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'player', seatID: 2, subZone: 'hand' },
       cardCount: 4,
       handMoveCount: 4
     })
@@ -359,10 +355,9 @@ describe('夺炁初始牌身份', () => {
     expect(group.candidateCardIDs).toEqual(new Set([5]))
     expect(state.pendingRandomHandGroups).toEqual([group])
 
-    room.moveCards([6], 'discard', {
-      fromSeatID: 2,
-      fromSubZone: 'hand',
-      fromZone: null,
+    room.moveCards([6], {
+      from: { type: 'player', seatID: 2, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1
     })
     room.applyPileIdentityReveal([6], 'discard')
@@ -533,10 +528,9 @@ describe('夺炁初始牌身份', () => {
 
     const [group] = state.pendingRandomHandGroups
     const candidateCards = [5, 6].map((cardID) => room.cardIndex.get(cardID)!)
-    room.moveCards([5, 6], 'discard', {
-      fromSeatID: 1,
-      fromSubZone: 'hand',
-      fromZone: null,
+    room.moveCards([5, 6], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 2
     })
     group.candidateCardIDs = new Set([5, 6])
@@ -580,10 +574,9 @@ describe('夺炁初始牌身份', () => {
     bindHand(room, [5, 6, 7, 8], 2)
     initializeDuoQiState(gameState, [1, 2, 3, 4, 5, 6, 7, 8])
 
-    room.moveCards([5], 'discard', {
-      fromSeatID: 2,
-      fromSubZone: 'hand',
-      fromZone: null,
+    room.moveCards([5], {
+      from: { type: 'player', seatID: 2, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1
     })
     room.applyPileIdentityReveal([5], 'discard')
@@ -620,10 +613,9 @@ describe('夺炁初始牌身份', () => {
     bindHand(room, [5, 6, 7, 8], 2)
     initializeDuoQiState(gameState, [1, 2, 3, 4, 5, 6, 7, 8])
 
-    room.moveCards([5, 6], 'discard', {
-      fromSeatID: 2,
-      fromSubZone: 'hand',
-      fromZone: null,
+    room.moveCards([5, 6], {
+      from: { type: 'player', seatID: 2, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 2
     })
     room.applyPileIdentityReveal([5, 6], 'discard')
@@ -658,10 +650,9 @@ describe('夺炁初始牌身份', () => {
     bindHand(room, [1, 2, 3, 4], 1)
     bindHand(room, [5, 6, 7, 8], 2)
     initializeDuoQiState(gameState, [1, 2, 3, 4, 5, 6, 7, 8])
-    room.moveCards([5, 6, 7, 8], 'discard', {
-      fromSeatID: 2,
-      fromSubZone: 'hand',
-      fromZone: null,
+    room.moveCards([5, 6, 7, 8], {
+      from: { type: 'player', seatID: 2, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 4
     })
     room.applyPileIdentityReveal([5, 6, 7, 8], 'discard')
@@ -754,10 +745,9 @@ describe('夺炁初始牌身份', () => {
     bindHand(room, [5, 6, 7, 8], 2)
     initializeDuoQiState(gameState, [1, 2, 3, 4, 5, 6, 7, 8])
 
-    room.moveCards([5, 6, 7, 8], 'discard', {
-      fromSeatID: 2,
-      fromSubZone: 'hand',
-      fromZone: null,
+    room.moveCards([5, 6, 7, 8], {
+      from: { type: 'player', seatID: 2, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 4
     })
     room.applyPileIdentityReveal([5, 6, 7, 8], 'discard')

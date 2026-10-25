@@ -766,20 +766,14 @@ function applyMoveCard(
     MoveType: move.MoveType,
     SpellID: move.SpellID,
     SrcSeatID: readNumber(record.payload.SrcSeatID),
-    fromSeatID:
-      normalizedEvent.options.fromSeatID == null
-        ? undefined
-        : Number(normalizedEvent.options.fromSeatID),
-    toSeatID:
-      normalizedEvent.options.toSeatID == null
-        ? undefined
-        : Number(normalizedEvent.options.toSeatID),
-    fromSubZone: normalizedEvent.options.fromSubZone ?? undefined,
-    toSubZone: normalizedEvent.options.subZone ?? undefined,
+    fromSeatID: normalizedEvent.from.type === 'player' ? normalizedEvent.from.seatID : undefined,
+    toSeatID: normalizedEvent.to.type === 'player' ? normalizedEvent.to.seatID : undefined,
+    fromSubZone: normalizedEvent.from.type === 'player' ? normalizedEvent.from.subZone : undefined,
+    toSubZone: normalizedEvent.to.type === 'player' ? normalizedEvent.to.subZone : undefined,
     fromSpellID:
-      normalizedEvent.options.fromSpellID == null
-        ? null
-        : Number(normalizedEvent.options.fromSpellID)
+      normalizedEvent.from.type === 'player' && normalizedEvent.from.subZone === 'mark'
+        ? normalizedEvent.from.markSpellID
+        : null
   }
 
   const specialZoneHandled = applySpecialZoneState(moveContext)

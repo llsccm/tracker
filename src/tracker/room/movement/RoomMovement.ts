@@ -1,3 +1,11 @@
+import {
+  getMoveZone,
+  getMovePosition,
+  getMoveSubZone,
+  getPopupSpaceID,
+  getMoveSeat,
+  getMoveMarkSpellID
+} from '@/tracker/helper/moveEndpoint'
 import type { Room } from '@/tracker/Room'
 import { RoomMovementCandidates } from './candidates'
 import { RoomMovementHiddenMarks } from './hiddenMarks'
@@ -6,8 +14,8 @@ import { RoomMovementKnownSources } from './knownSources'
 import { RoomMovementKnownPlacement } from './knownPlacement'
 import { createMoveContext } from './context'
 import { RoomMovementUnknownPlacement } from './unknownPlacement'
-import type { MoveTargetZone, RoomMoveContext, RoomMovementOptions } from './types'
-import type { CardID } from '@/tracker/types'
+import type { RoomMoveContext } from './types'
+import type { CardID, RoomMoveRequest } from '@/tracker/types'
 
 /**
  * Room 的移动阶段实现模块，组合来源、候选、暗置标记与已知牌阶段，不持有独立推断状态。
@@ -35,12 +43,8 @@ export class RoomMovement {
   }
 
   /** 构造只读输入快照；移动前事实在 hand-total delta 写入前捕获。 */
-  createMoveContext(
-    cardIDs: readonly CardID[],
-    toZone: MoveTargetZone,
-    opt: RoomMovementOptions = {}
-  ): RoomMoveContext {
-    return createMoveContext(this.room, cardIDs, toZone, opt)
+  createMoveContext(cardIDs: readonly CardID[], request: RoomMoveRequest): RoomMoveContext {
+    return createMoveContext(this.room, cardIDs, request)
   }
 
   /** 按来源解析整批已知牌，再统一恢复追踪与确认身份。 */
@@ -55,18 +59,18 @@ export class RoomMovement {
    */
   applyMoveCandidatePropagation(context: RoomMoveContext): void {
     const {
-      fromZone,
-      fromPosition,
       handMoveCount,
-      position,
       sourceEvent,
       sourceHandSeat,
-      subZone,
       targetHandSeat,
-      toZone,
       unknownCount,
       forceRandomHandTransferCandidates
     } = context
+    const fromZone = getMoveZone(context.from)
+    const fromPosition = getMovePosition(context.from)
+    const position = getMovePosition(context.to)
+    const subZone = getMoveSubZone(context.to)
+    const toZone = getMoveZone(context.to)
 
     // 木牛流马内部牌只随 mark700 协议迁移，不随装备本体移动。
     if (this.hiddenMarks.handleMuniuMarkMove(context)) return
@@ -77,10 +81,12 @@ export class RoomMovement {
     // 标记区可见牌多于协议暗牌张数时，挑一张会固化身份，改为标记/手牌双边候选。
     if (
       this.candidates.markStoredToHandCandidates({
-        fromPopupSpaceID: context.knownIDs.length === 0 ? context.fromPopupSpaceID : undefined,
+        fromPopupSpaceID: context.knownIDs.length === 0 ? getPopupSpaceID(context.from) : undefined,
         fromSeat:
-          context.fromSubZone === 'mark' && context.knownIDs.length === 0 ? context.fromSeat : null,
-        fromSpellID: context.fromSpellID ?? context.spellID ?? null,
+          getMoveSubZone(context.from) === 'mark' && context.knownIDs.length === 0
+            ? getMoveSeat(context.from)
+            : null,
+        fromSpellID: getMoveMarkSpellID(context.from),
         toSeat: context.targetHandSeat,
         count: context.unknownCount,
         gainSpellID: context.gainSpellID,
@@ -184,7 +190,8 @@ export class RoomMovement {
    * 公共区自身不表达 owner，这里只保留组合关系，供后续回到玩家区时继续收敛。
    */
   createPublicMoveConstraintGroup(context: RoomMoveContext): void {
-    const { combinationID, publicMovedCards, sourceEvent, toZone } = context
+    const { combinationID, publicMovedCards, sourceEvent } = context
+    const toZone = getMoveZone(context.to)
     if (toZone === 'player' || !combinationID || publicMovedCards.length === 0) return
 
     this.room.createConstraintGroup({

@@ -50,21 +50,21 @@ describe('Room 移动事件装饰', () => {
       return event
     })
 
-    const event = createEvent()
-    event.options.spellID = 42
+    let event = createEvent()
+    event = { ...event, to: { type: 'player', seatID: 1, subZone: 'mark', markSpellID: 42 } }
     const decorated = room.decorateMoveEvent(event)
     expect(calls).toEqual(['*', '42:first', '42:second'])
     expect(decorated.options.combinationID).toBe('wildcard')
 
     calls.length = 0
-    event.options.spellID = 99
+    event = { ...event, to: { type: 'player', seatID: 1, subZone: 'mark', markSpellID: 99 } }
     room.decorateMoveEvent(event)
     expect(calls).toEqual(['*', '42:first', '42:second', '99'])
   })
 
   it('完整协议与领域修正分离，装饰时不重写原始协议字段', () => {
     const room = createRoom()
-    const event = normalizeMoveEvent(
+    let event = normalizeMoveEvent(
       protocolMove({
         CardIDs: [1],
         CardCount: 1,
@@ -74,7 +74,7 @@ describe('Room 移动事件装饰', () => {
     )
     event.cardIDs = [2]
     event.cardCount = 3
-    event.options.spellID = 99
+    event = { ...event, to: { type: 'player', seatID: 1, subZone: 'mark', markSpellID: 99 } }
     const calls: number[] = []
     room.registerMoveEventHandler(42, () => {
       calls.push(42)

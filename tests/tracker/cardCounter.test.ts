@@ -1,3 +1,4 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CardConfig } from '@/config/CardConfig'
 import { Card } from '@/tracker/model/Card'
@@ -35,27 +36,27 @@ describe('CardCounter 状态索引', () => {
   it('按未知、出现、弃牌、移出游戏四类同步派生索引', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5], seatIDs: [1] })
 
-    room.moveCards([0], 'player', {
-      toSeatID: 1,
-      subZone: 'hand',
-      fromZone: 'pile',
+    room.moveCards([0], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'test:hidden-hand' }
     })
-    room.moveCards([2], 'player', {
-      toSeatID: 1,
-      subZone: 'hand',
-      fromZone: 'pile',
+    room.moveCards([2], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'test:known-hand' }
     })
-    room.moveCards([3], 'discard', {
-      fromZone: 'pile',
+    room.moveCards([3], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'test:discard' }
     })
-    room.moveCards([4], 'exile', {
-      fromZone: 'pile',
+    room.moveCards([4], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'exile', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'test:exile' }
     })

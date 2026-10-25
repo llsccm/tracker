@@ -1,3 +1,9 @@
+import {
+  getMoveSeat,
+  getMoveZone,
+  getMoveSubZone,
+  getMovePosition
+} from '@/tracker/helper/moveEndpoint'
 import type {
   PatchedMoveCardFields,
   NormalizedMoveCardFields,
@@ -154,7 +160,7 @@ describe('MoveEventNormalizer 当前行为', () => {
     const hiddenGain = normalizeMoveEvent(messages[3])
     expect(hiddenGain.cardIDs).toEqual([])
     expect(hiddenGain.cardCount).toBe(2)
-    expect(hiddenGain.options.toSeatID).toBe(0)
+    expect(getMoveSeat(hiddenGain.to)).toBe(0)
   })
 
   it('原始消息核心字段必填，牌 ID 只允许数组', () => {
@@ -181,10 +187,10 @@ describe('MoveEventNormalizer 当前行为', () => {
 
     expect(event.cardIDs).toEqual([1, 2])
     expect(event.cardCount).toBe(2)
-    expect(event.toZone).toBe('player')
-    expect(event.options.toSeatID).toBe(3)
-    expect(event.options.fromZone).toBe('pile')
-    expect(event.options.subZone).toBe('hand')
+    expect(getMoveZone(event.to)).toBe('player')
+    expect(getMoveSeat(event.to)).toBe(3)
+    expect(getMoveZone(event.from)).toBe('pile')
+    expect(getMoveSubZone(event.to)).toBe('hand')
     expect(event.options.cardCount).toBe(2)
     expect(event.options.sourceEvent.raw).toBe(event.raw)
   })
@@ -204,7 +210,7 @@ describe('MoveEventNormalizer 当前行为', () => {
       })
     )
 
-    expect(event.options.position).toBe(2)
+    expect(getMovePosition(event.to)).toBe(2)
     expect(event.options.sourceEvent.raw?.ToPosition).toBe(2)
   })
 
@@ -218,10 +224,10 @@ describe('MoveEventNormalizer 当前行为', () => {
     })
     const event = normalizeMoveEvent(raw)
 
-    expect(event.toZone).toBe('process')
-    expect(event.options.fromZone).toBeNull()
-    expect(event.options.subZone).toBeUndefined()
-    expect(event.options.fromSubZone).toBeUndefined()
+    expect(getMoveZone(event.to)).toBe('process')
+    expect(getMoveZone(event.from)).toBeNull()
+    expect(getMoveSubZone(event.to)).toBeUndefined()
+    expect(getMoveSubZone(event.from)).toBeUndefined()
     expect(validateMoveEvent(raw)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -255,12 +261,12 @@ describe('MoveEventNormalizer 当前行为', () => {
     )
 
     expect(event.type).toBe('moveUnknown')
-    expect(event.toZone).toBe('exchange')
-    expect(event.options.fromZone).toBe('pile')
-    expect(event.options.toSeatID).toBeUndefined()
-    expect(event.options.fromSeatID).toBeUndefined()
-    expect(event.options.subZone).toBeUndefined()
-    expect(event.options.fromSubZone).toBeUndefined()
+    expect(getMoveZone(event.to)).toBe('exchange')
+    expect(getMoveZone(event.from)).toBe('pile')
+    expect(getMoveSeat(event.to)).toBeNull()
+    expect(getMoveSeat(event.from)).toBeNull()
+    expect(getMoveSubZone(event.to)).toBeUndefined()
+    expect(getMoveSubZone(event.from)).toBeUndefined()
   })
 
   it('天候牌堆同区单牌展示基础归一为 noop，留给技能装饰器建立范围候选', () => {
@@ -404,18 +410,11 @@ describe('MoveEventNormalizer 当前行为', () => {
       cardIDs: [96],
       cardCount: 1,
       moveType: 8,
-      toZone: 'player',
+      from: { type: 'player', seatID: 0, subZone: 'mark', markSpellID: 3370 },
+      to: { type: 'player', seatID: 2, subZone: 'hand' },
       options: {
-        fromSeatID: 0,
-        toSeatID: 2,
-        fromSubZone: 'mark',
-        subZone: 'hand',
-        fromSpellID: 3370,
-        spellID: 3389,
         cardCount: 1,
         moveType: 8,
-        fromPosition: POSITION_TOP,
-        position: 2,
         sourceEvent: { moveType: 8, label: '标记牌回手' }
       }
     })

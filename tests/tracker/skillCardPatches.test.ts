@@ -1,3 +1,4 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { moveContext } from './helpers/moveContext'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Room } from '@/tracker/Room'
@@ -308,7 +309,11 @@ describe('技能插件归一化前补牌', () => {
 
   it('椒遇颜色候选数与协议张数不一致时保持暗牌消息', () => {
     const room = createSkillRoom({ 3571: new Set([1, 2]) })
-    room.moveCards([147], 'player', { toSeatID: 1, subZone: 'mark', spellID: 3571 })
+    room.moveCards([147], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'mark', markSpellID: 3571 },
+      triggerSpellID: 3571
+    })
     const card = room.cardIndex.get(147)!
     card.color = 1
     const context = createContext({
