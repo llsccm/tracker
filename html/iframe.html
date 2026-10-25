@@ -222,7 +222,8 @@
       font-size: 13px;
     }
 
-    .orderContainer {
+    .orderContainer,
+    #orderAndShouPai {
       text-align: right;
       vertical-align: bottom;
     }
@@ -519,7 +520,7 @@
     }
 
     /* 阴影充当边框，legend 处用底色遮断阴影线，避免文字压线 */
-    fieldset > legend {
+    fieldset>legend {
       margin-left: 4px;
       background: var(--bg-primary);
     }
@@ -1091,7 +1092,7 @@
     }
 
     .shoupai.unknown-card {
-      color: #767676;
+      color: #bbb;
       background: 0;
     }
 
@@ -1564,122 +1565,95 @@
 
     <!-- Tab 1: 卡牌 -->
     <div class="tab-panel active" id="tab-cards">
-      <div class="orderAndShouPai" id="orderAndShouPai">
+      <div id="orderAndShouPai">
         <button class="panel-header">
           <span class="triangle"></span>
           <b>武将手牌</b>
         </button>
         <div class="panel-content order" id="button">
           <div class="panel-content-inner">
-            <div class="orderContainer" id="or1">
-              <div class="order-body No1" id="1" style="--No-content: '神诸葛亮丨一'">
-                <button class="shoupai">
-                  <span class="card-cn suit-spade"><span class="suit-glyph">♠</span><span
-                      class="rank-glyph">Q</span></span>
-                  <span class="card-name">测试</span>
-                </button>
-                <button class="shoupai">
-                  <span class="card-cn suit-club"><span class="suit-glyph">♣</span><span
-                      class="rank-glyph">J</span></span>
-                  <span class="card-name">测试</span>
-                </button>
-                <button class="shoupai">
-                  <span class="card-cn suit-heart"><span class="suit-glyph">♥</span><span
-                      class="rank-glyph">K</span></span>
-                  <span class="card-name">测试</span>
-                </button>
-                <button class="shoupai">
-                  <span class="card-cn suit-club"><span class="suit-glyph">♣</span><span
-                      class="rank-glyph">Q</span></span>
-                  <span class="card-name">测试</span>
-                </button>
-                <div class="markedCard">
-                  <span class="mark">木马</span>
-                  <button class="shoupai unknown-card">
-                    <span class="card-cn card-cn-long suit-heart"><span class="suit-glyph">♥</span><span
-                        class="rank-glyph">10</span></span>
-                    <span class="card-name">测试</span>
-                  </button>
-                  <button class="shoupai red-card">
-                    <span class="card-cn suit-diamond"><span class="suit-glyph">♦</span><span
-                        class="rank-glyph">K</span></span>
-                    <span class="card-name">测试</span>
-                  </button>
-                </div>
-                <button class="shoupai">
-                  <span class="card-cn suit-club"><span class="suit-glyph">♣</span><span
-                      class="rank-glyph">Q</span></span>
-                  <span class="card-name">测试</span>
-                </button>
-                <button class="shoupai">
-                  <span class="card-cn suit-club"><span class="suit-glyph">♣</span><span
-                      class="rank-glyph">J</span></span>
-                  <span class="card-name">测试</span>
-                </button>
-                <button class="shoupai">
-                  <span class="card-cn suit-club"><span class="suit-glyph">♣</span><span
-                      class="rank-glyph">K</span></span>
-                  <span class="card-name">测试</span>
-                </button>
-                <button class="shoupai">
-                  <span class="card-cn suit-club"><span class="suit-glyph">♣</span><span
-                      class="rank-glyph">Q</span></span>
-                  <span class="card-name">测试</span>
-                </button>
-              </div>
-            </div>
-            <div class="orderContainer" id="or2">
-              <div class="order-body No2" id="2" style="--No-content: '卧龙诸葛丨二'">
+            <div class="order-body No1" id="1" style="--No-content: '神诸葛亮丨一'">
+              <button class="shoupai">
+                <span class="card-cn suit-spade"><span class="suit-glyph">♠</span><span
+                    class="rank-glyph">Q</span></span>
+                <span class="card-name">测试</span>
+              </button>
+              <button class="shoupai">
+                <span class="card-cn suit-club"><span class="suit-glyph">♣</span><span
+                    class="rank-glyph">J</span></span>
+                <span class="card-name">测试</span>
+              </button>
+              <button class="shoupai">
+                <span class="card-cn suit-heart"><span class="suit-glyph">♥</span><span
+                    class="rank-glyph">K</span></span>
+                <span class="card-name">测试</span>
+              </button>
+              <button class="shoupai">
+                <span class="card-cn suit-club"><span class="suit-glyph">♣</span><span
+                    class="rank-glyph">Q</span></span>
+                <span class="card-name">测试</span>
+              </button>
+              <div class="markedCard">
+                <span class="mark">木马</span>
                 <button class="shoupai unknown-card">
                   <span class="card-cn card-cn-long suit-heart"><span class="suit-glyph">♥</span><span
                       class="rank-glyph">10</span></span>
-                  <span class="card-name">暗牌</span>
+                  <span class="card-name">测试</span>
                 </button>
-                <button class="shoupai unknown-card">
-                  <span class="card-cn card-cn-long suit-heart"><span class="suit-glyph">♥</span><span
-                      class="rank-glyph">10</span></span>
-                  <span class="card-name">样式</span>
+                <button class="shoupai red-card">
+                  <span class="card-cn suit-diamond"><span class="suit-glyph">♦</span><span
+                      class="rank-glyph">K</span></span>
+                  <span class="card-name">测试</span>
                 </button>
               </div>
+              <button class="shoupai">
+                <span class="card-cn suit-club"><span class="suit-glyph">♣</span><span
+                    class="rank-glyph">Q</span></span>
+                <span class="card-name">测试</span>
+              </button>
+              <button class="shoupai">
+                <span class="card-cn suit-club"><span class="suit-glyph">♣</span><span
+                    class="rank-glyph">J</span></span>
+                <span class="card-name">测试</span>
+              </button>
+              <button class="shoupai">
+                <span class="card-cn suit-club"><span class="suit-glyph">♣</span><span
+                    class="rank-glyph">K</span></span>
+                <span class="card-name">测试</span>
+              </button>
+              <button class="shoupai">
+                <span class="card-cn suit-club"><span class="suit-glyph">♣</span><span
+                    class="rank-glyph">Q</span></span>
+                <span class="card-name">测试</span>
+              </button>
             </div>
-            <div class="orderContainer" id="or3" style="--No-content: '天候孔明丨三'">
-              <div class="order-body No3" id="3"></div>
+            <div class="order-body No2" id="2" style="--No-content: '卧龙诸葛丨二'">
+              <button class="shoupai unknown-card">
+                <span class="card-cn card-cn-long suit-heart"><span class="suit-glyph">♥</span><span
+                    class="rank-glyph">10</span></span>
+                <span class="card-name">暗牌</span>
+              </button>
+              <button class="shoupai unknown-card">
+                <span class="card-cn card-cn-long suit-heart"><span class="suit-glyph">♥</span><span
+                    class="rank-glyph">10</span></span>
+                <span class="card-name">样式</span>
+              </button>
             </div>
-            <div class="orderContainer" id="or4" style="--No-content: '诸葛亮丨四'">
-              <div class="order-body No4" id="4"></div>
-            </div>
-            <div class="orderContainer" id="or5" style="--No-content: '武诸葛亮丨五'">
-              <div class="order-body No5" id="5"></div>
-            </div>
-            <div class="orderContainer" id="or6" style="--No-content: '卧龙凤雏丨六'">
-              <div class="order-body No6" id="6"></div>
-            </div>
-            <div class="orderContainer" id="or7" style="--No-content: '界卧龙诸葛丨七'">
-              <div class="order-body No7" id="7"></div>
-            </div>
-            <div class="orderContainer" id="or8" style="--No-content: '界诸葛亮丨八'">
-              <div class="order-body No8" id="8"></div>
-            </div>
+            <div class="order-body No3" id="3" style="--No-content: '天候孔明丨三'"></div>
+            <div class="order-body No4" id="4" style="--No-content: '诸葛亮丨四'"></div>
+            <div class="order-body No5" id="5" style="--No-content: '武诸葛亮丨五'"></div>
+            <div class="order-body No6" id="6" style="--No-content: '卧龙凤雏丨六'"></div>
+            <div class="order-body No7" id="7" style="--No-content: '界卧龙诸葛丨七'"></div>
+            <div class="order-body No8" id="8" style="--No-content: '界诸葛亮丨八'"></div>
           </div>
         </div>
 
-        <div>
-          <div class="orderContainer">
-            <div class="order-body knownCards" id="knownCards"></div>
-          </div>
-          <div class="orderContainer">
-            <div class="order-body paiduiCards" id="paiduiCards"></div>
-          </div>
-          <div class="orderContainer">
-            <div class="order-body qipaiCards" id="qipaiCards"></div>
-          </div>
-          <div class="orderContainer">
-            <div class="knownCards quanBianYanXi" id="quanBian"></div>
-            <div class="knownCards quanBianYanXi" id="yanXi"></div>
-          </div>
-        </div>
+        <div class="order-body knownCards" id="knownCards"></div>
+        <div class="order-body paiduiCards" id="paiduiCards"></div>
+        <div class="order-body qipaiCards" id="qipaiCards"></div>
+        <div class="knownCards quanBianYanXi" id="quanBian"></div>
+        <div class="knownCards quanBianYanXi" id="yanXi"></div>
       </div>
-      <div class="width"></div>
       <div class="cardDetail" id="cardDetail">
         <div class="detail">
           <div class="detail-body">
