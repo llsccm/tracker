@@ -1,7 +1,65 @@
 import { describe, expect, it } from 'vitest'
 import { createTestRoom, getCard } from './helpers/room'
+import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
+import { protocolMove } from './helpers/trackerController'
 
 describe('已知牌来源与落区阶段顺序', () => {
+  it('未知协议来源只查找既有明牌，暗牌仍沿用牌堆取牌', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [0] })
+    const visible = getCard(room, 1)
+    const event = normalizeMoveEvent(
+      protocolMove({
+        FromZone: 99,
+        ToZone: 3,
+        CardIDs: [1, 2],
+        CardCount: 2
+      })
+    )
+    room.moveCards(event.cardIDs, event.toZone, event.options)
+    expect(room.zones.get('process')!.cards).toEqual([visible])
+    expect(room.cardIndex.has(2)).toBe(false)
+    const remaining = [...room.zones.get('pile')!.cards]
+    const hidden = normalizeMoveEvent(
+      protocolMove({
+        FromZone: 99,
+        ToZone: 3,
+        CardIDs: [],
+        CardCount: 1
+      })
+    )
+    room.moveCards(hidden.cardIDs, hidden.toZone, hidden.options)
+    expect(room.zones.get('process')!.cards).toEqual([visible, remaining.at(-1)])
+    expect(room.cards).toHaveLength(3)
+  })
+
+  it.each([
+    { toZone: 5, selected: 3389 },
+    { toZone: 3, selected: 414 }
+  ])('标记回调按目标类型 $toZone 选择，获得来源仍使用动作技能', ({ toZone, selected }) => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0] })
+    room.moveCards([1], 'player', { toSeatID: 0, subZone: 'mark', spellID: 414 })
+    const calls: number[] = []
+    room.registerSkillHandler(414, () => calls.push(414))
+    room.registerSkillHandler(3389, () => calls.push(3389))
+    const event = normalizeMoveEvent(
+      protocolMove({
+        FromID: 0,
+        FromZone: 4,
+        FromZoneParam: 414,
+        ToID: toZone === 5 ? 0 : 255,
+        ToZone: toZone,
+        SpellID: 3389,
+        CardIDs: [1],
+        CardCount: 1
+      })
+    )
+    room.moveCards(event.cardIDs, event.toZone, event.options)
+    expect(calls).toEqual([selected])
+    const card = room.cardIndex.get(1)!
+    expect(card.spellID).toBeNull()
+    if (toZone === 5) expect(card.gainSpellID).toBe(3389)
+  })
+
   it.each(['outside', 'pile', 'player'] as const)(
     '%s 来源先按协议顺序解析并确认整批身份，再逐牌执行技能与落区',
     (source) => {

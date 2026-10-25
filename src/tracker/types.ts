@@ -1,6 +1,7 @@
 import type { Card } from './model'
 import type { GameState } from './Game'
 import type { Room } from './Room'
+import type { ConstraintGroupOptions } from './constraint/ConstraintGroup'
 
 export type CardID = number
 /** 玩家物理座位为 0–7；协议公共端点 FromID/ToID 另按区域解释。 */
@@ -21,6 +22,81 @@ export type PublicZoneName =
   | string
 
 export type PublicPosition = number | 'top' | 'bottom' | 'random' | 'any' | string
+
+export type PlayerMoveArea =
+  | { readonly subZone: 'hand' | 'equip' | 'judge' }
+  | { readonly subZone: 'mark'; readonly markSpellID: SpellID | null }
+
+export type PlayerMoveEndpoint = Readonly<{
+  type: 'player'
+  seatID: SeatID
+}> &
+  PlayerMoveArea
+
+export interface PublicMoveEndpoint {
+  readonly type: 'public'
+  readonly zone: 'pile' | 'discard' | 'process' | 'exchange' | 'exile'
+  readonly position: PublicPosition
+}
+
+export interface PopupMoveEndpoint {
+  readonly type: 'popup'
+  readonly spaceID: number
+}
+
+export interface OutsideMoveEndpoint {
+  readonly type: 'outside'
+}
+
+export type MoveEndpoint =
+  | PlayerMoveEndpoint
+  | PublicMoveEndpoint
+  | PopupMoveEndpoint
+  | OutsideMoveEndpoint
+
+/** 来源未定位不授予游戏外创建身份的语义。 */
+export interface UnresolvedMoveSource {
+  readonly type: 'unresolved'
+}
+
+/** 多座位是同一批牌的可能归属，不是向每个座位分别发牌。 */
+export type PlayerCandidateTarget = Readonly<{
+  type: 'playerCandidates'
+  seatIDs: readonly [SeatID, SeatID, ...SeatID[]]
+}> &
+  PlayerMoveArea
+
+export type MoveSource = MoveEndpoint | UnresolvedMoveSource
+export type MoveTarget = MoveEndpoint | PlayerCandidateTarget
+
+export interface MoveRoute {
+  readonly from: MoveSource
+  readonly to: MoveTarget
+}
+
+/** 移动执行选项不携带来源或目标的镜像。 */
+export interface MoveExecutionOptions {
+  triggerSpellID?: SpellID | null
+  gainSpellID?: SpellID | null
+  combinationID?: number | string | null
+  cardCount?: number
+  handMoveCount?: number
+  moveType?: number
+  expectedSlotsByLocation?: ConstraintGroupOptions['expectedSlotsByLocation']
+  anonymizeCards?: Card[]
+  requireAnonymizeSuccess?: boolean
+  pileIdentityCardIDs?: readonly CardID[]
+  pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
+  sourceCards?: Card[]
+  publicCandidateSource?: PublicCandidateSource
+  forceRandomHandTransferCandidates?: boolean
+  publicCandidateReveal?: PublicCandidateReveal
+  postMovePublicCandidates?: PostMovePublicCandidate[]
+  duoQiRandomHandGroupSequence?: number
+  sourceEvent?: MoveSourceEvent
+}
+
+export interface RoomMoveRequest extends MoveRoute, MoveExecutionOptions {}
 
 export interface SubZoneCandidate {
   seatID: SeatID
