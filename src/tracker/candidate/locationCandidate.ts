@@ -57,7 +57,7 @@ function isContainerLocationCandidate(
  * 不投影为 owner。
  */
 export function normalizeLocationCandidate(
-  candidate: LocationCandidateInput = {}
+  candidate: LocationCandidateInput | null = {}
 ): LocationCandidate | null {
   if (!candidate) return null
 
@@ -126,7 +126,7 @@ export function normalizeLocationCandidate(
 /**
  * 生成稳定 key。字符串 key 仅用于 Map/Set，不作为业务状态源。
  */
-export function createLocationCandidateKey(candidate: LocationCandidateInput = {}): string {
+export function createLocationCandidateKey(candidate: LocationCandidateInput | null = {}): string {
   const normalized = normalizeLocationCandidate(candidate)
   if (!normalized) return ''
 

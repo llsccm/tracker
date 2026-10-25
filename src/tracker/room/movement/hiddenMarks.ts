@@ -61,7 +61,8 @@ export class RoomMovementHiddenMarks {
     targetSeat
   }: HiddenMarkRecord): LocationCandidate {
     // 装备标记容器使用 container；普通标记仍使用目标座位的 player mark。
-    const containerCandidate = createEquipmentContainerLocationCandidate(spellID)
+    const containerCandidate =
+      spellID === null ? null : createEquipmentContainerLocationCandidate(spellID)
     if (containerCandidate) return containerCandidate
 
     return {
@@ -134,6 +135,7 @@ export class RoomMovementHiddenMarks {
    * 更新木牛流马账本的承载座位，保留稳定的账本与约束组 ID。
    */
   private retargetMuniuRecord(record: HiddenMarkRecord, targetSeat: SeatID): boolean {
+    if (record.spellID === null) return false
     if (!getEquipmentMarkContainerByMarkSpellID(record.spellID)) return false
     if (targetSeat === record.targetSeat) return false
 
@@ -842,13 +844,14 @@ export class RoomMovementHiddenMarks {
         // mark700 迁座已在候选传播阶段完成；随后揭示身份不能按旧 FromID 把账本迁回去。
         const moveMarkSeat = seatChange
           ? seatChange.targetSeat
-          : Number.isFinite(context.fromSeat)
+          : context.fromSeat !== null
             ? context.fromSeat
             : record.targetSeat
 
         // 同一张明牌可能同时是多个标记账本的候选，必须先匹配实际标记空间。
         if (moveSpellID !== record.spellID) return
         if (moveMarkSeat !== record.targetSeat) {
+          if (record.spellID === null) return
           if (!getEquipmentMarkContainerByMarkSpellID(record.spellID)) return
           this.retargetMuniuRecord(record, moveMarkSeat)
         }
@@ -883,9 +886,7 @@ export class RoomMovementHiddenMarks {
           placeholderCount: record.placeholderCards.size
         })
       } else if (context.fromSubZone === 'hand') {
-        const moveHandSeat = Number.isFinite(context.fromSeat)
-          ? context.fromSeat
-          : record.sourceSeat
+        const moveHandSeat = context.fromSeat !== null ? context.fromSeat : record.sourceSeat
         if (moveHandSeat !== record.sourceSeat) return
 
         const candidate: PlayerLocationCandidate = {
@@ -936,7 +937,7 @@ export class RoomMovementHiddenMarks {
     const state = this.room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)
     if (!state?.records?.size) return false
 
-    const snapshot = this.getObservedEquipmentMarkSnapshot(context)
+    const snapshot = getObservedEquipmentMarkSnapshot(context)
     // knownIDs/cardCount 全明约束已在 getObservedEquipmentMarkSnapshot 内校验；
     // 这里只保留 snapshot 与 cardCount 边界。即使部分身份尚未物化，也按协议 ID 收敛弱候选。
     if (!snapshot || context.cardCount <= 0) {

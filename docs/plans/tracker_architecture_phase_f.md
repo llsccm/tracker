@@ -2,25 +2,29 @@
 
 > 导航：[总览](tracker_architecture_refactoring_plan.md) · [Phase E](tracker_architecture_phase_e.md)
 >
-> 状态：待执行；以下为阶段设计方案，实施前需按当前源码核对。
+> 状态：F1 已按收窄范围提取客户端增强与用户会话处理模块；F2 待执行，实施前需按当前源码核对。
 
 ## 1. 根因剖析
 
 1. **`src/logic.js` 职责过载与开局主视角识别分散**：
-   - `src/logic.js` 承担了消息白名单过滤、录制器调用、登录 UUID 提取、皮肤/击杀特效屏蔽、弹窗自动关闭、心愿池提示、山河图同步以及全部记牌器协议分发。
+   - 拆分前，`src/logic.js` 承担了消息白名单过滤、录制器调用、登录 UUID 提取、皮肤/击杀特效屏蔽、弹窗自动关闭、心愿池提示、山河图同步以及全部记牌器协议分发；本次提取其中的客户端增强与用户会话职责。
    - 主视角 `mySeatID` 的识别散落在 4 个不同地方：`Room.registerPlayers`（匹配 `user.userID`）、`logic.js` 的 `GsCUpdateRoleDataNtf (StateID === 58)`、`logic.js` 的 `SmsgGameSetCharacter`（斗地主/山河图单人选将）、以及 `src/handler/gameFlowState.js`（录像首次摸明牌）。
 2. **断线重连（`MsgReconnectGame`）完全放弃当局记牌**：
    - 收到 `MsgReconnectGame` 后，`Game.isDuanXian = true`，`TrackerController.isTrackerReady()` 直接返回 `false` 并 `unmount()` 视图，导致玩家在断线重连后整局失去记牌辅助（连场面已知装备、后续弃牌堆和各角色明牌都无法查看）。
 
 ## 2. 具体重构方案
 
-### 步骤 F1：按领域拆分 `src/logic.js` 并收口 `PerspectiveResolver`
+### 步骤 F1：提取客户端增强与用户会话处理（已完成）
 
-将 `src/logic.js` 瘦身为不到 80 行的顶层调度器，按职责拆分为三个子路由模块：
+保留 `src/logic.js` 的单一 `switch`，仅提取两个处理模块，不以入口行数为目标：
 
-- `src/handler/trackerRouter.ts`：专门处理记牌器生命周期、选将、回合阶段与卡牌移动消息；
-- `src/handler/clientEnhancementRouter.js`：处理皮肤屏蔽、击杀特效、开包弹窗、心愿池、聊天与广播；
-- `src/tracker/runtime/perspectiveResolver.ts`：集中管理“主视角座位判定策略”（UUID 匹配 $\rightarrow$ 2v2 阵营语音 `StateID=58` $\rightarrow$ 斗地主/山河图选将 $\rightarrow$ 录像首摸明牌），消除多处散落的 `if (Game.isRecord && Game.myID === undefined)`。
+- `src/handler/clientEnhancements.js`：按功能导出普通处理函数，负责皮肤/击杀特效屏蔽、广告/开包弹窗关闭、房间口号处理及心愿池提示；内部不再按协议名分发。
+- `src/handler/userSession.js`：负责首次用户 ID 与昵称同步、调用 `initFrame()` 及面板用户信息展示；模块内维护可提供用户身份的消息集合。
+
+入口顺序保持为消息预检与连续结束消息去重、协议录制、功能白名单、用户会话处理、`switch` 分发。
+皮肤与特效处理同步修改原消息对象，等待窗口和面板初始化的异步操作由处理函数自行捕获错误。
+
+本次不新增 tracker 子路由或 `PerspectiveResolver`；对局生命周期、主视角判定、聊天与山河图继续使用现有路径。
 
 ### 步骤 F2：实现断线重连的“残局降级追踪模式（Degraded Mode）”
 
@@ -34,6 +38,7 @@
 
 ## 3. 提交拆分与验证命令
 
-- **PR 1**：`refactor(handler): split logic.js into domain routers and unify perspective resolver`
+- **PR 1**：`refactor(handler): extract client enhancements and user session handling`
 - **PR 2**：`feat(tracker): support degraded tracking mode after MsgReconnectGame`
-- **验证门槛**：`pnpm test:tracker && pnpm typecheck && pnpm lint && pnpm build && pnpm build:prod`
+- **F1 验证门槛**：`pnpm lint`、`pnpm build` 与已有协议路由回归 `pnpm exec vitest run tests/tracker/gameRecordInitRoutes.test.ts`；客户端与用户信息展示通过手工验收，不新增 UI 自动化测试。
+- **F2 验证门槛**：`pnpm test:tracker`、`pnpm typecheck`、`pnpm lint`、`pnpm build` 与 `pnpm build:prod`。

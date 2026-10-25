@@ -115,7 +115,7 @@ export class RoomMovementSources {
     seatID: SeatID,
     count: number,
     subZone: SubZone = 'hand',
-    spellID: SpellID
+    spellID: SpellID | null | undefined
   ): Card[] {
     const playerCards: Card[] = []
     if (!(count > 0)) return playerCards
@@ -148,7 +148,7 @@ export class RoomMovementSources {
    * 玩家来源匹配优先使用 fromSpellID，再回退 spellID；空值表示没有来源标记限制。
    * 保留 0 等非空值，避免用目标标记 ID 覆盖已明确的来源标记。
    */
-  private getSourceSpellID(context: RoomMoveContext): RoomMoveContext['spellID'] {
+  private getSourceSpellID(context: RoomMoveContext): number | null {
     return context.fromSpellID ?? context.spellID ?? null
   }
 
@@ -524,7 +524,6 @@ export class RoomMovementSources {
       return
     }
 
-    zone?.removeCard(card)
     // 找不到旧公共区同样意味着占位失去位置职责；统一走身份释放入口，
     // 避免正 ID 暗占位变成 cardIndex 中永久不可见的 outside 身份。
     const placeholderCardID = placeholder.id
@@ -539,7 +538,7 @@ export class RoomMovementSources {
       oldLocation,
       keepPreviousPosition,
       oldZoneCardCount,
-      oldZoneCardCountAfter: zone?.cards.length ?? null,
+      oldZoneCardCountAfter: null,
       oldZoneHasKnownCard
     })
   }
@@ -674,7 +673,7 @@ export class RoomMovementSources {
       (moveType === MOVE_TYPE.GAIN || (moveType === MOVE_TYPE.MOVE && options.toZone === 'player'))
 
     if (sourceCards?.length) {
-      if (fromSeat !== null && !Number.isNaN(fromSeat)) {
+      if (fromSeat != null) {
         const explicitCards = Array.from(new Set(sourceCards)).filter(Boolean).slice(0, count)
         // 显式 sourceCards 也可能指向弹窗空间实体，不能绕过账本清理。
         removePopupSpaceCards(this.room, explicitCards)
@@ -722,7 +721,7 @@ export class RoomMovementSources {
       return takePopupSpaceCards(this.room, count, options.fromPopupSpaceID)
     }
 
-    if (fromSeat !== null && !Number.isNaN(fromSeat)) {
+    if (fromSeat != null) {
       const sourceSubZone = fromSubZone ?? subZone ?? 'hand'
       const sourceSpellID = sourceSubZone === 'mark' ? (fromSpellID ?? spellID) : spellID
       const unknownCards = takeUnknownCardsFromPlayer(

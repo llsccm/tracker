@@ -675,7 +675,11 @@ function applyRoleDataEx(
   const datas = optionalNumberArray(record.payload.Datas, 'Datas')
 
   if (dataID === 8) {
-    return recordDuoQiRoleDataTarget(context.gameState, record.payload)
+    return recordDuoQiRoleDataTarget(context.gameState, {
+      DataID: dataID,
+      Datas: datas,
+      SeatID: requireInteger(record, 'SeatID')
+    })
       ? applied()
       : ignored('夺炁目标通知未携带可用状态')
   }

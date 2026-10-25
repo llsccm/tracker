@@ -33,7 +33,7 @@ export function defineStoredCardsPlugin({
 export function recordSharedCardIDs(room: Room, msg: SkillUseSpellMessage): void {
   if (room.mySeatID === undefined || msg.SeatID === room.mySeatID) return
   if (msg.dest_Count === 1 && msg.DestSeatIDs?.[0] === room.mySeatID) return
-  if (msg.CardIDs?.length === msg.card_count) {
+  if (msg.CardIDs && msg.CardIDs.length === msg.card_count) {
     room.setSkillState(msg.SpellID, [...msg.CardIDs])
   }
 }

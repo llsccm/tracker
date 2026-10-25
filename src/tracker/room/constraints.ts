@@ -14,7 +14,7 @@ import { computeHandSlotAllocation, type HandSlotAllocation } from '../constrain
 import { isAmbiguousKnownCard } from '../projection/AmbiguousKnownIndex'
 import type { Room } from '../Room'
 import { recordTraversal } from '../traversalStats'
-import type { LocationCandidate, MoveSourceEvent, SeatID, SpellID, SubZone } from '../types'
+import type { LocationCandidate, MoveSourceEvent, SeatID } from '../types'
 import type { RoomDiagnostics } from './diagnostics'
 
 const MAX_TRACKED_CANDIDATE_SEATS = 4
@@ -53,23 +53,6 @@ function areSourceEventsEqual(
     return left === right
   }
   return left.type === right.type && left.label === right.label
-}
-
-interface ConstraintCardOptions {
-  cards?: Card | Card[]
-  cardIDs?: number[] | number
-  candidateSeats?: SeatID[] | SeatID
-  seatID?: SeatID | SeatID[]
-  subZone?: SubZone
-  spellID?: SpellID | null
-  known?: boolean
-}
-
-interface ConstraintGroupCreateOptions extends ConstraintCardOptions {
-  id?: string | number
-  combinationID?: string | number
-  expectedSlotsByLocation?: ConstraintGroupOptions['expectedSlotsByLocation']
-  sourceEvent?: MoveSourceEvent | string | null
 }
 
 /**
@@ -416,8 +399,8 @@ export class RoomConstraints {
 
           // 玩家、公共区和 container 的已锁定位置统一扣减完整位置名额。
           const locationKey = createLocationCandidateKey(resolvedLocationCandidate)
-          if (locationKey && group.expectedSlotsByLocation.has(locationKey)) {
-            const currentExpected = group.expectedSlotsByLocation.get(locationKey)
+          const currentExpected = group.expectedSlotsByLocation.get(locationKey)
+          if (locationKey && currentExpected) {
             group.expectedSlotsByLocation.set(locationKey, {
               min: Math.max(0, currentExpected.min - 1),
               max: Math.max(0, currentExpected.max - 1)
@@ -438,73 +421,6 @@ export class RoomConstraints {
       this.room.markConstraintGroupsDirty('removeCardsFromConstraintGroups')
     }
     return changed
-  }
-
-  /**
-   * 将约束组参数中的实体牌和物理 ID 统一解析为 Card 实体，并按需绑定候选席位。
-   */
-  resolveConstraintCards(options: ConstraintCardOptions = {}, targetSeats: SeatID[] = []): Card[] {
-    const optionCards = options.cards
-      ? Array.isArray(options.cards)
-        ? options.cards
-        : [options.cards]
-      : []
-    const cardIDs = Array.isArray(options.cardIDs)
-      ? options.cardIDs
-      : options.cardIDs === undefined
-        ? []
-        : [options.cardIDs]
-    const idCards = this.room.findCardsByIDs(cardIDs)
-    const cards = Array.from(new Set([...optionCards, ...idCards])).filter(Boolean)
-
-    if (options.cardIDs && targetSeats.length > 0) {
-      cards.forEach((card) => {
-        this.room.clearCardsFromPublicZones([card])
-
-        if (card.location !== 'player' || card.seats.size === 0) {
-          const bindOptions = { known: options.known === true }
-          card.bindCandidates(
-            targetSeats,
-            options.subZone ?? 'hand',
-            options.spellID ?? null,
-            bindOptions
-          )
-        } else {
-          card.setSeats(
-            this.room.mergeCandidateSeats(card.seats, targetSeats),
-            'resolveConstraintCards:mergeCandidateSeats'
-          )
-
-          const previousSubZone = card.subZone
-          const previousSpellID = card.spellID
-
-          if (options.subZone) {
-            card.subZone = options.subZone
-          }
-
-          if (options.spellID !== undefined) {
-            card.spellID = options.spellID
-          }
-
-          if (card.subZone !== previousSubZone || card.spellID !== previousSpellID) {
-            this.room.notifyCardChanged(card, {
-              type: 'card-player-zone-changed',
-              reason: 'resolveConstraintCards:zoneChanged',
-              previousSubZone,
-              nextSubZone: card.subZone,
-              previousSpellID,
-              nextSpellID: card.spellID
-            })
-          }
-
-          if (options.known === true) {
-            card.confirmKnown()
-          }
-        }
-      })
-    }
-
-    return cards
   }
 
   /**
@@ -570,10 +486,10 @@ export class RoomConstraints {
    * 创建或合并局部约束组，并立即应用一次组内约束。
    * 该方法只维护组结构；是否进行全局收敛由 Room.resolveConstraints() 决定。
    */
-  createConstraintGroup(options: ConstraintGroupCreateOptions = {}): ConstraintGroup {
-    const groupID = options.id ?? options.combinationID ?? `group_${++this.room.constraintGroupSeq}`
-    const targetSeats = this.room.normalizeSeats(options.candidateSeats ?? options.seatID)
-    const cards = this.resolveConstraintCards(options, targetSeats)
+  createConstraintGroup(options: ConstraintGroupOptions = {}): ConstraintGroup {
+    const groupID = options.id ?? `group_${++this.room.constraintGroupSeq}`
+    const targetSeats = this.room.normalizeSeats(options.candidateSeats ?? [])
+    const cards = Array.from(new Set(options.cards ?? []))
     let group = this.room.constraintGroups.get(groupID)
     let structureChanged = false
     // 普通确定牌组不影响模糊明牌描述；只对相关明牌置 dirty，保留高频路径收益。

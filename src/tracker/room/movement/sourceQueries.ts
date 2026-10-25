@@ -1,5 +1,5 @@
 import { getPlayerLocationCandidates } from '@/tracker/candidate/locationCandidate'
-import type { Card } from '@/tracker/model/Card'
+import type { Card } from '@/tracker/model'
 import type { Room } from '@/tracker/Room'
 import { getPopupSpaceCards } from './popupSpaces'
 import type { RoomMoveContext } from './types'
@@ -35,26 +35,18 @@ export function getCardPlayerLocationCandidates(card: Card): PlayerLocationCandi
  * 收集某玩家指定子区的暗牌来源，并把位置已确定的实体排在跨位置候选之前。
  * 协议只证明“某张暗牌来自该玩家”时，应优先消耗确定来源实体，不能因 Room.cards
  * 的物理顺序碰巧先命中跨座位候选，就提前收敛随机转移约束。
+ * spellID 仅限定标记空间；null 表示不限定，0 仍按具体 ID 匹配。
  */
 export function getUnknownPlayerSourceCards(
   room: Room,
   seatID: SeatID,
   subZone: SubZone = 'hand',
-  spellIDs: SpellID | SpellID[] = [],
+  spellID: SpellID | null = null,
   excludedCards: Iterable<Card> = []
 ): Card[] {
   const exactCards: Card[] = []
   const candidateCards: Card[] = []
   const excluded = new Set(excludedCards)
-  const sourceSpellIDs = Array.isArray(spellIDs) ? spellIDs : [spellIDs]
-  const markSpellIDs =
-    subZone === 'mark'
-      ? Array.from(new Set(sourceSpellIDs.filter((spellID) => spellID != null)))
-      : []
-  const matchesSpellID = (spellID: PlayerLocationCandidate['spellID']): boolean =>
-    subZone !== 'mark' ||
-    markSpellIDs.length === 0 ||
-    (spellID !== null && markSpellIDs.includes(spellID))
 
   for (const card of room.cards) {
     if (excluded.has(card)) continue
@@ -65,7 +57,7 @@ export function getUnknownPlayerSourceCards(
       (candidate) =>
         candidate.seatID === seatID &&
         candidate.subZone === subZone &&
-        matchesSpellID(candidate.spellID)
+        (subZone !== 'mark' || spellID === null || candidate.spellID === spellID)
     )
 
     if (!hasSourceCandidate) continue
@@ -82,8 +74,9 @@ export function getUnknownPlayerSourceCards(
  * 判断未公开、非暂停的玩家实体是否已确定属于该席位；子区匹配由调用方先筛选。
  * 即使只剩单席位，只要仍有完整位置或子区候选，就不能当作精确来源。
  */
-export function isExactUnknownPlayerSourceCard(card: Card, seatID: SeatID): boolean {
+export function isExactUnknownPlayerSourceCard(card: Card, seatID: SeatID | null): boolean {
   return (
+    seatID !== null &&
     card.location === 'player' &&
     card.isKnown !== true &&
     card.suspended !== true &&
@@ -104,6 +97,7 @@ export function getUnknownStoredSourceCards(
       (card) => !card.isKnown && !card.hasLocationCandidates() && !excluded.has(card)
     )
   }
+  if (context.fromSeat === null) return []
   return getUnknownPlayerSourceCards(
     room,
     context.fromSeat,
@@ -122,10 +116,10 @@ export function takeUnknownCardsFromPlayer(
   seatID: SeatID,
   count: number,
   subZone: SubZone = 'hand',
-  spellIDs: SpellID | SpellID[] = []
+  spellID: SpellID | null = null
 ): Card[] {
   if (!(count > 0)) return []
-  return getUnknownPlayerSourceCards(room, seatID, subZone, spellIDs).slice(0, count)
+  return getUnknownPlayerSourceCards(room, seatID, subZone, spellID).slice(0, count)
 }
 
 /**

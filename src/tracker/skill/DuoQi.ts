@@ -1,4 +1,4 @@
-import type { Card } from '@/tracker/model/Card'
+import type { Card } from '@/tracker/model'
 import type { GameState } from '../Game'
 import { getPositiveIDs } from '../helper/cardIDs'
 import type { Room } from '../Room'
@@ -61,8 +61,8 @@ interface DuoQiUseSpellMessage {
 
 interface DuoQiRoleDataTargetMessage {
   DataID?: number
-  Datas?: unknown[]
-  SeatID?: SeatID
+  Datas: number[]
+  SeatID: SeatID
 }
 
 /** 只读获取当前 Room 的夺炁推断状态，不存在时不创建。 */
@@ -177,11 +177,7 @@ export function recordDuoQiActivation(
 
   const ownerSeatID = msg.SkillOwerSeatID ?? msg.SeatID ?? msg.SrcSeatID
   const targetSeatID = msg.DestSeatIDs?.[0]
-  if (
-    !Number.isFinite(ownerSeatID) ||
-    !Number.isFinite(targetSeatID) ||
-    ownerSeatID === targetSeatID
-  ) {
+  if (ownerSeatID === undefined || targetSeatID === undefined || ownerSeatID === targetSeatID) {
     return undefined
   }
 
@@ -204,16 +200,14 @@ export function recordDuoQiRoleDataTarget(
   const room = game.room
   if (!room) return undefined
 
+  if (msg.Datas?.length < 2) return undefined
+
   const state = getDuoQiState(room)
   if (!state) return undefined
 
   const targetSeatID = msg.SeatID
-  const ownerSeatID = Number(msg.Datas[1])
-  if (
-    !Number.isFinite(targetSeatID) ||
-    !Number.isFinite(ownerSeatID) ||
-    targetSeatID === ownerSeatID
-  ) {
+  const ownerSeatID = msg.Datas[1]
+  if (targetSeatID === ownerSeatID) {
     return undefined
   }
 

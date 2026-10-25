@@ -111,9 +111,9 @@ function flushRender(): void {
     renderState.shouldRenderAllPlayers || renderState.affectedSeatIDs.size > 0
   const playerOrderResolved = hasResolvedPlayerOrder(currentRoom)
   const players = getPlayersForRender(currentRoom, renderState)
-  players.forEach((player) => {
+  for (const player of players) {
     renderPlayerHand(doc, player)
-  })
+  }
 
   if (renderState.shouldRenderPanels) renderQueryPanel(currentRoom, doc)
   syncTrackerVisibility(doc)

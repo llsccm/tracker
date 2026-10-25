@@ -435,7 +435,7 @@ export class Room extends RoomBase {
   /**
    * 将座位入参标准化为数字数组，过滤空值和非法数字。
    */
-  normalizeSeats(seatID: SeatID | SeatID[]): SeatID[] {
+  normalizeSeats(seatID: SeatID | SeatID[] | undefined): SeatID[] {
     return (Array.isArray(seatID) ? seatID : [seatID])
       .map((seat) => Number(seat))
       .filter(
@@ -477,7 +477,7 @@ export class Room extends RoomBase {
     return cardIDs
       .filter((id) => id > 0)
       .map((id) => this.cardIndex.get(id))
-      .filter(Boolean)
+      .filter((card) => card !== undefined)
   }
 
   /**

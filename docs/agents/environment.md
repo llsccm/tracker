@@ -16,6 +16,7 @@
 - 代码检查：`pnpm lint`。
 - 全量 TypeScript 类型检查：`pnpm typecheck`。
 - 记牌器 TypeScript 类型检查：`pnpm typecheck:tracker`。
+- `tsconfig.tracker.json` 对生产 TypeScript 启用 `strict` 与 `noImplicitOverride`；外围 JS 仅提供导入类型推导。测试暂不启用严格模式，仍由根配置 `pnpm typecheck` 检查。
 - 记牌器回归测试：`pnpm test:tracker`。
 - 仓库文档不强制指定开发者操作系统或默认 Shell；执行方式按“自带工具 → MCP → Shell”的优先级选择，确需运行项目脚本时优先使用 `pnpm`，外部命令按本机 Serena 记忆选择等价写法。
 - 终端、Shell、沙箱/权限限制与检索工具回退属于本机环境差异；不要把当前开发者的本机环境假定写回仓库文档。

@@ -55,13 +55,27 @@ const PROTOCOL_PLAYER_SUB_ZONE_MAP = new Map<number, ProtocolPlayerSubZone>([
   [PROTOCOL_ZONE.JUDGE, 'judge']
 ])
 
+/** 协议区域为必填数字；玩家区没有公共区映射，返回指定 fallback（默认 null）。 */
+export function getProtocolPublicZone(zone: ZoneID, fallback: PublicZoneName): PublicZoneName
 export function getProtocolPublicZone(
-  zone: ZoneID | null | undefined,
+  zone: ZoneID,
+  fallback?: PublicZoneName | null
+): PublicZoneName | null
+export function getProtocolPublicZone(
+  zone: ZoneID,
   fallback: PublicZoneName | null = null
 ): PublicZoneName | null {
-  return zone == null ? fallback : (PROTOCOL_PUBLIC_ZONE_MAP.get(zone) ?? fallback)
+  return PROTOCOL_PUBLIC_ZONE_MAP.get(zone) ?? fallback
 }
 
+export function getProtocolPlayerSubZone(
+  zone: ZoneID | null | undefined,
+  fallback?: ProtocolPlayerSubZone
+): ProtocolPlayerSubZone
+export function getProtocolPlayerSubZone(
+  zone: ZoneID | null | undefined,
+  fallback: ProtocolPlayerSubZone | null
+): ProtocolPlayerSubZone | null
 export function getProtocolPlayerSubZone(
   zone: ZoneID | null | undefined,
   fallback: ProtocolPlayerSubZone | null = 'hand'
@@ -69,6 +83,16 @@ export function getProtocolPlayerSubZone(
   return zone == null ? fallback : (PROTOCOL_PLAYER_SUB_ZONE_MAP.get(zone) ?? fallback)
 }
 
+export function getProtocolMarkSpellID(
+  zone: ZoneID | null | undefined,
+  params: ProtocolMarkSpellParams,
+  fallback: SpellID
+): SpellID
+export function getProtocolMarkSpellID(
+  zone: ZoneID | null | undefined,
+  params?: ProtocolMarkSpellParams,
+  fallback?: SpellID | null
+): SpellID | null
 export function getProtocolMarkSpellID(
   zone: ZoneID | null | undefined,
   params: ProtocolMarkSpellParams = {},

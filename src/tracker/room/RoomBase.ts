@@ -48,11 +48,11 @@ export abstract class RoomBase {
 
   /** 主视角在牌局中的顺位 */
   getMyDisplayID(): number | undefined {
-    return this.getDisplayID(this.mySeatID)
+    return this.mySeatID === undefined ? undefined : this.getDisplayID(this.mySeatID)
   }
 
   getMyPlayer(): Player | undefined {
-    return this.getPlayer(this.mySeatID)
+    return this.mySeatID === undefined ? undefined : this.getPlayer(this.mySeatID)
   }
 
   /**

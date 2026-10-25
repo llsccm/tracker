@@ -43,7 +43,7 @@ export function createMoveContext(
     requestedFromZone !== undefined ? requestedFromZone : hasExplicitFromSeat ? null : 'pile'
   const fromZoneNumber = Number(fromZone)
   const fromSeat = hasExplicitFromSeat
-    ? Number(fromSeatID)
+    ? fromSeatID
     : fromZone !== null &&
         fromZone !== undefined &&
         fromZone !== '' &&

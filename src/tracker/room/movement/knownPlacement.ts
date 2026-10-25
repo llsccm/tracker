@@ -8,6 +8,7 @@ import type { RoomMovementSources } from './sources'
 import { getPlayerHandCardsBySeat } from './sourceQueries'
 import { registerPopupSpaceCards, removePopupSpaceCards } from './popupSpaces'
 import type { RoomMoveContext } from './types'
+import { getObservedEquipmentMarkSnapshot } from './equipmentMarks'
 
 interface KnownMovePlacement {
   swappedCardIDs: CardID[]
@@ -55,7 +56,7 @@ export class RoomMovementKnownPlacement {
     const handledSpellCardIDs: CardID[] = []
     const resolvedSourceCardIDs: CardID[] = []
     const playerSourceSwapAttempts: unknown[] = []
-    const observedEquipmentMarkSnapshot = this.hiddenMarks.getObservedEquipmentMarkSnapshot(context)
+    const observedEquipmentMarkSnapshot = getObservedEquipmentMarkSnapshot(context)
     const playerSourceContext = observedEquipmentMarkSnapshot
       ? { ...context, fromSeat: observedEquipmentMarkSnapshot.observedSeat }
       : context
@@ -203,7 +204,10 @@ export class RoomMovementKnownPlacement {
           fromSeat,
           fromSubZone,
           toZone,
-          sourceHandCards: getPlayerHandCardsBySeat(this.room, fromSeat).map((sourceCard) => ({
+          sourceHandCards: (fromSeat === null
+            ? []
+            : getPlayerHandCardsBySeat(this.room, fromSeat)
+          ).map((sourceCard) => ({
             cardID: sourceCard.id,
             isKnown: sourceCard.isKnown,
             suspended: sourceCard.suspended,
@@ -264,7 +268,7 @@ export class RoomMovementKnownPlacement {
       this.hiddenMarks.resolveHiddenMarkCandidatesFromObservedMarkSnapshot(context)
 
       this.room.createConstraintGroup({
-        id: combinationID,
+        id: combinationID ?? undefined,
         cards: knownCards,
         candidateSeats: targetSeats,
         expectedSlotsByLocation,

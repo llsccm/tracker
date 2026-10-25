@@ -37,6 +37,9 @@ if (!room) return
 
 数量约束通过 `room.createConstraintGroup({ cards, expectedSlotsByLocation })` 提交：值仅接受数字
 或 `{ min, max }`，运行时统一为区间。弹窗位置为 `{ type: 'popup', spaceID }`，不能使用伪座位。
+建组入口与 `ConstraintGroup` 共用 `ConstraintGroupOptions`：`cards` 只接受实体数组，
+`candidateSeats` 只接受座位数组，分组标识统一用 `id`。不接收 `cardIDs`、`seatID`、
+`subZone`、`spellID` 或 `combinationID`；查牌及位置写入在建组前完成，候选座位只作为分组快照。
 
 弹窗入区使用 `room.moveCards(ids, 'popup', { fromZone: 'pile', toPopupSpaceID: 35, cardCount })`；出区使用 `fromZone: 'popup', fromPopupSpaceID: 35` 并明确目标。玩家标记继续使用 `toSeatID/subZone: 'mark'/spellID`，来源空间通过 `fromSpellID` 表达。`414` 标记返回时来源仍为 `414`，不能用动作技能 `3389` 查找标记空间。
 巧织暗取通过弹窗与手牌的数量约束保留候选，剩余牌明弃后确认入手身份；角色数据通知不参与揭示，移动自带正 ID 时直接确认。

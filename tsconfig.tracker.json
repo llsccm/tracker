@@ -1,16 +1,16 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "allowJs": false,
+    "allowJs": true,
     "checkJs": false,
-    "noEmit": true
+    "noEmit": true,
+    "strict": true,
+    "noImplicitOverride": true
   },
   "include": [
     "src/tracker/**/*.ts",
     "src/handler/skills/**/*.ts",
-    "src/types/**/*.d.ts",
-    "tests/tracker/**/*.ts",
-    "tests/contracts/pile-identity/**/*.ts"
+    "src/types/**/*.d.ts"
   ],
   "exclude": ["node_modules", "dist", "coverage"]
 }
