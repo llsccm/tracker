@@ -401,7 +401,7 @@ describe('PubGsCMoveCard', () => {
       type: 'drawKnown',
       cardIDs: [96],
       protocol: { CardIDs: [96], FromPosition: POSITION_TOP },
-      options: { fromPosition: POSITION_TOP },
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
       raw: { CardIDs: [0], FromPosition: POSITION_RANDOM }
     })
     expect(event.protocol).toEqual(syncTrackerMove.mock.calls[0][0])

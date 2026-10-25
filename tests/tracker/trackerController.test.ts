@@ -114,8 +114,10 @@ describe('TrackerController', () => {
     )
     expect(moveSpy).toHaveBeenCalledWith(
       [1],
-      'discard',
-      expect.objectContaining({ fromSeatID: 3, fromSubZone: 'hand' })
+      expect.objectContaining({
+        from: { type: 'player', seatID: 3, subZone: 'hand' },
+        to: { type: 'public', zone: 'discard', position: 65280 }
+      })
     )
     expect(room.cardIndex.get(1)?.location).toBe('discard')
     expect(move.FromZone).toBe(5)
@@ -144,8 +146,10 @@ describe('TrackerController', () => {
     expect(warn).not.toHaveBeenCalled()
     expect(moveSpy).toHaveBeenCalledWith(
       [1],
-      'discard',
-      expect.objectContaining({ fromSeatID: 3, fromSubZone: 'hand' })
+      expect.objectContaining({
+        from: { type: 'player', seatID: 3, subZone: 'hand' },
+        to: { type: 'public', zone: 'discard', position: 65280 }
+      })
     )
     expect(card.location).toBe('discard')
   })

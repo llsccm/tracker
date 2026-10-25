@@ -40,7 +40,12 @@ function createZuoLianMove(fromZone: number) {
 
 function applyMove(room: Room, fromZone = 2) {
   const event = room.decorateMoveEvent(createZuoLianMove(fromZone))
-  room.moveCards(event.cardIDs, event.toZone, event.options)
+  room.moveCards(event.cardIDs, {
+    ...event.options,
+    from: event.from,
+    to: event.to,
+    triggerSpellID: event.protocol.SpellID
+  })
   return event
 }
 

@@ -1,3 +1,8 @@
+import {
+  getMoveSubZone,
+  getMoveMarkSpellID,
+  getMoveCallbackSpellID
+} from '@/tracker/helper/moveEndpoint'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
@@ -74,9 +79,9 @@ describe('隐藏标记区候选', () => {
       SpellID: 3389
     })
 
-    expect(event.options.fromSubZone).toBe('mark')
-    expect(event.options.fromSpellID).toBe(414)
-    expect(event.options.spellID).toBe(3389)
+    expect(getMoveSubZone(event.from)).toBe('mark')
+    expect(getMoveMarkSpellID(event.from)).toBe(414)
+    expect(getMoveCallbackSpellID(event, event.protocol.SpellID)).toBe(3389)
   })
 
   it('414 标记区全暗回手牌按来源空间读取，动作技能为 3389', () => {

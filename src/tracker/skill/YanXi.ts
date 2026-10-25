@@ -48,7 +48,9 @@ export default function decorateYanXi(event: MoveEventDraft, room: Room): MoveEv
 
 function decorateTopGain(event: MoveEventDraft, room: Room): MoveEventDraft {
   if (hasPositiveID(event.cardIDs)) {
-    return patchEvent(event, { options: { fromPosition: POSITION_TOP } })
+    return patchEvent(event, {
+      from: event.from.type === 'public' ? { ...event.from, position: POSITION_TOP } : event.from
+    })
   }
 
   const sourceCards = room.getPublicEndpointCards('pile', 1, POSITION_TOP)
@@ -56,10 +58,7 @@ function decorateTopGain(event: MoveEventDraft, room: Room): MoveEventDraft {
   // MoveType=8 的通用暗牌获得会跳过明牌；成功批次须显式移动牌顶实体并同步已知身份账本。
   return patchEvent(event, {
     cardIDs,
-    options: {
-      fromPosition: POSITION_TOP,
-      sourceCards: cardIDs.length > 0 ? [] : sourceCards,
-      pileIdentityCardIDs: cardIDs
-    }
+    from: event.from.type === 'public' ? { ...event.from, position: POSITION_TOP } : event.from,
+    options: { sourceCards: cardIDs.length > 0 ? [] : sourceCards, pileIdentityCardIDs: cardIDs }
   })
 }

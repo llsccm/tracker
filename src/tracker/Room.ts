@@ -1,3 +1,4 @@
+import type { RoomMovementOptions } from './room/movement/types'
 import { trackerLogger } from '@/utils/logger'
 import { reconcilePopupSpaces } from './room/movement/popupSpaces'
 import { POSITION_RANDOM } from './candidate/cardPositions'
@@ -39,7 +40,6 @@ import type {
 } from './room/index'
 import type {
   CardID,
-  MoveOptions,
   RoomMoveRequest,
   NormalizedMoveEvent,
   PatchedMoveCardFields,
@@ -1048,16 +1048,16 @@ export class Room extends RoomBase {
    * 移动卡牌事件的房间级主流程。只接收只读 ID 数组，单张牌使用 [cardID]。
    * Room 保留阶段编排，具体阶段逻辑委托给 RoomMovement，便于快速查看协议同步的全貌。
    */
-  moveCards(cardIDs: readonly CardID[], request: RoomMoveRequest): boolean
   moveCards(
     cardIDs: readonly CardID[],
     toZone: PublicZoneName | 'player',
-    opt?: MoveOptions
+    opt?: RoomMovementOptions
   ): boolean
+  moveCards(cardIDs: readonly CardID[], request: RoomMoveRequest): boolean
   moveCards(
     cardIDs: readonly CardID[],
     request: RoomMoveRequest | PublicZoneName,
-    opt: MoveOptions = {}
+    opt: RoomMovementOptions = {}
   ): boolean {
     const context =
       typeof request === 'string'

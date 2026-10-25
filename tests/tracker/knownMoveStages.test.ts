@@ -15,7 +15,12 @@ describe('已知牌来源与落区阶段顺序', () => {
         CardCount: 2
       })
     )
-    room.moveCards(event.cardIDs, event.toZone, event.options)
+    room.moveCards(event.cardIDs, {
+      ...event.options,
+      from: event.from,
+      to: event.to,
+      triggerSpellID: event.protocol.SpellID
+    })
     expect(room.zones.get('process')!.cards).toEqual([visible])
     expect(room.cardIndex.has(2)).toBe(false)
     const remaining = [...room.zones.get('pile')!.cards]
@@ -27,7 +32,12 @@ describe('已知牌来源与落区阶段顺序', () => {
         CardCount: 1
       })
     )
-    room.moveCards(hidden.cardIDs, hidden.toZone, hidden.options)
+    room.moveCards(hidden.cardIDs, {
+      ...hidden.options,
+      from: hidden.from,
+      to: hidden.to,
+      triggerSpellID: hidden.protocol.SpellID
+    })
     expect(room.zones.get('process')!.cards).toEqual([visible, remaining.at(-1)])
     expect(room.cards).toHaveLength(3)
   })
@@ -53,7 +63,12 @@ describe('已知牌来源与落区阶段顺序', () => {
         CardCount: 1
       })
     )
-    room.moveCards(event.cardIDs, event.toZone, event.options)
+    room.moveCards(event.cardIDs, {
+      ...event.options,
+      from: event.from,
+      to: event.to,
+      triggerSpellID: event.protocol.SpellID
+    })
     expect(calls).toEqual([selected])
     const card = room.cardIndex.get(1)!
     expect(card.spellID).toBeNull()

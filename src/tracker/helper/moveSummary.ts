@@ -16,27 +16,18 @@ export function summarizeMoveEvent(event: NormalizedMoveEvent, options: MoveSumm
 
   return {
     type: event.type,
+    triggerSpellID: event.protocol.SpellID,
     cardIDs: options.normalizeCardIDs ? [...event.cardIDs] : event.cardIDs,
     ...(moveType !== undefined ? { moveType } : {}),
     ...(label ? { label } : {}),
-    toZone: event.toZone,
+    from: event.from,
+    to: event.to,
     ...(options.includeEventCardCount ? { cardCount: event.cardCount } : {}),
     options: {
-      fromPopupSpaceID: eventOptions.fromPopupSpaceID,
-      toPopupSpaceID: eventOptions.toPopupSpaceID,
-      toSeatID: eventOptions.toSeatID,
-      subZone: eventOptions.subZone,
-      spellID: eventOptions.spellID,
       gainSpellID: eventOptions.gainSpellID ?? eventOptions.sourceEvent?.spellID,
       combinationID: eventOptions.combinationID,
-      fromZone: eventOptions.fromZone,
-      fromSeatID: eventOptions.fromSeatID,
-      fromSubZone: eventOptions.fromSubZone,
-      fromSpellID: eventOptions.fromSpellID,
       cardCount: eventOptions.cardCount,
       moveType: eventOptions.moveType,
-      position: eventOptions.position,
-      fromPosition: eventOptions.fromPosition,
       ...(options.includeSourceCards
         ? { sourceCards: eventOptions.sourceCards?.map((card) => card.id) }
         : {})

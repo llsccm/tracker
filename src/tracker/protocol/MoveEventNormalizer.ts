@@ -8,7 +8,8 @@ import {
 } from './protocolZones'
 import type {
   CardID,
-  MoveOptions,
+  MoveRoute,
+  MoveEndpoint,
   NormalizedMoveCardFields,
   NormalizedMoveEvent,
   RawMoveCardEvent,
@@ -287,71 +288,48 @@ export function getProtocolMoveSpecialLabel(
 }
 
 /** 仅在最终事件构造时解析区域、座位和标记空间。 */
-function normalizeMoveEndpoints(
-  move: RawMoveCardEvent
-): Pick<
-  MoveOptions,
-  | 'toSeatID'
-  | 'fromSeatID'
-  | 'fromZone'
-  | 'subZone'
-  | 'fromSubZone'
-  | 'fromSpellID'
-  | 'spellID'
-  | 'fromPopupSpaceID'
-  | 'toPopupSpaceID'
-> {
-  const fromPublicZone = getProtocolPublicZone(move.FromZone)
-  const targetIsPlayerZone = isProtocolPlayerZone(move.ToZone)
-  const sourceIsPlayerZone = isProtocolPlayerZone(move.FromZone)
-  // 标记区回手牌时，目标区可能带返回技能 ID（如 3389），不能覆盖来源标记空间 ID。
-  const targetSpellID = targetIsPlayerZone
-    ? getProtocolMarkSpellID(
-        move.ToZone,
-        {
-          param: move.ToZoneParam,
-          toZoneParam: move.ToZoneParam,
-          spellID: move.SpellID
-        },
-        move.SpellID
-      )
-    : undefined
-  const fromSpellID = sourceIsPlayerZone
-    ? getProtocolMarkSpellID(
-        move.FromZone,
-        {
-          param: move.FromZoneParam,
-          fromZoneParam: move.FromZoneParam,
-          spellID: move.SpellID
-        },
-        move.SpellID
-      )
-    : undefined
-  // 纯公共区移动没有标记端点，仍需保留触发移动的协议技能 ID。
-  const spellID = targetIsPlayerZone ? targetSpellID : (fromSpellID ?? move.SpellID)
-
-  // FromID/ToID 的含义依赖具体 Zone，不能一律解释成玩家座位。
-  // 例如 FromZone=8 回牌堆时，FromID 是弹窗空间 ID；
-  // FromZone=1 牌堆来源时，FromID=255 也只是牌堆/无座位占位。
-  // fromSeatID/toSeatID 分别描述来源和目标玩家区端点，
-  // 弹窗空间由独立字段表达，不再把技能 ID 放入座位字段。
-
-  // 观看公共区时不应默认把 subZone 推导为 hand；公共区来源的 subZone 置为 undefined。
+export function normalizeMoveEndpoints(move: RawMoveCardEvent): MoveRoute {
+  const playerEndpoint = (zone: number, seatID: number, param: number): MoveEndpoint => {
+    const subZone = getProtocolPlayerSubZone(zone)
+    if (subZone === 'mark') {
+      return {
+        type: 'player',
+        seatID,
+        subZone,
+        markSpellID: getProtocolMarkSpellID(zone, { param, spellID: move.SpellID }, move.SpellID)
+      }
+    }
+    return { type: 'player', seatID, subZone }
+  }
+  const publicEndpoint = (zone: number, position: number): MoveEndpoint | null => {
+    if (zone === 0) return { type: 'outside' }
+    const name = getProtocolPublicZone(zone)
+    if (
+      name === 'pile' ||
+      name === 'discard' ||
+      name === 'process' ||
+      name === 'exchange' ||
+      name === 'exile'
+    ) {
+      return { type: 'public', zone: name, position }
+    }
+    return null
+  }
   return {
-    fromPopupSpaceID:
-      move.FromZone === 8 ? (move.FromID === 255 ? move.SpellID : move.FromID) : undefined,
-    toPopupSpaceID: move.ToZone === 8 ? move.SpellID : undefined,
-    toSeatID: targetIsPlayerZone ? move.ToID : undefined,
-    fromSeatID: sourceIsPlayerZone ? move.FromID : undefined,
-    fromZone: fromPublicZone,
-    subZone: targetIsPlayerZone
-      ? getProtocolPlayerSubZone(move.ToZone)
-      : sourceIsPlayerZone
-        ? getProtocolPlayerSubZone(move.FromZone)
-        : undefined,
-    fromSubZone: sourceIsPlayerZone ? getProtocolPlayerSubZone(move.FromZone) : undefined,
-    fromSpellID,
-    spellID
+    from: isProtocolPlayerZone(move.FromZone)
+      ? playerEndpoint(move.FromZone, move.FromID, move.FromZoneParam)
+      : move.FromZone === 8
+        ? { type: 'popup', spaceID: move.FromID === 255 ? move.SpellID : move.FromID }
+        : (publicEndpoint(move.FromZone, move.FromPosition) ?? { type: 'unresolved' }),
+    to: isProtocolPlayerZone(move.ToZone)
+      ? playerEndpoint(move.ToZone, move.ToID, move.ToZoneParam)
+      : move.ToZone === 8
+        ? { type: 'popup', spaceID: move.SpellID }
+        : (publicEndpoint(move.ToZone, move.ToPosition) ?? {
+            type: 'public',
+            zone: 'process',
+            position: move.ToPosition
+          })
   }
 }
 
@@ -366,8 +344,6 @@ export function normalizeMoveEvent(
   // 暗牌移动的 CardIDs 可以为空，移动张数以协议 CardCount 为准。
   const cardCount = patched.CardCount
   const type = inferEventType(patched, cardIDs)
-  const toPublicZoneName = getProtocolPublicZone(patched.ToZone)
-  const targetIsPlayerZone = isProtocolPlayerZone(patched.ToZone)
 
   return {
     type,
@@ -375,13 +351,10 @@ export function normalizeMoveEvent(
     cardCount,
     protocol: patched,
     moveType: patched.MoveType,
-    toZone: targetIsPlayerZone ? 'player' : (toPublicZoneName ?? 'process'),
+    ...normalizeMoveEndpoints(patched),
     options: {
-      ...normalizeMoveEndpoints(patched),
       cardCount,
       moveType: patched.MoveType,
-      position: patched.ToPosition,
-      fromPosition: patched.FromPosition,
       sourceEvent: {
         type,
         spellID: patched.SpellID,

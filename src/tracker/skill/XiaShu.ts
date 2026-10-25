@@ -33,28 +33,26 @@ export function handleXiaShuChoice(room: Room, msg: SkillChoiceMessage): boolean
 export function settleXiaShuAfterMove(event: NormalizedMoveEvent, room: Room): void {
   const state = room.readSkillState<XiaShuState>(XIA_SHU_SPELL_ID)
   if (!state || (state.choice !== 1 && state.choice !== 2)) return
-  const { fromSeatID, toSeatID, fromSubZone, subZone } = event.options
+  const { from, to } = event
   if (
     event.type === 'showCards' ||
     event.type === 'noop' ||
-    event.toZone !== 'player' ||
-    fromSubZone !== 'hand' ||
-    subZone !== 'hand' ||
+    from.type !== 'player' ||
+    to.type !== 'player' ||
+    from.subZone !== 'hand' ||
+    to.subZone !== 'hand' ||
     event.cardCount <= 0 ||
-    fromSeatID !== state.targetSeatID ||
-    toSeatID == null ||
-    toSeatID === 255 ||
-    (state.actorSeatID != null && state.actorSeatID !== toSeatID)
+    from.seatID !== state.targetSeatID ||
+    to.seatID === 255 ||
+    (state.actorSeatID != null && state.actorSeatID !== to.seatID)
   )
     return
 
   if (state.choice === 2) {
     // 通用转移已建立 N 选 K 约束；零增量确认展示牌留在目标手中，再让约束收敛。
-    const completed = room.moveCards(state.shownCardIDs, 'player', {
-      fromSeatID: state.targetSeatID,
-      toSeatID: state.targetSeatID,
-      fromSubZone: 'hand',
-      subZone: 'hand',
+    const completed = room.moveCards(state.shownCardIDs, {
+      from: { type: 'player', seatID: state.targetSeatID, subZone: 'hand' },
+      to: { type: 'player', seatID: state.targetSeatID, subZone: 'hand' },
       cardCount: state.shownCardIDs.length,
       handMoveCount: 0,
       sourceEvent: {

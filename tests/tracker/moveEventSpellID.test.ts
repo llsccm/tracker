@@ -1,3 +1,4 @@
+import { getMoveMarkSpellID, getMoveCallbackSpellID } from '@/tracker/helper/moveEndpoint'
 import { describe, expect, it, vi } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { summarizeMoveEvent } from '@/tracker/helper/moveSummary'
@@ -30,11 +31,12 @@ describe('移动事件技能 ID', () => {
     expect(event.protocol).toBe(patched)
     expect(event).toMatchObject({
       type: 'returnToPile',
-      toZone: 'pile',
-      options: { spellID: SpellID, fromZone: 'discard', fromPosition: 65282, position: 0 }
+      from: { type: 'public', zone: 'discard', position: 65282 },
+      to: { type: 'public', zone: 'pile', position: 0 },
+      protocol: { SpellID }
     })
-    expect(event.options.fromSpellID).toBeUndefined()
-    expect(summarizeMoveEvent(event).options.spellID).toBe(SpellID)
+    expect(getMoveMarkSpellID(event.from)).toBeNull()
+    expect(summarizeMoveEvent(event).triggerSpellID).toBe(SpellID)
   })
 
   it.each([
@@ -67,8 +69,8 @@ describe('移动事件技能 ID', () => {
     const event = normalizeMoveEvent({ ...returnMove, ...zones })
 
     expect(event.protocol.SpellID).toBe(3543)
-    expect(event.options.spellID).toBe(spellID)
-    expect(event.options.fromSpellID).toBe(fromSpellID)
+    expect(getMoveCallbackSpellID(event, event.protocol.SpellID)).toBe(spellID)
+    expect(getMoveMarkSpellID(event.from)).toBe(fromSpellID ?? null)
   })
 
   it('弃牌回牌堆底将技能传到 Room，但不把公共牌变成技能标记', () => {
@@ -89,13 +91,15 @@ describe('移动事件技能 ID', () => {
     expect(errorSpy).not.toHaveBeenCalled()
     expect(moveCards).toHaveBeenCalledWith(
       [1],
-      'pile',
-      expect.objectContaining({ spellID: 3543, position: 0 })
+      expect.objectContaining({
+        triggerSpellID: 3543,
+        to: { type: 'public', zone: 'pile', position: 0 }
+      })
     )
     expect(debug).toHaveBeenCalledWith(
       '移动事件归一化',
       expect.objectContaining({
-        options: expect.objectContaining({ spellID: 3543 })
+        triggerSpellID: 3543
       })
     )
     expect(room.zones.get('pile')?.cards[0].id).toBe(1)

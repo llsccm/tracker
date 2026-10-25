@@ -1,3 +1,4 @@
+import { getMovePosition } from '@/tracker/helper/moveEndpoint'
 /**
  * 族钟繇【诫厉】（SpellID=3483）交换适配。
  *
@@ -575,7 +576,7 @@ function returnTargetViewCardsToPile(
     count !== batch.pileSlots.length ||
     pileSlots.length !== batch.pileSlots.length ||
     handCards.length !== batch.handCards.length ||
-    event.options.position !== POSITION_TOP ||
+    getMovePosition(event.to) !== POSITION_TOP ||
     !finalPileCards ||
     finalPileCards.some((card) => card.location !== 'exchange')
   ) {
@@ -632,11 +633,8 @@ function returnCardsToTargetHand(
   }
 
   return patchEvent(event, {
-    options: {
-      sourceCards: handResultSlots,
-      // 回堆后 exchange 只剩被目标获得的槽，它们按 Type 53 的顶向序物化。
-      fromPosition: POSITION_TOP
-    }
+    from: event.from.type === 'public' ? { ...event.from, position: POSITION_TOP } : event.from,
+    options: { sourceCards: handResultSlots }
   })
 }
 

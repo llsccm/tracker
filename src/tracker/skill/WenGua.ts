@@ -1,3 +1,4 @@
+import { getMovePosition } from '@/tracker/helper/moveEndpoint'
 import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
 import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
@@ -41,7 +42,7 @@ export function decorateWenGuaCandidateSource(event: MoveEventDraft, room: Room)
     move.MoveType !== MOVE_TYPE.MOVE ||
     move.ToZone !== 1 ||
     move.FromID !== pending.toSeat ||
-    (event.options.position !== POSITION_TOP && event.options.position !== POSITION_BOTTOM)
+    (getMovePosition(event.to) !== POSITION_TOP && getMovePosition(event.to) !== POSITION_BOTTOM)
   )
     return event
 

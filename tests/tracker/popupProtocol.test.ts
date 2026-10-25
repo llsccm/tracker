@@ -1,3 +1,4 @@
+import { getMoveSeat, getMoveSubZone, getPopupSpaceID } from '@/tracker/helper/moveEndpoint'
 import { describe, expect, it } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { getPopupSpaceCards } from '@/tracker/room/movement/popupSpaces'
@@ -102,9 +103,9 @@ describe('玩家标记与弹窗协议边界', () => {
         MoveType: 7
       })
     )
-    expect(popup.options).toMatchObject({ fromZone: 'popup', fromPopupSpaceID: 35 })
-    expect(popup.options.fromSeatID).toBeUndefined()
-    expect(popup.options.fromSubZone).toBeUndefined()
+    expect(popup.from).toEqual({ type: 'popup', spaceID: 35 })
+    expect(getMoveSeat(popup.from)).toBeNull()
+    expect(getMoveSubZone(popup.from)).toBeUndefined()
     const mark = normalizeMoveEvent(
       protocolMove({
         FromZone: 4,
@@ -116,8 +117,8 @@ describe('玩家标记与弹窗协议边界', () => {
         MoveType: 15
       })
     )
-    expect(mark.options).toMatchObject({ fromSeatID: 6, fromSubZone: 'mark', fromSpellID: 414 })
-    expect(mark.options.fromPopupSpaceID).toBeUndefined()
+    expect(mark.from).toEqual({ type: 'player', seatID: 6, subZone: 'mark', markSpellID: 414 })
+    expect(getPopupSpaceID(mark.from)).toBeUndefined()
   })
 
   it('技能 35 暂存五张、四张回顶一张回底，复用原槽并释放空间', () => {

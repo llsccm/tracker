@@ -42,7 +42,7 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
     })
     // 该技能的 RANDOM 来源实际指牌底；显式来源同时保留端点明牌和匿名实体。
     return patchEvent(patchBatchCards(event, room, pileCards), {
-      options: { fromPosition: POSITION_BOTTOM }
+      from: event.from.type === 'public' ? { ...event.from, position: POSITION_BOTTOM } : event.from
     })
   }
 

@@ -41,7 +41,12 @@ function moveMuniuMarks(room: Room, fromSeatID: SeatID, seatID: SeatID, count = 
     ToZone: 4,
     ToZoneParam: 700
   })
-  room.moveCards(event.cardIDs, event.toZone, event.options)
+  room.moveCards(event.cardIDs, {
+    ...event.options,
+    from: event.from,
+    to: event.to,
+    triggerSpellID: event.protocol.SpellID
+  })
 }
 
 describe('木牛流马候选与收敛', () => {

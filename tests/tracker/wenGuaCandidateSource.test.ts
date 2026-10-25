@@ -97,12 +97,12 @@ describe('问卦候选来源筛选', () => {
       expect(give.CardIDs).toEqual([])
       expect(returned.CardIDs).toEqual([])
       expect(moveSpy.mock.lastCall?.[0]).toEqual([])
-      expect(moveSpy.mock.lastCall?.[2]).toMatchObject({
-        fromSeatID: 4,
+      expect(moveSpy.mock.lastCall?.[1]).toMatchObject({
+        from: { type: 'player', seatID: 4, subZone: 'hand' },
         publicCandidateSource: { fromSeat: 1, cards: sourceCards }
       })
-      expect(moveSpy.mock.lastCall?.[2]?.sourceCards).toBeUndefined()
-      expect(moveSpy.mock.lastCall?.[2]?.pileIdentityCardIDs).toBeUndefined()
+      expect(moveSpy.mock.lastCall?.[1]?.sourceCards).toBeUndefined()
+      expect(moveSpy.mock.lastCall?.[1]?.pileIdentityCardIDs).toBeUndefined()
       sourceCards.forEach((card) => {
         expect(card.publicCandidates).toContainEqual(
           expect.objectContaining({
@@ -141,7 +141,7 @@ describe('问卦候选来源筛选', () => {
     const moveSpy = vi.spyOn(room, 'moveCards')
     controller.syncTrackerMove(giveMove())
     controller.syncTrackerMove(returnMove())
-    expect(moveSpy.mock.lastCall?.[2]?.publicCandidateSource).toEqual({ fromSeat: 1, cards: [] })
+    expect(moveSpy.mock.lastCall?.[1]?.publicCandidateSource).toEqual({ fromSeat: 1, cards: [] })
     expect(room.cardIndex.get(13)!.publicCandidates).toEqual([])
     expect(room.cardIndex.get(13)!.seats).toEqual(new Set([4]))
     expect(room.assertPileIdentityLedgerConsistency('test:wengua-dark-source')).toEqual([])
@@ -154,7 +154,7 @@ describe('问卦候选来源筛选', () => {
     expect(room.hasSkillState(780)).toBe(false)
     const moveSpy = vi.spyOn(room, 'moveCards')
     controller.syncTrackerMove(returnMove({ CardIDs: [11] }))
-    expect(moveSpy.mock.lastCall?.[2]?.publicCandidateSource).toBeUndefined()
+    expect(moveSpy.mock.lastCall?.[1]?.publicCandidateSource).toBeUndefined()
     expect(room.zones.get('pile')!.cards[0].id).toBe(11)
     expect(room.cardIndex.get(13)!.publicCandidates).toEqual([])
     expect(room.assertPileIdentityLedgerConsistency('test:wengua-visible')).toEqual([])
@@ -194,7 +194,7 @@ describe('问卦候选来源筛选', () => {
                 ? { CardIDs: [11] }
                 : {}
       controller.syncTrackerMove(returnMove(overrides))
-      expect(moveSpy.mock.lastCall?.[2]?.publicCandidateSource).toBeUndefined()
+      expect(moveSpy.mock.lastCall?.[1]?.publicCandidateSource).toBeUndefined()
       expect(room.hasSkillState(780)).toBe(false)
     }
   )

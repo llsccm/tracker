@@ -95,8 +95,6 @@ export class RoomMovementKnownPlacement {
     const subZone = getMoveSubZone(context.to)
     const targetSeats = getMoveTargetSeats(context.to)
     const toZone = getMoveZone(context.to)
-    const toSeatID =
-      context.to.type === 'player' ? context.to.seatID : getMoveTargetSeats(context.to)
     const { swappedCardIDs, handledSpellCardIDs, resolvedSourceCardIDs, playerSourceContext } =
       placement
     const effectiveFromSeat = getMoveSeat(playerSourceContext.from)
@@ -146,9 +144,8 @@ export class RoomMovementKnownPlacement {
       if (spellID && this.room.skillHandlers.has(spellID)) {
         const handler = this.room.skillHandlers.get(spellID)
         handler?.(card, {
-          toZone,
-          toSeatID,
-          subZone,
+          from: context.from,
+          to: context.to,
           sourceEvent
         })
         handledSpellCardIDs.push(card.id)

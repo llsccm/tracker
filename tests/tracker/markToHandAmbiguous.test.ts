@@ -32,7 +32,12 @@ function moveHiddenMarkToHand(
     ToZone: 5,
     ToZoneParam: 0
   })
-  room.moveCards(event.cardIDs, event.toZone, event.options)
+  room.moveCards(event.cardIDs, {
+    ...event.options,
+    from: event.from,
+    to: event.to,
+    triggerSpellID: event.protocol.SpellID
+  })
 }
 
 function bindMarkCards(room: Room, cardIDs: number[], seatID: number, spellID: number) {

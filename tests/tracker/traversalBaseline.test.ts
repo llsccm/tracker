@@ -270,7 +270,12 @@ describe('Room.cards 遍历基线', () => {
         })
       )
     )
-    room.moveCards(pileStage.cardIDs, pileStage.toZone, pileStage.options)
+    room.moveCards(pileStage.cardIDs, {
+      ...pileStage.options,
+      from: pileStage.from,
+      to: pileStage.to,
+      triggerSpellID: pileStage.protocol.SpellID
+    })
 
     const { stats } = collectTraversalStats(() => {
       room.decorateMoveEvent(

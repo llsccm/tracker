@@ -47,12 +47,10 @@ describe('移动事件日志', () => {
     expect(getMoveTypeLabel(move.MoveType)).toBe('主动交给')
     expect(event.type).toBe(expectedType)
     expect(event.cardIDs).toBe(cardIDs)
-    expect(event.options).toMatchObject({
-      fromSeatID: 1,
-      toSeatID: 4,
-      moveType: MOVE_TYPE.GIVE,
-      fromPosition: POSITION_RANDOM,
-      position: POSITION_TOP
+    expect(event).toMatchObject({
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'player', seatID: 4, subZone: 'hand' },
+      moveType: MOVE_TYPE.GIVE
     })
     expect(summarizeMoveEvent(event, { includeEventCardCount: true })).toMatchObject({
       type: expectedType,
@@ -79,10 +77,10 @@ describe('移动事件日志', () => {
       cardIDs: [],
       moveType: MOVE_TYPE.GAIN,
       label: '从牌堆获取牌',
-      toZone: 'player',
+      from: { type: 'public', zone: 'pile', position: POSITION_RANDOM },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 2,
       options: {
-        fromZone: 'pile',
         moveType: MOVE_TYPE.GAIN
       }
     })

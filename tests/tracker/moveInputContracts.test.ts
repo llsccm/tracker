@@ -1,3 +1,4 @@
+import { getMovePosition, getMoveSeat, getMoveZone } from '@/tracker/helper/moveEndpoint'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { summarizeMoveEvent } from '@/tracker/helper/moveSummary'
@@ -59,7 +60,7 @@ describe('移动输入的只读直传契约', () => {
     expect(event.cardIDs).toBe(patched.CardIDs)
     expect(event.raw).toBe(raw)
     expect(event.options.sourceEvent?.raw).toBe(raw)
-    expect(event.options.fromPosition).toBe(POSITION_TOP)
+    expect(getMovePosition(event.from)).toBe(POSITION_TOP)
     expect(decorated.cardIDs).toEqual([113])
     expect(decorated.protocol).toBe(patched)
     expect(decorated.raw).toBe(raw)
@@ -94,8 +95,8 @@ describe('移动输入的只读直传契约', () => {
     const event = normalizeMoveEvent(protocolMove({ ToID: toSeatID }))
     const summary = summarizeMoveEvent(event)
 
-    expect(event.options.toSeatID).toBe(toSeatID)
-    expect(summary.options.toSeatID).toBe(toSeatID)
+    expect(getMoveSeat(event.to)).toBe(toSeatID)
+    expect(getMoveSeat(summary.to)).toBe(toSeatID)
     expect(event.options).not.toHaveProperty('seatID')
     expect(summary.options).not.toHaveProperty('seatID')
   })
@@ -116,9 +117,9 @@ describe('移动输入的只读直传契约', () => {
       })
     )
 
-    expect(event.toZone).toBe('process')
-    expect(event.options.fromSeatID).toBe(7)
-    expect(event.options.toSeatID).toBeUndefined()
+    expect(getMoveZone(event.to)).toBe('process')
+    expect(getMoveSeat(event.from)).toBe(7)
+    expect(getMoveSeat(event.to)).toBeNull()
     expect(event.options).not.toHaveProperty('seatID')
     expect(summarizeMoveEvent(event).options).not.toHaveProperty('seatID')
   })
@@ -136,7 +137,9 @@ describe('移动输入的只读直传契约', () => {
 
     expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([1])
     expect(handler).toHaveBeenCalledOnce()
-    expect(handler.mock.calls[0][1]).toMatchObject({ toSeatID: 1, toZone: 'player' })
+    expect(handler.mock.calls[0][1]).toMatchObject({
+      to: { type: 'player', seatID: 1, subZone: 'hand' }
+    })
     expect(handler.mock.calls[0][1]).not.toHaveProperty('seatID')
     controller.destroyTrackerRoom()
   })
@@ -152,8 +155,10 @@ describe('移动输入的只读直传契约', () => {
     controller.revealTrackerCards({ type: 'player', seatID: 1, fromZone: 'pile' }, [1])
 
     expect(moveCards).toHaveBeenCalledOnce()
-    expect(moveCards.mock.calls[0][2]?.toSeatID).toBe(1)
-    expect(moveCards.mock.calls[0][2]).not.toHaveProperty('seatID')
+    expect(moveCards.mock.calls[0][1]).toMatchObject({
+      to: { type: 'player', seatID: 1, subZone: 'hand' }
+    })
+    expect(moveCards.mock.calls[0][1]).not.toHaveProperty('seatID')
     expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([1])
     controller.destroyTrackerRoom()
   })
