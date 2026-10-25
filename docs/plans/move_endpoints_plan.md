@@ -1,6 +1,8 @@
 # 统一移动端点结构迁移计划
 
-状态：实施中；阶段一清点与契约已定稿，消费链路将在后续阶段切换。
+状态：源码迁移已完成；剩余测试夹具迁移与回放 helper 修复已在本地完成并验证，按用户要求暂缓提交。
+更早阶段已提交的测试修改保留。当前提交集合尚不包含完整测试适配，PR 保持草稿；自动化结果来自完整本地工作区。
+真实浏览器面板手工验收待执行，不作为已验证结果。
 
 目标：移动事件与 Room 使用显式的 `from` / `to` 端点表达来源和目标，消除座位、公共区域、
 弹窗空间与位置字段之间的隐式优先级；保持现有取牌、候选、身份账本和协议处理行为。
@@ -25,6 +27,10 @@
   `knownMoveStages.test.ts` 固定 mark:414 配合动作 3389 的手牌与公共目标差异。
 - 标记空间按既有非零 ZoneParam / 动作技能回退解析，最终协议 0 保留为 0；领域无空间显式用 null。
   共享类型使用本文草案字段名，执行选项显式列举于 MoveExecutionOptions，RoomMoveRequest 组合端点与执行选项。
+- `identityConservation.test.ts` 的历史 `fromZone: 'player'` 没有座位，实际只查找既有身份，迁为 unresolved。
+  木牛牌堆快照夹具显式拆出公共端点物化和标记快照置换，保留原有占位回补断言。
+- 最终复核确认未知来源仍有原始取牌位置：UnresolvedMoveSource 增加必填 position，协议按 FromPosition
+  直传，避免未知区域的底部暗取变为顶部暗取。该位置仅用于历史暗牌降级，不能授予 outside 语义。
 
 ## 1. 当前问题与边界
 
@@ -84,7 +90,7 @@ type MoveEndpoint =
   | OutsideMoveEndpoint
 
 // 只承接真实的来源未定位语义及既有未知协议区诊断，不作为省略来源的默认值。
-type UnresolvedMoveSource = Readonly<{ type: 'unresolved' }>
+type UnresolvedMoveSource = Readonly<{ type: 'unresolved'; position: PublicPosition }>
 
 // 保留 Room 当前的多候选目标能力；这些座位是可能归属，不表示每人收到一份。
 type PlayerCandidateTarget = Readonly<{
@@ -347,3 +353,17 @@ Room 核心、协议链路切换与最终交付额外运行 `pnpm build:prod`。
 最终应同时满足：端点语义只定义一次，生产链路只传递新结构，旧移动字段和适配器已删除，
 既有领域结果及性能护栏保持，当前 API 文档与实现一致。收益以消除歧义和重复解析衡量，
 不承诺本次重构提高推断能力或修复尚未证实的协议问题。
+
+## 9. 实施记录
+
+- 共享端点和 RoomMoveRequest 已落地；RoomMoveContext 只保留一份 from/to，旧三参数入口、
+  RoomMovementOptions、SourceZoneInput、旧 MoveContext 与集中适配器均已删除。
+- NormalizedMoveEvent、Controller、技能补丁、逐牌回调及普通测试夹具已切换；补丁完整替换端点，
+  options 显式列出执行字段，禁止覆盖协议动作技能。身份账本继续优先使用 pileIdentityEvent.protocol。
+- 多候选目标去重后单座位归一为 player；保留同一批实体和完整位置候选，原遍历基线无需更新。
+- 按用户追加范围修复回放 helper 的端点读取，并验证默认本地 JSONL；该修复与剩余测试迁移暂留工作区。
+  录制文件未提交。
+- 已运行 lint、tracker/全仓类型检查、tracker 回归、开发/生产构建及回放专用类型检查、
+  回放夹具测试、默认录制回放；完整本地工作区通过 tracker 964 项、回放夹具 41 项及默认录制回放。
+  由于测试适配暂缓提交，不能把本地结果视为当前 PR 提交集合的完整 CI 验证。
+- 当前工具没有连接真实游戏页面，面板数量、公共牌序和日志来源的浏览器手工验收仍待执行。

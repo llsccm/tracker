@@ -32,16 +32,15 @@ export class RoomMovementKnownSources {
   resolve(context: RoomMoveContext): KnownMoveResolution {
     const { knownIDs } = context
     const fromSeat = getMoveSeat(context.from)
-    const fromSubZone = getMoveSubZone(context.from)
     const fromZone = getMoveZone(context.from)
     const sourceIsOutside = context.from.type === 'outside'
     // 12 区也可能暂存游戏外生成牌，但已有匿名槽仍须优先按公共端点物化。
     const isExternalSource = sourceIsOutside || fromZone === 'exile'
     if (sourceIsOutside) return this.resolveOutsideSource(context, isExternalSource)
-    if (typeof fromZone === 'string' && this.room.zones.has(fromZone)) {
-      return this.resolvePublicSource(context, fromZone, isExternalSource)
+    if (context.from.type === 'public') {
+      return this.resolvePublicSource(context, context.from.zone, isExternalSource)
     }
-    if (fromZone === 'popup' || (fromSeat !== null && !Number.isNaN(fromSeat) && fromSubZone)) {
+    if (context.from.type === 'popup' || context.from.type === 'player') {
       return this.resolvePlayerSource(context, fromSeat, isExternalSource)
     }
 

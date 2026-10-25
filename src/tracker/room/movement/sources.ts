@@ -26,12 +26,7 @@ import {
   isExactUnknownPlayerSourceCard,
   takeUnknownCardsFromPlayer
 } from './sourceQueries'
-import type {
-  RoomMoveContext,
-  SourceZoneInput,
-  TakeSourceCardsOptions,
-  TakeSpecificSourceFallback
-} from './types'
+import type { RoomMoveContext, TakeSourceCardsOptions, TakeSpecificSourceFallback } from './types'
 import { removePopupSpaceCards, takePopupSpaceCards } from './popupSpaces'
 
 // 来源操作只依赖标记占位维护，不持有暗置标记组件的其它能力。
@@ -56,7 +51,7 @@ export class RoomMovementSources {
    */
   private takeCardsFromPublicZone(
     count: number,
-    zoneID: SourceZoneInput = 'pile',
+    zoneID: PublicZoneName | null | undefined = 'pile',
     position: PublicPosition = POSITION_TOP
   ): Card[] {
     const sourceZone = this.room.getPublicZone(zoneID as PublicZoneName | null | undefined)
@@ -69,7 +64,7 @@ export class RoomMovementSources {
    */
   private takeUnknownCardsFromPublicZone(
     count: number,
-    zoneID: SourceZoneInput = 'pile',
+    zoneID: PublicZoneName | null | undefined = 'pile',
     position: PublicPosition = POSITION_TOP
   ): Card[] {
     const sourceZone = this.room.getPublicZone(zoneID as PublicZoneName | null | undefined)
@@ -692,9 +687,21 @@ export class RoomMovementSources {
         anonymousFallback: isDiscardGain
       })
     }
-    if (from.type === 'outside' || isDiscardGain) {
-      return this.room.createExternalCards([], count)
+    if (from.type === 'outside') {
+      const externalCards = this.room.createExternalCards([], count)
+      if (externalCards.length > 0) {
+        trackerLogger.warn('游戏外来源创建匿名暗占位', {
+          reason: 'takeSourceCards:sourceOutside',
+          requestedCount: count,
+          placeholderCardIDs: externalCards.map((card) => card.id),
+          from,
+          to,
+          sourceEvent
+        })
+      }
+      return externalCards
     }
+    if (isDiscardGain) return this.room.createExternalCards([], count)
     if (from.type === 'popup') return takePopupSpaceCards(this.room, count, from.spaceID)
     if (from.type === 'player') {
       const markSpellID = getMoveMarkSpellID(from)
@@ -718,7 +725,8 @@ export class RoomMovementSources {
       return [...unknownCards, ...knownCards]
     }
     // 未定位来源的暗牌沿用历史公共查询降级；已知牌不走此分支，也不授予 outside 语义。
-    if (from.type === 'unresolved') return this.takeCardsFromPublicZone(count, 'pile', POSITION_TOP)
+    if (from.type === 'unresolved')
+      return this.takeCardsFromPublicZone(count, 'pile', from.position)
     if (from.zone !== 'pile' || moveType === MOVE_TYPE.DRAW) {
       return this.takeCardsFromPublicZone(count, from.zone, from.position)
     }

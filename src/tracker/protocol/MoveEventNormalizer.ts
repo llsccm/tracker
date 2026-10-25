@@ -320,7 +320,10 @@ export function normalizeMoveEndpoints(move: RawMoveCardEvent): MoveRoute {
       ? playerEndpoint(move.FromZone, move.FromID, move.FromZoneParam)
       : move.FromZone === 8
         ? { type: 'popup', spaceID: move.FromID === 255 ? move.SpellID : move.FromID }
-        : (publicEndpoint(move.FromZone, move.FromPosition) ?? { type: 'unresolved' }),
+        : (publicEndpoint(move.FromZone, move.FromPosition) ?? {
+            type: 'unresolved',
+            position: move.FromPosition
+          }),
     to: isProtocolPlayerZone(move.ToZone)
       ? playerEndpoint(move.ToZone, move.ToID, move.ToZoneParam)
       : move.ToZone === 8

@@ -10,6 +10,7 @@ import { getConstraintSlotState } from '@/tracker/constraint/constraintSlots'
 import type {
   PlayerLocationCandidate,
   PublicLocationCandidate,
+  PublicZoneName,
   SeatID,
   SpellID
 } from '@/tracker/types'
@@ -18,7 +19,6 @@ import { getKnownHandCardsBySeat, getPlayerHandCardsBySeat } from './sourceQueri
 import {
   PAIDUI_POSITIONS,
   type StoredToHandCandidatesOptions,
-  type MoveTargetZone,
   type PublicCandidatesToHandOptions,
   type RandomHandToPublicOptions,
   type RandomHandTransferCheckOptions,
@@ -385,7 +385,7 @@ export class RoomMovementCandidates {
   shouldMarkRandomHandToPublicCandidates(
     sourceSeat: SeatID | null,
     targetSeat: SeatID | null,
-    toZone: MoveTargetZone,
+    toZone: PublicZoneName,
     unknownCount: number
   ): boolean {
     return sourceSeat !== null && targetSeat === null && toZone === 'pile' && unknownCount > 0

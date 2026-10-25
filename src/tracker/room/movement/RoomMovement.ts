@@ -14,9 +14,8 @@ import { RoomMovementKnownSources } from './knownSources'
 import { RoomMovementKnownPlacement } from './knownPlacement'
 import { createMoveContext } from './context'
 import { RoomMovementUnknownPlacement } from './unknownPlacement'
-import type { MoveTargetZone, RoomMoveContext, RoomMovementOptions } from './types'
+import type { RoomMoveContext } from './types'
 import type { CardID, RoomMoveRequest } from '@/tracker/types'
-import { legacyMoveRequest } from './legacyMoveRequest'
 
 /**
  * Room 的移动阶段实现模块，组合来源、候选、暗置标记与已知牌阶段，不持有独立推断状态。
@@ -44,22 +43,8 @@ export class RoomMovement {
   }
 
   /** 构造只读输入快照；移动前事实在 hand-total delta 写入前捕获。 */
-  createMoveContext(cardIDs: readonly CardID[], request: RoomMoveRequest): RoomMoveContext
-  createMoveContext(
-    cardIDs: readonly CardID[],
-    toZone: MoveTargetZone,
-    opt?: RoomMovementOptions
-  ): RoomMoveContext
-  createMoveContext(
-    cardIDs: readonly CardID[],
-    request: RoomMoveRequest | MoveTargetZone,
-    opt: RoomMovementOptions = {}
-  ): RoomMoveContext {
-    return createMoveContext(
-      this.room,
-      cardIDs,
-      typeof request === 'string' ? legacyMoveRequest(request, opt) : request
-    )
+  createMoveContext(cardIDs: readonly CardID[], request: RoomMoveRequest): RoomMoveContext {
+    return createMoveContext(this.room, cardIDs, request)
   }
 
   /** 按来源解析整批已知牌，再统一恢复追踪与确认身份。 */

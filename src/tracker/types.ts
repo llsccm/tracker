@@ -57,6 +57,8 @@ export type MoveEndpoint =
 /** 来源未定位不授予游戏外创建身份的语义。 */
 export interface UnresolvedMoveSource {
   readonly type: 'unresolved'
+  /** 未知协议区域仍保留原取牌位置，供既有暗牌降级路径使用。 */
+  readonly position: PublicPosition
 }
 
 /** 多座位是同一批牌的可能归属，不是向每个座位分别发牌。 */
@@ -224,7 +226,7 @@ export interface PublicCandidateSource {
   cards: Card[]
 }
 
-export type MoveOptions = MoveExecutionOptions
+export type MoveOptions = Omit<MoveExecutionOptions, 'triggerSpellID' | 'pileIdentityEvent'>
 
 export interface NormalizedMoveEvent extends MoveRoute {
   /** 直接引用最终 patched，后续只读；raw 仅用于原始数据追溯。 */

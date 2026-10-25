@@ -1,4 +1,4 @@
-import { getMoveZone, getMovePosition, getMoveCallbackSpellID } from '@/tracker/helper/moveEndpoint'
+import { getMoveZone, getMovePosition } from '@/tracker/helper/moveEndpoint'
 import type { Zone } from '@/tracker/model'
 import { Card } from '@/tracker/model'
 import { trackerLogger } from '@/utils/logger'
@@ -6,7 +6,14 @@ import { replacePopupSpaceCard } from './movement/popupSpaces'
 import { POSITION_BOTTOM, POSITION_RANDOM } from '../candidate/cardPositions'
 import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
-import type { CardID, PublicPosition, PublicZoneName, TrackerLogger } from '../types'
+import type {
+  CardID,
+  MoveSource,
+  MoveTarget,
+  PublicPosition,
+  PublicZoneName,
+  TrackerLogger
+} from '../types'
 import type { RoomMoveContext } from './movement/types'
 
 export interface AnonymizeLocatedIdentityOptions {
@@ -58,12 +65,12 @@ export class RoomIdentity {
     const knownPileIdentityIDsConsumed = snapshot.knownPileDrawCards
       .filter((card) => card.location !== 'pile' && card.id > 0)
       .map((card) => card.id)
-    const fromZone = event?.protocol.FromZone ?? this.getIdentityZone(getMoveZone(context.from))
+    const fromZone = event?.protocol.FromZone ?? this.getIdentityZone(context.from)
 
     this.room.applyPileIdentityMove({
       eventType: event?.type ?? (context.knownIDs.length > 0 ? 'moveKnown' : 'moveUnknown'),
       fromZone,
-      toZone: event?.protocol.ToZone ?? this.getIdentityZone(getMoveZone(context.to)),
+      toZone: event?.protocol.ToZone ?? this.getIdentityZone(context.to),
       cardIDs,
       cardCount: event?.cardCount ?? context.cardCount,
       pileCountBefore: snapshot.pileCountBefore,
@@ -79,14 +86,15 @@ export class RoomIdentity {
       fromPosition: getMovePosition(context.from),
       toPosition: getMovePosition(context.to),
       moveType: context.moveType,
-      spellID: event?.protocol.SpellID ?? getMoveCallbackSpellID(context, context.triggerSpellID)
+      spellID: event?.protocol.SpellID ?? context.triggerSpellID
     })
   }
 
-  private getIdentityZone(zone: string | null): number | null {
-    // 账本只区分牌堆、弃牌与其余区域；数字来源在 Room API 中表示座位。
-    if (zone === 'pile') return 1
-    if (zone === 'discard') return 2
+  private getIdentityZone(endpoint: MoveSource | MoveTarget): number | null {
+    // 账本只区分牌堆、弃牌与其余区域，玩家座位不能作为协议区域。
+    if (endpoint.type !== 'public') return null
+    if (endpoint.zone === 'pile') return 1
+    if (endpoint.zone === 'discard') return 2
     return null
   }
 

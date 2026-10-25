@@ -1,5 +1,5 @@
 import { trackerLogger } from '@/utils/logger'
-import { getMoveSeat, getMoveSubZone } from '@/tracker/helper/moveEndpoint'
+import { getMoveSeat, getMoveSubZone, playerMoveTarget } from '@/tracker/helper/moveEndpoint'
 import { summarizeMoveContext } from '@/tracker/helper/moveSummary'
 import type { Room } from '@/tracker/Room'
 import type { CardID, RoomMoveRequest } from '@/tracker/types'
@@ -13,7 +13,7 @@ export function createMoveContext(
 ): RoomMoveContext {
   const {
     from,
-    to,
+    to: requestedTo,
     triggerSpellID,
     combinationID,
     cardCount = cardIDs.length,
@@ -28,6 +28,11 @@ export function createMoveContext(
     postMovePublicCandidates,
     sourceEvent
   } = opt
+
+  const to =
+    requestedTo.type === 'playerCandidates'
+      ? playerMoveTarget(requestedTo.seatIDs, requestedTo)
+      : requestedTo
 
   // 候选身份可由逻辑账本迁移而不移动实体；此时手牌总数变化量与实体移动数不同。
   const handMoveCount = Math.max(0, Number(requestedHandMoveCount ?? cardCount ?? cardIDs.length))

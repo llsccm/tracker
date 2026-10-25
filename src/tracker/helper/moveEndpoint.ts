@@ -39,7 +39,9 @@ export function getMoveMarkSpellID(endpoint: MoveSource | MoveTarget): SpellID |
 }
 
 export function getMovePosition(endpoint: MoveSource | MoveTarget) {
-  return endpoint.type === 'public' ? endpoint.position : POSITION_TOP
+  return endpoint.type === 'public' || endpoint.type === 'unresolved'
+    ? endpoint.position
+    : POSITION_TOP
 }
 
 export function getPopupSpaceID(endpoint: MoveSource | MoveTarget) {
@@ -68,10 +70,14 @@ export function playerMoveTarget(
   area: PlayerMoveArea
 ): PlayerMoveEndpoint | PlayerCandidateTarget {
   const unique = [...new Set(seats)] as [SeatID, ...SeatID[]]
-  if (unique.length === 1) return { type: 'player', seatID: unique[0], ...area }
+  const playerArea: PlayerMoveArea =
+    area.subZone === 'mark'
+      ? { subZone: 'mark', markSpellID: area.markSpellID }
+      : { subZone: area.subZone }
+  if (unique.length === 1) return { type: 'player', seatID: unique[0], ...playerArea }
   return {
     type: 'playerCandidates',
     seatIDs: unique as [SeatID, SeatID, ...SeatID[]],
-    ...area
+    ...playerArea
   }
 }

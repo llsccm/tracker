@@ -14,47 +14,11 @@ import type {
   SubZone
 } from '@/tracker/types'
 
-export type SeatInput = SeatID | SeatID[]
-export type SourceZoneInput = PublicZoneName | number | null | undefined
-export type MoveTargetZone = PublicZoneName | 'player'
-
 /**
  * known 移动中补建正 ID 的语义来源。
  * external-source 表示协议从 outside/exile 带来新牌，known-fallback 表示原有实体无法物化后的兜底。
  */
 export type KnownCardCreationReason = 'external-source' | 'known-fallback'
-
-export interface RoomMovementOptions {
-  fromPopupSpaceID?: number
-  toPopupSpaceID?: number
-  gainSpellID?: SpellID | null
-  pileIdentityCardIDs?: readonly CardID[]
-  pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
-  toSeatID?: SeatInput | null
-  subZone?: SubZone
-  spellID?: SpellID | null
-  combinationID?: string | number | null
-  fromZone?: SourceZoneInput
-  fromSeatID?: SeatID | null
-  fromSubZone?: SubZone | null
-  fromSpellID?: SpellID | null
-  cardCount?: number
-  /** 协议手牌总数变化量；省略时沿用实际移动实体数 cardCount。 */
-  handMoveCount?: number
-  moveType?: number
-  position?: PublicPosition
-  fromPosition?: PublicPosition
-  expectedSlotsByLocation?: ConstraintGroupOptions['expectedSlotsByLocation']
-  anonymizeCards?: Card[]
-  requireAnonymizeSuccess?: boolean
-  sourceCards?: Card[]
-  publicCandidateSource?: PublicCandidateSource
-  /** 技能需要保留全暗手牌的 N 选 K 身份事实时，强制建立随机转移候选。 */
-  forceRandomHandTransferCandidates?: boolean
-  postMovePublicCandidates?: PostMovePublicCandidate[]
-  sourceEvent?: MoveSourceEvent
-  [key: string]: unknown
-}
 
 export interface RoomMoveContext extends MoveRoute {
   triggerSpellID?: SpellID | null
@@ -115,7 +79,7 @@ export interface PopupSpaceState {
 }
 
 export interface TakeSpecificSourceFallback {
-  fromZone?: SourceZoneInput
+  fromZone?: PublicZoneName | null | undefined
   fromPosition?: PublicPosition
   anonymousFallback?: boolean
 }
@@ -183,9 +147,9 @@ export interface UnknownPileReturnOptions {
 }
 
 export interface PublicCandidatesToHandOptions {
-  fromZone: SourceZoneInput
+  fromZone: PublicZoneName | null | undefined
   fromPosition: PublicPosition
-  toZone: MoveTargetZone
+  toZone: PublicZoneName
   targetSeat: SeatID | null
   subZone: SubZone | undefined
   count: number

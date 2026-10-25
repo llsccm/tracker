@@ -97,17 +97,12 @@ export class RoomMovementKnownPlacement {
     const toZone = getMoveZone(context.to)
     const { swappedCardIDs, handledSpellCardIDs, resolvedSourceCardIDs, playerSourceContext } =
       placement
-    const effectiveFromSeat = getMoveSeat(playerSourceContext.from)
     knownCards.forEach((card) => {
       // 如果协议声明该明牌来自玩家区，而本地认为它在别处，用未知占位交换来修正物理身份。
       // 木牛流马完整快照通常只给目标座位；此时把目标座位视为 mark:700 来源座位，
       // 让明牌与木马里的实体暗占位交换，而不是额外残留一张占位牌。
       const isFromPlayerSource =
-        getMoveZone(context.from) === 'popup' ||
-        (effectiveFromSeat !== null &&
-          effectiveFromSeat !== undefined &&
-          !Number.isNaN(effectiveFromSeat) &&
-          Boolean(fromSubZone))
+        playerSourceContext.from.type === 'popup' || playerSourceContext.from.type === 'player'
 
       const shouldSwapSpeculativePlayerIdentity =
         isFromPlayerSource &&

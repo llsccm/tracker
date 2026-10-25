@@ -1,10 +1,4 @@
-import {
-  getMoveZone,
-  getMoveSubZone,
-  getMoveTargetSeats,
-  getMoveMarkSpellID,
-  getMoveSeat
-} from '@/tracker/helper/moveEndpoint'
+import { getMoveSubZone, getMoveMarkSpellID, getMoveSeat } from '@/tracker/helper/moveEndpoint'
 import { getEquipmentMarkContainerByMarkSpellID } from '@/tracker/candidate/equipmentMarkContainer'
 import {
   normalizeLocationCandidate,
@@ -61,9 +55,8 @@ export function getEquipmentMarkSeatChange(
 ): EquipmentMarkSeatChange | null {
   if (
     markSpellID == null ||
-    getMoveZone(context.to) !== 'player' ||
-    getMoveSubZone(context.to) !== 'mark' ||
-    getMoveTargetSeats(context.to).length !== 1 ||
+    context.to.type !== 'player' ||
+    context.to.subZone !== 'mark' ||
     getMoveMarkSpellID(context.to) !== markSpellID
   ) {
     return null
@@ -72,7 +65,7 @@ export function getEquipmentMarkSeatChange(
   const container = getEquipmentMarkContainerByMarkSpellID(markSpellID)
   if (!container) return null
 
-  const targetSeat = getMoveTargetSeats(context.to)[0]
+  const targetSeat = context.to.seatID
   const sourceSpellID = getMoveMarkSpellID(context.from)
   const transferFromSeat =
     getMoveSubZone(context.from) === 'mark' &&
@@ -103,10 +96,10 @@ export function getObservedEquipmentMarkSnapshot(
   context: RoomMoveContext
 ): ObservedEquipmentMarkSnapshot | null {
   if (
-    getMoveZone(context.to) !== 'player' ||
-    getMoveSubZone(context.from) !== 'mark' ||
-    getMoveSubZone(context.to) !== 'mark' ||
-    getMoveTargetSeats(context.to).length !== 1 ||
+    context.to.type !== 'player' ||
+    context.from.type !== 'player' ||
+    context.from.subZone !== 'mark' ||
+    context.to.subZone !== 'mark' ||
     context.unknownCount !== 0 ||
     context.knownIDs.length !== context.cardCount
   ) {
@@ -118,8 +111,7 @@ export function getObservedEquipmentMarkSnapshot(
   const container = getEquipmentMarkContainerByMarkSpellID(markSpellID)
   if (!container) return null
 
-  const observedSeat = Number(getMoveTargetSeats(context.to)[0])
-  if (!Number.isFinite(observedSeat)) return null
+  const observedSeat = context.to.seatID
 
   return { markSpellID: container.markSpellID, observedSeat }
 }
