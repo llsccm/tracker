@@ -191,10 +191,9 @@ describe('隐藏标记区候选', () => {
     const sourceMark = playerLocation(6, 'mark', 414)
     const otherHand = playerLocation(7, 'hand')
     const context = {
-      fromSeat: 6,
-      fromSubZone: 'mark',
-      fromSpellID: 414,
-      spellID: 3389,
+      from: { type: 'player', seatID: 6, subZone: 'mark', markSpellID: 414 },
+      to: { type: 'player', seatID: 6, subZone: 'hand' },
+      triggerSpellID: 3389,
       knownCards: [knownCard],
       sourceEvent: { type: 'test:source-mark-spell' }
     } as RoomMoveContext

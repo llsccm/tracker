@@ -214,17 +214,14 @@ describe('弃牌堆未知获得', () => {
     const discardBefore = [...room.zones.get('discard')!.cards]
     const entityCountBefore = room.cards.length
     const sourceOptions = {
-      fromSeat: testCase.fromSeat,
-      fromSubZone: testCase.subZone,
-      fromSpellID: 35,
-      spellID: 35,
+      to: { type: 'player', seatID: 3, subZone: 'hand' } as const,
       moveType: 18,
       sourceCards: testCase.emptySource ? [] : undefined
     }
 
     const gainedCards = room.movement.sources.takeSourceCards(2, {
       ...sourceOptions,
-      fromZone: 'discard'
+      from: { type: 'public', zone: 'discard', position: 65280 }
     })
 
     expect(gainedCards).toHaveLength(2)
@@ -239,8 +236,15 @@ describe('弃牌堆未知获得', () => {
     // 同一来源随后仍可按正常玩家/标记路径取出，证明弃牌获得没有消费其实体或空间账本。
     const regularSourceCards = room.movement.sources.takeSourceCards(2, {
       ...sourceOptions,
-      fromZone: testCase.seatID === 255 ? 'popup' : null,
-      fromPopupSpaceID: testCase.seatID === 255 ? 35 : undefined
+      from:
+        testCase.seatID === 255
+          ? { type: 'popup', spaceID: 35 }
+          : {
+              type: 'player',
+              seatID: testCase.fromSeat,
+              subZone: testCase.subZone,
+              markSpellID: 35
+            }
     })
     expect(new Set(regularSourceCards)).toEqual(new Set(playerSourceCards))
     expect(room.cards).toHaveLength(entityCountBefore + 2)

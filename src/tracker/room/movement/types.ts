@@ -2,6 +2,7 @@ import type { Card } from '@/tracker/model'
 import type { ConstraintGroupOptions } from '@/tracker/constraint/ConstraintGroup'
 import type {
   CardID,
+  MoveRoute,
   MoveSourceEvent,
   NormalizedMoveEvent,
   PostMovePublicCandidate,
@@ -55,26 +56,15 @@ export interface RoomMovementOptions {
   [key: string]: unknown
 }
 
-export interface RoomMoveContext {
-  fromPopupSpaceID?: number
-  toPopupSpaceID?: number
+export interface RoomMoveContext extends MoveRoute {
+  triggerSpellID?: SpellID | null
   gainSpellID: SpellID | null | undefined
   pileIdentityCardIDs?: readonly CardID[]
   pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
   cardIDs: readonly CardID[]
-  toZone: MoveTargetZone
-  toSeatID?: SeatInput | null
-  subZone: SubZone
-  spellID: SpellID | null | undefined
   combinationID?: string | number | null
-  fromZone: SourceZoneInput
-  fromSeat: SeatID | null
-  fromSubZone: SubZone
-  fromSpellID?: SpellID | null
   cardCount: number
   moveType?: number
-  position: PublicPosition
-  fromPosition: PublicPosition
   expectedSlotsByLocation?: ConstraintGroupOptions['expectedSlotsByLocation']
   anonymizeCards: Card[]
   requireAnonymizeSuccess: boolean
@@ -83,7 +73,6 @@ export interface RoomMoveContext {
   forceRandomHandTransferCandidates: boolean
   postMovePublicCandidates?: PostMovePublicCandidate[]
   sourceEvent?: MoveSourceEvent
-  targetSeats: SeatID[]
   handMoveCount: number
   sourceHandSeat: SeatID | null
   targetHandSeat: SeatID | null
@@ -91,7 +80,6 @@ export interface RoomMoveContext {
   sourceHandTotalBefore: number
   sourceHandUnknownCount: number
   knownIDs: CardID[]
-  sourceIsOutside: boolean
   unknownCount: number
   knownCards: Card[]
   movedUnknownCards: Card[]
@@ -132,17 +120,7 @@ export interface TakeSpecificSourceFallback {
   anonymousFallback?: boolean
 }
 
-export interface TakeSourceCardsOptions {
-  fromPopupSpaceID?: number
-  sourceIsOutside?: boolean
-  fromSeat?: SeatID | null
-  fromSubZone?: SubZone
-  subZone?: SubZone
-  spellID?: SpellID | null
-  fromZone?: SourceZoneInput
-  toZone?: MoveTargetZone
-  fromPosition?: PublicPosition
-  fromSpellID?: SpellID | null
+export interface TakeSourceCardsOptions extends MoveRoute {
   sourceCards?: Card[]
   sourceEvent?: MoveSourceEvent
   moveType?: number
@@ -209,7 +187,7 @@ export interface PublicCandidatesToHandOptions {
   fromPosition: PublicPosition
   toZone: MoveTargetZone
   targetSeat: SeatID | null
-  subZone: SubZone
+  subZone: SubZone | undefined
   count: number
   sourceEvent?: MoveSourceEvent
 }

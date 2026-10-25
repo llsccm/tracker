@@ -6,11 +6,16 @@ import type {
   PlayerMoveArea,
   PlayerMoveEndpoint,
   PlayerCandidateTarget,
+  PublicMoveEndpoint,
   SeatID,
   SpellID
 } from '../types'
 
-export function getMoveZone(endpoint: MoveSource | MoveTarget) {
+type MoveZone = PublicMoveEndpoint['zone'] | 'player' | 'popup' | 'outside'
+export function getMoveZone(endpoint: MoveTarget): MoveZone
+export function getMoveZone(endpoint: MoveSource): MoveZone | null
+export function getMoveZone(endpoint: MoveSource | MoveTarget): MoveZone | null
+export function getMoveZone(endpoint: MoveSource | MoveTarget): MoveZone | null {
   if (endpoint.type === 'public') return endpoint.zone
   if (endpoint.type === 'playerCandidates') return 'player'
   return endpoint.type === 'unresolved' ? null : endpoint.type

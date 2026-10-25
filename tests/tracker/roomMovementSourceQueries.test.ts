@@ -158,10 +158,8 @@ describe('移动组件共享来源查询', () => {
 
     const { result, stats } = collectTraversalStats(() =>
       room.movement.sources.takeSourceCards(2, {
-        fromSeat: 1,
-        fromSubZone: 'mark',
-        fromSpellID: 414,
-        spellID: 3389
+        from: { type: 'player', seatID: 1, subZone: 'mark', markSpellID: 414 },
+        to: { type: 'player', seatID: 1, subZone: 'hand' }
       })
     )
 

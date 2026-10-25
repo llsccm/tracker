@@ -700,8 +700,14 @@ describe('牌堆展示顺序', () => {
     expect(new Set(preservedMarkPlaceholders)).toEqual(new Set(hiddenMarkCards))
     expect(getSuspendedIdentityIDs(room)).toEqual([3, 11, 12, 73, 105])
 
+    // 旧夹具隐含“先从牌堆物化，再按完整标记快照置换”两个事实；显式准备前一个事实。
+    room.resolvePublicKnownCards(visibleMarkIdentityIDs, {
+      zoneName: 'pile',
+      position: POSITION_TOP
+    })
     room.moveCards(visibleMarkIdentityIDs, 'player', {
       toSeatID: 7,
+      fromSeatID: 7,
       fromSubZone: 'mark',
       fromSpellID: 700,
       subZone: 'mark',

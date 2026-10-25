@@ -607,8 +607,8 @@ describe('玩家手牌数观测', () => {
     const sourceHand = playerLocation(1, 'hand')
     const otherHand = playerLocation(2, 'hand')
     const context = {
-      fromSeat: 1,
-      fromSubZone: 'hand',
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'player', seatID: 2, subZone: 'hand' },
       knownCards: [],
       sourceEvent: { type: 'test:preserve-migrated-combination-id' }
     } as RoomMoveContext

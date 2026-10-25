@@ -1,3 +1,10 @@
+import {
+  getMoveZone,
+  getMoveSubZone,
+  getMoveTargetSeats,
+  getMoveMarkSpellID,
+  getMoveSeat
+} from '@/tracker/helper/moveEndpoint'
 import { getEquipmentMarkContainerByMarkSpellID } from '@/tracker/candidate/equipmentMarkContainer'
 import {
   normalizeLocationCandidate,
@@ -50,14 +57,14 @@ export function resolveEquipmentContainerLocationCandidates(
 /** 识别目标装备标记空间及真正的跨座迁移；数量与状态写入时机由调用阶段负责。 */
 export function getEquipmentMarkSeatChange(
   context: RoomMoveContext,
-  markSpellID: SpellID | null | undefined = context.spellID
+  markSpellID: SpellID | null | undefined = getMoveMarkSpellID(context.to)
 ): EquipmentMarkSeatChange | null {
   if (
     markSpellID == null ||
-    context.toZone !== 'player' ||
-    context.subZone !== 'mark' ||
-    context.targetSeats.length !== 1 ||
-    context.spellID !== markSpellID
+    getMoveZone(context.to) !== 'player' ||
+    getMoveSubZone(context.to) !== 'mark' ||
+    getMoveTargetSeats(context.to).length !== 1 ||
+    getMoveMarkSpellID(context.to) !== markSpellID
   ) {
     return null
   }
@@ -65,14 +72,14 @@ export function getEquipmentMarkSeatChange(
   const container = getEquipmentMarkContainerByMarkSpellID(markSpellID)
   if (!container) return null
 
-  const targetSeat = context.targetSeats[0]
-  const sourceSpellID = context.fromSpellID ?? context.spellID
+  const targetSeat = getMoveTargetSeats(context.to)[0]
+  const sourceSpellID = getMoveMarkSpellID(context.from)
   const transferFromSeat =
-    context.fromSubZone === 'mark' &&
-    sourceSpellID === context.spellID &&
-    context.fromSeat !== null &&
-    context.fromSeat !== targetSeat
-      ? context.fromSeat
+    getMoveSubZone(context.from) === 'mark' &&
+    sourceSpellID === getMoveMarkSpellID(context.to) &&
+    getMoveSeat(context.from) !== null &&
+    getMoveSeat(context.from) !== targetSeat
+      ? getMoveSeat(context.from)
       : null
 
   return { markSpellID: container.markSpellID, targetSeat, transferFromSeat }
@@ -96,22 +103,22 @@ export function getObservedEquipmentMarkSnapshot(
   context: RoomMoveContext
 ): ObservedEquipmentMarkSnapshot | null {
   if (
-    context.toZone !== 'player' ||
-    context.fromSubZone !== 'mark' ||
-    context.subZone !== 'mark' ||
-    context.targetSeats.length !== 1 ||
+    getMoveZone(context.to) !== 'player' ||
+    getMoveSubZone(context.from) !== 'mark' ||
+    getMoveSubZone(context.to) !== 'mark' ||
+    getMoveTargetSeats(context.to).length !== 1 ||
     context.unknownCount !== 0 ||
     context.knownIDs.length !== context.cardCount
   ) {
     return null
   }
 
-  const markSpellID = context.fromSpellID !== undefined ? context.fromSpellID : context.spellID
+  const markSpellID = getMoveMarkSpellID(context.from)
   if (markSpellID == null) return null
   const container = getEquipmentMarkContainerByMarkSpellID(markSpellID)
   if (!container) return null
 
-  const observedSeat = Number(context.targetSeats[0])
+  const observedSeat = Number(getMoveTargetSeats(context.to)[0])
   if (!Number.isFinite(observedSeat)) return null
 
   return { markSpellID: container.markSpellID, observedSeat }

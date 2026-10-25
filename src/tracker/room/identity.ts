@@ -1,3 +1,4 @@
+import { getMoveZone, getMovePosition, getMoveCallbackSpellID } from '@/tracker/helper/moveEndpoint'
 import type { Zone } from '@/tracker/model'
 import { Card } from '@/tracker/model'
 import { trackerLogger } from '@/utils/logger'
@@ -26,7 +27,7 @@ export class RoomIdentity {
     const pileCountBefore = pileCards.length
     const cardIDs = context.pileIdentityEvent?.protocol.CardIDs ?? context.knownIDs
     if (
-      context.fromZone !== 'pile' ||
+      getMoveZone(context.from) !== 'pile' ||
       cardIDs.some((id) => id > 0) ||
       context.moveType !== MOVE_TYPE.DRAW
     ) {
@@ -37,7 +38,7 @@ export class RoomIdentity {
     const sourceCards =
       count === 0
         ? []
-        : context.fromPosition === POSITION_BOTTOM
+        : getMovePosition(context.from) === POSITION_BOTTOM
           ? pileCards.slice(0, count)
           : pileCards.slice(-count)
     return {
@@ -57,12 +58,12 @@ export class RoomIdentity {
     const knownPileIdentityIDsConsumed = snapshot.knownPileDrawCards
       .filter((card) => card.location !== 'pile' && card.id > 0)
       .map((card) => card.id)
-    const fromZone = event?.protocol.FromZone ?? this.getIdentityZone(context.fromZone)
+    const fromZone = event?.protocol.FromZone ?? this.getIdentityZone(getMoveZone(context.from))
 
     this.room.applyPileIdentityMove({
       eventType: event?.type ?? (context.knownIDs.length > 0 ? 'moveKnown' : 'moveUnknown'),
       fromZone,
-      toZone: event?.protocol.ToZone ?? this.getIdentityZone(context.toZone),
+      toZone: event?.protocol.ToZone ?? this.getIdentityZone(getMoveZone(context.to)),
       cardIDs,
       cardCount: event?.cardCount ?? context.cardCount,
       pileCountBefore: snapshot.pileCountBefore,
@@ -75,14 +76,14 @@ export class RoomIdentity {
           : undefined,
       knownPileIdentityIDsConsumed,
       visiblePileIdentityIDsAfter: this.collectVisiblePileTopIdentityIDs(),
-      fromPosition: context.fromPosition,
-      toPosition: context.position,
+      fromPosition: getMovePosition(context.from),
+      toPosition: getMovePosition(context.to),
       moveType: context.moveType,
-      spellID: event?.protocol.SpellID ?? context.spellID
+      spellID: event?.protocol.SpellID ?? getMoveCallbackSpellID(context, context.triggerSpellID)
     })
   }
 
-  private getIdentityZone(zone: RoomMoveContext['fromZone'] | 'player'): number | null {
+  private getIdentityZone(zone: string | null): number | null {
     // 账本只区分牌堆、弃牌与其余区域；数字来源在 Room API 中表示座位。
     if (zone === 'pile') return 1
     if (zone === 'discard') return 2
@@ -153,8 +154,8 @@ export class RoomIdentity {
   /** Release identities after both movement paths have merged; Room commits inferred ledger IDs. */
   anonymizeRandomPileReturn(context: RoomMoveContext): CardID[] {
     if (
-      context.toZone !== 'pile' ||
-      (context.position !== POSITION_RANDOM && context.position !== 'random')
+      getMoveZone(context.to) !== 'pile' ||
+      (getMovePosition(context.to) !== POSITION_RANDOM && getMovePosition(context.to) !== 'random')
     )
       return []
 

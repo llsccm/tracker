@@ -1,3 +1,11 @@
+import {
+  getMoveMarkSpellID,
+  getMoveSeat,
+  getMoveSubZone,
+  getMoveZone,
+  getPopupSpaceID,
+  getMovePosition
+} from '@/tracker/helper/moveEndpoint'
 import { POSITION_BOTTOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import type { Card, Zone } from '@/tracker/model'
 import { MOVE_TYPE } from '@/tracker/protocol/MoveEventNormalizer'
@@ -149,7 +157,7 @@ export class RoomMovementSources {
    * 保留 0 等非空值，避免用目标标记 ID 覆盖已明确的来源标记。
    */
   private getSourceSpellID(context: RoomMoveContext): number | null {
-    return context.fromSpellID ?? context.spellID ?? null
+    return getMoveMarkSpellID(context.from)
   }
 
   /**
@@ -158,10 +166,11 @@ export class RoomMovementSources {
    * 须先确认来源再移出约束组，保证对应位置名额随实体离开而扣减；返回候选是否变化。
    */
   resolveStoredSourceCandidate(card: Card, context: RoomMoveContext): boolean {
-    const { fromSeat, fromSubZone } = context
+    const fromSeat = getMoveSeat(context.from)
+    const fromSubZone = getMoveSubZone(context.from)
     const sourceSpellID = this.getSourceSpellID(context)
-    if (context.fromZone === 'popup') {
-      const candidate = { type: 'popup', spaceID: context.fromPopupSpaceID } as const
+    if (getMoveZone(context.from) === 'popup') {
+      const candidate = { type: 'popup', spaceID: getPopupSpaceID(context.from) } as const
       if (card.hasLocationCandidate(candidate))
         return card.resolveLocationCandidate(candidate, 'move:sourcePopup')
       return false
@@ -189,14 +198,15 @@ export class RoomMovementSources {
    * 按当前投影核对来源席位、子区和标记 ID，不把模糊候选当作已落区。
    */
   isCardInStoredSource(card: Card, context: RoomMoveContext): boolean {
-    const { fromSeat, fromSubZone } = context
+    const fromSeat = getMoveSeat(context.from)
+    const fromSubZone = getMoveSubZone(context.from)
     const sourceSpellID = this.getSourceSpellID(context)
-    if (context.fromZone === 'popup') {
+    if (getMoveZone(context.from) === 'popup') {
       return card
         .getPossibleLocations()
         .some(
           (candidate) =>
-            candidate.type === 'popup' && candidate.spaceID === context.fromPopupSpaceID
+            candidate.type === 'popup' && candidate.spaceID === getPopupSpaceID(context.from)
         )
     }
     if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone) {
@@ -224,7 +234,7 @@ export class RoomMovementSources {
    * 避免玩家暗占位因残留公共区位置而被误当成可从牌堆取出的实体。
    */
   isCardInPublicSource(card: Card, context: RoomMoveContext): boolean {
-    const { fromZone } = context
+    const fromZone = getMoveZone(context.from)
     const sourceZone = typeof fromZone === 'string' ? this.room.zones.get(fromZone) : undefined
     return sourceZone?.cards.includes(card) === true
   }
@@ -236,9 +246,10 @@ export class RoomMovementSources {
     context: RoomMoveContext,
     excludeCard: Card | null = null
   ): Card | null {
-    const { fromSeat, fromSubZone } = context
+    const fromSeat = getMoveSeat(context.from)
+    const fromSubZone = getMoveSubZone(context.from)
     if (
-      context.fromZone !== 'popup' &&
+      getMoveZone(context.from) !== 'popup' &&
       (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone)
     ) {
       return null
@@ -263,9 +274,10 @@ export class RoomMovementSources {
     context: RoomMoveContext,
     excludeCard: Card | null = null
   ): Card | null {
-    const { fromSeat, fromSubZone } = context
+    const fromSeat = getMoveSeat(context.from)
+    const fromSubZone = getMoveSubZone(context.from)
     if (
-      context.fromZone !== 'popup' &&
+      getMoveZone(context.from) !== 'popup' &&
       (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone)
     ) {
       return null
@@ -276,7 +288,7 @@ export class RoomMovementSources {
     )
     return (
       getUnknownStoredSourceCards(this.room, context, excludedCards).find((card) =>
-        context.fromZone === 'popup'
+        getMoveZone(context.from) === 'popup'
           ? !card.hasLocationCandidates()
           : isExactUnknownPlayerSourceCard(card, fromSeat)
       ) ?? null
@@ -291,7 +303,8 @@ export class RoomMovementSources {
     card: Card,
     context: RoomMoveContext
   ): PlayerLocationCandidate | null {
-    const { fromSeat, fromSubZone } = context
+    const fromSeat = getMoveSeat(context.from)
+    const fromSubZone = getMoveSubZone(context.from)
     const sourceSpellID = this.getSourceSpellID(context)
     const candidates = getCardPlayerLocationCandidates(card)
 
@@ -313,7 +326,9 @@ export class RoomMovementSources {
    * 此兜底适用于任意位置的正 ID 明牌，不要求该牌处于 suspended 状态。
    */
   createPlayerSourcePlaceholderForKnownCard(card: Card, context: RoomMoveContext): Card | null {
-    const { fromSeat, fromSubZone, sourceEvent } = context
+    const { sourceEvent } = context
+    const fromSeat = getMoveSeat(context.from)
+    const fromSubZone = getMoveSubZone(context.from)
     if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat)) return null
     if (fromSubZone !== 'hand') return null
     if (card.id <= 0) return null
@@ -345,7 +360,8 @@ export class RoomMovementSources {
    * @returns 是否已就地对齐；true 时调用方不应再做置换。
    */
   alignVisibleSubZoneTransfer(card: Card, context: RoomMoveContext): boolean {
-    const { fromSeat, fromSubZone } = context
+    const fromSeat = getMoveSeat(context.from)
+    const fromSubZone = getMoveSubZone(context.from)
     if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat) || !fromSubZone) {
       return false
     }
@@ -396,7 +412,8 @@ export class RoomMovementSources {
     const placeholder = this.findUnknownStoredSourcePlaceholder(context, card)
     if (!placeholder) return null
 
-    const { fromSeat, fromSubZone } = context
+    const fromSeat = getMoveSeat(context.from)
+    const fromSubZone = getMoveSubZone(context.from)
     const sourceSpellID = this.getSourceSpellID(context)
     const replacementCandidate = this.getSourcePlaceholderReplacementCandidate(card, context)
     const oldLocation = card.location
@@ -419,8 +436,8 @@ export class RoomMovementSources {
       this.room.constraints.replaceCardInConstraintGroups(card, placeholder)
     }
 
-    if (context.fromZone === 'popup') {
-      card.resolveLocationCandidate({ type: 'popup', spaceID: context.fromPopupSpaceID })
+    if (getMoveZone(context.from) === 'popup') {
+      card.resolveLocationCandidate({ type: 'popup', spaceID: getPopupSpaceID(context.from) })
       card.confirmKnown()
     } else {
       card.bindCandidates([fromSeat], fromSubZone, fromSubZone === 'mark' ? sourceSpellID : null, {
@@ -583,7 +600,8 @@ export class RoomMovementSources {
    * 此时不能直接把该实体搬到当前玩家手里，而要先从牌堆取一张未知实体替回原暗位。
    */
   swapKnownCardWithPublicSourcePlaceholder(card: Card, context: RoomMoveContext): Card | null {
-    const { fromZone, fromPosition } = context
+    const fromZone = getMoveZone(context.from)
+    const fromPosition = getMovePosition(context.from)
     const sourceZone = typeof fromZone === 'string' ? this.room.zones.get(fromZone) : undefined
     if (!sourceZone || sourceZone.cards.includes(card) || card.suspended === true) return null
 
@@ -653,113 +671,58 @@ export class RoomMovementSources {
    * 根据来源信息取出暗牌占位；来源可能是游戏外、玩家区或公共区。
    * 公共区取牌会摘除对应物理槽位；来源缺口按协议策略补位，不在此执行整局收敛。
    */
-  takeSourceCards(count: number, options: TakeSourceCardsOptions = {}): Card[] {
-    const {
-      sourceIsOutside,
-      fromSeat,
-      fromSubZone,
-      subZone,
-      spellID,
-      fromZone,
-      fromPosition,
-      fromSpellID,
-      sourceCards,
-      sourceEvent
-    } = options
-    const moveType = Number(sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType ?? options.moveType)
-    // MOVE 也用于弃牌回堆，只对移入玩家区的未知获得补暗牌。
+  takeSourceCards(count: number, options: TakeSourceCardsOptions): Card[] {
+    const { from, to, sourceCards, sourceEvent } = options
+    const moveType = sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType ?? options.moveType
     const isDiscardGain =
-      (fromZone === 'discard' || Number(fromZone) === 2) &&
-      (moveType === MOVE_TYPE.GAIN || (moveType === MOVE_TYPE.MOVE && options.toZone === 'player'))
+      from.type === 'public' &&
+      from.zone === 'discard' &&
+      (moveType === MOVE_TYPE.GAIN ||
+        (moveType === MOVE_TYPE.MOVE && (to.type === 'player' || to.type === 'playerCandidates')))
 
     if (sourceCards?.length) {
-      if (fromSeat != null) {
-        const explicitCards = Array.from(new Set(sourceCards)).filter(Boolean).slice(0, count)
-        // 显式 sourceCards 也可能指向弹窗空间实体，不能绕过账本清理。
+      if (from.type === 'player') {
+        const explicitCards = [...new Set(sourceCards)].slice(0, count)
         removePopupSpaceCards(this.room, explicitCards)
-        // 弃牌获得可能同时携带来源席位，仍需补齐未确定的数量。
-        if (isDiscardGain && explicitCards.length < count) {
-          explicitCards.push(...this.room.createExternalCards([], count - explicitCards.length))
-        }
         return explicitCards
       }
-
       return this.takeSpecificSourceCards(sourceCards, count, {
-        fromZone,
-        fromPosition,
+        fromZone: from.type === 'public' ? from.zone : null,
+        fromPosition: getMovePosition(from),
         anonymousFallback: isDiscardGain
       })
     }
-
-    if (sourceIsOutside) {
-      const externalCards = this.room.createExternalCards([], count)
-      const placeholderCards = externalCards.filter((card) => card.isAnonymous)
-      if (placeholderCards.length > 0) {
-        trackerLogger.warn('游戏外来源创建匿名暗占位', {
-          reason: 'takeSourceCards:sourceOutside',
-          requestedCount: count,
-          createdPlaceholderCount: placeholderCards.length,
-          placeholderCardIDs: placeholderCards.map((card) => card.id),
-          fromSeat,
-          fromSubZone,
-          subZone,
-          spellID,
-          fromSpellID,
-          fromZone,
-          fromPosition,
-          sourceEvent
-        })
-      }
-
-      return externalCards
+    if (from.type === 'outside' || isDiscardGain) {
+      return this.room.createExternalCards([], count)
     }
-
-    // 弃牌来源优先于附带的席位；未公开身份时创建暗牌，不消费玩家或标记区实体。
-    if (isDiscardGain) return this.room.createExternalCards([], count)
-
-    if (fromZone === 'popup') {
-      return takePopupSpaceCards(this.room, count, options.fromPopupSpaceID)
-    }
-
-    if (fromSeat != null) {
-      const sourceSubZone = fromSubZone ?? subZone ?? 'hand'
-      const sourceSpellID = sourceSubZone === 'mark' ? (fromSpellID ?? spellID) : spellID
+    if (from.type === 'popup') return takePopupSpaceCards(this.room, count, from.spaceID)
+    if (from.type === 'player') {
+      const markSpellID = getMoveMarkSpellID(from)
       const unknownCards = takeUnknownCardsFromPlayer(
         this.room,
-        fromSeat,
+        from.seatID,
         count,
-        sourceSubZone,
-        sourceSpellID
+        from.subZone,
+        markSpellID
       )
       removePopupSpaceCards(this.room, unknownCards)
-
-      const selectedUnknownCards = unknownCards
-
-      if (selectedUnknownCards.length >= count || sourceSubZone === 'hand') {
-        return selectedUnknownCards.slice(0, count)
-      }
-
-      const selected = new Set(selectedUnknownCards)
+      if (unknownCards.length >= count || from.subZone === 'hand')
+        return unknownCards.slice(0, count)
+      const selected = new Set(unknownCards)
       const knownCards = this.takeKnownCardsFromPlayerSubZone(
-        fromSeat,
-        count - selectedUnknownCards.length,
-        sourceSubZone,
-        sourceSpellID
+        from.seatID,
+        count - unknownCards.length,
+        from.subZone,
+        markSpellID
       ).filter((card) => !selected.has(card))
-
-      return [...selectedUnknownCards, ...knownCards]
+      return [...unknownCards, ...knownCards]
     }
-
-    const isPileSource = fromZone === 'pile' || Number(fromZone) === 1
-    const isRegularPileDraw = isPileSource && moveType === MOVE_TYPE.DRAW
-
-    // 其余非牌堆公共区移动与常规摸牌仍按端点移动真实实体；牌堆的非标准无 ID 获取
-    // 只消费暗槽，保留已展示明牌。
-    if (!isPileSource || isRegularPileDraw) {
-      return this.takeCardsFromPublicZone(count, fromZone, fromPosition)
+    // 未定位来源的暗牌沿用历史公共查询降级；已知牌不走此分支，也不授予 outside 语义。
+    if (from.type === 'unresolved') return this.takeCardsFromPublicZone(count, 'pile', POSITION_TOP)
+    if (from.zone !== 'pile' || moveType === MOVE_TYPE.DRAW) {
+      return this.takeCardsFromPublicZone(count, from.zone, from.position)
     }
-
-    return this.takeUnknownCardsFromPublicZone(count, fromZone, fromPosition)
+    return this.takeUnknownCardsFromPublicZone(count, from.zone, from.position)
   }
 
   /**

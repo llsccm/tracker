@@ -45,7 +45,7 @@ describe('巧织默认协议管线', () => {
       spellID: null,
       gainSpellID: 3544
     })
-    expect(summarizeMoveContext(context)).toMatchObject({ spellID: null, gainSpellID: 3544 })
+    expect(summarizeMoveContext(context)).toMatchObject({ triggerSpellID: null, gainSpellID: 3544 })
     controller.syncTrackerMove(
       protocolMove({
         CardIDs: [92],

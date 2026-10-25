@@ -1,3 +1,11 @@
+import {
+  getMoveSeat,
+  getMoveSubZone,
+  getMoveZone,
+  getMovePosition,
+  getMoveMarkSpellID,
+  getMoveTargetSeats
+} from '@/tracker/helper/moveEndpoint'
 import { trackerLogger } from '@/utils/logger'
 import type { Card } from '@/tracker/model'
 import { normalizePublicPosition } from '@/tracker/candidate/publicCandidate'
@@ -22,7 +30,11 @@ export class RoomMovementKnownSources {
   ) {}
 
   resolve(context: RoomMoveContext): KnownMoveResolution {
-    const { fromSeat, fromSubZone, fromZone, knownIDs, sourceIsOutside } = context
+    const { knownIDs } = context
+    const fromSeat = getMoveSeat(context.from)
+    const fromSubZone = getMoveSubZone(context.from)
+    const fromZone = getMoveZone(context.from)
+    const sourceIsOutside = context.from.type === 'outside'
     // 12 区也可能暂存游戏外生成牌，但已有匿名槽仍须优先按公共端点物化。
     const isExternalSource = sourceIsOutside || fromZone === 'exile'
     if (sourceIsOutside) return this.resolveOutsideSource(context, isExternalSource)
@@ -44,7 +56,10 @@ export class RoomMovementKnownSources {
 
   /** 所有来源解析结束后才统一恢复 suspended 并确认明牌，保留补建来源的诊断区别。 */
   confirm(context: RoomMoveContext, resolution: KnownMoveResolution): void {
-    const { knownIDs, fromZone, fromSeat, sourceIsOutside } = context
+    const { knownIDs } = context
+    const fromZone = getMoveZone(context.from)
+    const fromSeat = getMoveSeat(context.from)
+    const sourceIsOutside = context.from.type === 'outside'
     const { missingIDs, createdCards, knownCardCreationReason, isExternalSource } = resolution
     const createdCardSet = new Set(createdCards)
     const resumedCardIDs: CardID[] = []
@@ -130,7 +145,8 @@ export class RoomMovementKnownSources {
     fromZone: PublicZoneName,
     isExternalSource: boolean
   ): KnownMoveResolution {
-    const { fromPosition, knownIDs } = context
+    const { knownIDs } = context
+    const fromPosition = getMovePosition(context.from)
     let missingIDs: CardID[]
     let createdCards: Card[] = []
     let knownCardCreationReason: KnownCardCreationReason | null = isExternalSource
@@ -243,7 +259,8 @@ export class RoomMovementKnownSources {
     fromSeat: SeatID | null,
     isExternalSource: boolean
   ): KnownMoveResolution {
-    const { fromSubZone, knownIDs, sourceCards } = context
+    const { knownIDs, sourceCards } = context
+    const fromSubZone = getMoveSubZone(context.from)
     let missingIDs: CardID[]
     let createdCards: Card[] = []
     let knownCardCreationReason: KnownCardCreationReason | null = isExternalSource
@@ -251,7 +268,7 @@ export class RoomMovementKnownSources {
       : null
     // 玩家/mark 通用模型允许本机已知身份暂时保持暗状态，两类实体统一由 materialize 收口。
     // 手牌 known 禁止消费 mark:700 等占位；木马身份只在 mark 收敛/快照路径 materialize。
-    const markSpellID = context.fromSpellID ?? context.spellID
+    const markSpellID = getMoveMarkSpellID(context.from)
 
     const explicitTargets = sourceCards?.filter((card) => card.isAnonymous) ?? []
     let sourceTargets =
@@ -262,7 +279,7 @@ export class RoomMovementKnownSources {
             .slice(0, knownIDs.length)
 
     // 手牌路径只保留 hand 匿名，绝不纳入 mark 占位。
-    if (context.fromZone !== 'popup' && fromSubZone === 'hand') {
+    if (getMoveZone(context.from) !== 'popup' && fromSubZone === 'hand') {
       sourceTargets = sourceTargets.filter((card) => card.subZone === 'hand')
     }
 
@@ -273,14 +290,14 @@ export class RoomMovementKnownSources {
     // 全明快照物化时需追加目标座位 mark 匿名槽，避免 knownCards 静默短少、弱候选无法收敛。
     const isFullKnownMarkSnapshot =
       fromSubZone === 'mark' &&
-      context.subZone === 'mark' &&
-      context.toZone === 'player' &&
+      getMoveSubZone(context.to) === 'mark' &&
+      getMoveZone(context.to) === 'player' &&
       context.unknownCount === 0 &&
       knownIDs.length === context.cardCount &&
       knownIDs.length > 0
     if (isFullKnownMarkSnapshot && availableTargets.length < knownIDs.length) {
       const usedTargets = new Set(availableTargets)
-      context.targetSeats.forEach((targetSeat) => {
+      getMoveTargetSeats(context.to).forEach((targetSeat) => {
         if (Number(targetSeat) === Number(fromSeat)) return
         getUnknownPlayerSourceCards(this.room, targetSeat, fromSubZone, markSpellID)
           .filter((card) => card.isAnonymous)
