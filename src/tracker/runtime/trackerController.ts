@@ -459,7 +459,10 @@ export class TrackerController {
       ids,
       {
         zoneName: materializationZone,
-        position: getMovePosition(event.from) ?? position
+        position:
+          event.from.type === 'public' || event.from.type === 'unresolved'
+            ? event.from.position
+            : (event.protocol.FromPosition ?? position)
       },
       this.controllerLogger
     )
