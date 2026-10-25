@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         三国杀小抄 Lite
 // @namespace    https://greasyfork.org/scripts/448004
-// @version      0.19.0
+// @version      0.19.1
 // @author       三国杀小抄
 // @description  三国杀记牌器
 // @license      GPL-3.0-or-later
@@ -1231,265 +1231,180 @@
 			for (const pj of XSPJ) this.PingJianDic.set(Number(pj.id), pj);
 		}
 	};
-	var ConfigManager = class ConfigManager {
-		configUrl = "https://web.sanguosha.com/220/h5_2/res/config/Config_w.sgs";
-		fileNames = [
-			"sys_playcard",
-			"cha_spell",
-			"character",
-			"hd_roguelike",
-			"cha_spellextend"
-		];
-		static GetInstance() {
-			if (null == this.instance) this.instance = new ConfigManager();
-			return this.instance;
-		}
-		constructor() {
-			this.preloadConfigerList = [
-				CardConfig.GetInstance(),
-				SkillsConfig.GetInstance(),
-				CharacterConfig.GetInstance(),
-				RoguelikeConfig.GetInstance(),
-				SpellExtendConfig.GetInstance()
-			];
-		}
-		async loadAndParseConfigs() {
-			const response = await fetch(this.configUrl);
-			if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-			const zipData = await response.arrayBuffer();
-			const zip = await JSZip.loadAsync(zipData);
-			const promises = this.preloadConfigerList.map(async (configer) => {
-				if (!configer) return;
-				const data = await this.loadConfigFile(zip, configer.FileName);
-				configer.parse(data);
-			});
-			await Promise.all(promises);
-			console.info("[ConfigManager] Config_w 解析完成");
-		}
-		async loadConfigFile(zip, fileName) {
-			const file = zip.file(fileName + ".sgs");
-			if (!file) throw new Error(`File not found in zip: ${fileName}.sgs`);
-			const arrayBuffer = await file.async("arraybuffer");
-			const decryptedData = CtrUtil.Ctr.Ofb_Dec(arrayBuffer);
-			const uint8Array = decryptedData instanceof Uint8Array ? decryptedData : new Uint8Array(decryptedData);
-			const decompressedData = new Zlib.Gunzip(uint8Array).decompress();
-			const fileData = new TextDecoder().decode(decompressedData);
-			return JSON.parse(fileData);
-		}
-	};
-	var notificationQueue = [];
-	var isNotificationShowing = false;
-	var currentTimeout = null;
-	var TOOLTIP_BG = "url('https://web.sanguosha.com/220/h5_2/res/assets/bigPng/propGet.png')";
-	var TOOLTIP_STYLE = {
-		position: "fixed",
-		top: "20px",
-		left: "50%",
-		zIndex: "2147483647",
-		display: "flex",
-		alignItems: "center",
-		justifyContent: "center",
-		padding: "12px 24px",
-		borderRadius: "4px",
-		backgroundColor: "transparent",
-		backgroundImage: TOOLTIP_BG,
-		backgroundSize: "100% 100%",
-		fontSize: "16px",
-		fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", Tahoma, Arial, sans-serif",
-		whiteSpace: "nowrap",
-		overflow: "hidden",
-		pointerEvents: "auto",
-		transform: "translateX(-50%)",
-		textShadow: "0 0 4px rgba(0,0,0,0.6)",
-		transition: "opacity 0.3s ease, visibility 0.3s ease"
-	};
-	function applyTooltipStyle(el, className, visible = false) {
-		Object.assign(el.style, TOOLTIP_STYLE, {
-			color: "#f2de9c",
-			opacity: visible ? "1" : "0",
-			visibility: visible ? "visible" : "hidden"
+	var retainedLogicMessages = new Set([
+		"ClientLoginRep",
+		"ClientUserDataCounterNtf",
+		"SmsgUpdateTaskListToClient",
+		"ClientGuildMemberChangeNtf",
+		"MsgReconnectGame",
+		"MsgHeartAliveRep",
+		"decodeGameRecordInitInfo",
+		"ClientBindKeyRep",
+		"decodeSyncGameDataEvent",
+		"ClientUserbaseinfoRep",
+		"ClientUserdetailRep",
+		"decodeSSCChatmsgNtf",
+		"decodeClientActSysBroadMsgListResp",
+		"CClientGameRewardPointNTF",
+		"ClientGeneralSkinRep",
+		"ClientChestOpenReplaceInfoNtf",
+		"decodeServerGeneralWishPoolDataResp",
+		"decodeServerDrawGeneralWishResp",
+		"decodeServerSkinWishPoolDataResp",
+		"decodeRogueLikeDataSync",
+		"ClientActivitysetDataRep",
+		"decodeRougeBaseInfoRep",
+		"ClientTableinfoRep",
+		"MsgGameShowFigure",
+		"decodeGsClientUserSeatFlagNtf",
+		"GsCModifyUserseatNtf",
+		"GsCUpdateRoleDataNtf",
+		"MsgGameOver",
+		"ClientLeavetableRep",
+		"MsgGamePlayCardNtf",
+		"SmsgGameSetCharacter",
+		"GsCGuoZhanSetCharacter",
+		"GsCFirstPhaseRole",
+		"MsgGameTurnNtf",
+		"GsCGamephaseNtf",
+		"GsCUpdateRoleDataExNtf",
+		"MsgGameRoundNtf",
+		"ClientRecommendShopItemRep",
+		"ClientModifyTblsetingNtf",
+		"MsgGamePlayerShowStatusNtf",
+		"GsCUpdateHpNtf",
+		"GsCTriggerSpellNew",
+		"ClientHappyGetFriendHandcardRep",
+		"MsgNtfUseCardType",
+		"PubGsCUseCard",
+		"PubGsCUseSpell",
+		"GsCRoleOptTargetNtf",
+		"CGsRoleSpellOptRep",
+		"PubGsCMoveCard",
+		"decodeGameDealPileTopCardList"
+	]);
+	function isRetainedLogicMessage(className) {
+		return retainedLogicMessages.has(className);
+	}
+	var POWER_SLOGAN_TEXTS = new Set([
+		"中原人杰地灵，天下归心！",
+		"一统中原，天下归心！",
+		"赴此雄途，一统山河！",
+		"对酒当歌，人生几何！",
+		"周公吐哺，天下归心。",
+		"雄踞北方，睥睨天下！",
+		"兵锋四向，所向披靡！",
+		"势贯长虹，锐不可当！",
+		"魏武挥鞭，龙骧虎战！",
+		"魏风烈烈，霸业千秋！",
+		"枕山河之固，展霸业鸿图！",
+		"执戟兴邦，志在八方！",
+		"魏骑驰骋，踏破山河！",
+		"枕山河之固，扬魏武雄风！",
+		"魏德昭彰，恩威并施！",
+		"志在魏邦，雄图万里！",
+		"战合肥，破成都，胜者为王！",
+		"外驱胡虏，内平吴蜀！",
+		"魏武藏奇略，霸业定乾坤！",
+		"诸公半虎狼，魏旗不留藏!",
+		"长驱蹈匈奴，左顾凌鲜卑！",
+		"扇挥白羽迥，甲锁黄金明！",
+		"魏光璀璨耀星河",
+		"魏恩广布润人心",
+		"护魏山河，霸业千秋！",
+		"舳舻千里，旌旗蔽空",
+		"受禅汉庭，魏起征程！",
+		"奇谋鬼才，算无遗策！",
+		"魏威如岳，气吞山河！",
+		"大魏雄师，势不可挡！",
+		"匡扶汉室，入主中原",
+		"忠义为先，蜀汉必兴！",
+		"鞠躬尽瘁，死而后已！",
+		"惟贤惟德，方能匡复汉室！",
+		"能进能退，方能百战不殆！",
+		"蜀风烈烈，其志昭昭！",
+		"天地英雄气，千秋尚凛然",
+		"蜀道崎岖，壮志不屈！",
+		"蜀锦为裳，剑指北方！",
+		"血染征袍，荡涤乱世！",
+		"汉业兴亡惟我在！",
+		"蜀汉精忠，义贯长虹！",
+		"壮志盈怀，忠义为先！",
+		"蜀汉英魂，壮志凌云！",
+		"蜀汉兴邦，志在四方",
+		"犯我大吴疆土，虽远必诛",
+		"上有天堂，下有苏杭！",
+		"羽扇纶巾，计定天下！",
+		"何人敢犯大吴疆土",
+		"赴汤蹈火，在所不辞！",
+		"犯大吴疆土者，吾必击而破之！",
+		"江东子弟，何惧于天下！",
+		"天下英雄谁敌手？",
+		"英雄何不带吴钩！",
+		"东吴水师，横行江海！",
+		"吴钩似霜，斩破千障！",
+		"吴营谋深，弹指乾坤！",
+		"天险固垒，欲攻则锐！",
+		"智谋如渊，踏浪焚天！",
+		"江东子弟多才俊，谁怕！"
+	]);
+	var HALL_CHAT_REPEAT_WINDOW = 15 * 1e3;
+	var hallChatRepeatMap = new Map();
+	var BLOCKED_CHAT_CONTENT_PATTERN = /((?:桃|烧)[bB8]|桃花|鲜花|菜篮子|0\.5(?:一|个)|女大(?:学生|妹妹)?|可[约玥]|福利|交友|进[群裙]|加[群裙]|群聊|裙聊|私聊|绿泡泡|[加嘉家].{0,2}[vV微薇].{0,2}[心芯新]|开放啪|代练|代打|陪玩|接单|带打|包上分|上分|(?:出|卖|收|回收).{0,3}号|成品号|收[^徒]*$|[帮代带].*[玩练打]|出.{0,3}的|[加家+＋十].{0,3}我)/;
+	function normalizeHallChatMsg(text) {
+		if (typeof text != "string" || !text) return "";
+		return text.normalize("NFKC").toLowerCase().replace(/#[0-9]+/g, "").replace(/[0-9]+/g, "").replace(/[ \t\r\n\u00a0❤♥♡❥ⅤⅴvVⅠⅰiI丨|]/g, "").replace(/[.,，。!！?？:：;；'"“”‘’_\-+＋=~～*＊/\\()[\]（）【】<>《》]/g, "");
+	}
+	function isPurePlaceholderChatMsg(text) {
+		if (typeof text != "string" || !text) return false;
+		const cleaned = text.replace(/\s/g, "");
+		if (!cleaned) return false;
+		return /^[:：=＝\-—_·.。•＊*#■□▢▣▤▥▦▧▨▩▪▫◆◇◈◼◻◾◽█▌▐▓▒░]+$/.test(cleaned);
+	}
+	function shouldBlockHallChat({ ProtoObj, chatMsg, channel, hallChatRepeatBlocked }) {
+		if (ProtoObj.Channel == 2 && chatMsg && POWER_SLOGAN_TEXTS.has(chatMsg)) return true;
+		if (ProtoObj.chatMsg?.startsWith("oldback@") || ProtoObj.MsgType == 26 || ProtoObj.MsgKind == 2) return true;
+		if (channel == 7 && (ProtoObj.officeLevel == null || ProtoObj.officeLevel <= 6 || isPurePlaceholderChatMsg(chatMsg)) || hallChatRepeatBlocked) return true;
+		return BLOCKED_CHAT_CONTENT_PATTERN.test(ProtoObj.chatMsg || "");
+	}
+	function updateHallChatRepeatState(chatMsg, channel) {
+		if (channel != 7 || !chatMsg) return false;
+		const key = normalizeHallChatMsg(chatMsg);
+		if (!key) return false;
+		const now = Date.now();
+		const prev = hallChatRepeatMap.get(key);
+		let blocked = false;
+		if (prev && now - prev.time <= HALL_CHAT_REPEAT_WINDOW) {
+			prev.time = now;
+			prev.count += 1;
+			blocked = prev.count >= 3;
+		} else hallChatRepeatMap.set(key, {
+			time: now,
+			count: 1
 		});
-	}
-	function addTooltip(text, id = "acTooltip", duration = 1e4, className = "", clickCallback = null, shouldUpdate = false) {
-		if (shouldUpdate) updateOrCreateTooltip(text, id, duration, className);
-		else {
-			notificationQueue.push({
-				text,
-				id,
-				duration,
-				className,
-				clickCallback
-			});
-			if (!isNotificationShowing) showNextNotification();
+		if (hallChatRepeatMap.size > 200) {
+			for (const [name, item] of hallChatRepeatMap) if (now - item.time > HALL_CHAT_REPEAT_WINDOW) hallChatRepeatMap.delete(name);
 		}
+		return blocked;
 	}
-	function updateOrCreateTooltip(text, id, duration, className) {
-		let element = document.getElementById(id);
-		if (!element) {
-			element = document.createElement("div");
-			element.id = id;
-			element.className = "ac-tooltip " + className;
-			document.body.appendChild(element);
-		}
-		element.innerHTML = text;
-		element.className = "ac-tooltip " + className;
-		applyTooltipStyle(element, className);
-		element.onclick = () => {
-			removeTooltip(id);
-		};
-		setTimeout(() => {
-			element.classList.remove("hide");
-			element.classList.add("show");
-			applyTooltipStyle(element, className, true);
-		}, 50);
-		if (currentTimeout) clearTimeout(currentTimeout);
-		currentTimeout = setTimeout(() => removeTooltip(id), duration);
-	}
-	function showNextNotification() {
-		if (notificationQueue.length === 0) {
-			isNotificationShowing = false;
+	function handleChatMessage(msg, ProtoObj) {
+		if (!ProtoObj) return;
+		if (ProtoObj.scene == 11) ProtoObj.scene = 2;
+		const chatMsg = ProtoObj.chatMsg || ProtoObj.ChatMsg || "";
+		const channel = ProtoObj.Channel || ProtoObj.channel;
+		if (shouldBlockHallChat({
+			ProtoObj,
+			chatMsg,
+			channel,
+			hallChatRepeatBlocked: updateHallChatRepeatState(chatMsg, channel)
+		})) {
+			delete msg.data.protoObj;
 			return;
 		}
-		isNotificationShowing = true;
-		const { text, id, duration, className, clickCallback } = notificationQueue.shift();
-		const ele = document.getElementById(id);
-		ele && ele.remove();
-		const uniqueId = id + "-" + new Date().getTime();
-		const div = document.createElement("div");
-		div.id = uniqueId;
-		div.className = "ac-tooltip " + className;
-		div.innerHTML = text;
-		applyTooltipStyle(div, className);
-		document.body.appendChild(div);
-		if (clickCallback && typeof clickCallback === "function") div.addEventListener("click", clickCallback);
-		div.addEventListener("click", () => {
-			removeTooltip(uniqueId);
-			showNextNotification();
-		});
-		setTimeout(() => {
-			div.classList.remove("hide");
-			div.classList.add("show");
-			applyTooltipStyle(div, className, true);
-		}, 50);
-		if (duration) setTimeout(() => {
-			removeTooltip(uniqueId);
-			showNextNotification();
-		}, duration);
-		else isNotificationShowing = false;
 	}
-	function removeTooltip(id) {
-		const ele = document.getElementById(id);
-		if (ele) {
-			ele.classList.remove("show");
-			ele.classList.add("hide");
-			applyTooltipStyle(ele, ele.classList.contains("green") ? "green" : "", false);
-			setTimeout(() => {
-				ele && ele.remove();
-			}, 300);
-		}
-	}
-	var correction = [
-		["10", "⒑"],
-		["1", "⒈"],
-		["2", "⒉"],
-		["3", "⒊"],
-		["4", "⒋"],
-		["5", "⒌"],
-		["6", "⒍"],
-		["7", "⒎"],
-		["8", "⒏"],
-		["9", "⒐"],
-		["J", "Ⓙ"],
-		["Q", "Ⓠ"],
-		["K", "Ⓚ"],
-		["+", " "]
-	];
-	async function toClipboard(text, filter) {
-		if (filter) correction.forEach(([from, to]) => {
-			text = text.replaceAll(from, to);
-		});
-		try {
-			await navigator.clipboard.writeText(text);
-			addTooltip("复制成功！");
-			return true;
-		} catch (error) {
-			console.info("Copy to clipboard failed.", error);
-			return false;
-		}
-	}
-	function clearElement(element) {
-		while (element?.firstChild) element.removeChild(element.firstChild);
-	}
-	function buttonRes(text, title = "点击复制", encode = true, disable = false) {
-		const button = document.createElement("button");
-		button.className = "calRes";
-		button.title = title;
-		button.disabled = disable;
-		button.innerText = text;
-		button.onclick = () => {
-			toClipboard(text, encode);
-			button.innerText = "复制成功";
-			setTimeout(() => {
-				button.textContent = text;
-			}, 500);
-		};
-		return button;
-	}
-	function getResultContainer() {
-		const resDiv = document.getElementById("result");
-		if (resDiv) clearElement(resDiv);
-		return resDiv;
-	}
-	function showTextResult(container, text) {
-		container.innerHTML = `<span class="textRes">${text}</span>`;
-	}
-	function normalizeCardNumbers(array) {
-		return (array || []).filter((number) => Number.isInteger(number) && number >= 1 && number <= 13).sort((a, b) => a - b);
-	}
-	function formatCardNumbers(numbers, useAce = true) {
-		return numbers.map((number) => n2N(number, useAce)).join("+");
-	}
-	function countCardNumbers(numbers) {
-		const counts = Array(14).fill(0);
-		numbers.forEach((number) => {
-			counts[0] += 1;
-			counts[number] += 1;
-		});
-		return counts;
-	}
-	function getCountedNumbersTotal(counts) {
-		return counts.reduce((sum, count, number) => sum + count * number, 0);
-	}
-	function formatNumberCounts(counts) {
-		return counts.flatMap((count, number) => number > 0 ? Array(count).fill(n2N(number, false)) : []);
-	}
-	var OVERFLOW_TOLERANCE_PX = 4;
-	var tokens = new WeakMap();
-	function isEllipsisHost(el) {
-		if (!el || typeof el !== "object") return false;
-		const obj = el;
-		const cl = obj.classList;
-		return typeof cl?.add === "function" && typeof cl?.remove === "function" && typeof obj.clientHeight === "number" && typeof obj.scrollHeight === "number";
-	}
-	function nextToken(el) {
-		const t = (tokens.get(el) ?? 0) + 1;
-		tokens.set(el, t);
-		return t;
-	}
-	function checkEllipsisOverflow(el, threshold) {
-		if (!isEllipsisHost(el)) return;
-		const token = nextToken(el);
-		requestAnimationFrame(() => {
-			if (tokens.get(el) !== token) return;
-			const limit = threshold ?? el.clientHeight;
-			if (el.clientHeight > 0 && el.scrollHeight > limit + OVERFLOW_TOLERANCE_PX) el.classList.add("show-ellipsis");
-			else el.classList.remove("show-ellipsis");
-		});
-	}
-	function invalidateEllipsisOverflow(el) {
-		if (!isEllipsisHost(el)) return;
-		nextToken(el);
-		el.classList.remove("show-ellipsis");
+	function handleBroadMsg(ProtoObj) {
+		if (!ProtoObj) return;
+		if (Array.isArray(ProtoObj.msgList)) ProtoObj.msgList.length = 0;
 	}
 	var ACTIVE_CONFIG_ENTRIES = [
 		[
@@ -1579,7 +1494,7 @@
 		} catch {
 			return defaultValue;
 		}
-		if (rawValue === null) {
+		if (rawValue == null) {
 			writeStoredValue(storage, id, defaultValue);
 			return defaultValue;
 		}
@@ -1829,6 +1744,9 @@
 		get myID() {
 			return this.room?.mySeatID ?? void 0;
 		}
+		get myDisplayID() {
+			return this.room?.getMyDisplayID();
+		}
 		getCurrentTimestamp() {
 			return {
 				turn: this.turn ?? 0,
@@ -2017,693 +1935,6 @@
 		}
 	};
 	var Game = new GameState({ orderLabels: UI.ORDER_LABELS });
-	var ROUND_ZHAN_FA_IDS = new Set([
-		2100,
-		2101,
-		2108,
-		2109,
-		2110,
-		2312,
-		2313,
-		2317,
-		2319,
-		2320,
-		2321,
-		2322
-	]);
-	var SELF_TURN_ZHAN_FA_IDS = new Set([
-		2079,
-		2080,
-		2081,
-		2082,
-		2083,
-		2084
-	]);
-	function redefine(obj, prop, value) {
-		if (typeof obj?.[prop] != "function") return false;
-		if (Object.prototype.hasOwnProperty.call(obj, `__${prop}`)) return false;
-		Object.defineProperty(obj, `__${prop}`, Object.getOwnPropertyDescriptor(obj, prop));
-		Object.defineProperty(obj, prop, {
-			...value,
-			configurable: true
-		});
-		return true;
-	}
-	function getPageWindow() {
-		if (typeof unsafeWindow == "object") return unsafeWindow;
-		return window;
-	}
-	function getCallerFromEvent(emitter, eventName, propKey = null) {
-		const handlers = emitter?._events?.[eventName];
-		if (!handlers) return void 0;
-		return (Array.isArray(handlers) ? handlers : [handlers]).map((e) => e?.caller).filter(Boolean).find((caller) => !propKey || Object.prototype.hasOwnProperty.call(caller, propKey) || caller.constructor && Object.prototype.hasOwnProperty.call(caller.constructor, propKey) || propKey in caller);
-	}
-	function findInStage(stage, key) {
-		if (!stage) return [];
-		if (key in stage) return stage[key];
-		let result = stage?._children?.filter(Boolean) || [];
-		if (key === "*" && stage?.viewStack?._childUIList?.length) result = stage.viewStack._childUIList;
-		else if (key?.endsWith?.("Layer")) {
-			const order = [
-				"BottomLayer",
-				"BackgroundLayer",
-				"SceneLayer",
-				"AnimationLayer",
-				"WindowLayer",
-				"TopUILayer",
-				"PromptLayer"
-			].indexOf(key);
-			result = result.filter((layer) => layer.layerOrder == order);
-		} else if ((key?.endsWith?.("View") || key?.endsWith?.("Window")) && stage?.viewStack?._childList?.includes(key)) {
-			const indexes = stage.viewStack._childList.map((value, index) => value == key ? index : -1).filter((value) => value > -1);
-			result = stage.viewStack._childUIList?.filter((value, index) => value && indexes.includes(index));
-		} else if (key) result = result.filter((item) => item.name == key || item.sceneName == key || item.constructor?.name == key);
-		if (!result?.length) return [];
-		return Array.isArray(result) && result.length == 1 ? result[0] : result;
-	}
-	var classResolvers = {
-		GameContext(_runtime) {
-			const ctx = getPageWindow()?.GameContext || window.Laya?.Browser?.window?.GameContext || window.GameContext;
-			if (ctx && typeof ctx.GetModeType == "function" && typeof ctx.GetGroupID == "function") return ctx;
-		},
-		GetGoodsByID(runtime) {
-			return runtime.get("SgxFPreviewWindow", null, 0)?.getGoodConfig;
-		},
-		SgsText(runtime) {
-			return runtime.scene?.topMenu?.timeLabel?.constructor;
-		},
-		SgsSpriteFilterBtn(runtime) {
-			return runtime.scene?.topMenu?.backBtn?.constructor;
-		},
-		GameEventDispatcher(runtime) {
-			return runtime.get("PopUpWindow", null, 0)?.ged;
-		},
-		WindowManager(runtime) {
-			const ged = runtime.class("GameEventDispatcher");
-			if (!ged) return void 0;
-			return getCallerFromEvent(ged, "HIDE_WINDOW", "WindowInstanceDict");
-		},
-		ServerProxy(runtime) {
-			return runtime.class("WindowManager")?.proxy;
-		},
-		SceneManager(runtime) {
-			const ged = runtime.class("GameEventDispatcher");
-			if (!ged) return void 0;
-			return getCallerFromEvent(ged, "SWITCH_SCENE", "CurrentScene");
-		},
-		RogueLikePveManager(runtime) {
-			const proxy = runtime.class("ServerProxy");
-			if (!proxy) return void 0;
-			return getCallerFromEvent(proxy, "decodeRogueLikeDataSync");
-		}
-	};
-	var GameRuntime = class {
-		instance = {};
-		classes = {};
-		__RUNTIME__ = null;
-		flag = null;
-		limit = 300;
-		order = [];
-		mark = () => null;
-		trace = () => null;
-		yanJiao = () => null;
-		_powerSloganBlocked = false;
-		reset() {
-			this.flag = null;
-			this.order = [];
-		}
-		init() {
-			return true;
-		}
-		class(name, anew = false, value = void 0) {
-			if (!anew && this.classes[name]) return this.classes[name];
-			const resolver = Object.prototype.hasOwnProperty.call(classResolvers, name) ? classResolvers[name] : void 0;
-			const resolved = typeof value == "function" ? value() : value || resolver?.(this);
-			if (resolved) this.classes[name] = resolved;
-			return this.classes[name];
-		}
-		get(name, args, dt = false, callback) {
-			if (name in this.classes) return this.class(name) ? new this.classes[name](args) : void 0;
-			if (!window.Laya?.ClassUtils?.getInstance) return void 0;
-			if (!this.instance[name]) {
-				this.del(name);
-				const instance = window.Laya.ClassUtils.getInstance(name, args);
-				if (instance?.protoName != "Protocol" && typeof instance?.Init == "function" && args !== null) try {
-					instance.Init();
-				} catch (error) {
-					console.error(`Laya instance ${name} Init() error!\n` + error.stack);
-				}
-				this.instance[name] = instance;
-			}
-			if (this.instance[name]?.timeoutId) clearTimeout(this.instance[name].timeoutId);
-			if (typeof callback === "function") callback(this.instance[name]);
-			if (dt !== false) this.del(name, dt);
-			return this.instance[name];
-		}
-		del(name, time = true) {
-			const item = this.instance[name];
-			if (!item || time === false || time === null) return;
-			if (item.timeoutId) {
-				clearTimeout(item.timeoutId);
-				delete item.timeoutId;
-			}
-			const delNow = () => {
-				if (!this.instance[name]) return;
-				try {
-					if (!this.instance[name].parent) if (typeof this.instance[name].Close == "function") this.instance[name].Close();
-					else this.instance[name].destroy?.();
-				} catch (error) {
-					console.error("Laya instance " + name + " delete error!" + error);
-				}
-				delete this.instance[name];
-			};
-			if (time === true) delNow();
-			else item.timeoutId = setTimeout(delNow, time);
-		}
-		find(...keys) {
-			const isPlainObject = (obj) => Object.prototype.toString.call(obj) === "[object Object]";
-			const start = isPlainObject(keys[0]) ? keys.shift() : window.Laya?.stage;
-			const result = keys.reduce((acc, key) => {
-				if (!(acc instanceof Object)) return [];
-				if (Array.isArray(acc)) {
-					if (!acc.length) return [];
-					if (Array.isArray(key)) return acc.flatMap((item) => key.flatMap((itemKey) => findInStage(item, itemKey)));
-					return acc.flatMap((item) => findInStage(item, key));
-				}
-				if (Array.isArray(key)) return key.flatMap((itemKey) => findInStage(acc, itemKey));
-				return findInStage(acc, key);
-			}, start);
-			return result?.length == 0 ? null : result;
-		}
-		get ged() {
-			return this.class("GameEventDispatcher");
-		}
-		get scene() {
-			return this.class("SceneManager")?.CurrentScene || this.find("SceneLayer", null);
-		}
-		get gamescene() {
-			return this.class("SceneManager")?.IsGameScene ? this.scene : null;
-		}
-		chat(chatmsg = "", channel = false) {
-			if (!channel) {
-				const UI = this.gamescene?.chatViewUI || this.scene?.chatViewUI || this.find(this.gamescene || this.scene, null, "chatViewUI");
-				return UI?.chatInput && (UI.chatInput.text = chatmsg);
-			}
-			if (typeof channel === "string") {
-				chatmsg = channel + ":" + btoa(chatmsg);
-				channel = true;
-			}
-			if (channel === true) channel = this.gamescene?.chatViewUI?.chatInput ? 2 : 7;
-			if (typeof channel !== "number") return;
-			const manager = this.class("ChatManager");
-			if (!manager) return;
-			if (channel == 2 && typeof manager.SendChatMsg == "function") return manager.SendChatMsg(chatmsg);
-			if (channel == 13 && typeof manager.SendCampChatMsg == "function") return manager.SendCampChatMsg(chatmsg);
-			if (typeof manager.SendBaseChatMsg == "function") return manager.SendBaseChatMsg(chatmsg, channel, "", 0);
-		}
-		seatUIs() {
-			this.init(true);
-			if (!this._gamescene) return null;
-			const verbose = this.limit == 290;
-			const seats = (this.gamescene.seatContainer?.seatUIs)?.map((ui) => ui.seat)?.filter((s) => !s.isHide);
-			if (!Game.isGuoZhan && !seats?.filter((s) => s.fixedViewId)?.length) return [];
-			let SeatUIs = seats.map((seat, i, seats) => ({
-				seat,
-				seatID: seat.index,
-				order: seat.fixedViewId - 1,
-				figure: !Game.isGuoZhan ? seat.figure == seats[0].figure : seat.Country == seats[0].Country || -!!seat.Country,
-				ai: seat?.playerInfo?.ClientId < 4e9 ? 0 : seat.playerInfo?.IsNormalRobot ? 2 : 1
-			}));
-			if (verbose === true && SeatUIs.some(({ ai }) => ai) && !Game.isShanHeTu) addTooltip("对战AI小杀！");
-			SeatUIs = SeatUIs.map((ui) => ({
-				...ui,
-				index: this.order.indexOf(ui.seatID)
-			})).sort((a, b) => a.figure - b.figure || b.ai - a.ai || a.index - b.index || a.order - b.order);
-			this.order = SeatUIs.map((e) => e.seatID);
-			const self = this.gamescene.SelfSeatUi;
-			const cardContainer = self.cardContainer;
-			const cardUis = cardContainer?.cardUis;
-			const btnUIs = self.buttonBar?.btns;
-			const skillItems = self.skillItems;
-			const spellSelector = self.spellSelector;
-			if (!verbose) return true;
-			if (!cardUis || !btnUIs || !skillItems || !spellSelector) return false;
-			this.limit--;
-			this.mark = (ids, label, _, uis = cardUis) => ids != false && setTimeout(() => {
-				if (Array.isArray(ids)) uis = ids.map((id) => cardContainer.getCardUiBy(id, false, uis)).filter(Boolean);
-				uis.forEach((ui) => ui?.AddCardTag?.(label));
-			});
-		}
-		ShowWindow(name) {
-			const GameEventDispatcher = this.ged;
-			if (!GameEventDispatcher) return;
-			GameEventDispatcher.i?.(name);
-		}
-		GetWindow(name) {
-			const manager = this.class("WindowManager");
-			if (!manager) return null;
-			const cachedWindow = (manager?.WindowInstanceDict)?.get(name);
-			if (cachedWindow) return cachedWindow;
-			const foundWindow = this.find("WindowLayer", name);
-			if (Array.isArray(foundWindow)) return foundWindow.find(Boolean) ?? null;
-			return foundWindow ?? null;
-		}
-		HideStartLoadingListener() {
-			const GameEventDispatcher = this.ged;
-			if (!GameEventDispatcher) return;
-			GameEventDispatcher.on("HIDE_CHALLENGE_GAME_START", this, this.showName);
-		}
-		async showName() {
-			const seatUIs = await wait(() => this.gamescene?.seatContainer?.seatUIs);
-			if (!seatUIs) return;
-			seatUIs.forEach(({ seat, otherTopManager }) => {
-				if (seat?.playerInfo?.ClientId >= 4e9) return;
-				otherTopManager?.createPlayerNameBg();
-				otherTopManager?.createPlayerName();
-				otherTopManager?.UpdatePlayerName(seat.playerInfo);
-				otherTopManager?.SetPlayNameVisible(true);
-				otherTopManager?.layout();
-			});
-		}
-		blockPowerSlogan() {
-			if (this._powerSloganBlocked) return true;
-			const seatList = this.scene?.seatListView?.seatList;
-			if (!Array.isArray(seatList) || !seatList.length) return false;
-			const proto = seatList.find((seat) => seat?.__proto__ && typeof seat.__proto__.showPowerSlogan == "function")?.__proto__;
-			if (!proto) return false;
-			redefine(proto, "showPowerSlogan", { value() {} });
-			if (!proto.__showPowerSlogan) return false;
-			this._powerSloganBlocked = true;
-			return true;
-		}
-		zhanfaMap = new Map();
-		ZHANFA = new Set([
-			13027,
-			13028,
-			13029,
-			13039,
-			13040,
-			13041,
-			13087,
-			13088,
-			13089,
-			13184,
-			13185,
-			13293,
-			13294,
-			13033,
-			13034,
-			13035,
-			13070,
-			13071,
-			13072,
-			13073,
-			13074,
-			13075,
-			13091,
-			13098
-		]);
-		shaCounter() {
-			if (!Game.isShanHeTu && !Game.isRoguelike1v1) return;
-			const value = Number(Game.getSpellState("三板斧")) % 3;
-			for (const id of [
-				13033,
-				13034,
-				13035
-			]) {
-				const zhanfa = this.zhanfaMap.get(id);
-				if (zhanfa) zhanfa.Value = value;
-			}
-		}
-		useCounter() {
-			if (!Game.isShanHeTu && !Game.isRoguelike1v1) return;
-			const value = Game.getSpellState("手到擒来");
-			for (const id of [
-				13070,
-				13071,
-				13072
-			]) {
-				const zhanfa = this.zhanfaMap.get(id);
-				if (zhanfa) zhanfa.Value = value;
-			}
-		}
-		drawCounter() {
-			if (!Game.isShanHeTu && !Game.isRoguelike1v1) return;
-			const count = Number(Game.getSpellState("神龙摆尾"));
-			const times = Game.getSpellState("多多益善");
-			const shenlong1 = this.zhanfaMap.get(13091);
-			if (shenlong1) shenlong1.Value = count % 9;
-			const shenlong2 = this.zhanfaMap.get(13098);
-			if (shenlong2) shenlong2.Value = count % 6;
-			for (const id of [
-				13073,
-				13074,
-				13075
-			]) {
-				const zhanfa = this.zhanfaMap.get(id);
-				if (zhanfa) zhanfa.Value = times;
-			}
-		}
-		zhanfaCounter(SkillId) {
-			const zhanfa = this.zhanfaMap.get(SkillId);
-			if (!zhanfa) return;
-			if (zhanfa.n === void 0) zhanfa.n = 0;
-			zhanfa.Value = ++zhanfa.n;
-		}
-		zhanfaRegister() {
-			this.gamescene?.SelfSeatUi?.zhanFaItems?.forEach((ui) => {
-				if (this.ZHANFA.has(ui.SkillId)) this.zhanfaMap.set(ui.SkillId, ui);
-			});
-		}
-		zhanfaReset() {
-			for (const [_, ui] of this.zhanfaMap) if (ui?.n !== void 0) ui.Value = ui.n = 0;
-		}
-		resetRoundZhanFa(previousSeatID) {
-			for (const [_, ui] of this.zhanfaMap) {
-				if (ui?.n !== void 0 && ROUND_ZHAN_FA_IDS.has(ui.PlotID)) ui.Value = ui.n = 0;
-				if (previousSeatID === Game.myID && SELF_TURN_ZHAN_FA_IDS.has(ui.PlotID)) ui.Value = 0;
-			}
-		}
-	};
-	var laya = new GameRuntime();
-	function isStrictMultisetSubset(subset, superSet) {
-		if (subset.length >= superSet.length) return false;
-		const counts = new Map();
-		superSet.forEach((number) => counts.set(number, (counts.get(number) || 0) + 1));
-		return subset.every((number) => {
-			const count = counts.get(number) || 0;
-			if (count <= 0) return false;
-			counts.set(number, count - 1);
-			return true;
-		});
-	}
-	function drawChengXiang(array, K) {
-		const arr = normalizeCardNumbers(array);
-		if (!arr.length) return;
-		const results = [];
-		function backtrack(temp, start, sum) {
-			if (sum > 13) return;
-			if (temp.length > 0) {
-				const numbers = temp.slice();
-				const exact = K && sum === 13 ? temp.length : 0;
-				results.push({
-					numbers,
-					exact
-				});
-			}
-			for (let i = start; i < arr.length; i++) {
-				if (i > start && arr[i] === arr[i - 1]) continue;
-				if (sum + arr[i] > 13) break;
-				temp.push(arr[i]);
-				backtrack(temp, i + 1, sum + arr[i]);
-				temp.pop();
-			}
-		}
-		backtrack([], 0, 0);
-		const resDiv = getResultContainer();
-		if (!resDiv) return;
-		const fragment = document.createDocumentFragment();
-		const visibleResults = results.filter((subset, _, self) => !self.some((superSet) => isStrictMultisetSubset(subset.numbers, superSet.numbers))).sort((a, b) => (b.exact || 0) - (a.exact || 0) || b.numbers.length - a.numbers.length);
-		for (const result of visibleResults) {
-			const button = buttonRes(formatCardNumbers(result.numbers, false));
-			if (K && result.exact) button.classList.add("textRes");
-			fragment.appendChild(button);
-		}
-		resDiv.appendChild(fragment);
-	}
-	function drawMiZhu(array) {
-		const arr = normalizeCardNumbers(array);
-		const results = [];
-		function backtrack(temp, start, sum) {
-			if (sum === 13) {
-				results.push(temp.slice());
-				return;
-			}
-			for (let i = start; i < arr.length; i++) {
-				if (i > start && arr[i] === arr[i - 1]) continue;
-				if (sum + arr[i] > 13) break;
-				temp.push(arr[i]);
-				backtrack(temp, i + 1, sum + arr[i]);
-				temp.pop();
-			}
-		}
-		backtrack([], 0, 0);
-		const resDiv = getResultContainer();
-		if (!resDiv) return;
-		const fragment = document.createDocumentFragment();
-		const sortedResults = results.sort((a, b) => b.length - a.length);
-		for (let i = 0; i < sortedResults.length && i < 15; i += 1) fragment.appendChild(buttonRes(formatCardNumbers(sortedResults[i], false)));
-		if (!fragment.childNodes.length) {
-			showTextResult(resDiv, "【资援】无解！");
-			return;
-		}
-		resDiv.appendChild(fragment);
-	}
-	function getYanJiaoRemain(counts, ...subsets) {
-		const remain = counts.slice();
-		for (let i = 0; i < remain.length; i += 1) {
-			for (const subset of subsets) {
-				remain[i] -= subset[i];
-				if (remain[i] < 0) return null;
-			}
-			if (i > 0 && remain[i] >= 2) return null;
-		}
-		return remain;
-	}
-	function createYanJiaoButton(left, right) {
-		const button = document.createElement("button");
-		const spanA = document.createElement("span");
-		const spanB = document.createElement("span");
-		button.className = "calRes";
-		button.title = "点击复制";
-		spanA.innerText = formatNumberCounts(left).join("+");
-		spanB.innerText = formatNumberCounts(right).join("+");
-		button.appendChild(spanA);
-		button.insertAdjacentHTML("beforeend", "<span>=</span>");
-		button.appendChild(spanB);
-		button.onclick = function() {
-			toClipboard(button.innerText, true);
-		};
-		return button;
-	}
-	function drawYanJiao(array) {
-		const counts = countCardNumbers(normalizeCardNumbers(array));
-		const half = Math.floor(getCountedNumbersTotal(counts) / 2);
-		const subsetsBySum = new Map([[0, [Array(14).fill(0)]]]);
-		for (let number = 1; number <= 13; number += 1) {
-			const count = counts[number];
-			if (count === 0) continue;
-			for (const sum of Array.from(subsetsBySum.keys()).sort((a, b) => b - a)) {
-				const subsets = subsetsBySum.get(sum);
-				for (let n = 1; n <= count; n += 1) {
-					const newSum = sum + number * n;
-					if (newSum > half) break;
-					if (!subsetsBySum.has(newSum)) subsetsBySum.set(newSum, []);
-					const targetSubsets = subsetsBySum.get(newSum);
-					for (const subset of subsets) {
-						const nextSubset = subset.slice();
-						nextSubset[0] += n;
-						nextSubset[number] += n;
-						targetSubsets.push(nextSubset);
-					}
-				}
-			}
-		}
-		subsetsBySum.delete(0);
-		const pairs = new Map();
-		for (const sum of Array.from(subsetsBySum.keys()).sort((a, b) => b - a)) {
-			const subsets = subsetsBySum.get(sum);
-			for (let i = 0; i < subsets.length; i += 1) for (let j = i; j < subsets.length; j += 1) {
-				const remain = getYanJiaoRemain(counts, subsets[i], subsets[j]);
-				if (!remain) continue;
-				const [left, right] = subsets[i][0] <= subsets[j][0] ? [subsets[i], subsets[j]] : [subsets[j], subsets[i]];
-				if (!pairs.has(remain[0])) pairs.set(remain[0], []);
-				pairs.get(remain[0]).push([
-					left,
-					right,
-					remain
-				]);
-			}
-		}
-		const resDiv = getResultContainer();
-		if (!resDiv) return;
-		const fragment = document.createDocumentFragment();
-		let rendered = 0;
-		for (const remainCount of Array.from(pairs.keys()).sort((a, b) => a - b)) {
-			const pairsByRemain = pairs.get(remainCount).sort((a, b) => a[0][0] - b[0][0]);
-			for (const [left, right] of pairsByRemain) {
-				fragment.appendChild(createYanJiaoButton(left, right));
-				rendered += 1;
-				if (rendered >= 5) break;
-			}
-			if (rendered >= 5) break;
-		}
-		if (!rendered) {
-			showTextResult(resDiv, "【严教】无解！");
-			return;
-		}
-		resDiv.appendChild(fragment);
-	}
-	var MAX_RENDERED_RESULTS = 15;
-	function getYiChengGroups(numbers, length) {
-		const groups = [];
-		function backtrack(start, selected, sum) {
-			if (selected.length === length) {
-				groups.push({
-					selected: selected.slice(),
-					sum
-				});
-				return;
-			}
-			for (let i = start; i < numbers.length; i += 1) {
-				if (i > start && numbers[i] === numbers[i - 1]) continue;
-				selected.push(numbers[i]);
-				backtrack(i + 1, selected, sum + numbers[i]);
-				selected.pop();
-			}
-		}
-		backtrack(0, [], 0);
-		return groups;
-	}
-	function hasNumberOverlap(left, right) {
-		const rightSet = new Set(right);
-		return left.some((number) => rightSet.has(number));
-	}
-	function drawYiCheng(paiduiNumbers, shoupaiNumbers) {
-		if (!paiduiNumbers?.length || !shoupaiNumbers?.length) return;
-		const resDiv = getResultContainer();
-		if (!resDiv) return;
-		const paidui = normalizeCardNumbers(paiduiNumbers);
-		const shoupai = normalizeCardNumbers(shoupaiNumbers);
-		const max = Math.min(paidui.length, shoupai.length);
-		const fragment = document.createDocumentFragment();
-		let rendered = 0;
-		for (let n = 2; n <= max && rendered < MAX_RENDERED_RESULTS; n++) {
-			const paiduiGroups = getYiChengGroups(paidui, n);
-			const handGroups = getYiChengGroups(shoupai, n);
-			for (const handGroup of handGroups) {
-				if (rendered >= MAX_RENDERED_RESULTS) break;
-				for (const paiduiGroup of paiduiGroups) {
-					if (rendered >= MAX_RENDERED_RESULTS) break;
-					if (handGroup.sum <= paiduiGroup.sum) continue;
-					if (hasNumberOverlap(handGroup.selected, paiduiGroup.selected)) continue;
-					if (max >= 3 && !handGroup.selected.some((number, index) => number < paiduiGroup.selected[index])) continue;
-					fragment.appendChild(buttonRes(`${formatCardNumbers(handGroup.selected)}→${formatCardNumbers(paiduiGroup.selected)}`, "点击复制", false));
-					rendered += 1;
-				}
-			}
-		}
-		const shoupaiSet = Array.from(new Set(shoupai));
-		const paiduiSet = Array.from(new Set(paidui));
-		for (const sp of shoupaiSet) {
-			if (rendered >= MAX_RENDERED_RESULTS) break;
-			const pd = paiduiSet.filter((n) => n < sp);
-			if (!pd.length) continue;
-			fragment.appendChild(buttonRes(n2N(sp) + "→" + pd.map((n) => n2N(n)).join("/"), "点击复制", false));
-			rendered += 1;
-		}
-		if (!rendered) {
-			showTextResult(resDiv, "【易城】无法交换！");
-			return;
-		}
-		resDiv.appendChild(fragment);
-	}
-	function drawLastUseCard(cardIDs = [], { spellId, color } = {}) {
-		const toBeAdd = document.getElementById("lastUseCard");
-		if (!toBeAdd) return;
-		const ids = (cardIDs || []).filter((id) => id);
-		let card;
-		let isRed;
-		if (ids.length === 1) {
-			card = CardConfig.GetInstance().getCard(ids[0]);
-			isRed = card?.color === 1 || card?.color === 2;
-		} else {
-			card = spellId ? SkillsConfig.GetInstance().getSpell(spellId) : null;
-			isRed = color === 1;
-		}
-		if (!card) return;
-		const button = document.createElement("button");
-		button.classList.add("shoupai");
-		button.classList.toggle("red-card", isRed);
-		button.innerHTML = getCardFaceHtml(card);
-		clearDirectCards(toBeAdd);
-		toBeAdd.appendChild(button);
-	}
-	function clearDirectCards(element) {
-		if (!(element instanceof HTMLElement)) return;
-		invalidateEllipsisOverflow(element);
-		element.querySelectorAll(":scope > .shoupai, :scope > .markedCard").forEach((e) => e.remove());
-	}
-	function clearZoneMirrors() {
-		document.querySelectorAll("#seatUI .sorder-body").forEach(clearDirectCards);
-		document.querySelectorAll("#seatUI .markedCard").forEach((element) => element.remove());
-	}
-	function debounce(func, wait) {
-		let timeout;
-		function debounced(...args) {
-			clearTimeout(timeout);
-			timeout = setTimeout(() => func.apply(this, args), wait);
-		}
-		debounced.cancel = function() {
-			clearTimeout(timeout);
-			timeout = null;
-		};
-		return debounced;
-	}
-	var optimizedResizeHandler = debounce(() => {
-		requestAnimationFrame(() => {
-			document.querySelectorAll(".sorder-body").forEach((orderBody) => {
-				checkEllipsisOverflow(orderBody, 40);
-			});
-		});
-	}, 500);
-	window.addEventListener("resize", optimizedResizeHandler);
-	function drawSeatUIs() {
-		const seatUI = document.getElementById("seatUI");
-		if (!seatUI) return false;
-		const seats = UI.seatUIs.slice(1);
-		if (seats.length === 0 || seats.some((seat) => !hasSeatPosition(seat))) return false;
-		const defaultWidth = UI.unscaledWidth + UI.paddingRight;
-		const layouts = seats.map((seat) => {
-			const displayID = seat.fixedViewId;
-			return {
-				displayID,
-				orderContainer: seatUI.querySelector("#or" + displayID),
-				seat
-			};
-		});
-		if (layouts.some(({ orderContainer }) => !orderContainer)) return false;
-		const visibleContainers = new Set(layouts.map(({ orderContainer }) => orderContainer));
-		for (const container of seatUI.querySelectorAll(".sorderContainer:not(.deckEdgeUI)")) {
-			const isShown = visibleContainers.has(container);
-			container.style.display = isShown ? "flex" : "none";
-			container.style.visibility = isShown && Game.turn > 0 ? "visible" : "hidden";
-		}
-		for (const { displayID, orderContainer, seat } of layouts) {
-			applySeatContainerLayout(orderContainer, seat, defaultWidth);
-			ensureSeatOrderBody(orderContainer, displayID).className = `sorder-body sNo${displayID}`;
-		}
-		UI.firstUpdateSeatUI = true;
-		window.dispatchEvent(new CustomEvent("dxc-seat-overlay-layout"));
-		return true;
-	}
-	function hasSeatPosition(seat) {
-		return Number.isFinite(seat?.posX) && Number.isFinite(seat?.posY) && Number.isFinite(seat?.fixedViewId);
-	}
-	function applySeatContainerLayout(orderContainer, seat, defaultWidth) {
-		orderContainer.style.top = seat.posY + "px";
-		orderContainer.style.left = seat.posX + "px";
-		orderContainer.style.width = (seat.width || defaultWidth) + "px";
-	}
-	function ensureSeatOrderBody(orderContainer, displayID) {
-		let orderBody = orderContainer.querySelector("#s" + displayID);
-		if (!orderBody) {
-			orderBody = document.createElement("div");
-			orderBody.id = "s" + displayID;
-			orderContainer.appendChild(orderBody);
-		}
-		return orderBody;
-	}
 	var POSITION_TOP = 65280;
 	var POSITION_RANDOM = 65282;
 	function getProtocolInsertionIndex(position, cardCount) {
@@ -2859,25 +2090,25 @@
 		const type = parts[0];
 		if (type === "popup") return normalizeLocationCandidate({
 			type,
-			spaceID: parts[1]
+			spaceID: Number(parts[1])
 		});
 		if (type === "player") return normalizeLocationCandidate({
 			type,
 			seatID: Number(parts[1]),
 			subZone: parts[2],
-			spellID: parts[3] === "none" ? null : parts[3]
+			spellID: parts[3] === "none" ? null : Number(parts[3])
 		});
 		if (type === "public") return normalizeLocationCandidate({
 			type,
 			zone: parts[1],
 			position: parts[2] === "any" ? null : parts[2],
-			count: parts[3] === "any" ? null : parts[3]
+			count: parts[3] === "any" ? null : Number(parts[3])
 		});
 		if (type === "container") return normalizeLocationCandidate({
 			type,
 			containerType: parts[1],
-			cardID: parts[2],
-			spellID: parts[3] === "none" ? null : parts[3]
+			cardID: Number(parts[2]),
+			spellID: parts[3] === "none" ? null : Number(parts[3])
 		});
 		if (type === "outside") return normalizeLocationCandidate({
 			type,
@@ -3049,7 +2280,7 @@
 		[PROTOCOL_ZONE.JUDGE, "judge"]
 	]);
 	function getProtocolPublicZone(zone, fallback = null) {
-		return zone == null ? fallback : PROTOCOL_PUBLIC_ZONE_MAP.get(zone) ?? fallback;
+		return PROTOCOL_PUBLIC_ZONE_MAP.get(zone) ?? fallback;
 	}
 	function getProtocolPlayerSubZone(zone, fallback = "hand") {
 		return zone == null ? fallback : PROTOCOL_PLAYER_SUB_ZONE_MAP.get(zone) ?? fallback;
@@ -3236,6 +2467,7 @@
 		return card.popupSpaceID !== null && spaceIDs.includes(card.popupSpaceID);
 	}
 	function getPopupSpaceCards(room, spaceID) {
+		if (spaceID === void 0) return [];
 		const state = room.readSkillState(POPUP_SPACE_STATE_KEY);
 		if (!state) return [];
 		const liveCards = (state.spaces.get(spaceID) ?? []).filter((card) => isLivePopupSpaceCard(card, [spaceID]));
@@ -3244,7 +2476,7 @@
 		return liveCards;
 	}
 	function registerPopupSpaceCards(room, spaceID, cards) {
-		if (spaceID === null || cards.length === 0) return;
+		if (spaceID == null || cards.length === 0) return;
 		const state = getPopupSpaceState(room);
 		const liveCards = cards.filter((card) => isLivePopupSpaceCard(card, [spaceID]));
 		if (liveCards.length === 0) return;
@@ -3259,7 +2491,7 @@
 		state.spaces.set(spaceID, mergedCards);
 	}
 	function takePopupSpaceCards(room, count, spaceID) {
-		if (!(count > 0)) return [];
+		if (!(count > 0) || spaceID === void 0) return [];
 		const state = room.readSkillState(POPUP_SPACE_STATE_KEY);
 		if (!state?.spaces?.size) return [];
 		const spaceCards = getPopupSpaceCards(room, spaceID);
@@ -3347,11 +2579,11 @@
 			return this.handGainSpellIDs.get(seatID) ?? null;
 		}
 		recordHandGain(seatID, spellID) {
-			const next = spellID > 0 ? spellID : null;
+			const next = spellID !== null && spellID > 0 ? spellID : null;
 			if (this.getHandGainSpellID(seatID) === next) return;
 			if (next === null) this.handGainSpellIDs.delete(seatID);
 			else this.handGainSpellIDs.set(seatID, next);
-			this.room?.notifyCardChanged(this, {
+			this.room.notifyCardChanged(this, {
 				type: "card-hand-gain-source",
 				seatID,
 				gainSpellID: next
@@ -3407,11 +2639,7 @@
 			return Array.from(nextSeats).every((seat) => seats.has(seat));
 		}
 		syncTimestamp() {
-			const timestamp = this.room?.getCurrentTimestamp?.() ?? {
-				turn: 0,
-				round: 0,
-				phase: 0
-			};
+			const timestamp = this.room.getCurrentTimestamp();
 			this.turn = timestamp.turn ?? 0;
 			this.round = timestamp.round ?? 0;
 			this.phase = timestamp.phase ?? 0;
@@ -3419,8 +2647,8 @@
 		confirmKnown() {
 			if (!this.isKnown) {
 				this.isKnown = true;
-				this.room?.markCounterDirty?.(this);
-				this.room?.notifyCardChanged?.(this, { type: "card-known-confirmed" });
+				this.room.markCounterDirty(this);
+				this.room.notifyCardChanged(this, { type: "card-known-confirmed" });
 			}
 			this.syncTimestamp();
 		}
@@ -3437,7 +2665,7 @@
 			const resolvedSeatChanged = previousResolvedSeat !== nextResolvedSeat;
 			this.owner = nextOwner;
 			if (seatsChanged || ownerChanged || resolvedSeatChanged) {
-				this.room?.notifyCardChanged?.(this, {
+				this.room.notifyCardChanged(this, {
 					type: "card-seats-changed",
 					reason,
 					previousResolvedSeat,
@@ -3552,7 +2780,7 @@
 			const hasExchangeBatchCandidate = this.locationCandidates.some((candidate) => candidate.type === "outside" && candidate.zone === "exchange" && Boolean(candidate.batchID));
 			const previousLocation = this.location;
 			let changed = false;
-			if ((playerCandidates.length > 0 || hasContainerCandidate || hasExchangeBatchCandidate || popupCandidate) && !hasPublicCandidate) this.room?.clearCardsFromPublicZones?.([this]);
+			if ((playerCandidates.length > 0 || hasContainerCandidate || hasExchangeBatchCandidate || popupCandidate) && !hasPublicCandidate) this.room.clearCardsFromPublicZones([this]);
 			if (playerCandidates.length > 0 || hasContainerCandidate) {
 				this.location = "player";
 				this.popupSpaceID = null;
@@ -3580,7 +2808,7 @@
 				nextResolvedSeat: this.location === "player" && nextSeats.size === 1 ? nextSeats.values().next().value ?? null : null,
 				seatsChanged: previousSeats.size !== nextSeats.size || Array.from(previousSeats).some((seat) => !nextSeats.has(seat))
 			}) || changed;
-			if (changed) this.room?.markCounterDirty?.(this);
+			if (changed) this.room.markCounterDirty(this);
 			return changed;
 		}
 		getPossibleLocations() {
@@ -3620,7 +2848,7 @@
 			this.storeLocationCandidates(nextCandidates);
 			this.reconcileLocationStateFromCandidates(reason, previousSeats);
 			this.pruneHandGainSources();
-			this.room?.notifyCardChanged?.(this, {
+			this.room.notifyCardChanged(this, {
 				type: "card-location-candidates-changed",
 				reason,
 				candidates: this.locationCandidates,
@@ -3650,7 +2878,7 @@
 			const hadCandidates = this.hasLocationCandidates();
 			const previousPopupSpaceID = this.popupSpaceID;
 			const previousSeats = this.seats;
-			this.room?.clearCardsFromPublicZones?.([this]);
+			this.room.clearCardsFromPublicZones([this]);
 			this.location = normalized.type === "popup" ? "popup" : "player";
 			this.popupSpaceID = normalized.type === "popup" ? normalized.spaceID : null;
 			this.subZone = normalized.type === "popup" ? null : normalized.subZone;
@@ -3665,10 +2893,10 @@
 				nextResolvedSeat: normalized.type === "player" ? normalized.seatID : null,
 				seatsChanged: previousSeats.size !== nextSeats.size || Array.from(previousSeats).some((seat) => !nextSeats.has(seat))
 			});
-			this.room?.markCounterDirty?.(this);
+			this.room.markCounterDirty(this);
 			const changed = hadCandidates || previousLocation !== this.location || previousSubZone !== this.subZone || previousSpellID !== this.spellID || previousPopupSpaceID !== this.popupSpaceID || seatsChanged;
 			this.pruneHandGainSources();
-			if (changed) this.room?.notifyCardChanged?.(this, {
+			if (changed) this.room.notifyCardChanged(this, {
 				type: "card-location-resolved",
 				reason,
 				candidate: normalized,
@@ -3690,7 +2918,8 @@
 			return this.setLocationCandidates(nextCandidates, reason);
 		}
 		resolveSubZoneCandidate(candidate, reason = "resolveSubZoneCandidate") {
-			return this.resolveLocationCandidate(fromSubZoneCandidate(candidate), reason);
+			const normalized = fromSubZoneCandidate(candidate);
+			return normalized ? this.resolveLocationCandidate(normalized, reason) : false;
 		}
 		bindCandidates(seats, subZone = "hand", spellID = null, options = {}) {
 			const { known = false } = options;
@@ -3705,8 +2934,8 @@
 			if (known) this.confirmKnown();
 			this.setSeats(seats, "bindCandidates");
 			this.pruneHandGainSources();
-			this.room?.markCounterDirty?.(this);
-			this.room?.notifyCardChanged?.(this, {
+			this.room.markCounterDirty(this);
+			this.room.notifyCardChanged(this, {
 				type: "card-bound",
 				subZone,
 				spellID,
@@ -3732,7 +2961,7 @@
 			this.suspended = false;
 			this.syncTimestamp();
 			if (destination === "exile" || destination === "outside") this.isKnown = false;
-			this.room?.markCounterDirty?.(this);
+			this.room.markCounterDirty(this);
 			this.notifyLeftPlayerZoneIfSilent(!seatsChanged && !candidatesChanged, previous, {
 				type: "card-moved-to-public-zone",
 				destination
@@ -3740,7 +2969,7 @@
 		}
 		getLocationDescription() {
 			if (this.suspended) return "位置发散，暂停追踪";
-			const ambiguousDescription = this.room?.ambiguousKnownIndex?.describe(this.id);
+			const ambiguousDescription = this.room.ambiguousKnownIndex.describe(this.id);
 			if (ambiguousDescription) return ambiguousDescription;
 			if (this.location === "outside") return "游戏外";
 			if (this.location === "pile") return "牌堆";
@@ -3758,9 +2987,12 @@
 					});
 					return parts.join("/");
 				}
+				const subZone = this.subZone;
+				if (subZone === null) return "未知";
+				const zoneName = getSubZoneName(subZone);
 				this.seats.forEach((seatID) => {
 					const prefix = this.room.formatSeatPrefix(seatID);
-					parts.push(`${prefix}${getSubZoneName(this.subZone)}`);
+					parts.push(`${prefix}${zoneName}`);
 				});
 				return parts.join("/");
 			}
@@ -3774,13 +3006,14 @@
 				count: candidate.count
 			};
 			const baseCandidates = this.locationCandidates.length > 0 ? this.locationCandidates : this.getResolvedLocationCandidates();
-			return this.setLocationCandidates([...baseCandidates, fromPublicCandidate(normalized)].filter(Boolean), "addPublicCandidate");
+			return this.setLocationCandidates([...baseCandidates, fromPublicCandidate(normalized)].filter((candidate) => candidate !== null), "addPublicCandidate");
 		}
 		removePublicCandidates(predicate) {
 			if (!this.locationCandidates.some((candidate) => candidate.type === "public")) return false;
 			const nextCandidates = this.locationCandidates.filter((candidate) => {
 				if (candidate.type !== "public") return true;
-				return !predicate(toPublicCandidate(candidate, (zone, position, count) => getPublicCandidateLabel(zone, position, count) ?? null));
+				const publicCandidate = toPublicCandidate(candidate, (zone, position, count) => getPublicCandidateLabel(zone, position, count) ?? null);
+				return publicCandidate === null || !predicate(publicCandidate);
 			});
 			return this.setLocationCandidates(nextCandidates, "removePublicCandidates");
 		}
@@ -3798,7 +3031,7 @@
 			this.turn = 0;
 			this.round = 0;
 			this.phase = 0;
-			this.room?.markCounterDirty?.(this);
+			this.room.markCounterDirty(this);
 			this.notifyLeftPlayerZoneIfSilent(!seatsChanged, previous, { type: "card-reset" });
 		}
 		capturePublicMigrationSnapshot() {
@@ -3813,7 +3046,7 @@
 		notifyLeftPlayerZoneIfSilent(silent, previous, detail) {
 			if (!silent) return;
 			if (!(previous.location === "player" || previous.location === "popup" || previous.subZone !== null || previous.spellID !== null || previous.candidateCount > 0 || previous.suspended !== this.suspended)) return;
-			this.room?.notifyCardChanged?.(this, {
+			this.room.notifyCardChanged(this, {
 				...detail,
 				previousLocation: previous.location,
 				previousSubZone: previous.subZone,
@@ -5003,9 +4236,8 @@
 			return this.get(cardID)?.description ?? "";
 		}
 		formatCardDescription(card, groups) {
-			const zoneName = this.getSubZoneName(card);
 			const locations = [];
-			if (card.hasLocationCandidates?.()) {
+			if (card.hasLocationCandidates()) {
 				const playerCandidates = getPlayerLocationCandidates(card.locationCandidates);
 				const containerCandidates = getContainerLocationCandidates(card.locationCandidates);
 				const publicCandidates = getPublicLocationCandidates(card.locationCandidates);
@@ -5020,19 +4252,19 @@
 					const publicCandidate = toPublicCandidate(candidate, (zone, position, count) => getPublicCandidateLabel(zone, position, count));
 					if (publicCandidate?.label) locations.push(publicCandidate.label);
 				});
-			} else if (card.location === "player") Array.from(card.seats).forEach((seatID) => {
-				const prefix = this.room.formatSeatPrefix(seatID);
-				locations.push(`${prefix}${zoneName}`);
-			});
+			} else if (card.location === "player" && card.subZone !== null) {
+				const zoneName = getSubZoneName(card.subZone);
+				Array.from(card.seats).forEach((seatID) => {
+					const prefix = this.room.formatSeatPrefix(seatID);
+					locations.push(`${prefix}${zoneName}`);
+				});
+			}
 			const sourceLabels = groups.map((group) => {
 				if (typeof group.sourceEvent === "string") return group.sourceEvent;
 				return group.sourceEvent?.label ?? group.sourceEvent?.type;
 			}).filter(Boolean);
 			if (sourceLabels.length === 0) return locations.join("/");
 			return `${locations.join("/")}（${Array.from(new Set(sourceLabels)).join("/")}）`;
-		}
-		getSubZoneName(card) {
-			return getSubZoneName(card.subZone);
 		}
 		getRelatedGroups(card, groups) {
 			return groups.filter((group) => group.cards.has(card));
@@ -5047,7 +4279,7 @@
 			};
 		}
 		hasContainerLocationCandidates(card) {
-			if (!card.hasLocationCandidates?.()) return false;
+			if (!card.hasLocationCandidates()) return false;
 			return getContainerLocationCandidates(card.locationCandidates).length > 0;
 		}
 	};
@@ -5314,10 +4546,7 @@
 			else this.containerDependentCards.delete(card);
 		}
 		refreshPublicZones(room, zoneIDs) {
-			for (const zoneID of zoneIDs) {
-				const zone = room.zones.get(zoneID);
-				if (zone) this.publicByZone.set(zoneID, [...zone.cards]);
-			}
+			for (const zoneID of zoneIDs) if (room.zones.has(zoneID)) this.publicByZone.set(zoneID, [...room.getZone(zoneID).cards]);
 		}
 		toComparable(room) {
 			const order = new Map();
@@ -5336,7 +4565,7 @@
 			};
 		}
 		cardHasContainerCandidates(card) {
-			if (!card.hasLocationCandidates?.()) return false;
+			if (!card.hasLocationCandidates()) return false;
 			return getContainerLocationCandidates(card.locationCandidates).length > 0;
 		}
 		projectCard(room, card) {
@@ -5530,9 +4759,9 @@
 		}
 		getCurrentTimestamp() {
 			return {
-				turn: this.game?.turn ?? 0,
-				round: this.game?.round ?? 0,
-				phase: this.game?.phase ?? 0
+				turn: this.game.turn ?? 0,
+				round: this.game.round ?? 0,
+				phase: this.game.phase ?? 0
 			};
 		}
 		getPlayer(seatID) {
@@ -5543,10 +4772,10 @@
 			trackerLogger.info("Room 设置主视角座位", { mySeatID: this.mySeatID });
 		}
 		getMyDisplayID() {
-			return this.getDisplayID(this.mySeatID);
+			return this.mySeatID === void 0 ? void 0 : this.getDisplayID(this.mySeatID);
 		}
 		getMyPlayer() {
-			return this.getPlayer(this.mySeatID);
+			return this.mySeatID === void 0 ? void 0 : this.getPlayer(this.mySeatID);
 		}
 		setFirstHand(firstID) {
 			this.firstID = firstID;
@@ -5732,13 +4961,13 @@
 						if (player.hasObservedHandCount && player.observedHandCount - lockedKnownCount <= 0) {
 							recordTraversal("resolveConstraints:constraint3:exclusion", playerCards.length);
 							for (const card of playerCards) {
-								if (card.location === "player" && card.hasLocationCandidates?.() && getHandSlotKindForSeat(card, seatID) === "candidate") {
+								if (card.location === "player" && card.hasLocationCandidates() && getHandSlotKindForSeat(card, seatID) === "candidate") {
 									card.locationCandidates.filter((candidate) => candidate.type === "player" && candidate.seatID === seatID && candidate.subZone === "hand").forEach((candidate) => {
 										changed = card.removeLocationCandidate(candidate, "room:unknownQuotaExclusion") || changed;
 									});
 									continue;
 								}
-								if (card.location === "player" && card.subZone === "hand" && !card.hasSubZoneCandidates?.() && card.seats.size > 1 && card.seats.has(seatID)) changed = card.deleteSeat(seatID, "room:unknownQuotaExclusion") || changed;
+								if (card.location === "player" && card.subZone === "hand" && !card.hasSubZoneCandidates() && card.seats.size > 1 && card.seats.has(seatID)) changed = card.deleteSeat(seatID, "room:unknownQuotaExclusion") || changed;
 							}
 						}
 					}
@@ -5881,13 +5110,11 @@
 					if (group.cards.has(card)) {
 						affectsAmbiguousKnownIndex = affectsAmbiguousKnownIndex || this.affectsAmbiguousKnownIndex(card);
 						const locationKey = createLocationCandidateKey(this.getResolvedExpectedLocationCandidate(card));
-						if (locationKey && group.expectedSlotsByLocation.has(locationKey)) {
-							const currentExpected = group.expectedSlotsByLocation.get(locationKey);
-							group.expectedSlotsByLocation.set(locationKey, {
-								min: Math.max(0, currentExpected.min - 1),
-								max: Math.max(0, currentExpected.max - 1)
-							});
-						}
+						const currentExpected = group.expectedSlotsByLocation.get(locationKey);
+						if (locationKey && currentExpected) group.expectedSlotsByLocation.set(locationKey, {
+							min: Math.max(0, currentExpected.min - 1),
+							max: Math.max(0, currentExpected.max - 1)
+						});
 						group.cards.delete(card);
 						changed = true;
 					}
@@ -5899,35 +5126,6 @@
 			}
 			if (changed && affectsAmbiguousKnownIndex) this.room.markConstraintGroupsDirty("removeCardsFromConstraintGroups");
 			return changed;
-		}
-		resolveConstraintCards(options = {}, targetSeats = []) {
-			const optionCards = options.cards ? Array.isArray(options.cards) ? options.cards : [options.cards] : [];
-			const cardIDs = Array.isArray(options.cardIDs) ? options.cardIDs : options.cardIDs === void 0 ? [] : [options.cardIDs];
-			const idCards = this.room.findCardsByIDs(cardIDs);
-			const cards = Array.from(new Set([...optionCards, ...idCards])).filter(Boolean);
-			if (options.cardIDs && targetSeats.length > 0) cards.forEach((card) => {
-				this.room.clearCardsFromPublicZones([card]);
-				if (card.location !== "player" || card.seats.size === 0) {
-					const bindOptions = { known: options.known === true };
-					card.bindCandidates(targetSeats, options.subZone ?? "hand", options.spellID ?? null, bindOptions);
-				} else {
-					card.setSeats(this.room.mergeCandidateSeats(card.seats, targetSeats), "resolveConstraintCards:mergeCandidateSeats");
-					const previousSubZone = card.subZone;
-					const previousSpellID = card.spellID;
-					if (options.subZone) card.subZone = options.subZone;
-					if (options.spellID !== void 0) card.spellID = options.spellID;
-					if (card.subZone !== previousSubZone || card.spellID !== previousSpellID) this.room.notifyCardChanged(card, {
-						type: "card-player-zone-changed",
-						reason: "resolveConstraintCards:zoneChanged",
-						previousSubZone,
-						nextSubZone: card.subZone,
-						previousSpellID,
-						nextSpellID: card.spellID
-					});
-					if (options.known === true) card.confirmKnown();
-				}
-			});
-			return cards;
 		}
 		syncStableCardList(existingCards = [], currentCards = []) {
 			const currentSet = new Set(currentCards);
@@ -5958,9 +5156,9 @@
 			});
 		}
 		createConstraintGroup(options = {}) {
-			const groupID = options.id ?? options.combinationID ?? `group_${++this.room.constraintGroupSeq}`;
-			const targetSeats = this.room.normalizeSeats(options.candidateSeats ?? options.seatID);
-			const cards = this.resolveConstraintCards(options, targetSeats);
+			const groupID = options.id ?? `group_${++this.room.constraintGroupSeq}`;
+			const targetSeats = this.room.normalizeSeats(options.candidateSeats ?? []);
+			const cards = Array.from(new Set(options.cards ?? []));
 			let group = this.room.constraintGroups.get(groupID);
 			let structureChanged = false;
 			let affectsAmbiguousKnownIndex = cards.some((card) => this.affectsAmbiguousKnownIndex(card));
@@ -6049,7 +5247,7 @@
 			this.room = room;
 		}
 		capturePileMoveSnapshot(context) {
-			const pileCards = this.room.zones.get("pile").cards;
+			const pileCards = this.room.getZone("pile").cards;
 			const pileCountBefore = pileCards.length;
 			const cardIDs = context.pileIdentityEvent?.protocol.CardIDs ?? context.knownIDs;
 			if (context.fromZone !== "pile" || cardIDs.some((id) => id > 0) || context.moveType !== MOVE_TYPE.DRAW) return {
@@ -6064,7 +5262,7 @@
 		}
 		commitPileIdentityForMove(context, snapshot) {
 			const event = context.pileIdentityEvent;
-			const pileCountAfter = this.room.zones.get("pile").cards.length;
+			const pileCountAfter = this.room.getZone("pile").cards.length;
 			const cardIDs = (context.pileIdentityCardIDs ?? event?.protocol.CardIDs ?? context.knownIDs).filter((id) => id > 0);
 			const knownPileIdentityIDsConsumed = snapshot.knownPileDrawCards.filter((card) => card.location !== "pile" && card.id > 0).map((card) => card.id);
 			const fromZone = event?.protocol.FromZone ?? this.getIdentityZone(context.fromZone);
@@ -6090,7 +5288,7 @@
 			return null;
 		}
 		collectVisiblePileTopIdentityIDs() {
-			const pileCards = this.room.zones.get("pile").cards;
+			const pileCards = this.room.getZone("pile").cards;
 			const cardIDs = [];
 			for (let index = pileCards.length - 1; index >= 0; index -= 1) {
 				const card = pileCards[index];
@@ -6299,6 +5497,24 @@
 				return room.materialize(cardID, target ?? null);
 			}).filter((card) => Boolean(card));
 		}
+		resolvePublicKnownCards(ids, target = null, logger = trackerLogger) {
+			const room = this.room;
+			if (target) room.materializeAtPublicEndpoint(ids, target.zoneName, target.position);
+			const existingCards = room.findCardsByIDs(ids).filter((card) => !room.detachedKnownCards.has(card));
+			const existingIDs = new Set(existingCards.map((card) => card.id));
+			const missingIDs = ids.filter((id) => !existingIDs.has(id) && !room.unlocatedIdentities.has(id) && !room.cardIndex.has(id));
+			const createdCards = missingIDs.length > 0 ? room.createExternalCards(missingIDs, missingIDs.length) : [];
+			const cardMap = new Map();
+			existingCards.forEach((card) => cardMap.set(card.id, card));
+			createdCards.forEach((card) => cardMap.set(card.id, card));
+			const unresolvedIdentityIDs = ids.filter((id) => !cardMap.has(id) && room.unlocatedIdentities.has(id));
+			if (unresolvedIdentityIDs.length > 0) logger.warn("揭示身份未能物化到匿名槽，已从已知牌集合中略过", {
+				reason: "resolveKnownCards:unresolvedUnlocatedIdentity",
+				unresolvedIdentityIDs,
+				target
+			});
+			return ids.map((id) => cardMap.get(id)).filter((card) => Boolean(card));
+		}
 		materializeExistingIdentityAtTarget(existing, target) {
 			const room = this.room;
 			if (target.hasRealIdentity) return;
@@ -6355,8 +5571,7 @@
 		}
 		anonymizePileCohortIdentityEntities(context) {
 			const room = this.room;
-			const pile = room.zones.get("pile");
-			if (!pile) return [];
+			const pile = room.getZone("pile");
 			const cohortIdentityIDs = new Set(room.pileIdentityLedger.getUnresolvedIdentityIDs());
 			if (cohortIdentityIDs.size === 0) return [];
 			const anonymizedIdentityIDs = [];
@@ -6560,15 +5775,67 @@
 		"exchange"
 	]);
 	var PLAYER_HAND_CARD_STATUSES = [CARD_INSTANCE_STATUS.UNKNOWN, CARD_INSTANCE_STATUS.APPEARED];
+	function hasCardsAtPublicPosition(zoneCards, cards, position) {
+		if (cards.length === 0 || zoneCards.length < cards.length) return false;
+		if (position === 65280) {
+			const offset = zoneCards.length - cards.length;
+			return cards.every((card, index) => zoneCards[offset + index] === card);
+		}
+		if (position === 0) {
+			const len = cards.length;
+			return cards.every((_, index) => zoneCards[index] === cards[len - 1 - index]);
+		}
+		return false;
+	}
 	var RoomPublicZones = class {
 		constructor(room) {
 			this.room = room;
 		}
 		getExchangeBatch(batchKey) {
-			return this.room.zones.get("exchange").getExchangeBatch(batchKey);
+			return this.room.getZone("exchange").getExchangeBatch(batchKey);
 		}
 		deleteExchangeBatch(batchKey) {
-			this.room.zones.get("exchange").deleteExchangeBatch(batchKey);
+			this.room.getZone("exchange").deleteExchangeBatch(batchKey);
+		}
+		placePublicRevealCards(knownCards, zoneName, options = {}, logger = trackerLogger) {
+			const room = this.room;
+			const position = options.position ?? 65280;
+			const targetZone = room.zones.get(zoneName);
+			const placeableCards = [];
+			const skippedCards = [];
+			knownCards.forEach((card) => {
+				if (card.location === "player") {
+					skippedCards.push(card);
+					return;
+				}
+				if (targetZone?.cards.includes(card) || card.location === zoneName) {
+					placeableCards.push(card);
+					return;
+				}
+				if (card.location === "outside" || card.location === "suspended") {
+					placeableCards.push(card);
+					return;
+				}
+				if (!room.zones.has(card.location)) {
+					placeableCards.push(card);
+					return;
+				}
+				skippedCards.push(card);
+			});
+			if (skippedCards.length > 0) logger.info("公共区展示跳过无法回收的实体", {
+				zoneName,
+				skippedIDs: skippedCards.map((card) => card.id),
+				skippedLocations: skippedCards.map((card) => card.location)
+			});
+			placeableCards.forEach((card) => {
+				room.removeCardsFromConstraintGroups([card]);
+				card.confirmKnown();
+			});
+			const missingCards = placeableCards.filter((card) => !targetZone?.cards.includes(card));
+			const repositionCards = options.cardIDsTopFirst === true && position === 65280 ? [...placeableCards].reverse() : placeableCards;
+			const cardsToPlace = options.reposition === true && targetZone !== void 0 && placeableCards.length > 0 && !hasCardsAtPublicPosition(targetZone.cards, repositionCards, position) ? repositionCards : missingCards;
+			if (cardsToPlace.length > 0) targetZone?.add(cardsToPlace, position);
+			room.resolveConstraints();
 		}
 		resizeShuffledPile(cards, cardCount) {
 			const missingCount = cardCount - cards.length;
@@ -6631,7 +5898,7 @@
 			});
 			this.room.cards.forEach((card) => {
 				if (!ORDERED_PUBLIC_ZONE_IDS.has(card.location)) return;
-				if (!this.room.zones.get(card.location)?.cards.includes(card)) issues.push({
+				if (!this.room.getZone(card.location).cards.includes(card)) issues.push({
 					type: "missing-public-zone-order",
 					cardID: card.id,
 					cardName: card.name,
@@ -6648,41 +5915,39 @@
 			const normalizedSeat = Number(seatID);
 			const cardsByStatus = this.room.counter?.cardsByStatus;
 			const appearedCards = cardsByStatus?.[CARD_INSTANCE_STATUS.APPEARED];
-			return (knownOnly ? appearedCards ? Array.from(appearedCards) : this.room.cards : cardsByStatus ? PLAYER_HAND_CARD_STATUSES.flatMap((status) => Array.from(cardsByStatus[status] ?? [])) : this.room.cards).filter((card) => card.location === "player" && card.subZone === "hand" && (includeCandidates || !card.hasSubZoneCandidates?.()) && card.seats.has(normalizedSeat) && (!knownOnly || card.isKnown === true)).map((card) => card.id).filter((id) => id > 0);
+			return (knownOnly ? appearedCards ? Array.from(appearedCards) : this.room.cards : cardsByStatus ? PLAYER_HAND_CARD_STATUSES.flatMap((status) => Array.from(cardsByStatus[status] ?? [])) : this.room.cards).filter((card) => card.location === "player" && card.subZone === "hand" && (includeCandidates || !card.hasSubZoneCandidates()) && card.seats.has(normalizedSeat) && (!knownOnly || card.isKnown === true)).map((card) => card.id).filter((id) => id > 0);
 		}
 	};
 	function getCardPlayerLocationCandidates(card) {
 		return getPlayerLocationCandidates(card.getPossibleLocations());
 	}
-	function getUnknownPlayerSourceCards(room, seatID, subZone = "hand", spellIDs = [], excludedCards = []) {
+	function getUnknownPlayerSourceCards(room, seatID, subZone = "hand", spellID = null, excludedCards = []) {
 		const exactCards = [];
 		const candidateCards = [];
 		const excluded = new Set(excludedCards);
-		const sourceSpellIDs = Array.isArray(spellIDs) ? spellIDs : [spellIDs];
-		const markSpellIDs = subZone === "mark" ? Array.from(new Set(sourceSpellIDs.filter((spellID) => spellID != null))) : [];
-		const matchesSpellID = (spellID) => subZone !== "mark" || markSpellIDs.length === 0 || spellID !== null && markSpellIDs.includes(spellID);
 		for (const card of room.cards) {
 			if (excluded.has(card)) continue;
 			if (card.isKnown === true || card.suspended === true) continue;
-			if (!getCardPlayerLocationCandidates(card).some((candidate) => candidate.seatID === seatID && candidate.subZone === subZone && matchesSpellID(candidate.spellID))) continue;
+			if (!getCardPlayerLocationCandidates(card).some((candidate) => candidate.seatID === seatID && candidate.subZone === subZone && (subZone !== "mark" || spellID === null || candidate.spellID === spellID))) continue;
 			if (isExactUnknownPlayerSourceCard(card, seatID)) exactCards.push(card);
 			else candidateCards.push(card);
 		}
 		return [...exactCards, ...candidateCards];
 	}
 	function isExactUnknownPlayerSourceCard(card, seatID) {
-		return card.location === "player" && card.isKnown !== true && card.suspended !== true && card.owner === seatID && !card.hasLocationCandidates();
+		return seatID !== null && card.location === "player" && card.isKnown !== true && card.suspended !== true && card.owner === seatID && !card.hasLocationCandidates();
 	}
 	function getUnknownStoredSourceCards(room, context, excludedCards = []) {
 		if (context.fromZone === "popup") {
 			const excluded = new Set(excludedCards);
 			return getPopupSpaceCards(room, context.fromPopupSpaceID).filter((card) => !card.isKnown && !card.hasLocationCandidates() && !excluded.has(card));
 		}
+		if (context.fromSeat === null) return [];
 		return getUnknownPlayerSourceCards(room, context.fromSeat, context.fromSubZone, context.fromSpellID ?? context.spellID, excludedCards);
 	}
-	function takeUnknownCardsFromPlayer(room, seatID, count, subZone = "hand", spellIDs = []) {
+	function takeUnknownCardsFromPlayer(room, seatID, count, subZone = "hand", spellID = null) {
 		if (!(count > 0)) return [];
-		return getUnknownPlayerSourceCards(room, seatID, subZone, spellIDs).slice(0, count);
+		return getUnknownPlayerSourceCards(room, seatID, subZone, spellID).slice(0, count);
 	}
 	function getPlayerHandCardsBySeat(room, seatID) {
 		return room.refreshPlayerSnapshot().filter((card) => card.subZone === "hand" && card.seats.has(seatID));
@@ -6790,21 +6055,21 @@
 		}
 		markStoredToHandCandidates({ fromPopupSpaceID, gainSpellID, fromSeat, fromSpellID, toSeat, count, sourceEvent }) {
 			if (!(count > 0) || toSeat === null) return false;
-			if (fromPopupSpaceID === void 0 && (fromSeat === null || fromSpellID == null)) return false;
-			const isPopup = fromPopupSpaceID !== void 0;
-			const spaceCards = isPopup ? getPopupSpaceCards(this.room, fromPopupSpaceID) : [];
-			if (isPopup && spaceCards.some((card) => !card.isKnown)) return false;
-			const markCards = isPopup ? spaceCards : getVisibleMarkSpaceCards(this.room, fromSeat, fromSpellID);
-			if (!isPopup && markCards.length <= count) return false;
-			const markCandidate = isPopup ? {
+			const markCandidate = fromPopupSpaceID !== void 0 ? {
 				type: "popup",
 				spaceID: fromPopupSpaceID
-			} : {
+			} : fromSeat !== null && fromSpellID !== null ? {
 				type: "player",
 				seatID: fromSeat,
 				subZone: "mark",
 				spellID: fromSpellID
-			};
+			} : null;
+			if (!markCandidate) return false;
+			const isPopup = markCandidate.type === "popup";
+			const spaceCards = markCandidate.type === "popup" ? getPopupSpaceCards(this.room, markCandidate.spaceID) : [];
+			if (isPopup && spaceCards.some((card) => !card.isKnown)) return false;
+			const markCards = markCandidate.type === "popup" ? spaceCards : getVisibleMarkSpaceCards(this.room, markCandidate.seatID, markCandidate.spellID);
+			if (markCards.length === 0) return false;
 			const handCandidate = {
 				type: "player",
 				seatID: toSeat,
@@ -6813,14 +6078,13 @@
 			};
 			const markKey = createLocationCandidateKey(markCandidate);
 			const handKey = createLocationCandidateKey(handCandidate);
-			const hasPopupCandidates = isPopup && markCards.some((card) => card.hasLocationCandidates());
-			const previousGroup = hasPopupCandidates ? Array.from(this.room.constraintGroups.values()).find((group) => {
+			const hasStoredCandidates = markCards.some((card) => card.hasLocationCandidates());
+			const previousGroup = hasStoredCandidates ? Array.from(this.room.constraintGroups.values()).find((group) => {
 				const slots = group.expectedSlotsByLocation.get(markKey);
 				return slots !== void 0 && slots.min === slots.max && markCards.every((card) => group.cards.has(card));
 			}) : void 0;
-			if (hasPopupCandidates && !previousGroup) return false;
 			const sourceCount = previousGroup?.expectedSlotsByLocation.get(markKey)?.min ?? markCards.length;
-			if (previousGroup ? sourceCount < count : sourceCount <= count) return false;
+			if (previousGroup ? sourceCount < count : !hasStoredCandidates && sourceCount <= count) return false;
 			const slots = new Map(previousGroup?.expectedSlotsByLocation);
 			const handState = previousGroup ? getConstraintSlotState(previousGroup.cards, handCandidate, {
 				min: 0,
@@ -6830,14 +6094,16 @@
 				min: handState?.exactCards.length ?? 0,
 				max: handState ? handState.exactCards.length + handState.candidateCards.length : 0
 			};
-			slots.set(markKey, {
-				min: sourceCount - count,
-				max: sourceCount - count
-			});
-			slots.set(handKey, {
-				min: previousHandSlots.min + count,
-				max: previousHandSlots.max + count
-			});
+			if (previousGroup || !hasStoredCandidates) {
+				slots.set(markKey, {
+					min: sourceCount - count,
+					max: sourceCount - count
+				});
+				slots.set(handKey, {
+					min: previousHandSlots.min + count,
+					max: previousHandSlots.max + count
+				});
+			}
 			if (!previousGroup) this.room.removeCardsFromConstraintGroups(markCards);
 			markCards.forEach((card) => {
 				const otherCandidates = card.locationCandidates.filter((candidate) => {
@@ -6854,18 +6120,18 @@
 			this.room.createConstraintGroup({
 				id: previousGroup?.id,
 				cards: markCards,
-				candidateSeats: isPopup ? [toSeat] : Array.from(new Set([fromSeat, toSeat])),
+				candidateSeats: markCandidate.type === "popup" ? [toSeat] : Array.from(new Set([markCandidate.seatID, toSeat])),
 				expectedSlotsByLocation: slots,
 				known: previousGroup?.known ?? true,
 				sourceEvent: sourceEvent ?? { type: "markStoredToHandCandidates" }
 			});
-			trackerLogger.info("标记区可见牌多于暗牌张数，建立标记/手牌双边候选", {
+			trackerLogger.info("标记或弹窗空间暗取，建立位置候选", {
 				fromSeat,
 				fromSpellID,
 				toSeat,
 				count,
 				cardIDs: markCards.map((card) => card.id),
-				markSlots: sourceCount - count,
+				markSlots: slots.get(markKey)?.min,
 				handSlots: slots.get(handKey),
 				locationCandidates: markCards.map((card) => card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)))
 			});
@@ -6982,8 +6248,13 @@
 		}
 	};
 	function getVisibleMarkSpaceCards(room, seatID, spellID) {
-		const markSpellIDs = spellID != null ? [spellID] : [];
-		return room.refreshPlayerSnapshot().filter((card) => card.location === "player" && card.subZone === "mark" && card.isKnown === true && card.suspended !== true && card.seats.size === 1 && card.seats.has(seatID) && !card.hasSubZoneCandidates?.() && (markSpellIDs.length === 0 || card.spellID !== null && markSpellIDs.includes(card.spellID)));
+		const markKey = createLocationCandidateKey({
+			type: "player",
+			seatID,
+			subZone: "mark",
+			spellID
+		});
+		return room.refreshPlayerSnapshot().filter((card) => card.location === "player" && card.isKnown === true && card.suspended !== true && card.getPossibleLocations().some((candidate) => createLocationCandidateKey(candidate) === markKey));
 	}
 	var EQUIPMENT_MARK_CONTAINER_BY_MARK_SPELL_ID = new Map([{
 		equipmentCardID: 161,
@@ -7010,7 +6281,7 @@
 		if (normalized?.type !== "container" || normalized.containerType !== "equipment") return [];
 		const equipment = cardIndex.get(normalized.cardID);
 		if (equipment?.location !== "player" || equipment.subZone !== "equip") return [];
-		const markSeat = getEquipmentMarkContainerByMarkSpellID(normalized.spellID)?.equipmentCardID === normalized.cardID ? observedMarkSeat : null;
+		const markSeat = (normalized.spellID === null ? null : getEquipmentMarkContainerByMarkSpellID(normalized.spellID))?.equipmentCardID === normalized.cardID ? observedMarkSeat : null;
 		return (markSeat !== null && markSeat !== void 0 ? [markSeat] : Array.from(equipment.seats)).map((seatID) => ({
 			type: "player",
 			seatID,
@@ -7019,12 +6290,12 @@
 		}));
 	}
 	function getEquipmentMarkSeatChange(context, markSpellID = context.spellID) {
-		if (context.toZone !== "player" || context.subZone !== "mark" || context.targetSeats.length !== 1 || context.spellID !== markSpellID) return null;
+		if (markSpellID == null || context.toZone !== "player" || context.subZone !== "mark" || context.targetSeats.length !== 1 || context.spellID !== markSpellID) return null;
 		const container = getEquipmentMarkContainerByMarkSpellID(markSpellID);
 		if (!container) return null;
 		const targetSeat = context.targetSeats[0];
 		const sourceSpellID = context.fromSpellID ?? context.spellID;
-		const transferFromSeat = context.fromSubZone === "mark" && sourceSpellID === context.spellID && Number.isFinite(context.fromSeat) && context.fromSeat !== targetSeat ? context.fromSeat : null;
+		const transferFromSeat = context.fromSubZone === "mark" && sourceSpellID === context.spellID && context.fromSeat !== null && context.fromSeat !== targetSeat ? context.fromSeat : null;
 		return {
 			markSpellID: container.markSpellID,
 			targetSeat,
@@ -7032,17 +6303,20 @@
 		};
 	}
 	function getEquipmentMarkRecordKey(sourceSeat, spellID) {
+		if (spellID === null) return null;
 		const container = getEquipmentMarkContainerByMarkSpellID(spellID);
 		return container ? `${sourceSeat}:muniu:${container.equipmentCardID}` : null;
 	}
 	function getObservedEquipmentMarkSnapshot(context) {
 		if (context.toZone !== "player" || context.fromSubZone !== "mark" || context.subZone !== "mark" || context.targetSeats.length !== 1 || context.unknownCount !== 0 || context.knownIDs.length !== context.cardCount) return null;
 		const markSpellID = context.fromSpellID !== void 0 ? context.fromSpellID : context.spellID;
-		if (!getEquipmentMarkContainerByMarkSpellID(markSpellID)) return null;
+		if (markSpellID == null) return null;
+		const container = getEquipmentMarkContainerByMarkSpellID(markSpellID);
+		if (!container) return null;
 		const observedSeat = Number(context.targetSeats[0]);
 		if (!Number.isFinite(observedSeat)) return null;
 		return {
-			markSpellID,
+			markSpellID: container.markSpellID,
 			observedSeat
 		};
 	}
@@ -7055,7 +6329,7 @@
 			return resolveEquipmentContainerLocationCandidates(candidate, this.room.cardIndex, this.room.readSkillState(HIDDEN_MARK_STATE_KEY)?.muniuMarkSeat);
 		}
 		createHiddenMarkTargetLocationCandidate({ spellID, targetSeat }) {
-			const containerCandidate = createEquipmentContainerLocationCandidate(spellID);
+			const containerCandidate = spellID === null ? null : createEquipmentContainerLocationCandidate(spellID);
 			if (containerCandidate) return containerCandidate;
 			return {
 				type: "player",
@@ -7097,6 +6371,7 @@
 			});
 		}
 		retargetMuniuRecord(record, targetSeat) {
+			if (record.spellID === null) return false;
 			if (!getEquipmentMarkContainerByMarkSpellID(record.spellID)) return false;
 			if (targetSeat === record.targetSeat) return false;
 			const previousTargetSeat = record.targetSeat;
@@ -7124,7 +6399,7 @@
 			});
 		}
 		getKnownHandCandidatesForHiddenMark(sourceSeat) {
-			return this.room.refreshPlayerSnapshot().filter((card) => card.isKnown === true && card.suspended !== true && card.seats.has(sourceSeat) && (card.subZone === "hand" && !card.hasSubZoneCandidates?.() || card.hasSubZoneCandidate?.({
+			return this.room.refreshPlayerSnapshot().filter((card) => card.isKnown === true && card.suspended !== true && card.seats.has(sourceSeat) && (card.subZone === "hand" && !card.hasSubZoneCandidates() || card.hasSubZoneCandidate({
 				seatID: sourceSeat,
 				subZone: "hand",
 				spellID: null
@@ -7297,8 +6572,8 @@
 			let changed = false;
 			card.confirmKnown();
 			if (candidate.type === "container") {
-				if (card.location === "player" && !card.hasLocationCandidate?.(candidate)) {
-					const next = [...card.locationCandidates ?? [], candidate];
+				if (card.location === "player" && !card.hasLocationCandidate(candidate)) {
+					const next = [...card.locationCandidates, candidate];
 					changed = card.setLocationCandidates(next, reason) || changed;
 				}
 			} else if (candidate.type === "player") {
@@ -7354,7 +6629,7 @@
 			if (!(card.id > 0)) return false;
 			if (card.location === "player" && card.subZone === "mark" && Number(card.spellID) === Number(record.spellID)) return true;
 			const candidate = this.createHiddenMarkTargetLocationCandidate(record);
-			return candidate.type === "container" && card.hasLocationCandidate?.(candidate) === true;
+			return candidate.type === "container" && card.hasLocationCandidate(candidate);
 		}
 		replaceHiddenMarkPlaceholder(previousCard, nextCard) {
 			const state = this.room.readSkillState(HIDDEN_MARK_STATE_KEY);
@@ -7465,20 +6740,21 @@
 				if (context.fromSubZone === "mark") {
 					const moveSpellID = context.fromSpellID !== void 0 ? context.fromSpellID : context.spellID ?? null;
 					const seatChange = getEquipmentMarkSeatChange(context, moveSpellID);
-					const moveMarkSeat = seatChange ? seatChange.targetSeat : Number.isFinite(context.fromSeat) ? context.fromSeat : record.targetSeat;
+					const moveMarkSeat = seatChange ? seatChange.targetSeat : context.fromSeat !== null ? context.fromSeat : record.targetSeat;
 					if (moveSpellID !== record.spellID) return;
 					if (moveMarkSeat !== record.targetSeat) {
+						if (record.spellID === null) return;
 						if (!getEquipmentMarkContainerByMarkSpellID(record.spellID)) return;
 						this.retargetMuniuRecord(record, moveMarkSeat);
 					}
 					const candidate = this.createHiddenMarkTargetLocationCandidate(record);
 					this.setHiddenMarkConfirmation(record, card, "mark");
 					changed = this.bindConfirmedMarkCardToMarkSpace(record, card, "hiddenMark:confirmedMark") || changed;
-					if (candidate.type === "container" && card.hasLocationCandidate?.(candidate)) changed = card.setLocationCandidates([candidate], "hiddenMark:confirmedMark") || changed;
-					else if (card.hasLocationCandidate?.(candidate)) changed = card.resolveLocationCandidate(candidate, "hiddenMark:confirmedMark") || changed;
+					if (candidate.type === "container" && card.hasLocationCandidate(candidate)) changed = card.setLocationCandidates([candidate], "hiddenMark:confirmedMark") || changed;
+					else if (card.hasLocationCandidate(candidate)) changed = card.resolveLocationCandidate(candidate, "hiddenMark:confirmedMark") || changed;
 					else {
 						const subZoneCandidate = toSubZoneCandidate(candidate);
-						if (subZoneCandidate && card.hasSubZoneCandidate?.(subZoneCandidate)) changed = card.resolveSubZoneCandidate(subZoneCandidate, "hiddenMark:confirmedMark") || changed;
+						if (subZoneCandidate && card.hasSubZoneCandidate(subZoneCandidate)) changed = card.resolveSubZoneCandidate(subZoneCandidate, "hiddenMark:confirmedMark") || changed;
 					}
 					trackerLogger.info("手牌暗置标记区候选确认进标记", {
 						spellID: record.spellID,
@@ -7492,7 +6768,7 @@
 						placeholderCount: record.placeholderCards.size
 					});
 				} else if (context.fromSubZone === "hand") {
-					const moveHandSeat = Number.isFinite(context.fromSeat) ? context.fromSeat : record.sourceSeat;
+					const moveHandSeat = context.fromSeat !== null ? context.fromSeat : record.sourceSeat;
 					if (moveHandSeat !== record.sourceSeat) return;
 					const candidate = {
 						type: "player",
@@ -7501,8 +6777,8 @@
 						spellID: null
 					};
 					this.setHiddenMarkConfirmation(record, card, "hand");
-					if (card.hasLocationCandidate?.(candidate)) changed = card.resolveLocationCandidate(candidate, "hiddenMark:confirmedHand") || changed;
-					else if (card.hasSubZoneCandidate?.(candidate)) changed = card.resolveSubZoneCandidate(candidate, "hiddenMark:confirmedHand") || changed;
+					if (card.hasLocationCandidate(candidate)) changed = card.resolveLocationCandidate(candidate, "hiddenMark:confirmedHand") || changed;
+					else if (card.hasSubZoneCandidate(candidate)) changed = card.resolveSubZoneCandidate(candidate, "hiddenMark:confirmedHand") || changed;
 					trackerLogger.info("手牌暗置标记区候选确认回手牌", {
 						spellID: record.spellID,
 						sourceSeat: record.sourceSeat,
@@ -7524,7 +6800,7 @@
 		resolveHiddenMarkCandidatesFromObservedMarkSnapshot(context) {
 			const state = this.room.readSkillState(HIDDEN_MARK_STATE_KEY);
 			if (!state?.records?.size) return false;
-			const snapshot = this.getObservedEquipmentMarkSnapshot(context);
+			const snapshot = getObservedEquipmentMarkSnapshot(context);
 			if (!snapshot || context.cardCount <= 0) return false;
 			const { markSpellID, observedSeat } = snapshot;
 			let changed = false;
@@ -7566,7 +6842,7 @@
 				record.cards.forEach((card) => {
 					if (observedCards.has(card) || observedCardIDs.has(Number(card.id)) || record.confirmedMarkCards.has(card)) return;
 					this.setHiddenMarkConfirmation(record, card, "hand");
-					if (card.hasLocationCandidate?.(targetCandidate)) {
+					if (card.hasLocationCandidate(targetCandidate)) {
 						changed = card.removeLocationCandidate(targetCandidate, "hiddenMark:observedContainerSnapshot") || changed;
 						resolvedHandCardIDs.push(card.id);
 					}
@@ -7639,7 +6915,7 @@
 			if (!(count > 0)) return playerCards;
 			const markSpellIDs = subZone === "mark" && spellID != null ? [spellID] : [];
 			for (const card of this.room.refreshPlayerSnapshot()) {
-				if (card.subZone !== subZone || card.seats.has(seatID) !== true || card.isKnown !== true || card.suspended === true || card.hasSubZoneCandidates?.()) continue;
+				if (card.subZone !== subZone || card.seats.has(seatID) !== true || card.isKnown !== true || card.suspended === true || card.hasSubZoneCandidates()) continue;
 				if (subZone === "mark" && markSpellIDs.length > 0) {
 					if (card.spellID === null || !markSpellIDs.includes(card.spellID)) continue;
 				}
@@ -7669,7 +6945,7 @@
 				subZone: fromSubZone,
 				spellID: fromSubZone === "mark" ? sourceSpellID : null
 			};
-			if (card.hasLocationCandidate?.(candidate)) return card.resolveLocationCandidate(candidate, "move:sourcePlayerCandidate");
+			if (card.hasLocationCandidate(candidate)) return card.resolveLocationCandidate(candidate, "move:sourcePlayerCandidate");
 			return false;
 		}
 		isCardInStoredSource(card, context) {
@@ -7731,7 +7007,7 @@
 			const { fromSeat, fromSubZone } = context;
 			if (fromSeat === null || fromSeat === void 0 || Number.isNaN(fromSeat) || !fromSubZone) return false;
 			const sourceSubZone = card.subZone;
-			if (card.location !== "player" || card.isKnown !== true || card.seats.size !== 1 || sourceSubZone === null || sourceSubZone === "hand" || card.hasLocationCandidates?.()) return false;
+			if (card.location !== "player" || card.isKnown !== true || card.seats.size !== 1 || sourceSubZone === null || sourceSubZone === "hand" || card.hasLocationCandidates()) return false;
 			if (card.seats.has(fromSeat) && sourceSubZone === fromSubZone) return false;
 			card.subZone = fromSubZone;
 			card.spellID = fromSubZone === "mark" ? this.getSourceSpellID(context) : null;
@@ -7832,7 +7108,6 @@
 				else zone.add(placeholder, POSITION_TOP);
 				return;
 			}
-			zone?.removeCard(card);
 			const placeholderCardID = placeholder.id;
 			const releasedIdentityID = this.room.releaseUnknownPlaceholderToOutside(placeholder, "restoreUnknownPlaceholderToPreviousPublicLocation:missingZone");
 			trackerLogger.warn("占位置换未回补公共区，已将占位移出追踪区", {
@@ -7842,7 +7117,7 @@
 				oldLocation,
 				keepPreviousPosition,
 				oldZoneCardCount,
-				oldZoneCardCountAfter: zone?.cards.length ?? null,
+				oldZoneCardCountAfter: null,
 				oldZoneHasKnownCard
 			});
 		}
@@ -7914,7 +7189,7 @@
 			const moveType = Number(sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType ?? options.moveType);
 			const isDiscardGain = (fromZone === "discard" || Number(fromZone) === 2) && (moveType === MOVE_TYPE.GAIN || moveType === MOVE_TYPE.MOVE && options.toZone === "player");
 			if (sourceCards?.length) {
-				if (fromSeat !== null && !Number.isNaN(fromSeat)) {
+				if (fromSeat != null) {
 					const explicitCards = Array.from(new Set(sourceCards)).filter(Boolean).slice(0, count);
 					removePopupSpaceCards(this.room, explicitCards);
 					if (isDiscardGain && explicitCards.length < count) explicitCards.push(...this.room.createExternalCards([], count - explicitCards.length));
@@ -7947,7 +7222,7 @@
 			}
 			if (isDiscardGain) return this.room.createExternalCards([], count);
 			if (fromZone === "popup") return takePopupSpaceCards(this.room, count, options.fromPopupSpaceID);
-			if (fromSeat !== null && !Number.isNaN(fromSeat)) {
+			if (fromSeat != null) {
 				const sourceSubZone = fromSubZone ?? subZone ?? "hand";
 				const sourceSpellID = sourceSubZone === "mark" ? fromSpellID ?? spellID : spellID;
 				const unknownCards = takeUnknownCardsFromPlayer(this.room, fromSeat, count, sourceSubZone, sourceSpellID);
@@ -8048,7 +7323,7 @@
 			const cardMap = new Map();
 			existingCards.forEach((card) => cardMap.set(card.id, card));
 			createdCards.forEach((card) => cardMap.set(card.id, card));
-			context.knownCards = knownIDs.map((id) => cardMap.get(id)).filter(Boolean);
+			context.knownCards = knownIDs.map((id) => cardMap.get(id)).filter((card) => card !== void 0);
 			return {
 				missingIDs,
 				createdCards,
@@ -8237,7 +7512,7 @@
 			const handledSpellCardIDs = [];
 			const resolvedSourceCardIDs = [];
 			const playerSourceSwapAttempts = [];
-			const observedEquipmentMarkSnapshot = this.hiddenMarks.getObservedEquipmentMarkSnapshot(context);
+			const observedEquipmentMarkSnapshot = getObservedEquipmentMarkSnapshot(context);
 			return {
 				swappedCardIDs,
 				handledSpellCardIDs,
@@ -8307,13 +7582,13 @@
 					fromSeat,
 					fromSubZone,
 					toZone,
-					sourceHandCards: getPlayerHandCardsBySeat(this.room, fromSeat).map((sourceCard) => ({
+					sourceHandCards: (fromSeat === null ? [] : getPlayerHandCardsBySeat(this.room, fromSeat)).map((sourceCard) => ({
 						cardID: sourceCard.id,
 						isKnown: sourceCard.isKnown,
 						suspended: sourceCard.suspended,
 						seats: Array.from(sourceCard.seats, Number),
-						hasLocationCandidates: sourceCard.hasLocationCandidates?.() ?? false,
-						hasSubZoneCandidates: sourceCard.hasSubZoneCandidates?.() ?? false
+						hasLocationCandidates: sourceCard.hasLocationCandidates(),
+						hasSubZoneCandidates: sourceCard.hasSubZoneCandidates()
 					})),
 					sourceEvent
 				});
@@ -8351,7 +7626,7 @@
 			if (toZone === "player") {
 				this.hiddenMarks.resolveHiddenMarkCandidatesFromObservedMarkSnapshot(context);
 				this.room.createConstraintGroup({
-					id: combinationID,
+					id: combinationID ?? void 0,
 					cards: knownCards,
 					candidateSeats: targetSeats,
 					expectedSlotsByLocation,
@@ -8401,8 +7676,8 @@
 						cardLocation: card.location,
 						cardSubZone: card.subZone,
 						cardSeats: Array.from(card.seats, Number),
-						hasLocationCandidates: card.hasLocationCandidates?.() ?? false,
-						hasSubZoneCandidates: card.hasSubZoneCandidates?.() ?? false
+						hasLocationCandidates: card.hasLocationCandidates(),
+						hasSubZoneCandidates: card.hasSubZoneCandidates()
 					});
 				});
 				return residues;
@@ -8496,7 +7771,7 @@
 		const hasExplicitFromSeat = fromSeatID !== void 0 && fromSeatID !== null;
 		const fromZone = requestedFromZone !== void 0 ? requestedFromZone : hasExplicitFromSeat ? null : "pile";
 		const fromZoneNumber = Number(fromZone);
-		const fromSeat = hasExplicitFromSeat ? Number(fromSeatID) : fromZone !== null && fromZone !== void 0 && fromZone !== "" && Number.isFinite(fromZoneNumber) ? parseInt(String(fromZone)) : null;
+		const fromSeat = hasExplicitFromSeat ? fromSeatID : fromZone !== null && fromZone !== void 0 && fromZone !== "" && Number.isFinite(fromZoneNumber) ? parseInt(String(fromZone)) : null;
 		const fromSubZone = opt.fromSubZone ?? subZone ?? "hand";
 		const handMoveCount = Math.max(0, Number(requestedHandMoveCount ?? cardCount ?? cardIDs.length));
 		const sourceHandSeat = fromSeat !== null && !Number.isNaN(fromSeat) && fromSubZone === "hand" ? fromSeat : null;
@@ -8601,7 +7876,7 @@
 					if (context.targetHandSeat !== null && context.gainSpellID !== void 0) card.recordHandGain(context.targetHandSeat, context.gainSpellID);
 				});
 				if (movedUnknownCards.length > 0 && targetSeats.length > 0) this.room.createConstraintGroup({
-					id: combinationID,
+					id: combinationID ?? void 0,
 					cards: movedUnknownCards,
 					candidateSeats: targetSeats,
 					expectedSlotsByLocation,
@@ -8753,7 +8028,8 @@
 					force: forceRandomHandTransferCandidates
 				});
 				context.skipUnknownMovement = propagatedCards.length > 0;
-				if (context.gainSpellID !== void 0 && targetHandSeat !== null) propagatedCards.forEach((card) => card.recordHandGain(targetHandSeat, context.gainSpellID));
+				const gainSpellID = context.gainSpellID;
+				if (gainSpellID !== void 0 && targetHandSeat !== null) propagatedCards.forEach((card) => card.recordHandGain(targetHandSeat, gainSpellID));
 			}
 			if (this.candidates.shouldMarkRandomHandToPublicCandidates(sourceHandSeat, targetHandSeat, toZone, unknownCount)) this.candidates.markRandomHandToPublicCandidates({
 				fromSeat: sourceHandSeat,
@@ -8771,7 +8047,8 @@
 				count: handMoveCount,
 				sourceEvent
 			});
-			if (context.gainSpellID !== void 0 && targetHandSeat !== null) publicHandCandidates.forEach((card) => card.recordHandGain(targetHandSeat, context.gainSpellID));
+			const gainSpellID = context.gainSpellID;
+			if (gainSpellID !== void 0 && targetHandSeat !== null) publicHandCandidates.forEach((card) => card.recordHandGain(targetHandSeat, gainSpellID));
 		}
 		moveUnknownCardsForContext(context) {
 			this.unknownPlacement.move(context);
@@ -8792,6 +8069,55 @@
 			});
 		}
 	};
+	var GUI_FU_ROLE_DATA_ID = 3709;
+	var FULL_HAND_ROLE_OPT_SPELL_IDS = new Set([
+		4,
+		5,
+		357,
+		372,
+		501,
+		811,
+		921,
+		3119,
+		3437,
+		3876,
+		4025
+	]);
+	var PARTIAL_HAND_ROLE_OPT_SPELL_IDS = new Set([
+		774,
+		851,
+		3310
+	]);
+	function shouldIgnoreTrackerMove({ CardCount, MoveType, ToZone, isSend }) {
+		return CardCount === 0 || MoveType === 0 || ToZone === 11 || !!isSend;
+	}
+	function hasMixedTrackerMoveVisibility({ CardIDs, CardCount }) {
+		const knownCount = CardIDs.filter((cardID) => cardID > 0).length;
+		return knownCount !== CardCount && knownCount !== 0;
+	}
+	function normalizeTrackerMovePosition({ CardIDs, CardCount, FromZone, FromPosition, ToID, ToZone, ToPosition, MoveType, SpellID }) {
+		let fromPosition = FromPosition;
+		let toPosition = ToPosition;
+		if (FromZone === 1 && FromPosition === 65282 && SpellID === 3208) fromPosition = POSITION_TOP;
+		if (FromZone === 1 && FromPosition === 65282 && MoveType === 13 && CardCount === 1) fromPosition = POSITION_TOP;
+		if (FromZone === 1 && FromPosition === 65282 && ToZone === 4 && MoveType === 8 && SpellID === 795 && CardCount === 1) fromPosition = POSITION_TOP;
+		if (FromZone === 1 && FromPosition === 65282 && ToZone === 5 && SpellID === 3101 && CardCount === 1) fromPosition = 0;
+		if (FromZone === 1 && FromPosition === 65281 && ToZone === 5 && SpellID === 0 && MoveType === 1 && CardCount === 4 && CardIDs.length === CardCount && CardIDs.every((id) => CardConfig.GetInstance().getCard(id)?.type == 8)) fromPosition = POSITION_RANDOM;
+		if (SpellID === 3694 && FromZone === 0 && ToZone === 1 && ToPosition === 65281 && MoveType === 19) toPosition = POSITION_RANDOM;
+		if (ToZone === 1 && ToID === 255 && ToPosition === 65280 && CardIDs.some((cardID) => cardID === 4400 || cardID === 4401)) toPosition = POSITION_RANDOM;
+		if (FromZone === 5 && ToZone === 1 && SpellID === 0 && MoveType === 19) toPosition = POSITION_RANDOM;
+		return {
+			FromPosition: fromPosition,
+			ToPosition: toPosition
+		};
+	}
+	function shouldRevealAsFullHand({ handCount, observedHandCount, localHandCount }) {
+		const count = Number(handCount) || 0;
+		if (count <= 0) return false;
+		if (observedHandCount !== void 0 && observedHandCount !== null) return count === Number(observedHandCount);
+		const fallbackCount = Number(localHandCount) || 0;
+		return fallbackCount > 0 && count === fallbackCount;
+	}
 	var DIRTY_CARD_EVENT_LIMIT = 500;
 	var Room = class extends RoomBase {
 		isDeckReady = false;
@@ -8847,7 +8173,7 @@
 			this.constraints = new RoomConstraints(this);
 			this.movement = new RoomMovement(this);
 			this.pileIdentityLedger = new PileIdentityLedger();
-			this.game?.bindRoom?.(this);
+			this.game.bindRoom(this);
 		}
 		initDeck(cardIDs) {
 			this.isDeckReady = false;
@@ -8860,7 +8186,7 @@
 			this.unlocatedIdentities = new Set(cardIDs.filter((id) => id > 0));
 			this.deckIdentities = new Set(this.unlocatedIdentities);
 			this.anonymousEntitySeq = -1;
-			const pile = this.zones.get("pile");
+			const pile = this.getZone("pile");
 			this.zones.forEach((zone) => zone.clear());
 			const deckCards = [];
 			for (let i = 0; i < cardIDs.length; i += 1) {
@@ -8886,8 +8212,8 @@
 				const context = `move:${move.eventType}`;
 				this.pileIdentityLedger.applyMove({
 					...move,
-					pileCountAfter: this.zones.get("pile")?.cards.length ?? 0,
-					discardCountAfter: this.zones.get("discard")?.cards.length ?? 0
+					pileCountAfter: this.getZone("pile").cards.length,
+					discardCountAfter: this.getZone("discard").cards.length
 				});
 				this.identity.anonymizePileCohortIdentityEntities(context);
 				this.assertPileIdentityLedgerConsistency(context);
@@ -8920,8 +8246,8 @@
 					this.pileIdentityLedger.applyReveal({
 						cardIDs: groupedCardIDs,
 						location: revealLocation,
-						pileCountAfter: this.zones.get("pile")?.cards.length ?? 0,
-						discardCountAfter: this.zones.get("discard")?.cards.length ?? 0
+						pileCountAfter: this.getZone("pile").cards.length,
+						discardCountAfter: this.getZone("discard").cards.length
 					});
 					this.assertPileIdentityLedgerConsistency(`reveal:${revealLocation}`);
 				}
@@ -8950,7 +8276,7 @@
 			});
 			this.seatIDs.sort((a, b) => a - b);
 			this.size = this.seatIDs.length;
-			this.game?.syncRoomSeats(this);
+			this.game.syncRoomSeats(this);
 			this.game.isRecord = this.mySeatID === void 0;
 			trackerLogger.info("Room 注册玩家", {
 				seatIDs: this.seatIDs,
@@ -9008,7 +8334,7 @@
 			return new Set(intersection.length > 0 ? intersection : normalizedNextSeats);
 		}
 		findCardsByIDs(cardIDs = []) {
-			return cardIDs.filter((id) => id > 0).map((id) => this.cardIndex.get(id)).filter(Boolean);
+			return cardIDs.filter((id) => id > 0).map((id) => this.cardIndex.get(id)).filter((card) => card !== void 0);
 		}
 		getPublicEndpointCards(zoneID, count, position) {
 			const cards = this.zones.get(zoneID)?.cards ?? [];
@@ -9034,6 +8360,12 @@
 		materializeAtPublicEndpoint(cardIDs, zoneID, position) {
 			return this.identity.materializeAtPublicEndpoint(cardIDs, zoneID, position);
 		}
+		resolvePublicKnownCards(ids, target = null, logger) {
+			return this.identity.resolvePublicKnownCards(ids, target, logger);
+		}
+		placePublicRevealCards(knownCards, zoneName, options = {}, logger) {
+			this.publicZones.placePublicRevealCards(knownCards, zoneName, options, logger);
+		}
 		registerCardEntity(card) {
 			this.cards.push(card);
 			this.playerSnapshot.registerCard(card, this.cards.length - 1);
@@ -9058,15 +8390,30 @@
 		clearCardsFromPublicZones(cards = []) {
 			return this.publicZones.clearCardsFromPublicZones(cards);
 		}
-		getPublicZone(zoneID) {
-			if (!zoneID || !this.zones.has(zoneID)) return this.zones.get("pile");
+		getZone(zoneID) {
 			return this.zones.get(zoneID);
+		}
+		getPublicZone(zoneID) {
+			return zoneID && this.zones.has(zoneID) ? this.getZone(zoneID) : this.getZone("pile");
 		}
 		resolveEquipmentContainerLocationCandidates(candidate) {
 			return this.movement.hiddenMarks.resolveEquipmentContainerLocationCandidates(candidate);
 		}
 		getPlayerHandCardIDs(seatID, options = {}) {
 			return this.publicZones.getPlayerHandCardIDs(seatID, options);
+		}
+		shouldRevealPlayerHandAsFullHand(seatID, handCount) {
+			const player = this.getPlayer(seatID);
+			if (player?.hasObservedHandCount) return shouldRevealAsFullHand({
+				handCount,
+				observedHandCount: player.observedHandCount
+			});
+			const normalizedSeat = Number(seatID);
+			const localHandCount = this.refreshPlayerSnapshot().filter((card) => card.subZone === "hand" && card.seats.has(normalizedSeat)).length;
+			return shouldRevealAsFullHand({
+				handCount,
+				localHandCount
+			});
 		}
 		removeCardsFromConstraintGroups(cards = []) {
 			return this.constraints.removeCardsFromConstraintGroups(cards);
@@ -9117,8 +8464,8 @@
 			this.pileIdentityLedger.applyReveal({
 				cardIDs: cards.map((card) => card.id),
 				location: candidate.zone === "pile" ? "pile" : candidate.zone === "discard" ? "discard" : "outside",
-				pileCountAfter: this.zones.get("pile").cards.length,
-				discardCountAfter: this.zones.get("discard").cards.length
+				pileCountAfter: this.getZone("pile").cards.length,
+				discardCountAfter: this.getZone("discard").cards.length
 			});
 			this.resolveConstraints();
 			this.assertPileIdentityLedgerConsistency("revealPublicCandidate");
@@ -9129,7 +8476,7 @@
 		}
 		markPublicZoneDirty(zoneID) {
 			if (zoneID === null || zoneID === void 0) return;
-			this.dirtyPublicZones?.add(zoneID);
+			this.dirtyPublicZones.add(zoneID);
 			this.markViewDirty(`public-zone:${zoneID}`);
 		}
 		markConstraintGroupsDirty(_reason = "constraint-groups-dirty") {
@@ -9139,9 +8486,8 @@
 			return this.constraintGroups.delete(groupID);
 		}
 		shufflePile(options = {}) {
-			const pile = this.zones.get("pile");
-			const discard = this.zones.get("discard");
-			if (!pile || !discard) return;
+			const pile = this.getZone("pile");
+			const discard = this.getZone("discard");
 			const normalizedCardCount = options.cardCount !== null && options.cardCount !== void 0 ? Math.floor(Number(options.cardCount)) : NaN;
 			const hasProtocolPileCount = Number.isFinite(normalizedCardCount) && normalizedCardCount >= 0;
 			const remainingPileCards = [...pile.cards];
@@ -9209,7 +8555,7 @@
 			});
 			this.identity.anonymizePileCohortIdentityEntities(identityContext);
 			this.detachedKnownCards.forEach((card) => {
-				card.removePublicCandidates((candidate) => candidate?.zone === "pile" || candidate?.zone === "discard");
+				card.removePublicCandidates((candidate) => candidate.zone === "pile" || candidate.zone === "discard");
 			});
 			this.resolveConstraints();
 			this.assertPileIdentityLedgerConsistency(identityContext);
@@ -9286,7 +8632,7 @@
 				card.addPublicCandidate(candidate);
 			});
 			this.movement.createPublicMoveConstraintGroup(context);
-			this.zones.get("exchange")?.completeExchangeMove();
+			this.getZone("exchange").completeExchangeMove();
 			this.identity.commitPileIdentityForMove(context, pileSnapshot);
 			this.resolveConstraints();
 			this.assertPileIdentityLedgerConsistency("moveCards");
@@ -9300,7 +8646,7 @@
 			return true;
 		}
 		destroy() {
-			if (this.game?.room === this) this.game.bindRoom(null);
+			if (this.game.room === this) this.game.bindRoom(null);
 			trackerLogger.info("Room destroy 开始", {
 				cardCount: this.cards.length,
 				playerCount: this.players.size,
@@ -9310,7 +8656,6 @@
 			this.players.forEach((player) => player.reset());
 			this.players.clear();
 			this.zones.forEach((zone) => zone.clear());
-			this.zones.clear();
 			this.trackedCards.forEach((card) => card.reset());
 			this.detachedKnownCards.clear();
 			this.detachedIdentitySeq = 0;
@@ -9421,8 +8766,7 @@
 		}
 		if (fromZone === 10) {
 			if (toZone === 10) return event;
-			const exchange = room.zones.get("exchange");
-			if (!exchange) return event;
+			const exchange = room.getZone("exchange");
 			const knownCards = exchange.cards.filter((card) => card.id > 0);
 			const placeholders = room.createExternalCards([], knownCards.length);
 			knownCards.forEach((card, index) => {
@@ -9464,7 +8808,7 @@
 		const cardCount = getCount(event);
 		if (cardCount === 0) return event;
 		const sourceCards = [];
-		for (const card of room.zones.get("discard")?.cards ?? []) {
+		for (const card of room.getZone("discard").cards) {
 			if (!FEN_CHAO_CARD_SPELL_IDS.has(card.spellId)) continue;
 			sourceCards.push(card);
 			if (sourceCards.length === cardCount) break;
@@ -9577,20 +8921,20 @@
 		};
 	}
 	function splitProtocolKnownAndUnknown(event, cards) {
-		const protocolKnownIDs = new Set(getPositiveIDs(event.cardIDs ?? []));
+		const protocolKnownIDs = new Set(getPositiveIDs(event.cardIDs));
 		return cards.filter((card) => !protocolKnownIDs.has(card.id));
 	}
 	function stagePileToExchange$1(event, room, spellID) {
 		const move = event.protocol;
 		const count = getCount(event);
 		const pileBucketID = move.ToID;
-		const selectedCards = (room.zones.get("pile")?.cards ?? []).slice(-count);
+		const selectedCards = room.getZone("pile").cards.slice(-count);
 		if (!(count > 0) || !Number.isFinite(pileBucketID) || selectedCards.length !== count) {
 			clearBatch$2(room, spellID);
 			return event;
 		}
 		const knownResolution = resolveProtocolKnownCards(event, room, selectedCards);
-		if (knownResolution.cards.length !== getPositiveIDs(event.cardIDs ?? []).length || !commitProtocolKnownCards(room, knownResolution)) {
+		if (knownResolution.cards.length !== getPositiveIDs(event.cardIDs).length || !commitProtocolKnownCards(room, knownResolution)) {
 			clearBatch$2(room, spellID);
 			return event;
 		}
@@ -9981,6 +9325,44 @@
 		};
 		return true;
 	}
+	function parseJieLiNotice(msg) {
+		const { Params, SeatID, SrcSeatID, targetSeatID } = msg;
+		if (targetSeatID === void 0 || !Array.isArray(Params) || Params.length === 0) return null;
+		const actorSeat = SrcSeatID ?? SeatID;
+		const targetSeat = targetSeatID;
+		const [pileCount, handCount] = Params;
+		if (!Number.isInteger(pileCount) || pileCount <= 0) return null;
+		if (Params.length === 1) return {
+			actorSeat,
+			targetSeat,
+			pileCount,
+			pileCardIDs: null,
+			handCardIDs: null
+		};
+		if (!Number.isInteger(handCount) || handCount < 0 || Params.length !== 2 + pileCount + handCount) return null;
+		return {
+			actorSeat,
+			targetSeat,
+			pileCount,
+			pileCardIDs: Params.slice(2, 2 + pileCount),
+			handCardIDs: Params.slice(2 + pileCount)
+		};
+	}
+	function handleJieLiChoice(room, msg) {
+		const { Datas, Type } = msg;
+		if (Type !== 53 || !Array.isArray(Datas) || room.mySeatID !== Datas[1]) return false;
+		const [actorSeat, targetSeat, handCount] = Datas;
+		const handEnd = 3 + handCount;
+		const pileStart = handEnd + 1;
+		const pileCount = Datas[handEnd];
+		if (!Number.isInteger(handCount) || !Number.isInteger(pileCount) || handCount <= 0 || pileCount <= 0 || handCount !== pileCount || Datas.length !== pileStart + pileCount) return false;
+		return recordJieLiSelection(room, {
+			actorSeat,
+			targetSeat,
+			handCardIDs: Datas.slice(3, handEnd),
+			pileCardIDs: Datas.slice(pileStart, pileStart + pileCount)
+		});
+	}
 	function resolveViewMode(room, eventActorSeat) {
 		const context = getJieLiState(room)?.context;
 		const actorSeat = eventActorSeat != null && eventActorSeat !== 255 ? eventActorSeat : context?.actorSeat ?? null;
@@ -10075,9 +9457,9 @@
 		const move = event.protocol;
 		const context = getJieLiState(room)?.context;
 		const count = getCount(event);
-		const pileProtocolCardIDs = getPositiveIDs(event.cardIDs ?? []);
+		const pileProtocolCardIDs = getPositiveIDs(event.cardIDs);
 		const actorSeat = move.ToID;
-		const physicalPileSlots = (room.zones.get("pile")?.cards ?? []).slice(-count);
+		const physicalPileSlots = room.getZone("pile").cards.slice(-count);
 		if (!context || context.actorSeat !== actorSeat || context.targetSeat !== room.mySeatID || context.pileCount !== count || !(count > 0) || pileProtocolCardIDs.length !== count || physicalPileSlots.length !== count) return failTargetInference(event, room, informationMode);
 		let pileSlots = physicalPileSlots;
 		if (informationMode === "full") {
@@ -10113,7 +9495,7 @@
 		const move = event.protocol;
 		const batch = getBatch(room);
 		const count = getCount(event);
-		const cardIDs = getPositiveIDs(event.cardIDs ?? []);
+		const cardIDs = getPositiveIDs(event.cardIDs);
 		const actorSeat = move.ToID;
 		const targetSeat = move.FromID;
 		const handCards = getEventSourceCards(event, room);
@@ -10131,14 +9513,14 @@
 		const move = event.protocol;
 		const batch = getBatch(room);
 		if (!batch || batch.informationMode !== informationMode || move.FromID !== batch.actorSeat) return failTargetInference(event, room, informationMode);
-		if (informationMode === "full" && getPositiveIDs(event.cardIDs ?? []).length > 0) {
+		if (informationMode === "full" && getPositiveIDs(event.cardIDs).length > 0) {
 			clearJieLiState(room);
 			return event;
 		}
 		const pileSlots = batch.pileSlots.filter((card) => card.location === "exchange");
 		const handCards = batch.handCards.filter((card) => card.location === "exchange");
 		const finalPileCards = buildFinalPileOrder(batch);
-		if (getCount(event) !== batch.pileSlots.length || pileSlots.length !== batch.pileSlots.length || handCards.length !== batch.handCards.length || event.options?.position !== 65280 || !finalPileCards || finalPileCards.some((card) => card.location !== "exchange")) return failTargetInference(event, room, informationMode);
+		if (getCount(event) !== batch.pileSlots.length || pileSlots.length !== batch.pileSlots.length || handCards.length !== batch.handCards.length || event.options.position !== 65280 || !finalPileCards || finalPileCards.some((card) => card.location !== "exchange")) return failTargetInference(event, room, informationMode);
 		batch.returnedToPile = true;
 		return patchEvent(event, {
 			...informationMode === "limited" ? { cardIDs: [] } : {},
@@ -10153,7 +9535,7 @@
 		const batch = getBatch(room);
 		const selection = batch?.selection;
 		if (!batch || !selection || batch.informationMode !== informationMode || !batch.returnedToPile || move.FromID !== batch.actorSeat || move.ToID !== batch.targetSeat) return failTargetInference(event, room, informationMode);
-		const cardIDs = getPositiveIDs(event.cardIDs ?? []);
+		const cardIDs = getPositiveIDs(event.cardIDs);
 		const pileSlotByResultID = new Map(selection.pileToHandCardIDs.map((cardID, index) => [cardID, selection.pileToHandSlots[index]]));
 		const handResultSlots = cardIDs.map((cardID) => pileSlotByResultID.get(cardID)).filter((card) => Boolean(card));
 		clearJieLiState(room);
@@ -10195,6 +9577,32 @@
 		if (fromZone === 10 && toZone === 5) return returnCardsToTargetHand(event, room, informationMode);
 		return noOp(event);
 	}
+	var jieLiPlugin = {
+		id: "jieLi",
+		spellIDs: [JIE_LI_SPELL_ID],
+		decorateMove: decorateJieLi,
+		onProtocolEvent(event, room) {
+			const msg = event.message;
+			if (!("SpellID" in msg) || msg.SpellID !== 3483) return;
+			if (event.type === "targetNotice") {
+				const noticeMsg = event.message;
+				if (noticeMsg.targetSeatID !== void 0 && noticeMsg.Param == 1 && noticeMsg.Params && noticeMsg.Params.length > 0) {
+					const notice = parseJieLiNotice(noticeMsg);
+					if (!notice) {
+						clearJieLiState(room);
+						return;
+					}
+					recordJieLiContext(room, {
+						actorSeat: notice.actorSeat,
+						targetSeat: notice.targetSeat,
+						pileCount: notice.pileCount
+					});
+				}
+				return;
+			}
+			if (event.type === "choice") handleJieLiChoice(room, event.message);
+		}
+	};
 	var XING_ZUO_SPELL_ID = 3776;
 	function decorateXingZuo(event, room) {
 		const move = event.protocol;
@@ -10322,7 +9730,7 @@
 	function getActorHandCards(room, actorSeat) {
 		const playerCards = room.refreshPlayerSnapshot();
 		recordTraversal("tianHou:playerHand", playerCards.length);
-		return playerCards.filter((card) => card.location === "player" && card.subZone === "hand" && card.seats.size === 1 && card.seats.has(actorSeat) && !card.hasLocationCandidates?.() && !card.hasSubZoneCandidates?.());
+		return playerCards.filter((card) => card.location === "player" && card.subZone === "hand" && card.seats.size === 1 && card.seats.has(actorSeat) && !card.hasLocationCandidates() && !card.hasSubZoneCandidates());
 	}
 	function createKnownOutConstraint(room, batch, cards, knownOut, label) {
 		if (cards.length === 0) return null;
@@ -10359,7 +9767,7 @@
 	function decoratePileStage(event, room, actorSeat) {
 		const count = getCount(event);
 		if (!(count > 0) || count > TIAN_HOU_VIEW_COUNT || !isOtherView(room, actorSeat)) return event;
-		const selectedPileCards = (room.zones.get("pile")?.cards ?? []).slice(-count).reverse();
+		const selectedPileCards = room.getZone("pile").cards.slice(-count).reverse();
 		if (selectedPileCards.length !== count) return event;
 		clearBatch(room, true);
 		const pileBatchKey = `${TIAN_HOU_SPELL_ID}:pile:${actorSeat}`;
@@ -10454,7 +9862,7 @@
 	}
 	function isKnownExactPileTopThree(room, cardID) {
 		const card = room.cardIndex.get(cardID);
-		if (!card || card.isKnown !== true || card.hasLocationCandidates?.()) return false;
+		if (!card || card.isKnown !== true || card.hasLocationCandidates()) return false;
 		return room.getPublicEndpointCards("pile", TIAN_HOU_VIEW_COUNT, POSITION_TOP).includes(card);
 	}
 	function decorateFinalReveal(event, room) {
@@ -10515,14 +9923,14 @@
 		if (patched.FromZone === 10 && [1, 2].includes(patched.ToZone) && patched.MoveType === 11) {
 			const state = room.readSkillState(ZUO_LIAN_SPELL_ID);
 			const cardID = state?.stack;
-			if (!patched.CardIDs.some((id) => id > 0) && cardID > 0) patched.CardIDs[0] = cardID;
+			if (!patched.CardIDs.some((id) => id > 0) && cardID !== void 0 && cardID > 0) patched.CardIDs[0] = cardID;
 			if (state) delete state.stack;
 		}
 	}
 	function decorateZuoLian(event, room) {
 		const move = event.protocol;
 		if (hasPositiveID(event.cardIDs) || move.FromZone !== PROTOCOL_ZONE.DISCARD || move.ToZone !== PROTOCOL_ZONE.EXCHANGE || move.MoveType !== MOVE_TYPE.EXCHANGE || move.FromPosition !== 65282 || getCount(event) !== 1) return event;
-		const discardCards = room.zones.get("discard")?.cards ?? [];
+		const discardCards = room.getZone("discard").cards;
 		const selectedCard = findLastCardByName(discardCards, "火杀") ?? findLastCardByName(discardCards, "雷杀");
 		if (!selectedCard) return event;
 		return patchEvent(event, { options: {
@@ -10668,8 +10076,7 @@
 		return state;
 	}
 	function recordDuoQiActivation(game, msg) {
-		const spellID = Number(msg.SpellID);
-		if (spellID !== 3731) return void 0;
+		if (msg.SpellID !== 3731) return void 0;
 		const room = game.room;
 		if (!room) return void 0;
 		const state = getDuoQiState(room);
@@ -10678,7 +10085,7 @@
 		if (effectIndex !== 2) return void 0;
 		const ownerSeatID = msg.SkillOwerSeatID ?? msg.SeatID ?? msg.SrcSeatID;
 		const targetSeatID = msg.DestSeatIDs?.[0];
-		if (!Number.isFinite(ownerSeatID) || !Number.isFinite(targetSeatID) || ownerSeatID === targetSeatID) return;
+		if (ownerSeatID === void 0 || targetSeatID === void 0 || ownerSeatID === targetSeatID) return;
 		const activation = {
 			ownerSeatID,
 			targetSeatID,
@@ -10686,17 +10093,18 @@
 			sequence: ++state.sequence,
 			skipInference: ownerSeatID === room.mySeatID
 		};
-		state.activations.set(spellID, activation);
+		state.activations.set(msg.SpellID, activation);
 		return activation;
 	}
 	function recordDuoQiRoleDataTarget(game, msg) {
 		const room = game.room;
 		if (!room) return void 0;
+		if (msg.Datas?.length < 2) return void 0;
 		const state = getDuoQiState(room);
 		if (!state) return void 0;
 		const targetSeatID = msg.SeatID;
-		const ownerSeatID = Number(msg.Datas[1]);
-		if (!Number.isFinite(targetSeatID) || !Number.isFinite(ownerSeatID) || targetSeatID === ownerSeatID) return;
+		const ownerSeatID = msg.Datas[1];
+		if (targetSeatID === ownerSeatID) return;
 		const activation = {
 			ownerSeatID,
 			targetSeatID,
@@ -10724,8 +10132,8 @@
 	function decorateGainAll(event, room, state) {
 		const activation = state.activations.get(DUO_QI_GAIN_ALL_SPELL_ID);
 		if (!activation || activation.skipInference || !activationMatchesMove(activation, event)) return event;
-		if (event.cardIDs?.some?.((cardID) => cardID > 0)) return event;
-		const sourceZone = event.options?.fromZone === "discard" ? 2 : 5;
+		if (event.cardIDs.some((cardID) => cardID > 0)) return event;
+		const sourceZone = event.options.fromZone === "discard" ? 2 : 5;
 		resolveRandomHandCandidatesForGainAll(event, room, state, activation, sourceZone);
 		const sourceCards = collectGainAllSourceCards(room, state, activation.targetSeatID, activation.ownerSeatID, sourceZone);
 		const cardCount = getCount(event);
@@ -10794,7 +10202,7 @@
 	function collectRecentDiscardSourceCards(event, room, state, activation) {
 		const targetInitialCardIDs = getInitialCardIDsForSeat(state, activation.targetSeatID);
 		const targetInitialCardIDsInDiscard = new Set(targetInitialCardIDs.filter((cardID) => room.cardIndex.get(cardID)?.location === "discard"));
-		const sourceCandidates = (room.zones.get("discard")?.cards ?? []).filter((card) => targetInitialCardIDsInDiscard.has(card.id));
+		const sourceCandidates = room.getZone("discard").cards.filter((card) => targetInitialCardIDsInDiscard.has(card.id));
 		const gainedCount = getCount(event);
 		if (gainedCount <= 0 || sourceCandidates.length < gainedCount) return [];
 		return sourceCandidates.slice(-gainedCount).reverse();
@@ -10802,7 +10210,7 @@
 	function decorateRandomDiscardGain(event, room, state) {
 		const activation = state.activations.get(DUO_QI_RANDOM_GAIN_SPELL_ID);
 		if (!activation || activation.skipInference || !activationMatchesMove(activation, event)) return event;
-		if (event.options?.fromZone !== "discard" || event.cardIDs?.some?.((cardID) => cardID > 0)) return event;
+		if (event.options.fromZone !== "discard" || event.cardIDs.some((cardID) => cardID > 0)) return event;
 		const gainedCount = getCount(event);
 		const sourceCards = collectRecentDiscardSourceCards(event, room, state, activation);
 		if (gainedCount <= 0 || sourceCards.length !== gainedCount) return event;
@@ -10822,7 +10230,7 @@
 	function decorateRandomHandGain(event, state) {
 		const activation = state.activations.get(DUO_QI_RANDOM_GAIN_SPELL_ID);
 		if (!activation || activation.skipInference || !activationMatchesMove(activation, event)) return event;
-		if (event.options?.fromZone != null || event.options?.fromSubZone !== "hand" || event.cardIDs?.some?.((cardID) => cardID > 0) || event.options?.sourceCards?.length) return event;
+		if (event.options.fromZone != null || event.options.fromSubZone !== "hand" || event.cardIDs.some((cardID) => cardID > 0) || event.options.sourceCards?.length) return event;
 		const count = getCount(event);
 		const candidateEntities = new Set(getInitialEntitiesForSeat(state, activation.targetSeatID).filter((card) => card.location === "player" && card.subZone === "hand" && card.seats.has(activation.targetSeatID)));
 		if (count <= 0 || candidateEntities.size < count) return event;
@@ -10844,7 +10252,7 @@
 		const state = getDuoQiState(room);
 		if (!state || state.pendingRandomHandGroups.length === 0) return event;
 		const fromSeatID = event.options.fromSeatID;
-		if (event.options?.fromSubZone !== "hand" || !Number.isFinite(fromSeatID) || !event.cardIDs?.some?.((cardID) => cardID > 0)) return event;
+		if (event.options.fromSubZone !== "hand" || !Number.isFinite(fromSeatID) || !event.cardIDs.some((cardID) => cardID > 0)) return event;
 		const group = state.pendingRandomHandGroups.slice().reverse().find((candidate) => candidate.ownerSeatID === fromSeatID && candidate.gainedCount > 0);
 		if (!group) return event;
 		const candidateIDs = event.cardIDs.filter((cardID) => cardID > 0).filter((cardID) => state.allCardIDs.has(cardID) && !state.initialSeatByCardID.has(cardID));
@@ -10860,7 +10268,7 @@
 		const move = event.protocol;
 		const spellID = move.SpellID;
 		const fromSeatID = move.FromID;
-		if (!(move.FromZone === 5 && !event.cardIDs?.some?.((cardID) => cardID > 0)) || spellID === 3730) return event;
+		if (!(move.FromZone === 5 && !event.cardIDs.some((cardID) => cardID > 0)) || spellID === 3730) return event;
 		if (spellID === 3731) return event;
 		const selectionCount = getCount(event);
 		const sourcePlayer = room.getPlayer(fromSeatID);
@@ -10899,7 +10307,7 @@
 	}
 	function finishRandomHandGroupsAfterGainAll(state, event) {
 		if (!state || state.pendingRandomHandGroups.length === 0) return;
-		if (event.protocol.SpellID !== 3730 || event.options?.fromSubZone !== "hand" || !Number.isFinite(event.options.fromSeatID)) return;
+		if (event.protocol.SpellID !== 3730 || event.options.fromSubZone !== "hand" || !Number.isFinite(event.options.fromSeatID)) return;
 		const activation = state.activations.get(DUO_QI_GAIN_ALL_SPELL_ID);
 		if (!activation || !activationMatchesMove(activation, event)) return;
 		state.pendingRandomHandGroups = state.pendingRandomHandGroups.filter((group) => group.ownerSeatID !== activation.ownerSeatID || group.targetSeatID !== activation.targetSeatID);
@@ -10914,55 +10322,6 @@
 		getPositiveIDs(candidateIDs).forEach((cardID) => {
 			if (state.allCardIDs.has(cardID) && !state.initialSeatByCardID.has(cardID)) group.candidateCardIDs.add(cardID);
 		});
-	}
-	var GUI_FU_ROLE_DATA_ID = 3709;
-	var FULL_HAND_ROLE_OPT_SPELL_IDS = new Set([
-		4,
-		5,
-		357,
-		372,
-		501,
-		811,
-		921,
-		3119,
-		3437,
-		3876,
-		4025
-	]);
-	var PARTIAL_HAND_ROLE_OPT_SPELL_IDS = new Set([
-		774,
-		851,
-		3310
-	]);
-	function shouldIgnoreTrackerMove({ CardCount, MoveType, ToZone, isSend }) {
-		return CardCount === 0 || MoveType === 0 || ToZone === 11 || !!isSend;
-	}
-	function hasMixedTrackerMoveVisibility({ CardIDs, CardCount }) {
-		const knownCount = CardIDs.filter((cardID) => cardID > 0).length;
-		return knownCount !== CardCount && knownCount !== 0;
-	}
-	function normalizeTrackerMovePosition({ CardIDs, CardCount, FromZone, FromPosition, ToID, ToZone, ToPosition, MoveType, SpellID }) {
-		let fromPosition = FromPosition;
-		let toPosition = ToPosition;
-		if (FromZone === 1 && FromPosition === 65282 && SpellID === 3208) fromPosition = POSITION_TOP;
-		if (FromZone === 1 && FromPosition === 65282 && MoveType === 13 && CardCount === 1) fromPosition = POSITION_TOP;
-		if (FromZone === 1 && FromPosition === 65282 && ToZone === 4 && MoveType === 8 && SpellID === 795 && CardCount === 1) fromPosition = POSITION_TOP;
-		if (FromZone === 1 && FromPosition === 65282 && ToZone === 5 && SpellID === 3101 && CardCount === 1) fromPosition = 0;
-		if (FromZone === 1 && FromPosition === 65281 && ToZone === 5 && SpellID === 0 && MoveType === 1 && CardCount === 4 && CardIDs.length === CardCount && CardIDs.every((id) => CardConfig.GetInstance().getCard(id)?.type == 8)) fromPosition = POSITION_RANDOM;
-		if (SpellID === 3694 && FromZone === 0 && ToZone === 1 && ToPosition === 65281 && MoveType === 19) toPosition = POSITION_RANDOM;
-		if (ToZone === 1 && ToID === 255 && ToPosition === 65280 && CardIDs.some((cardID) => cardID === 4400 || cardID === 4401)) toPosition = POSITION_RANDOM;
-		if (FromZone === 5 && ToZone === 1 && SpellID === 0 && MoveType === 19) toPosition = POSITION_RANDOM;
-		return {
-			FromPosition: fromPosition,
-			ToPosition: toPosition
-		};
-	}
-	function shouldRevealAsFullHand({ handCount, observedHandCount, localHandCount }) {
-		const count = Number(handCount) || 0;
-		if (count <= 0) return false;
-		if (observedHandCount !== void 0 && observedHandCount !== null) return count === Number(observedHandCount);
-		const fallbackCount = Number(localHandCount) || 0;
-		return fallbackCount > 0 && count === fallbackCount;
 	}
 	function deferGuiFuMove(room, raw, move) {
 		const previous = room.readSkillState(GUI_FU_ROLE_DATA_ID);
@@ -10988,7 +10347,7 @@
 		room.deleteSkillState(GUI_FU_ROLE_DATA_ID);
 		const { raw, patched } = pending;
 		const count = patched.CardCount;
-		const gainedIDs = cardIDs.slice(0, count);
+		const gainedIDs = cardIDs.filter((cardID) => !isHeldGuiFuCard(room, seatID, cardID));
 		if (patched.ToID !== seatID || gainedIDs.length !== count || new Set(gainedIDs).size !== count || patched.FromZone === 2 && !hasDiscardSourceCards(room, gainedIDs)) {
 			trackerLogger.warn("诡伏相邻角色数据与待补全移动不匹配，已取消移动", {
 				pending,
@@ -11005,11 +10364,16 @@
 			}
 		};
 	}
+	function isHeldGuiFuCard(room, seatID, cardID) {
+		const locations = room.cardIndex.get(cardID)?.getPossibleLocations() ?? [];
+		const location = locations[0];
+		return locations.length === 1 && location.type === "player" && location.seatID === seatID && location.subZone === "hand";
+	}
 	function hasDiscardSourceCards(room, cardIDs) {
-		const discard = room.zones.get("discard");
+		const discard = room.getZone("discard");
 		return cardIDs.every((cardID) => {
 			const card = room.cardIndex.get(cardID);
-			return card?.location === "discard" && card.isKnown && discard?.cards.includes(card) === true;
+			return card?.location === "discard" && card.isKnown && discard.cards.includes(card);
 		});
 	}
 	function parseGuiFuCardIDs(datas) {
@@ -11089,11 +10453,28 @@
 		},
 		onDeckInitialized: (room) => room.deleteSkillState(XIA_SHU_SPELL_ID)
 	};
+	function defineStoredCardsPlugin({ id, spellIDs, prepare, record }) {
+		return {
+			id,
+			spellIDs,
+			beforeNormalizeMove: (patched, raw, room) => prepare(patched, room),
+			onProtocolEvent(event, room) {
+				if (event.type === "useSpell" && spellIDs.includes(event.message.SpellID)) record(room, event.message);
+			},
+			onDeckInitialized: (room) => spellIDs.forEach((spellID) => room.deleteSkillState(spellID))
+		};
+	}
 	function recordSharedCardIDs(room, msg) {
 		if (room.mySeatID === void 0 || msg.SeatID === room.mySeatID) return;
 		if (msg.dest_Count === 1 && msg.DestSeatIDs?.[0] === room.mySeatID) return;
-		if (msg.CardIDs?.length === msg.card_count) room.setSkillState(msg.SpellID, [...msg.CardIDs]);
+		if (msg.CardIDs && msg.CardIDs.length === msg.card_count) room.setSkillState(msg.SpellID, [...msg.CardIDs]);
 	}
+	var qingYiLianJuPlugin = defineStoredCardsPlugin({
+		id: "qingYiLianJu",
+		spellIDs: [3157, 3511],
+		prepare: handleQingYiLianJu,
+		record: recordSharedCardIDs
+	});
 	function handleQingYiLianJu(patched, room) {
 		const spellCards = room.readSkillState(patched.SpellID);
 		if (patched.FromZone == 2 && patched.ToZone == 5 && patched.CardCount == spellCards?.length && patched.CardIDs.filter((id) => id > 0).length == 0) {
@@ -11103,8 +10484,14 @@
 			room.deleteSkillState(patched.SpellID);
 		}
 	}
+	var qianFuPlugin = defineStoredCardsPlugin({
+		id: "qianFu",
+		spellIDs: [3750],
+		prepare: handleQianFu,
+		record: recordQianFu
+	});
 	function recordQianFu(room, msg) {
-		if (msg.EffectIndex === 2 && !msg.DestSeatIDs?.length) room.setSkillState(3750, [...msg.CardIDs ?? []]);
+		if (msg.EffectIndex === 2 && !msg.DestSeatIDs?.length) room.setSkillState(msg.SpellID, [...msg.CardIDs ?? []]);
 	}
 	function handleQianFu(patched, room) {
 		const spellCards = room.readSkillState(patched.SpellID);
@@ -11113,9 +10500,15 @@
 			room.deleteSkillState(patched.SpellID);
 		}
 	}
+	var shengMoPlugin = defineStoredCardsPlugin({
+		id: "shengMo",
+		spellIDs: [3434],
+		prepare: handleShengMo,
+		record: recordShengMo
+	});
 	function recordShengMo(room, msg) {
 		if (room.mySeatID === void 0 || msg.SeatID === room.mySeatID) return;
-		room.setSkillState(3434, [...msg.CardIDs ?? []]);
+		room.setSkillState(msg.SpellID, [...msg.CardIDs ?? []]);
 	}
 	function handleShengMo(patched, room) {
 		const spellCards = room.readSkillState(patched.SpellID);
@@ -11124,6 +10517,12 @@
 			room.deleteSkillState(patched.SpellID);
 		}
 	}
+	var zeXingPlugin = defineStoredCardsPlugin({
+		id: "zeXing",
+		spellIDs: [3854],
+		prepare: handleZeXing,
+		record: recordSharedCardIDs
+	});
 	function handleZeXing(patched, room) {
 		const spellCards = room.readSkillState(patched.SpellID);
 		if (patched.FromZone == 5 && patched.ToZone == 5 && patched.CardCount == spellCards?.length && patched.CardIDs.filter((id) => id > 0).length == 0) {
@@ -11143,25 +10542,6 @@
 		const spellID = event.protocol.SpellID;
 		if (HAND_EXCHANGE_EXCLUDED_SPELL_IDS.has(spellID)) return event;
 		return decorateHandExchange(event, room);
-	}
-	function createFilteredPublicMoveHandler(spellID, label, predicate) {
-		return (event, room) => {
-			const move = event.protocol;
-			const fromZone = move.FromZone;
-			if (hasPositiveID(event.cardIDs) || ![1, 2].includes(fromZone) || move.FromPosition !== 65282) return event;
-			const selectedCards = [];
-			const count = getCount(event);
-			const sourceCards = getSourceZoneCards(event, room);
-			for (let index = sourceCards.length - 1; index >= 0 && selectedCards.length < count; index--) {
-				const card = sourceCards[index];
-				if (predicate(card)) selectedCards.push(card);
-			}
-			if (selectedCards.length === 0) return event;
-			return patchEvent(event, { options: {
-				sourceCards: selectedCards,
-				combinationID: nextGroupID(room, spellID, label)
-			} });
-		};
 	}
 	function registerDefaultMoveEventHandlers(room) {
 		room.registerSkillPlugin(guiFuPlugin);
@@ -11230,11 +10610,7 @@
 			spellIDs: [3208],
 			decorateMove: decorateChengLieMove
 		});
-		room.registerSkillPlugin({
-			id: "jieLi",
-			spellIDs: [3483],
-			decorateMove: decorateJieLi
-		});
+		room.registerSkillPlugin(jieLiPlugin);
 		room.registerSkillPlugin({
 			id: "wenGua",
 			spellIDs: [780],
@@ -11252,52 +10628,11 @@
 			spellIDs: [7017],
 			decorateMove: decorateYanXi
 		});
-		room.registerSkillPlugin({
-			id: "xingLuan",
-			spellIDs: [862],
-			decorateMove: createFilteredPublicMoveHandler(862, "xingluan_candidate", (card) => card.number === 6)
-		});
-		room.registerSkillPlugin(storedCardsPlugin("qingYiLianJu", [3157, 3511], handleQingYiLianJu, recordSharedCardIDs));
-		room.registerSkillPlugin(storedCardsPlugin("qianFu", [3750], handleQianFu, recordQianFu));
-		room.registerSkillPlugin(storedCardsPlugin("shengMo", [3434], handleShengMo, recordShengMo));
-		room.registerSkillPlugin(storedCardsPlugin("zeXing", [3854], handleZeXing, recordSharedCardIDs));
-		room.registerSkillPlugin({
-			id: "qiaoZhiReveal",
-			spellIDs: [3544],
-			onProtocolEvent(event, currentRoom) {
-				if (event.type !== "roleData" || event.message.DataID !== 3544) return;
-				const { SeatID, Datas } = event.message;
-				const cardID = Datas?.[0];
-				if (SeatID === void 0 || !currentRoom.seatIDs.includes(SeatID) || !(cardID > 0)) return;
-				if (currentRoom.moveCards([cardID], "player", {
-					fromSeatID: SeatID,
-					fromSubZone: "hand",
-					toSeatID: SeatID,
-					subZone: "hand",
-					spellID: null,
-					gainSpellID: 3544,
-					handMoveCount: 0,
-					sourceEvent: {
-						type: "qiaozhi:update-role-data",
-						spellID: 3544,
-						label: "GsCUpdateRoleDataExNtf:3544",
-						raw: { ...event.message }
-					}
-				})) currentRoom.notifyCardsRevealed([cardID]);
-			}
-		});
+		room.registerSkillPlugin(qingYiLianJuPlugin);
+		room.registerSkillPlugin(qianFuPlugin);
+		room.registerSkillPlugin(shengMoPlugin);
+		room.registerSkillPlugin(zeXingPlugin);
 		room.registerSkillPlugin(xiaShuPlugin);
-	}
-	function storedCardsPlugin(id, spellIDs, prepare, record) {
-		return {
-			id,
-			spellIDs,
-			beforeNormalizeMove: (patched, raw, room) => prepare(patched, room),
-			onProtocolEvent(event, room) {
-				if (event.type === "useSpell" && spellIDs.includes(event.message.SpellID)) record(room, event.message);
-			},
-			onDeckInitialized: (room) => spellIDs.forEach((spellID) => room.deleteSkillState(spellID))
-		};
 	}
 	var MOVE_EVENT_SUMMARY_OPTIONS = {
 		normalizeCardIDs: true,
@@ -11314,18 +10649,6 @@
 		info() {},
 		warn() {}
 	};
-	function hasCardsAtPublicPosition(zoneCards, cards, position) {
-		if (cards.length === 0 || zoneCards.length < cards.length) return false;
-		if (position === 65280) {
-			const offset = zoneCards.length - cards.length;
-			return cards.every((card, index) => zoneCards[offset + index] === card);
-		}
-		if (position === 0) {
-			const len = cards.length;
-			return cards.every((_, index) => zoneCards[index] === cards[len - 1 - index]);
-		}
-		return false;
-	}
 	var TrackerController = class {
 		controllerView;
 		controllerLogger;
@@ -11361,17 +10684,18 @@
 		initTrackerRoom() {
 			try {
 				this.trackerRoom?.destroy();
-				this.trackerRoom = new Room({ gameState: this.gameState });
 				this.gameState.beginPlayback();
-				this.gameState.bindRoom(this.trackerRoom);
+				const room = new Room({ gameState: this.gameState });
+				this.trackerRoom = room;
 				this.controllerLogger.info("Room 初始化");
-				this.registerMoveEventHandlers(this.trackerRoom);
+				this.registerMoveEventHandlers(room);
 			} catch (e) {
 				trackerLogger.error("Room 初始化失败", e);
 				this.controllerView.unmount();
-				this.trackerRoom?.destroy();
-				this.gameState.bindRoom(null);
-				this.trackerRoom = null;
+				if (this.trackerRoom) {
+					this.trackerRoom.destroy();
+					this.trackerRoom = null;
+				} else this.gameState.bindRoom(null);
 			}
 		}
 		initTrackerDeck(cardIDs) {
@@ -11388,7 +10712,6 @@
 		registerTrackerPlayers(infos, currentUserID) {
 			if (!this.trackerRoom) return;
 			this.trackerRoom.registerPlayers(infos, currentUserID);
-			this.gameState.syncRoomSeats(this.trackerRoom);
 			this.controllerView.mount(this.trackerRoom);
 			this.controllerView.scheduleRender();
 		}
@@ -11398,7 +10721,6 @@
 			if (!this.trackerRoom.players.has(normalizedSeatID)) return;
 			this.trackerRoom.setMySeatID(normalizedSeatID);
 			this.trackerRoom.updateFixedViewIds();
-			this.gameState.syncRoomSeats(this.trackerRoom);
 			this.getSeatUIs();
 			this.controllerView.scheduleRender();
 		}
@@ -11419,7 +10741,6 @@
 					return;
 				}
 				this.trackerRoom.setFirstHand(seatID);
-				this.gameState.syncRoomSeats(this.trackerRoom);
 				this.getSeatUIs();
 				this.controllerView.scheduleRender();
 			} catch (e) {
@@ -11460,11 +10781,7 @@
 				const normalizedEvent = normalizeMoveEvent(patched, raw);
 				if (normalizedEvent.options.fromSubZone === "hand") normalizedEvent.cardIDs.forEach((cardID) => {
 					const card = readyRoom.cardIndex.get(cardID);
-					if (!card || card.suspended || card.hasLocationCandidates() || card.resolvedSeat !== normalizedEvent.options.fromSeatID || ![
-						"equip",
-						"judge",
-						"mark"
-					].includes(card.subZone)) return;
+					if (!card || card.suspended || card.hasLocationCandidates() || card.resolvedSeat !== normalizedEvent.options.fromSeatID || card.subZone !== "equip" && card.subZone !== "judge" && card.subZone !== "mark") return;
 					this.controllerLogger.warn("协议手牌来源与本地确定子区冲突，仍按协议处理", {
 						cardID,
 						fromSeatID: normalizedEvent.options.fromSeatID,
@@ -11488,13 +10805,13 @@
 				});
 				if (event.type === "revealPublicCandidate") {
 					this.controllerLogger.info("移动事件分支: revealPublicCandidate", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
-					if (!this.revealPublicCandidateCards(event)) return;
+					if (!this.revealPublicCandidateCards(readyRoom, event)) return;
 				} else if (event.type === "noop") {
 					this.controllerLogger.info("移动事件跳过", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
 					return;
 				} else if (event.type === "showCards") {
 					this.controllerLogger.info("移动事件分支: showCards", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
-					if (!this.showTrackerCards(event)) return;
+					if (!this.showTrackerCards(readyRoom, event)) return;
 				} else if (event.type === "shuffleDiscardIntoPile") {
 					this.controllerLogger.info("移动事件分支: shuffleDiscardIntoPile", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
 					readyRoom.shufflePile({ cardCount: event.cardCount });
@@ -11515,14 +10832,13 @@
 				trackerLogger.error("移动同步异常，已跳过本次 tracker 更新", e, this.summarizeProtocolMove(raw));
 			}
 		}
-		revealPublicCandidateCards(event) {
-			const readyRoom = this.getReadyTrackerRoom();
+		revealPublicCandidateCards(room, event) {
 			const reveal = event.options.publicCandidateReveal;
-			if (!readyRoom || !reveal || !(Number(reveal.count) > 0)) return false;
-			const ids = this.normalizeIDs(event.cardIDs).filter((id) => id > 0);
+			if (!reveal || !(Number(reveal.count) > 0)) return false;
+			const ids = event.cardIDs.filter((id) => id > 0);
 			const locationCandidate = fromPublicCandidate(createPublicCandidate(reveal.zone, reveal.position, Number(reveal.count)));
 			if (ids.length === 0 || !locationCandidate) return false;
-			const cards = readyRoom.revealPublicCandidates(ids, locationCandidate);
+			const cards = room.revealPublicCandidates(ids, locationCandidate);
 			this.controllerLogger.info("公共区范围揭示完成", {
 				ids,
 				zone: reveal.zone,
@@ -11532,12 +10848,10 @@
 			});
 			return cards.length > 0;
 		}
-		showTrackerCards(event) {
-			const readyRoom = this.getReadyTrackerRoom();
-			if (!readyRoom) return false;
-			const ids = this.normalizeIDs(event.cardIDs).filter((id) => id > 0);
+		showTrackerCards(room, event) {
+			const ids = event.cardIDs.filter((id) => id > 0);
 			if (ids.length === 0) return false;
-			const raw = event.raw ?? event.options?.sourceEvent?.raw ?? {};
+			const raw = event.raw ?? event.options.sourceEvent?.raw ?? {};
 			const move = event.protocol;
 			const zone = move.ToZone ?? move.FromZone;
 			const seatID = move.ToID ?? move.FromID;
@@ -11547,7 +10861,7 @@
 				fromZoneParam: move.FromZoneParam,
 				spellID: move.SpellID
 			}, move.SpellID);
-			if (zone === 8) return readyRoom.moveCards(ids, "popup", {
+			if (zone === 8) return room.moveCards(ids, "popup", {
 				fromZone: "popup",
 				fromPopupSpaceID: event.options.toPopupSpaceID,
 				toPopupSpaceID: event.options.toPopupSpaceID,
@@ -11561,7 +10875,7 @@
 					subZone,
 					spellID
 				});
-				return readyRoom.moveCards(ids, "player", {
+				return room.moveCards(ids, "player", {
 					toSeatID: seatID,
 					fromSeatID: seatID,
 					fromZone: null,
@@ -11569,20 +10883,20 @@
 					subZone,
 					spellID,
 					cardCount: ids.length,
-					sourceEvent: event.options?.sourceEvent ?? {
+					sourceEvent: event.options.sourceEvent ?? {
 						type: "showCards",
 						raw
 					}
 				});
 			}
 			const zoneName = getProtocolPublicZone(zone, event.toZone ?? "process");
-			const position = event.options?.position ?? event.options?.fromPosition ?? 65280;
+			const position = event.options.position ?? event.options.fromPosition ?? 65280;
 			const sourceZoneName = getProtocolPublicZone(move.FromZone);
 			const materializationZone = sourceZoneName && sourceZoneName !== zoneName ? sourceZoneName : zoneName;
-			const knownCards = this.resolveKnownCards(ids, {
+			const knownCards = room.resolvePublicKnownCards(ids, {
 				zoneName: materializationZone,
-				position: event.options?.fromPosition ?? position
-			});
+				position: event.options.fromPosition ?? position
+			}, this.controllerLogger);
 			this.controllerLogger.info("展示明牌进入公共区", {
 				ids,
 				zoneName,
@@ -11591,7 +10905,7 @@
 			});
 			if (sourceZoneName && sourceZoneName !== zoneName) {
 				knownCards.forEach((card) => card.confirmKnown());
-				return readyRoom.moveCards(ids, zoneName, {
+				return room.moveCards(ids, zoneName, {
 					...event.options,
 					fromZone: sourceZoneName,
 					fromSeatID: null,
@@ -11600,12 +10914,12 @@
 				});
 			}
 			const shouldRepositionPile = zoneName === "pile" && (position === 65280 || position === 0);
-			this.placePublicRevealCards(knownCards, zoneName, {
+			room.placePublicRevealCards(knownCards, zoneName, {
 				position,
 				reposition: shouldRepositionPile,
 				cardIDsTopFirst: shouldRepositionPile && position === 65280
-			});
-			readyRoom.applyPileIdentityReveal(ids);
+			}, this.controllerLogger);
+			room.applyPileIdentityReveal(ids);
 			return true;
 		}
 		revealTrackerCards(target = {}, cardIDs = []) {
@@ -11622,7 +10936,7 @@
 					const seatID = Number(target.seatID);
 					if (Number.isNaN(seatID) || seatID === 255) return;
 					const subZone = target.subZone ?? "hand";
-					if (target.fullHand && subZone === "hand") {
+					if ((target.fullHand === true || target.inferFullHand === true && subZone === "hand" && readyRoom.shouldRevealPlayerHandAsFullHand(seatID, ids.length)) && subZone === "hand") {
 						const handCount = Number(target.handCount ?? ids.length);
 						readyRoom.syncObservedPlayerHandCount(seatID, handCount, { resolve: false });
 					}
@@ -11654,15 +10968,15 @@
 				} else if (target.type === "public") {
 					const zoneName = target.zoneName ?? "pile";
 					const position = target.position ?? 65280;
-					const knownCards = this.resolveKnownCards(ids, {
+					const knownCards = readyRoom.resolvePublicKnownCards(ids, {
 						zoneName,
 						position
-					});
-					this.placePublicRevealCards(knownCards, zoneName, {
+					}, this.controllerLogger);
+					readyRoom.placePublicRevealCards(knownCards, zoneName, {
 						position,
 						reposition: target.reposition === true,
 						cardIDsTopFirst: target.cardIDsTopFirst === true
-					});
+					}, this.controllerLogger);
 				} else return;
 				readyRoom.applyPileIdentityReveal(ids);
 				readyRoom.notifyCardsRevealed(ids);
@@ -11685,47 +10999,6 @@
 			} catch (error) {
 				trackerLogger.error("技能协议处理失败", error, event);
 			}
-		}
-		placePublicRevealCards(knownCards, zoneName, options = {}) {
-			const readyRoom = this.getReadyTrackerRoom();
-			if (!readyRoom) return;
-			const position = options.position ?? 65280;
-			const targetZone = readyRoom.zones.get(zoneName);
-			const placeableCards = [];
-			const skippedCards = [];
-			knownCards.forEach((card) => {
-				if (card.location === "player") {
-					skippedCards.push(card);
-					return;
-				}
-				if (targetZone?.cards.includes(card) || card.location === zoneName) {
-					placeableCards.push(card);
-					return;
-				}
-				if (card.location === "outside" || card.location === "suspended") {
-					placeableCards.push(card);
-					return;
-				}
-				if (!readyRoom.zones.has(card.location)) {
-					placeableCards.push(card);
-					return;
-				}
-				skippedCards.push(card);
-			});
-			if (skippedCards.length > 0) this.controllerLogger.info("公共区展示跳过无法回收的实体", {
-				zoneName,
-				skippedIDs: skippedCards.map((card) => card.id),
-				skippedLocations: skippedCards.map((card) => card.location)
-			});
-			placeableCards.forEach((card) => {
-				readyRoom.removeCardsFromConstraintGroups([card]);
-				card.confirmKnown();
-			});
-			const missingCards = placeableCards.filter((card) => !targetZone?.cards.includes(card));
-			const repositionCards = options.cardIDsTopFirst === true && position === 65280 ? [...placeableCards].reverse() : placeableCards;
-			const cardsToPlace = options.reposition === true && Boolean(targetZone) && placeableCards.length > 0 && !hasCardsAtPublicPosition(targetZone.cards, repositionCards, position) ? repositionCards : missingCards;
-			if (cardsToPlace.length > 0) targetZone?.add(cardsToPlace, position);
-			readyRoom.resolveConstraints();
 		}
 		revealTrackerCardsInZone(protocolZone, cardIDs = []) {
 			const ids = this.normalizeIDs(cardIDs).filter((id) => id > 0);
@@ -11801,37 +11074,159 @@
 				SpellID: msg.SpellID
 			};
 		}
-		resolveKnownCards(ids, target = null) {
-			const readyRoom = this.getReadyTrackerRoom();
-			if (!readyRoom) return [];
-			if (target) readyRoom.materializeAtPublicEndpoint(ids, target.zoneName, target.position);
-			const existingCards = readyRoom.findCardsByIDs(ids).filter((card) => !readyRoom.detachedKnownCards.has(card));
-			const existingIDs = new Set(existingCards.map((card) => card.id));
-			const missingIDs = ids.filter((id) => !existingIDs.has(id) && !readyRoom.unlocatedIdentities.has(id) && !readyRoom.cardIndex.has(id));
-			const createdCards = missingIDs.length > 0 ? readyRoom.createExternalCards(missingIDs, missingIDs.length) : [];
-			const cardMap = new Map();
-			existingCards.forEach((card) => cardMap.set(card.id, card));
-			createdCards.forEach((card) => cardMap.set(card.id, card));
-			const unresolvedIdentityIDs = ids.filter((id) => !cardMap.has(id) && readyRoom.unlocatedIdentities.has(id));
-			if (unresolvedIdentityIDs.length > 0) this.controllerLogger.warn("揭示身份未能物化到匿名槽，已从已知牌集合中略过", {
-				reason: "resolveKnownCards:unresolvedUnlocatedIdentity",
-				unresolvedIdentityIDs,
-				target
-			});
-			return ids.map((id) => cardMap.get(id)).filter((card) => Boolean(card));
-		}
 		destroyTrackerRoom() {
 			try {
 				this.controllerView.unmount();
-				this.trackerRoom?.destroy();
-				this.gameState.bindRoom(null);
-				this.trackerRoom = null;
+				if (this.trackerRoom) {
+					this.trackerRoom.destroy();
+					this.trackerRoom = null;
+				} else this.gameState.bindRoom(null);
 				this.controllerLogger.info("Room 销毁");
 			} catch (e) {
 				trackerLogger.error("Room 销毁失败", e);
 			}
 		}
 	};
+	var notificationQueue = [];
+	var isNotificationShowing = false;
+	var currentTimeout = null;
+	var TOOLTIP_BG = "url('https://web.sanguosha.com/220/h5_2/res/assets/bigPng/propGet.png')";
+	var TOOLTIP_STYLE = {
+		position: "fixed",
+		top: "20px",
+		left: "50%",
+		zIndex: "2147483647",
+		display: "flex",
+		alignItems: "center",
+		justifyContent: "center",
+		padding: "12px 24px",
+		borderRadius: "4px",
+		backgroundColor: "transparent",
+		backgroundImage: TOOLTIP_BG,
+		backgroundSize: "100% 100%",
+		fontSize: "16px",
+		fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", Tahoma, Arial, sans-serif",
+		whiteSpace: "nowrap",
+		overflow: "hidden",
+		pointerEvents: "auto",
+		transform: "translateX(-50%)",
+		textShadow: "0 0 4px rgba(0,0,0,0.6)",
+		transition: "opacity 0.3s ease, visibility 0.3s ease"
+	};
+	function applyTooltipStyle(el, className, visible = false) {
+		Object.assign(el.style, TOOLTIP_STYLE, {
+			color: "#f2de9c",
+			opacity: visible ? "1" : "0",
+			visibility: visible ? "visible" : "hidden"
+		});
+	}
+	function addTooltip(text, id = "acTooltip", duration = 1e4, className = "", clickCallback = null, shouldUpdate = false) {
+		if (shouldUpdate) updateOrCreateTooltip(text, id, duration, className);
+		else {
+			notificationQueue.push({
+				text,
+				id,
+				duration,
+				className,
+				clickCallback
+			});
+			if (!isNotificationShowing) showNextNotification();
+		}
+	}
+	function updateOrCreateTooltip(text, id, duration, className) {
+		let element = document.getElementById(id);
+		if (!element) {
+			element = document.createElement("div");
+			element.id = id;
+			element.className = "ac-tooltip " + className;
+			document.body.appendChild(element);
+		}
+		element.innerHTML = text;
+		element.className = "ac-tooltip " + className;
+		applyTooltipStyle(element, className);
+		element.onclick = () => {
+			removeTooltip(id);
+		};
+		setTimeout(() => {
+			element.classList.remove("hide");
+			element.classList.add("show");
+			applyTooltipStyle(element, className, true);
+		}, 50);
+		if (currentTimeout) clearTimeout(currentTimeout);
+		currentTimeout = setTimeout(() => removeTooltip(id), duration);
+	}
+	function showNextNotification() {
+		if (notificationQueue.length === 0) {
+			isNotificationShowing = false;
+			return;
+		}
+		isNotificationShowing = true;
+		const { text, id, duration, className, clickCallback } = notificationQueue.shift();
+		const ele = document.getElementById(id);
+		ele && ele.remove();
+		const uniqueId = id + "-" + new Date().getTime();
+		const div = document.createElement("div");
+		div.id = uniqueId;
+		div.className = "ac-tooltip " + className;
+		div.innerHTML = text;
+		applyTooltipStyle(div, className);
+		document.body.appendChild(div);
+		if (clickCallback && typeof clickCallback === "function") div.addEventListener("click", clickCallback);
+		div.addEventListener("click", () => {
+			removeTooltip(uniqueId);
+			showNextNotification();
+		});
+		setTimeout(() => {
+			div.classList.remove("hide");
+			div.classList.add("show");
+			applyTooltipStyle(div, className, true);
+		}, 50);
+		if (duration) setTimeout(() => {
+			removeTooltip(uniqueId);
+			showNextNotification();
+		}, duration);
+		else isNotificationShowing = false;
+	}
+	function removeTooltip(id) {
+		const ele = document.getElementById(id);
+		if (ele) {
+			ele.classList.remove("show");
+			ele.classList.add("hide");
+			applyTooltipStyle(ele, ele.classList.contains("green") ? "green" : "", false);
+			setTimeout(() => {
+				ele && ele.remove();
+			}, 300);
+		}
+	}
+	var correction = [
+		["10", "⒑"],
+		["1", "⒈"],
+		["2", "⒉"],
+		["3", "⒊"],
+		["4", "⒋"],
+		["5", "⒌"],
+		["6", "⒍"],
+		["7", "⒎"],
+		["8", "⒏"],
+		["9", "⒐"],
+		["J", "Ⓙ"],
+		["Q", "Ⓠ"],
+		["K", "Ⓚ"],
+		["+", " "]
+	];
+	async function toClipboard(text, filter) {
+		if (filter) correction.forEach(([from, to]) => {
+			text = text.replaceAll(from, to);
+		});
+		try {
+			await navigator.clipboard.writeText(text);
+			addTooltip("复制成功！");
+			return true;
+		} catch (error) {
+			console.info("Copy to clipboard failed.", error);
+			return false;
+		}
+	}
 	var USER_INFO_SELECTORS = ["#uuid", "#nickName"];
 	function getUserInfoCopyValue(element) {
 		const text = element.textContent ?? "";
@@ -12055,7 +11450,7 @@
 		button.id = "card" + card.id;
 		button.classList.toggle(RED_CARD_CLASS, card.color > 0 && card.color <= 2);
 		button.innerHTML = getCardFaceHtml(card);
-		button.title = card.getLocationDescription?.() ?? "";
+		button.title = card.getLocationDescription();
 		if (options.ambiguous) {
 			button.classList.add("candidate-card");
 			button.setAttribute("aria-disabled", "true");
@@ -12077,7 +11472,7 @@
 		button.id = "Qcard" + inst.id;
 		button.innerHTML = getCardFaceHtml(inst);
 		button.style.backgroundColor = STATUS_COLORS[key] ?? "";
-		if (key === 1) button.title = (room?.cardIndex?.get(inst.id))?.getLocationDescription?.() ?? "";
+		if (key === 1) button.title = (room?.cardIndex.get(inst.id))?.getLocationDescription() ?? "";
 		else button.title = STATUS_LABELS[key] ?? "";
 		return button;
 	}
@@ -12102,6 +11497,34 @@
 			});
 		});
 	}
+	var OVERFLOW_TOLERANCE_PX = 4;
+	var tokens = new WeakMap();
+	function isEllipsisHost(el) {
+		if (!el || typeof el !== "object") return false;
+		const obj = el;
+		const cl = obj.classList;
+		return typeof cl?.add === "function" && typeof cl?.remove === "function" && typeof obj.clientHeight === "number" && typeof obj.scrollHeight === "number";
+	}
+	function nextToken(el) {
+		const t = (tokens.get(el) ?? 0) + 1;
+		tokens.set(el, t);
+		return t;
+	}
+	function checkEllipsisOverflow(el, threshold) {
+		if (!isEllipsisHost(el)) return;
+		const token = nextToken(el);
+		requestAnimationFrame(() => {
+			if (tokens.get(el) !== token) return;
+			const limit = threshold ?? el.clientHeight;
+			if (el.clientHeight > 0 && el.scrollHeight > limit + OVERFLOW_TOLERANCE_PX) el.classList.add("show-ellipsis");
+			else el.classList.remove("show-ellipsis");
+		});
+	}
+	function invalidateEllipsisOverflow(el) {
+		if (!isEllipsisHost(el)) return;
+		nextToken(el);
+		el.classList.remove("show-ellipsis");
+	}
 	function getPileDisplayCards(cards) {
 		return [...cards].reverse();
 	}
@@ -12113,10 +11536,10 @@
 		const indexedCards = Array.from(indexedItems.values(), ({ card }) => card).filter((card) => isAmbiguousKnownCard(card));
 		const scannedCards = collectSupplementalCandidateCards(room, indexedItems);
 		[...indexedCards, ...scannedCards].forEach((card) => {
-			if (card?.id > 0) cardsByID.set(card.id, card);
+			if (card.id > 0) cardsByID.set(card.id, card);
 		});
-		room.suspendedKnownCards?.forEach((card) => {
-			if (card?.id > 0 && card.isKnown) cardsByID.set(card.id, card);
+		room.suspendedKnownCards.forEach((card) => {
+			if (card.id > 0 && card.isKnown) cardsByID.set(card.id, card);
 		});
 		return Array.from(cardsByID.values());
 	}
@@ -12195,15 +11618,11 @@
 		for (let displayID = 1; displayID <= playerCount; displayID++) panel.appendChild(createPlayerHandContainer(doc, displayID));
 	}
 	function createPlayerHandContainer(doc, displayID) {
-		const container = doc.createElement("div");
-		container.className = "orderContainer";
-		container.id = "playerHand" + displayID;
-		container.style.setProperty("--No-content", `'${getDisplayIdLabel(displayID)}号位'`);
 		const body = doc.createElement("div");
 		body.className = "order-body No" + displayID;
 		body.id = String(displayID);
-		container.appendChild(body);
-		return container;
+		body.style.setProperty("--No-content", `'${getDisplayIdLabel(displayID)}号位'`);
+		return body;
 	}
 	function syncPlayerHandContainers(doc, room) {
 		const panel = getPlayerHandPanel(doc);
@@ -12214,8 +11633,8 @@
 			if (viewID !== void 0) playersByDisplayID.set(viewID + 1, player);
 		}
 		let changed = false;
-		for (const container of panel.querySelectorAll(":scope > .orderContainer")) {
-			const displayID = Number(container.id.slice(10));
+		for (const container of panel.querySelectorAll(":scope > .order-body")) {
+			const displayID = Number(container.id);
 			const player = playersByDisplayID.get(displayID);
 			const seatID = player ? String(player.seatID) : "";
 			const display = player ? "" : "none";
@@ -12226,7 +11645,7 @@
 			if (container.dataset.seatId === seatID && container.style.display === display) continue;
 			container.dataset.seatId = seatID;
 			container.style.display = display;
-			container.querySelector(".order-body")?.replaceChildren();
+			container.replaceChildren();
 			changed = true;
 		}
 		return changed;
@@ -12234,7 +11653,7 @@
 	function updateSeatLabel(doc, player, orderLabels) {
 		const fixedViewId = player.fixedViewId;
 		if (fixedViewId === void 0) return;
-		const container = doc.getElementById("playerHand" + fixedViewId);
+		const container = doc.getElementById(String(fixedViewId));
 		if (!container) return;
 		const label = `"${formatPlayerSeatLabel(player, { orderLabels })}"`;
 		if (container.style.getPropertyValue("--No-content") !== label) container.style.setProperty("--No-content", label);
@@ -12242,7 +11661,7 @@
 	function renderPlayerHand(doc, player) {
 		const displayID = Number(player.fixedViewId);
 		if (!Number.isFinite(displayID)) return;
-		const body = getPlayerHandPanel(doc)?.querySelector("#playerHand" + displayID + " > .order-body");
+		const body = getPlayerHandPanel(doc)?.querySelector(":scope > .order-body.No" + displayID);
 		if (!body) return;
 		const renderedNodes = [];
 		for (const card of player.knownHandCards) renderedNodes.push(createHandCardNode(doc, card, "known"));
@@ -12268,7 +11687,7 @@
 		mark.textContent = label;
 		markedCard.appendChild(mark);
 		cards.forEach((card) => {
-			const button = createCardButton(doc, card, { ambiguous: card.hasSubZoneCandidates?.() === true });
+			const button = createCardButton(doc, card, { ambiguous: card.hasSubZoneCandidates() });
 			markedCard.appendChild(button);
 		});
 		return setRenderedNodeKey(markedCard, `mark:${spellID}`);
@@ -12334,9 +11753,9 @@
 		return getPanelContentInner(doc.getElementById("button"));
 	}
 	function renderPublicZones(room, doc) {
-		const publicByZone = room.locationIndex?.publicByZone;
-		renderCardList(doc, "paiduiCards", getPileDisplayCards(publicByZone?.get("pile") ?? room.zones.get("pile")?.cards ?? []));
-		renderCardList(doc, "qipaiCards", (publicByZone?.get("discard") ?? room.zones.get("discard")?.cards ?? []).filter((card) => card.turn === Game.turn && card.round === Game.round));
+		const publicByZone = room.locationIndex.publicByZone;
+		renderCardList(doc, "paiduiCards", getPileDisplayCards(publicByZone.get("pile") ?? room.getZone("pile").cards));
+		renderCardList(doc, "qipaiCards", (publicByZone.get("discard") ?? room.getZone("discard").cards).filter((card) => card.turn === Game.turn && card.round === Game.round));
 		renderCardList(doc, "knownCards", getPublicFieldCandidateCards(room), { ambiguous: true });
 	}
 	function renderCardList(doc, containerId, cards, options = { ambiguous: false }) {
@@ -12503,9 +11922,8 @@
 		}
 		const shouldRenderPlayerHands = renderState.shouldRenderAllPlayers || renderState.affectedSeatIDs.size > 0;
 		const playerOrderResolved = hasResolvedPlayerOrder(currentRoom);
-		getPlayersForRender(currentRoom, renderState).forEach((player) => {
-			renderPlayerHand(doc, player);
-		});
+		const players = getPlayersForRender(currentRoom, renderState);
+		for (const player of players) renderPlayerHand(doc, player);
 		if (renderState.shouldRenderPanels) renderQueryPanel(currentRoom, doc);
 		syncTrackerVisibility(doc);
 		if (shouldRenderPlayerHands && !playerOrderResolved) return;
@@ -12590,6 +12008,2405 @@
 		getSeatUIs: () => readSeatUIs(),
 		logger: trackerLogger
 	});
+	function addDragHint() {
+		var sidebarHint = document.createElement("div");
+		sidebarHint.id = "sidebarHint";
+		sidebarHint.innerText = "拖到这里变为变为侧边栏，再次拖动取消侧边栏";
+		document.body.appendChild(sidebarHint);
+	}
+	function getLayoutViewportWidth() {
+		return document.documentElement.clientWidth || window.innerWidth;
+	}
+	function initDragElement(globalConfig, globalState, refreshSidebarViewport) {
+		let mousePressed = false;
+		document.addEventListener("mousedown", function(e) {
+			if (!mousePressed) {
+				mousePressed = true;
+				const clickedSorderBody = e.target.closest(".sorder-body");
+				if (clickedSorderBody) {
+					document.body.classList.add("mouse-pressed");
+					e.preventDefault();
+					e.stopImmediatePropagation();
+					setTimeout(() => {
+						const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
+						if (elementBelow && elementBelow !== clickedSorderBody) elementBelow.dispatchEvent(new MouseEvent("mousedown", {
+							bubbles: true,
+							cancelable: true,
+							clientX: e.clientX,
+							clientY: e.clientY,
+							button: e.button,
+							buttons: e.buttons
+						}));
+					}, 0);
+				} else document.body.classList.add("mouse-pressed");
+			}
+		}, true);
+		document.addEventListener("mouseup", () => {
+			if (mousePressed) {
+				mousePressed = false;
+				document.body.classList.remove("mouse-pressed");
+			}
+		});
+		const draggable = document.getElementById("header");
+		const container = document.getElementById("tracker-shell");
+		const sidebarHint = document.getElementById("sidebarHint");
+		let isDragging = false;
+		let startX = 0, startY = 0;
+		let translateX = 0, translateY = 0;
+		let pendingFrame = false;
+		const startDrag = (e) => {
+			draggable.style.cursor = "grabbing";
+			isDragging = true;
+			startX = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
+			startY = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
+			container.style.userSelect = "none";
+			container.style.willChange = "transform";
+			document.addEventListener("mousemove", onDrag);
+			document.addEventListener("mouseup", stopDrag);
+			document.addEventListener("touchmove", onDrag);
+			document.addEventListener("touchend", stopDrag);
+		};
+		draggable.addEventListener("mousedown", startDrag);
+		draggable.addEventListener("touchstart", startDrag);
+		function onDrag(e) {
+			if (!isDragging) return;
+			sidebarHint.style.display = "flex";
+			const clientX = e.clientX ?? e.touches?.[0]?.clientX ?? startX;
+			const clientY = e.clientY ?? e.touches?.[0]?.clientY ?? startY;
+			const deltaX = clientX - startX;
+			const deltaY = clientY - startY;
+			const rect = container.getBoundingClientRect();
+			const left0 = rect.left - translateX;
+			const top0 = rect.top - translateY;
+			const width = rect.width || 230;
+			const viewportWidth = getLayoutViewportWidth();
+			translateX += deltaX;
+			translateY += deltaY;
+			const minX = -left0;
+			const maxX = viewportWidth - width - left0;
+			const minY = -top0;
+			const maxY = window.innerHeight - 30 - top0;
+			translateX = Math.max(minX, Math.min(maxX, translateX));
+			translateY = Math.max(minY, Math.min(maxY, translateY));
+			if (globalConfig.padding) {
+				globalConfig.padding = 0;
+				container.style.height = "500px";
+				refreshSidebarViewport();
+			}
+			if (!pendingFrame) {
+				pendingFrame = true;
+				requestAnimationFrame(() => {
+					container.style.transform = `translate(${translateX}px, ${translateY}px)`;
+					pendingFrame = false;
+				});
+			}
+			if (viewportWidth - clientX < 25) sidebarHint.style.backgroundColor = "rgba(55, 40, 32, 1)";
+			else sidebarHint.style.backgroundColor = "rgba(55, 40, 32, 0.8)";
+			startX = clientX;
+			startY = clientY;
+		}
+		function stopDrag(e) {
+			sidebarHint.style.display = "none";
+			draggable.style.cursor = "grab";
+			isDragging = false;
+			document.removeEventListener("mousemove", onDrag);
+			document.removeEventListener("mouseup", stopDrag);
+			document.removeEventListener("touchmove", onDrag);
+			document.removeEventListener("touchend", stopDrag);
+			container.style.willChange = "auto";
+			const finalClientX = e.clientX ?? e.changedTouches?.[0]?.clientX ?? e.touches?.[0]?.clientX ?? startX;
+			if (getLayoutViewportWidth() - finalClientX < 25 && draggable.id === "header") {
+				if (!globalConfig.padding) {
+					if (globalState.closeIframe) document.getElementById("toggle-me").click();
+					globalConfig.padding = 232;
+					refreshSidebarViewport();
+					translateX = 0;
+					translateY = 0;
+					container.style.transform = `translate(${translateX}px, ${translateY}px)`;
+				}
+			}
+		}
+	}
+	var windowStates = new Map();
+	function createDraggableWindow({ id, styleId, styleText, markup, handleSelector }) {
+		ensureStyle$1(styleId, `${getShellStyle(id)}${styleText}`);
+		const element = document.createElement("section");
+		element.id = id;
+		element.innerHTML = markup;
+		document.body.appendChild(element);
+		const state = windowStates.get(id) || {
+			lastPosition: null,
+			cleanupDrag: null,
+			cleanupPosition: null
+		};
+		windowStates.set(id, state);
+		restorePosition(element, state);
+		bindDrag(element, element.querySelector(handleSelector), state);
+		bindPositionCorrection(element, state);
+		return element;
+	}
+	function destroyDraggableWindow(id) {
+		const state = windowStates.get(id);
+		state?.cleanupDrag?.();
+		state?.cleanupPosition?.();
+		document.getElementById(id)?.remove();
+	}
+	function setDraggableWindowVisible(id, visible) {
+		const element = document.getElementById(id);
+		if (!element) return;
+		element.style.display = visible ? "" : "none";
+		const state = windowStates.get(id);
+		if (visible && state) correctPosition(element, state);
+	}
+	function ensureStyle$1(styleId, styleText) {
+		if (document.getElementById(styleId)) return;
+		const style = document.createElement("style");
+		style.id = styleId;
+		style.textContent = styleText;
+		document.head.appendChild(style);
+	}
+	function getShellStyle(id) {
+		return `
+    #${id} {
+      position: fixed;
+      right: 20px;
+      z-index: 10000000020;
+      box-sizing: border-box;
+      padding: 0 6px 6px;
+      color: #f4ead8;
+      background: #292724;
+      border: 1px solid #7b292d;
+      box-shadow: 0 7px 18px rgba(0, 0, 0, 0.42);
+      font-family: "Microsoft YaHei", sans-serif;
+      user-select: none;
+    }
+    #${id} * { box-sizing: border-box; }
+    #${id} .draggable-window-header {
+      height: 22px;
+      margin: 0 -6px;
+      padding: 0 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #7b292d;
+      cursor: grab;
+    }
+    #${id}.is-dragging .draggable-window-header { cursor: grabbing; }
+    #${id} .draggable-window-title {
+      overflow: hidden;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  `;
+	}
+	function bindDrag(element, handle, state) {
+		state.cleanupDrag?.();
+		let pointerId = null;
+		let offsetX = 0;
+		let offsetY = 0;
+		const move = (event) => {
+			if (event.pointerId !== pointerId) return;
+			state.lastPosition = setPosition(element, event.clientX - offsetX, event.clientY - offsetY);
+		};
+		const stop = (event) => {
+			if (event.pointerId !== pointerId) return;
+			pointerId = null;
+			element.classList.remove("is-dragging");
+			handle.releasePointerCapture?.(event.pointerId);
+		};
+		const start = (event) => {
+			if (event.button !== 0) return;
+			const rect = element.getBoundingClientRect();
+			pointerId = event.pointerId;
+			offsetX = event.clientX - rect.left;
+			offsetY = event.clientY - rect.top;
+			element.classList.add("is-dragging");
+			handle.setPointerCapture?.(pointerId);
+		};
+		handle.addEventListener("pointerdown", start);
+		handle.addEventListener("pointermove", move);
+		handle.addEventListener("pointerup", stop);
+		handle.addEventListener("pointercancel", stop);
+		state.cleanupDrag = () => {
+			handle.removeEventListener("pointerdown", start);
+			handle.removeEventListener("pointermove", move);
+			handle.removeEventListener("pointerup", stop);
+			handle.removeEventListener("pointercancel", stop);
+			state.cleanupDrag = null;
+		};
+	}
+	function bindPositionCorrection(element, state) {
+		state.cleanupPosition?.();
+		const correct = () => correctPosition(element, state);
+		const observer = new ResizeObserver(correct);
+		observer.observe(element, { box: "border-box" });
+		window.addEventListener("resize", correct);
+		correct();
+		state.cleanupPosition = () => {
+			observer.disconnect();
+			window.removeEventListener("resize", correct);
+			state.cleanupPosition = null;
+		};
+	}
+	function correctPosition(element, state) {
+		if (!element.getClientRects().length) return;
+		const { left, top } = element.getBoundingClientRect();
+		const position = clampPosition(element, left, top);
+		if (position.left === left && position.top === top) return;
+		state.lastPosition = setPosition(element, position.left, position.top);
+	}
+	function restorePosition(element, state) {
+		if (!state.lastPosition) return;
+		state.lastPosition = setPosition(element, state.lastPosition.left, state.lastPosition.top);
+	}
+	function setPosition(element, left, top) {
+		const position = clampPosition(element, left, top);
+		element.style.left = `${position.left}px`;
+		element.style.top = `${position.top}px`;
+		element.style.right = "auto";
+		return position;
+	}
+	function clampPosition(element, left, top) {
+		return {
+			left: Math.min(Math.max(0, getLayoutViewportWidth() - element.offsetWidth), Math.max(0, left)),
+			top: Math.min(Math.max(0, window.innerHeight - element.offsetHeight), Math.max(0, top))
+		};
+	}
+	var WINDOW_ID$1 = "pingjian-window";
+	var STYLE_ID$2 = "pingjian-style";
+	function createWindow$1() {
+		return createDraggableWindow({
+			id: WINDOW_ID$1,
+			styleId: STYLE_ID$2,
+			styleText: `
+    #${WINDOW_ID$1} {
+      top: 60px;
+      min-width: 140px;
+    }
+    #${WINDOW_ID$1} .pingjian-title {
+      font-size: 16px;
+    }
+    #${WINDOW_ID$1} .pingjian-list {
+      margin: 4px 0 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    #${WINDOW_ID$1} .pingjian-item {
+      padding: 3px 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(242, 208, 107, 0.2);
+      border-radius: 2px;
+      font-size: 16px;
+      color: #f2d06b;
+      white-space: nowrap;
+      text-align: center;
+    }
+  `,
+			markup: `
+    <header class="draggable-window-header pingjian-header">
+      <div class="draggable-window-title pingjian-title">评鉴</div>
+    </header>
+    <ul class="pingjian-list"></ul>
+  `,
+			handleSelector: ".pingjian-header"
+		});
+	}
+	function renderPingJianWindow(names) {
+		if (!Array.isArray(names) || !names.length) return false;
+		const list = (document.getElementById(WINDOW_ID$1) || createWindow$1()).querySelector(".pingjian-list");
+		if (!list) return false;
+		const items = names.map((name) => {
+			const li = document.createElement("li");
+			li.className = "pingjian-item";
+			li.textContent = name;
+			return li;
+		});
+		list.replaceChildren(...items);
+		return true;
+	}
+	function destroyPingJianWindow() {
+		destroyDraggableWindow(WINDOW_ID$1);
+	}
+	var PROTOCOL_PILE_ZONE = 1;
+	var PROTOCOL_HAND_ZONE = 5;
+	function revealCardsInProtocolZone(id, cardIDs, zone = PROTOCOL_HAND_ZONE, pos = void 0) {
+		tracker.revealTrackerCardsInZone({
+			id,
+			zone,
+			pos
+		}, cardIDs);
+	}
+	function handleResultType({ Type }) {
+		switch (Type) {
+			case 44: break;
+			case 45: break;
+			default: break;
+		}
+	}
+	function handleRoleSpellOptRep(msg = {}) {
+		const { Datas, SeatID, SpellID, Type } = msg;
+		handleResultType(msg);
+		tracker.dispatchSkillProtocolEvent({
+			type: "choice",
+			message: msg
+		});
+		switch (SpellID) {
+			case 2022:
+				Game.setGeneral(SeatID, Datas[0], Datas[1], true);
+				break;
+			case 3659:
+				revealCardsInProtocolZone(SeatID, Datas);
+				break;
+			case 3744:
+				if (Type !== 73) revealCardsInProtocolZone(255, Datas, PROTOCOL_PILE_ZONE);
+				break;
+			case 3868:
+				if (Type === 50) revealCardsInProtocolZone(255, Datas, PROTOCOL_PILE_ZONE);
+				break;
+			case 7009:
+				if (Type === 30 && Array.isArray(Datas) && Datas.length > 0) revealCardsInProtocolZone(255, Datas, PROTOCOL_PILE_ZONE);
+				break;
+			case 3336:
+				if (Type === 50 && Array.isArray(Datas)) revealCardsInProtocolZone(255, [...Datas].reverse(), PROTOCOL_PILE_ZONE, 0);
+				break;
+			case 3571: break;
+			case 3911:
+				if (Type !== 82 || SeatID !== Game.myID) break;
+				if (Array.isArray(Datas) && Datas.length === 0) {
+					destroyPingJianWindow();
+					Game.deleteSpellState(3911);
+				}
+				if (Array.isArray(Datas) && Datas.length > 0) {
+					const storedParams = Game.getSpellState(3911);
+					if (Array.isArray(storedParams) && storedParams.length > 0) {
+						const successCount = Number(Datas[0]) || 0;
+						const successData = Datas.slice(1, 1 + successCount * 4);
+						const helpCount = Number(storedParams[0]) || 0;
+						const helpData = storedParams.slice(1, 1 + helpCount * 4);
+						const nextDatas = [
+							successCount,
+							...successData,
+							helpCount,
+							...helpData,
+							0
+						];
+						Datas.splice(0, Datas.length, ...nextDatas);
+						msg.Datas = Datas;
+					}
+				}
+				break;
+			default: break;
+		}
+	}
+	var PEIXIU_DIRECTIONS = {
+		1: {
+			name: "红桃",
+			shortDirection: "左",
+			mark: "♥",
+			dx: -1,
+			dy: 0
+		},
+		2: {
+			name: "方块",
+			shortDirection: "上",
+			mark: "♦",
+			dx: 0,
+			dy: -1
+		},
+		3: {
+			name: "黑桃",
+			shortDirection: "右",
+			mark: "♠",
+			dx: 1,
+			dy: 0
+		},
+		4: {
+			name: "梅花",
+			shortDirection: "下",
+			mark: "♣",
+			dx: 0,
+			dy: 1
+		}
+	};
+	var DIR = PEIXIU_DIRECTIONS;
+	var DIRECTIONS = [
+		1,
+		2,
+		3,
+		4
+	];
+	function nums(text) {
+		if (Array.isArray(text)) return text.map(Number).filter(Number.isFinite);
+		return String(text || "").split(",").map((n) => Number(n.trim())).filter(Number.isFinite);
+	}
+	function firstField(raw, ...keys) {
+		for (const key of keys) if (raw && raw[key] !== void 0 && raw[key] !== null) return raw[key];
+	}
+	function field(raw, lower, upper, fallback = 0) {
+		return firstField(raw, lower, upper) ?? fallback;
+	}
+	function normalizeCell(cell) {
+		const n = Number(cell) || 0;
+		if (n <= 25) return n;
+		const row = Math.floor(n / 10);
+		const col = n % 10;
+		return row >= 1 && row <= 5 && col >= 1 && col <= 5 ? (row - 1) * 5 + col : n;
+	}
+	function pos(cell) {
+		const n = normalizeCell(cell);
+		return {
+			row: Math.floor((n - 1) / 5),
+			col: (n - 1) % 5
+		};
+	}
+	function cellAt(row, col) {
+		if (row < 0 || row >= 5 || col < 0 || col >= 5) return 0;
+		return row * 5 + col + 1;
+	}
+	function validCell(cell) {
+		return cell >= 1 && cell <= 25;
+	}
+	function parseCells(value) {
+		return nums(value).map(normalizeCell).filter(validCell);
+	}
+	function parseSpecialCells(value) {
+		return (Array.isArray(value) ? value : String(value || "").split("|").filter(Boolean)).map((item) => {
+			if (!Array.isArray(item) && typeof item == "object") return {
+				cell: field(item, "cell", "CellID"),
+				effect: field(item, "effect", "EffectID"),
+				param1: field(item, "param1", "Param1"),
+				param2: field(item, "param2", "Param2")
+			};
+			const [cell, effect, param1 = 0, param2 = 0] = nums(item);
+			return {
+				cell,
+				effect,
+				param1,
+				param2
+			};
+		});
+	}
+	function parseRewards(value) {
+		return (Array.isArray(value) ? value : String(value || "").split("|").filter(Boolean)).map((item) => {
+			if (!Array.isArray(item) && typeof item == "object") {
+				const cell = field(item, "cell", "CellID");
+				return {
+					cell: normalizeCell(cell),
+					rawCell: Number(cell),
+					rewardId: field(item, "rewardId", "RewardID")
+				};
+			}
+			const [cell, rewardId] = nums(item);
+			return {
+				cell: normalizeCell(cell),
+				rawCell: Number(cell),
+				rewardId
+			};
+		});
+	}
+	function parsePeiXiuMap(raw) {
+		const cells = new Set(parseCells(firstField(raw, "cell", "Cells", "cells")));
+		const specials = new Map();
+		parseSpecialCells(firstField(raw, "spcell", "SpecialCells", "specialCells")).forEach((item) => {
+			const id = normalizeCell(item.cell);
+			if (validCell(id)) specials.set(id, {
+				cell: id,
+				effect: Number(item.effect) || 0,
+				param1: Number(item.param1) || 0,
+				param2: Number(item.param2) || 0
+			});
+		});
+		const rewards = parseRewards(firstField(raw, "reward", "RewardCells", "rewardCells"));
+		const mapReward = rewards.find((reward) => reward.rawCell === 26) || null;
+		const rewardCells = rewards.filter((reward) => reward.rawCell !== 26 && validCell(reward.cell) && cells.has(reward.cell)).map((r) => r.cell);
+		return {
+			id: firstField(raw, "cellID", "CellID", "id", "mapId") || 0,
+			name: raw?.name || "",
+			cells,
+			start: normalizeCell(firstField(raw, "precell", "PreCell", "start") || 0),
+			specials,
+			rewards,
+			mapReward,
+			rewardCells: [...new Set(rewardCells)].sort((a, b) => a - b),
+			color: Number(firstField(raw, "color", "Color")) || 0,
+			bigMapPos: firstField(raw, "bigMapPos", "bigmappos", "BigMapPos") || ""
+		};
+	}
+	function orderedLineCells(from, dir, cells) {
+		const p = pos(from);
+		const step = DIR[dir];
+		const list = [];
+		if (!step) return list;
+		for (let i = 1; i <= 4; i += 1) {
+			const next = cellAt(p.row + step.dy * i, p.col + step.dx * i);
+			if (!next || !cells.has(next)) break;
+			list.push(next);
+		}
+		return list;
+	}
+	function forcedMove(from, special, map) {
+		const dir = DIR[special.param1];
+		const steps = Number(special.param2) || 0;
+		if (!dir || steps <= 0) return null;
+		const start = pos(from);
+		const path = [];
+		let end = from;
+		for (let i = 1; i <= steps; i += 1) {
+			const next = cellAt(start.row + dir.dy * i, start.col + dir.dx * i);
+			if (!next) break;
+			if (!map.cells.has(next)) break;
+			path.push(next);
+			end = next;
+		}
+		return {
+			dir: special.param1,
+			steps,
+			path,
+			end
+		};
+	}
+	function rewardIndexMap(map) {
+		const index = new Map();
+		map.rewardCells.forEach((cell, i) => index.set(cell, i));
+		return index;
+	}
+	function collectMask(cells, index) {
+		let mask = 0;
+		for (const cell of cells) {
+			const i = index.get(cell);
+			if (i !== void 0) mask |= 1 << i;
+		}
+		return mask;
+	}
+	function applySpecials(startPos, index, startMask, map) {
+		let current = startPos;
+		let mask = startMask;
+		const specialMoves = [];
+		const seen = new Set();
+		while (map.specials.get(current)?.effect === 3 && !seen.has(current)) {
+			seen.add(current);
+			const special = map.specials.get(current);
+			const forced = forcedMove(current, special, map);
+			if (!forced || forced.end === current) break;
+			mask |= collectMask(forced.path, index);
+			specialMoves.push({
+				from: current,
+				to: forced.end,
+				dir: forced.dir,
+				steps: forced.steps,
+				path: forced.path
+			});
+			current = forced.end;
+		}
+		return {
+			pos: current,
+			mask,
+			specialMoves
+		};
+	}
+	function buildTransition(from, dir, map, index) {
+		const line = orderedLineCells(from, dir, map.cells);
+		if (!line.length) return null;
+		const specialResult = applySpecials(line[line.length - 1], index, collectMask(line, index), map);
+		return {
+			pos: specialResult.pos,
+			mask: specialResult.mask,
+			step: {
+				dir,
+				from,
+				to: specialResult.pos,
+				line,
+				specialMoves: specialResult.specialMoves
+			}
+		};
+	}
+	function buildTransitionTable(map, index) {
+		const table = new Map();
+		const positions = new Set(map.cells);
+		positions.add(map.start);
+		for (const from of positions) {
+			const transitions = [];
+			for (const dir of DIRECTIONS) {
+				const next = buildTransition(from, dir, map, index);
+				if (next) transitions.push(next);
+			}
+			if (transitions.length) table.set(from, transitions);
+		}
+		return table;
+	}
+	function betterRoute(state, best) {
+		return state.count > best.count || state.count === best.count && state.depth < best.depth;
+	}
+	function buildSolution(state) {
+		const path = [];
+		for (let current = state; current?.parent; current = current.parent) path.push(current.step);
+		path.reverse();
+		return {
+			pos: state.pos,
+			mask: state.mask,
+			path
+		};
+	}
+	function solvePeiXiuMap(raw, options = {}) {
+		const map = parsePeiXiuMap(raw);
+		const startCell = normalizeCell(options.startCell ?? map.start);
+		if (!validCell(startCell) || !map.cells.has(startCell)) throw new RangeError(`裴秀地图起始格无效: ${startCell}`);
+		map.start = startCell;
+		const index = rewardIndexMap(map);
+		const target = map.rewardCells.length ? (1 << map.rewardCells.length) - 1 : 0;
+		const collectedCells = Array.isArray(options.collectedCells) ? options.collectedCells.map(normalizeCell) : [];
+		const startMask = options.collectStart === false ? collectMask(collectedCells, index) : collectMask([map.start].concat(collectedCells), index);
+		const start = {
+			pos: map.start,
+			mask: startMask,
+			count: bitCount(startMask),
+			depth: 0,
+			parent: null,
+			step: null
+		};
+		const queue = [start];
+		const seen = new Set([`${start.pos}:${start.mask}`]);
+		const transitions = buildTransitionTable(map, index);
+		let best = start;
+		for (let head = 0; head < queue.length; head += 1) {
+			const state = queue[head];
+			if (state.mask === target) return {
+				map,
+				solution: buildSolution(state),
+				complete: true
+			};
+			if (betterRoute(state, best)) best = state;
+			for (const next of transitions.get(state.pos) || []) {
+				const mask = state.mask | next.mask;
+				const key = `${next.pos}:${mask}`;
+				if (seen.has(key)) continue;
+				seen.add(key);
+				queue.push({
+					pos: next.pos,
+					mask,
+					count: bitCount(mask),
+					depth: state.depth + 1,
+					parent: state,
+					step: {
+						...next.step,
+						gainedMask: mask & ~state.mask
+					}
+				});
+			}
+		}
+		return {
+			map,
+			solution: buildSolution(best),
+			complete: false
+		};
+	}
+	function parsePeiXiuRoleData(datas) {
+		if (!Array.isArray(datas) || datas.length < 4) return null;
+		const mapId = Number(datas[0]);
+		const currentCell = normalizeCell(datas[1]);
+		const historyCount = Number(datas[2]);
+		if (!Number.isInteger(mapId) || !validCell(currentCell) || !Number.isInteger(historyCount) || historyCount < 0) return null;
+		const historyCells = datas.slice(3, 3 + historyCount).map(normalizeCell);
+		if (historyCells.length !== historyCount || historyCells.some((cell) => !validCell(cell))) return null;
+		if (datas[3 + historyCount] !== 0) return null;
+		return {
+			mapId,
+			currentCell,
+			historyCount,
+			historyCells
+		};
+	}
+	function solvePeiXiuRoleData(raw, datas) {
+		const roleData = parsePeiXiuRoleData(datas);
+		if (!roleData) return null;
+		const map = parsePeiXiuMap(raw);
+		if (Number(map.id) !== roleData.mapId || !map.cells.has(roleData.currentCell)) return null;
+		return {
+			...roleData,
+			result: solvePeiXiuMap(raw, {
+				startCell: roleData.currentCell,
+				collectedCells: roleData.historyCells
+			})
+		};
+	}
+	function bitCount(n) {
+		let count = 0;
+		while (n) {
+			n &= n - 1;
+			count += 1;
+		}
+		return count;
+	}
+	var WINDOW_ID = "peixiu-map-window";
+	var STYLE_ID$1 = "peixiu-map-style";
+	var CELL_SIZE = 50;
+	var SUIT_ORDER = [
+		3,
+		4,
+		1,
+		2
+	];
+	function getRewardInfo(reward, bonuses) {
+		if (!reward) return null;
+		const config = bonuses?.get(Number(reward.rewardId));
+		return {
+			id: Number(reward.rewardId),
+			name: config?.name || `奖励 ${reward.rewardId}`,
+			desc: config?.desc || ""
+		};
+	}
+	function getRouteCells(solution) {
+		const cells = new Set();
+		for (const step of solution?.path || []) {
+			for (const cell of step.line || []) cells.add(cell);
+			for (const move of step.specialMoves || []) for (const cell of move.path || []) cells.add(cell);
+		}
+		return cells;
+	}
+	function formatRoute(solution, emptyText = "已完成") {
+		const path = Array.isArray(solution) ? solution : solution?.path || [];
+		if (!path.length) return emptyText;
+		return path.map((step) => {
+			const direction = typeof step === "number" ? step : step.dir;
+			const mark = PEIXIU_DIRECTIONS[direction]?.mark || direction;
+			return typeof step === "number" ? mark : `${mark}${step.to}`;
+		}).join(" → ");
+	}
+	function setSuitText(element, text, prefix = "") {
+		element.replaceChildren();
+		const parts = `${prefix}${text}`.split(/([♥♦])/);
+		for (const part of parts) {
+			if (!part) continue;
+			if (part === "♥" || part === "♦") {
+				const suit = document.createElement("span");
+				suit.className = "peixiu-red-suit";
+				suit.textContent = part;
+				element.appendChild(suit);
+			} else element.appendChild(document.createTextNode(part));
+		}
+	}
+	function formatSuitCounts(suits) {
+		const counts = new Map(SUIT_ORDER.map((direction) => [direction, 0]));
+		for (const suit of suits || []) if (counts.has(suit)) counts.set(suit, counts.get(suit) + 1);
+		return SUIT_ORDER.map((direction) => `${PEIXIU_DIRECTIONS[direction].mark}${counts.get(direction)}`).join("");
+	}
+	function formatRequiredSuits(solution) {
+		return formatSuitCounts((solution?.path || []).map((step) => step.dir));
+	}
+	function buildPeiXiuMapViewModel(state, bonuses) {
+		const map = state?.result?.map;
+		if (!map) return null;
+		const rewardsByCell = new Map(map.rewards.filter((reward) => reward.rawCell !== 26).map((reward) => [reward.cell, getRewardInfo(reward, bonuses)]));
+		const historyCells = new Set(state.historyCells || []);
+		const collectedCells = new Set(historyCells).add(state.currentCell);
+		const routeCells = getRouteCells(state.result.solution);
+		return {
+			width: 264,
+			mapName: map.name || `地图 ${map.id}`,
+			mapReward: getRewardInfo(map.mapReward, bonuses),
+			currentCell: state.currentCell,
+			presetRoutes: (state.presetRoutes || []).slice(0, 2).map(formatRoute),
+			requiredSuits: formatRequiredSuits(state.result.solution),
+			handSuits: Array.isArray(state.handSuitColors) ? formatSuitCounts(state.handSuitColors) : "",
+			dynamicRoute: state.result.complete ? formatRoute(state.result.solution) : `无法拿全奖励，当前最优：${formatRoute(state.result.solution, "无可行路线")}`,
+			historyCells,
+			routeCells,
+			cells: [...map.cells].map((id) => ({
+				id,
+				row: Math.floor((id - 1) / 5) + 1,
+				column: (id - 1) % 5 + 1,
+				current: id === state.currentCell,
+				visited: historyCells.has(id),
+				onRoute: routeCells.has(id),
+				reward: rewardsByCell.get(id) || null,
+				rewardCollected: collectedCells.has(id),
+				special: map.specials.get(id) || null
+			}))
+		};
+	}
+	function createWindow() {
+		return createDraggableWindow({
+			id: WINDOW_ID,
+			styleId: STYLE_ID$1,
+			styleText: `
+    #${WINDOW_ID} {
+      top: 50px;
+      width: 264px;
+    }
+    #${WINDOW_ID} .peixiu-title {
+      font-size: 12px;
+    }
+    #${WINDOW_ID} .peixiu-fixed-skill {
+      min-height: 38px;
+      padding: 4px 0;
+      overflow: hidden;
+      border-bottom: 1px solid #706457;
+    }
+    #${WINDOW_ID} .peixiu-fixed-skill span {
+      overflow: hidden;
+      font-size: 12px;
+      line-height: 14px;
+      white-space: normal;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+    #${WINDOW_ID} .peixiu-presets {
+      padding: 2px 0;
+      display: grid;
+      gap: 1px;
+      color: #dce9ef;
+      font-size: 16px;
+      line-height: 16px;
+    }
+    #${WINDOW_ID} .peixiu-presets .peixiu-route {
+      min-height: 16px;
+    }
+    #${WINDOW_ID} .peixiu-presets .peixiu-route.is-empty {
+      visibility: hidden;
+    }
+    #${WINDOW_ID} .peixiu-presets .peixiu-route + .peixiu-route {
+      margin-top: 2px;
+      padding-top: 2px;
+      border-top: 1px solid #706457;
+    }
+    #${WINDOW_ID} .peixiu-dynamic-route {
+      min-height: 36px;
+      padding: 2px 0;
+      color: #9ed4b4;
+      font-size: 16px;
+      line-height: 16px;
+    }
+    #${WINDOW_ID} .peixiu-required-suits {
+      min-height: 22px;
+      padding: 3px 0;
+      color: #f2d06b;
+      font-size: 16px;
+      line-height: 16px;
+    }
+    #${WINDOW_ID} .peixiu-hand-suits {
+      min-height: 22px;
+      padding: 3px 0;
+      color: #dce9ef;
+      font-size: 16px;
+      line-height: 16px;
+    }
+    #${WINDOW_ID} .peixiu-hand-suits.is-empty {
+      visibility: hidden;
+    }
+    #${WINDOW_ID} .peixiu-route {
+      overflow: hidden;
+      display: -webkit-box;
+      white-space: normal;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+    #${WINDOW_ID} .peixiu-red-suit {
+      color: #ff5f5f;
+    }
+    #${WINDOW_ID} .peixiu-board {
+      width: 250px;
+      height: 250px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(5, ${CELL_SIZE}px);
+      grid-template-rows: repeat(5, ${CELL_SIZE}px);
+      background: rgba(219, 189, 134, 0.95);
+      box-shadow: inset 0 0 0 1px #51463b;
+    }
+    #${WINDOW_ID} .peixiu-cell {
+      position: relative;
+      width: ${CELL_SIZE}px;
+      height: ${CELL_SIZE}px;
+      padding: 3px;
+      color: #33261d;
+      background: rgb(213, 175, 123);
+      border: 1px solid rgba(70, 50, 36, 0.46);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    #${WINDOW_ID} .peixiu-cell.is-visited { background: #66aa77; }
+    #${WINDOW_ID} .peixiu-cell.is-route { box-shadow: inset 0 0 0 2px #3f6f86; }
+    #${WINDOW_ID} .peixiu-cell.is-current {
+      color: #fff;
+      background: #8f3438;
+      box-shadow: inset 0 0 0 2px #f2d06b;
+    }
+    #${WINDOW_ID} .peixiu-cell-number { position: absolute; top: 3px; left: 3px; }
+    #${WINDOW_ID} .peixiu-reward-badge {
+      position: absolute;
+      right: 3px;
+      bottom: 3px;
+      max-width: 40px;
+      padding: 2px;
+      overflow: hidden;
+      color: #fff8dd;
+      background: #2f6652;
+      border: 1px solid #d9c477;
+      font-size: 12px;
+      line-height: 8px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #${WINDOW_ID} .peixiu-reward-badge.is-collected {
+      color: #2c2925;
+      background: #fff;
+      border-color: #8a8177;
+    }
+    #${WINDOW_ID} .peixiu-special {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #6f2025;
+      font-size: 13px;
+    }
+  `,
+			markup: `
+    <header class="draggable-window-header peixiu-header">
+      <div class="draggable-window-title peixiu-title"></div>
+    </header>
+    <div class="peixiu-fixed-skill"></div>
+    <div class="peixiu-presets">
+      <div class="peixiu-route" data-route="preset-1"></div>
+      <div class="peixiu-route" data-route="preset-2"></div>
+    </div>
+    <div class="peixiu-board"></div>
+    <div class="peixiu-required-suits"></div>
+    <div class="peixiu-route peixiu-dynamic-route" data-route="dynamic"></div>
+    <div class="peixiu-hand-suits"></div>
+  `,
+			handleSelector: ".peixiu-header"
+		});
+	}
+	function setSkillLine(element, desc) {
+		element.replaceChildren();
+		const text = document.createElement("span");
+		text.textContent = desc || "";
+		element.appendChild(text);
+	}
+	function renderPeiXiuMapWindow(state, bonuses) {
+		const model = buildPeiXiuMapViewModel(state, bonuses);
+		if (!model) return false;
+		const element = document.getElementById(WINDOW_ID) || createWindow();
+		element.querySelector(".peixiu-title").textContent = model.mapName;
+		[element.querySelector("[data-route=\"preset-1\"]"), element.querySelector("[data-route=\"preset-2\"]")].forEach((routeElement, index) => {
+			const route = model.presetRoutes[index] || "";
+			setSuitText(routeElement, route);
+			routeElement.classList.toggle("is-empty", !route);
+		});
+		setSuitText(element.querySelector(".peixiu-required-suits"), model.requiredSuits, "需求：");
+		setSuitText(element.querySelector("[data-route=\"dynamic\"]"), model.dynamicRoute, "动态：");
+		const handSuits = element.querySelector(".peixiu-hand-suits");
+		setSuitText(handSuits, model.handSuits, model.handSuits ? "手牌：" : "");
+		handSuits.classList.toggle("is-empty", !model.handSuits);
+		const fixedSkill = element.querySelector(".peixiu-fixed-skill");
+		const fixedSkillDesc = model.mapReward?.desc || "";
+		setSkillLine(fixedSkill, fixedSkillDesc);
+		const board = element.querySelector(".peixiu-board");
+		board.replaceChildren();
+		for (const cell of model.cells) {
+			const cellElement = document.createElement("div");
+			cellElement.className = "peixiu-cell";
+			cellElement.style.gridRow = cell.row;
+			cellElement.style.gridColumn = cell.column;
+			cellElement.classList.toggle("is-visited", cell.visited);
+			cellElement.classList.toggle("is-route", cell.onRoute);
+			cellElement.classList.toggle("is-current", cell.current);
+			const number = document.createElement("span");
+			number.className = "peixiu-cell-number";
+			number.textContent = cell.id;
+			cellElement.appendChild(number);
+			if (cell.reward) {
+				const badge = document.createElement("span");
+				badge.className = "peixiu-reward-badge";
+				badge.classList.toggle("is-collected", cell.rewardCollected);
+				badge.textContent = cell.reward.name;
+				cellElement.appendChild(badge);
+				cellElement.addEventListener("mouseenter", () => setSkillLine(fixedSkill, cell.reward.desc));
+				cellElement.addEventListener("mouseleave", () => setSkillLine(fixedSkill, fixedSkillDesc));
+			}
+			if (cell.special?.effect === 3) {
+				const special = document.createElement("span");
+				special.className = "peixiu-special";
+				special.textContent = `${PEIXIU_DIRECTIONS[cell.special.param1]?.shortDirection || cell.special.param1}${cell.special.param2}`;
+				cellElement.appendChild(special);
+			}
+			board.appendChild(cellElement);
+		}
+		return true;
+	}
+	function destroyPeiXiuMapWindow() {
+		destroyDraggableWindow(WINDOW_ID);
+	}
+	function setPeiXiuMapWindowVisible(visible) {
+		setDraggableWindowVisible(WINDOW_ID, visible);
+	}
+	function clearElement(element) {
+		while (element?.firstChild) element.removeChild(element.firstChild);
+	}
+	function buttonRes(text, title = "点击复制", encode = true, disable = false) {
+		const button = document.createElement("button");
+		button.className = "calRes";
+		button.title = title;
+		button.disabled = disable;
+		button.innerText = text;
+		button.onclick = () => {
+			toClipboard(text, encode);
+			button.innerText = "复制成功";
+			setTimeout(() => {
+				button.textContent = text;
+			}, 500);
+		};
+		return button;
+	}
+	function getResultContainer() {
+		const resDiv = document.getElementById("result");
+		if (resDiv) clearElement(resDiv);
+		return resDiv;
+	}
+	function showTextResult(container, text) {
+		container.innerHTML = `<span class="textRes">${text}</span>`;
+	}
+	function normalizeCardNumbers(array) {
+		return (array || []).filter((number) => Number.isInteger(number) && number >= 1 && number <= 13).sort((a, b) => a - b);
+	}
+	function formatCardNumbers(numbers, useAce = true) {
+		return numbers.map((number) => n2N(number, useAce)).join("+");
+	}
+	function countCardNumbers(numbers) {
+		const counts = Array(14).fill(0);
+		numbers.forEach((number) => {
+			counts[0] += 1;
+			counts[number] += 1;
+		});
+		return counts;
+	}
+	function getCountedNumbersTotal(counts) {
+		return counts.reduce((sum, count, number) => sum + count * number, 0);
+	}
+	function formatNumberCounts(counts) {
+		return counts.flatMap((count, number) => number > 0 ? Array(count).fill(n2N(number, false)) : []);
+	}
+	var ROUND_ZHAN_FA_IDS = new Set([
+		2100,
+		2101,
+		2108,
+		2109,
+		2110,
+		2312,
+		2313,
+		2317,
+		2319,
+		2320,
+		2321,
+		2322
+	]);
+	var SELF_TURN_ZHAN_FA_IDS = new Set([
+		2079,
+		2080,
+		2081,
+		2082,
+		2083,
+		2084
+	]);
+	function redefine(obj, prop, value) {
+		if (typeof obj?.[prop] != "function") return false;
+		if (Object.prototype.hasOwnProperty.call(obj, `__${prop}`)) return false;
+		Object.defineProperty(obj, `__${prop}`, Object.getOwnPropertyDescriptor(obj, prop));
+		Object.defineProperty(obj, prop, {
+			...value,
+			configurable: true
+		});
+		return true;
+	}
+	function getPageWindow() {
+		if (typeof unsafeWindow == "object") return unsafeWindow;
+		return window;
+	}
+	function getCallerFromEvent(emitter, eventName, propKey = null) {
+		const handlers = emitter?._events?.[eventName];
+		if (!handlers) return void 0;
+		return (Array.isArray(handlers) ? handlers : [handlers]).map((e) => e?.caller).filter(Boolean).find((caller) => !propKey || Object.prototype.hasOwnProperty.call(caller, propKey) || caller.constructor && Object.prototype.hasOwnProperty.call(caller.constructor, propKey) || propKey in caller);
+	}
+	function findInStage(stage, key) {
+		if (!stage) return [];
+		if (key in stage) return stage[key];
+		let result = stage?._children?.filter(Boolean) || [];
+		if (key === "*" && stage?.viewStack?._childUIList?.length) result = stage.viewStack._childUIList;
+		else if (key?.endsWith?.("Layer")) {
+			const order = [
+				"BottomLayer",
+				"BackgroundLayer",
+				"SceneLayer",
+				"AnimationLayer",
+				"WindowLayer",
+				"TopUILayer",
+				"PromptLayer"
+			].indexOf(key);
+			result = result.filter((layer) => layer.layerOrder == order);
+		} else if ((key?.endsWith?.("View") || key?.endsWith?.("Window")) && stage?.viewStack?._childList?.includes(key)) {
+			const indexes = stage.viewStack._childList.map((value, index) => value == key ? index : -1).filter((value) => value > -1);
+			result = stage.viewStack._childUIList?.filter((value, index) => value && indexes.includes(index));
+		} else if (key) result = result.filter((item) => item.name == key || item.sceneName == key || item.constructor?.name == key);
+		if (!result?.length) return [];
+		return Array.isArray(result) && result.length == 1 ? result[0] : result;
+	}
+	var classResolvers = {
+		GameContext(_runtime) {
+			const ctx = getPageWindow()?.GameContext || window.Laya?.Browser?.window?.GameContext || window.GameContext;
+			if (ctx && typeof ctx.GetModeType == "function" && typeof ctx.GetGroupID == "function") return ctx;
+		},
+		GetGoodsByID(runtime) {
+			return runtime.get("SgxFPreviewWindow", null, 0)?.getGoodConfig;
+		},
+		SgsText(runtime) {
+			return runtime.scene?.topMenu?.timeLabel?.constructor;
+		},
+		SgsSpriteFilterBtn(runtime) {
+			return runtime.scene?.topMenu?.backBtn?.constructor;
+		},
+		GameEventDispatcher(runtime) {
+			return runtime.get("PopUpWindow", null, 0)?.ged;
+		},
+		WindowManager(runtime) {
+			const ged = runtime.class("GameEventDispatcher");
+			if (!ged) return void 0;
+			return getCallerFromEvent(ged, "HIDE_WINDOW", "WindowInstanceDict");
+		},
+		ServerProxy(runtime) {
+			return runtime.class("WindowManager")?.proxy;
+		},
+		SceneManager(runtime) {
+			const ged = runtime.class("GameEventDispatcher");
+			if (!ged) return void 0;
+			return getCallerFromEvent(ged, "SWITCH_SCENE", "CurrentScene");
+		},
+		RogueLikePveManager(runtime) {
+			const proxy = runtime.class("ServerProxy");
+			if (!proxy) return void 0;
+			return getCallerFromEvent(proxy, "decodeRogueLikeDataSync");
+		}
+	};
+	var GameRuntime = class {
+		instance = {};
+		classes = {};
+		__RUNTIME__ = null;
+		flag = null;
+		limit = 300;
+		order = [];
+		mark = () => null;
+		trace = () => null;
+		yanJiao = () => null;
+		_powerSloganBlocked = false;
+		reset() {
+			this.flag = null;
+			this.order = [];
+		}
+		init() {
+			return true;
+		}
+		class(name, anew = false, value = void 0) {
+			if (!anew && this.classes[name]) return this.classes[name];
+			const resolver = Object.prototype.hasOwnProperty.call(classResolvers, name) ? classResolvers[name] : void 0;
+			const resolved = typeof value == "function" ? value() : value || resolver?.(this);
+			if (resolved) this.classes[name] = resolved;
+			return this.classes[name];
+		}
+		get(name, args, dt = false, callback) {
+			if (name in this.classes) return this.class(name) ? new this.classes[name](args) : void 0;
+			if (!window.Laya?.ClassUtils?.getInstance) return void 0;
+			if (!this.instance[name]) {
+				this.del(name);
+				const instance = window.Laya.ClassUtils.getInstance(name, args);
+				if (instance?.protoName != "Protocol" && typeof instance?.Init == "function" && args !== null) try {
+					instance.Init();
+				} catch (error) {
+					console.error(`Laya instance ${name} Init() error!\n` + error.stack);
+				}
+				this.instance[name] = instance;
+			}
+			if (this.instance[name]?.timeoutId) clearTimeout(this.instance[name].timeoutId);
+			if (typeof callback === "function") callback(this.instance[name]);
+			if (dt !== false) this.del(name, dt);
+			return this.instance[name];
+		}
+		del(name, time = true) {
+			const item = this.instance[name];
+			if (!item || time === false || time === null) return;
+			if (item.timeoutId) {
+				clearTimeout(item.timeoutId);
+				delete item.timeoutId;
+			}
+			const delNow = () => {
+				if (!this.instance[name]) return;
+				try {
+					if (!this.instance[name].parent) if (typeof this.instance[name].Close == "function") this.instance[name].Close();
+					else this.instance[name].destroy?.();
+				} catch (error) {
+					console.error("Laya instance " + name + " delete error!" + error);
+				}
+				delete this.instance[name];
+			};
+			if (time === true) delNow();
+			else item.timeoutId = setTimeout(delNow, time);
+		}
+		find(...keys) {
+			const isPlainObject = (obj) => Object.prototype.toString.call(obj) === "[object Object]";
+			const start = isPlainObject(keys[0]) ? keys.shift() : window.Laya?.stage;
+			const result = keys.reduce((acc, key) => {
+				if (!(acc instanceof Object)) return [];
+				if (Array.isArray(acc)) {
+					if (!acc.length) return [];
+					if (Array.isArray(key)) return acc.flatMap((item) => key.flatMap((itemKey) => findInStage(item, itemKey)));
+					return acc.flatMap((item) => findInStage(item, key));
+				}
+				if (Array.isArray(key)) return key.flatMap((itemKey) => findInStage(acc, itemKey));
+				return findInStage(acc, key);
+			}, start);
+			return result?.length == 0 ? null : result;
+		}
+		get ged() {
+			return this.class("GameEventDispatcher");
+		}
+		get scene() {
+			return this.class("SceneManager")?.CurrentScene || this.find("SceneLayer", null);
+		}
+		get gamescene() {
+			return this.class("SceneManager")?.IsGameScene ? this.scene : null;
+		}
+		chat(chatmsg = "", channel = false) {
+			if (!channel) {
+				const UI = this.gamescene?.chatViewUI || this.scene?.chatViewUI || this.find(this.gamescene || this.scene, null, "chatViewUI");
+				return UI?.chatInput && (UI.chatInput.text = chatmsg);
+			}
+			if (typeof channel === "string") {
+				chatmsg = channel + ":" + btoa(chatmsg);
+				channel = true;
+			}
+			if (channel === true) channel = this.gamescene?.chatViewUI?.chatInput ? 2 : 7;
+			if (typeof channel !== "number") return;
+			const manager = this.class("ChatManager");
+			if (!manager) return;
+			if (channel == 2 && typeof manager.SendChatMsg == "function") return manager.SendChatMsg(chatmsg);
+			if (channel == 13 && typeof manager.SendCampChatMsg == "function") return manager.SendCampChatMsg(chatmsg);
+			if (typeof manager.SendBaseChatMsg == "function") return manager.SendBaseChatMsg(chatmsg, channel, "", 0);
+		}
+		seatUIs() {
+			this.init(true);
+			if (!this._gamescene) return null;
+			const verbose = this.limit == 290;
+			const seats = (this.gamescene.seatContainer?.seatUIs)?.map((ui) => ui.seat)?.filter((s) => !s.isHide);
+			if (!Game.isGuoZhan && !seats?.filter((s) => s.fixedViewId)?.length) return [];
+			let SeatUIs = seats.map((seat, i, seats) => ({
+				seat,
+				seatID: seat.index,
+				order: seat.fixedViewId - 1,
+				figure: !Game.isGuoZhan ? seat.figure == seats[0].figure : seat.Country == seats[0].Country || -!!seat.Country,
+				ai: seat?.playerInfo?.ClientId < 4e9 ? 0 : seat.playerInfo?.IsNormalRobot ? 2 : 1
+			}));
+			if (verbose === true && SeatUIs.some(({ ai }) => ai) && !Game.isShanHeTu) addTooltip("对战AI小杀！");
+			SeatUIs = SeatUIs.map((ui) => ({
+				...ui,
+				index: this.order.indexOf(ui.seatID)
+			})).sort((a, b) => a.figure - b.figure || b.ai - a.ai || a.index - b.index || a.order - b.order);
+			this.order = SeatUIs.map((e) => e.seatID);
+			const self = this.gamescene.SelfSeatUi;
+			const cardContainer = self.cardContainer;
+			const cardUis = cardContainer?.cardUis;
+			const btnUIs = self.buttonBar?.btns;
+			const skillItems = self.skillItems;
+			const spellSelector = self.spellSelector;
+			if (!verbose) return true;
+			if (!cardUis || !btnUIs || !skillItems || !spellSelector) return false;
+			this.limit--;
+			this.mark = (ids, label, _, uis = cardUis) => ids != false && setTimeout(() => {
+				if (Array.isArray(ids)) uis = ids.map((id) => cardContainer.getCardUiBy(id, false, uis)).filter(Boolean);
+				uis.forEach((ui) => ui?.AddCardTag?.(label));
+			});
+		}
+		ShowWindow(name) {
+			const GameEventDispatcher = this.ged;
+			if (!GameEventDispatcher) return;
+			GameEventDispatcher.i?.(name);
+		}
+		GetWindow(name) {
+			const manager = this.class("WindowManager");
+			if (!manager) return null;
+			const cachedWindow = (manager?.WindowInstanceDict)?.get(name);
+			if (cachedWindow) return cachedWindow;
+			const foundWindow = this.find("WindowLayer", name);
+			if (Array.isArray(foundWindow)) return foundWindow.find(Boolean) ?? null;
+			return foundWindow ?? null;
+		}
+		HideStartLoadingListener() {
+			const GameEventDispatcher = this.ged;
+			if (!GameEventDispatcher) return;
+			GameEventDispatcher.on("HIDE_CHALLENGE_GAME_START", this, this.showName);
+		}
+		async showName() {
+			const seatUIs = await wait(() => this.gamescene?.seatContainer?.seatUIs);
+			if (!seatUIs) return;
+			seatUIs.forEach(({ seat, otherTopManager }) => {
+				if (seat?.playerInfo?.ClientId >= 4e9) return;
+				otherTopManager?.createPlayerNameBg();
+				otherTopManager?.createPlayerName();
+				otherTopManager?.UpdatePlayerName(seat.playerInfo);
+				otherTopManager?.SetPlayNameVisible(true);
+				otherTopManager?.layout();
+			});
+		}
+		blockPowerSlogan() {
+			if (this._powerSloganBlocked) return true;
+			const seatList = this.scene?.seatListView?.seatList;
+			if (!Array.isArray(seatList) || !seatList.length) return false;
+			const proto = seatList.find((seat) => seat?.__proto__ && typeof seat.__proto__.showPowerSlogan == "function")?.__proto__;
+			if (!proto) return false;
+			redefine(proto, "showPowerSlogan", { value() {} });
+			if (!proto.__showPowerSlogan) return false;
+			this._powerSloganBlocked = true;
+			return true;
+		}
+		zhanfaMap = new Map();
+		ZHANFA = new Set([
+			13027,
+			13028,
+			13029,
+			13039,
+			13040,
+			13041,
+			13087,
+			13088,
+			13089,
+			13184,
+			13185,
+			13293,
+			13294,
+			13033,
+			13034,
+			13035,
+			13070,
+			13071,
+			13072,
+			13073,
+			13074,
+			13075,
+			13091,
+			13098
+		]);
+		shaCounter() {
+			if (!Game.isShanHeTu && !Game.isRoguelike1v1) return;
+			const value = Number(Game.getSpellState("三板斧")) % 3;
+			for (const id of [
+				13033,
+				13034,
+				13035
+			]) {
+				const zhanfa = this.zhanfaMap.get(id);
+				if (zhanfa) zhanfa.Value = value;
+			}
+		}
+		useCounter() {
+			if (!Game.isShanHeTu && !Game.isRoguelike1v1) return;
+			const value = Game.getSpellState("手到擒来");
+			for (const id of [
+				13070,
+				13071,
+				13072
+			]) {
+				const zhanfa = this.zhanfaMap.get(id);
+				if (zhanfa) zhanfa.Value = value;
+			}
+		}
+		drawCounter() {
+			if (!Game.isShanHeTu && !Game.isRoguelike1v1) return;
+			const count = Number(Game.getSpellState("神龙摆尾"));
+			const times = Game.getSpellState("多多益善");
+			const shenlong1 = this.zhanfaMap.get(13091);
+			if (shenlong1) shenlong1.Value = count % 9;
+			const shenlong2 = this.zhanfaMap.get(13098);
+			if (shenlong2) shenlong2.Value = count % 6;
+			for (const id of [
+				13073,
+				13074,
+				13075
+			]) {
+				const zhanfa = this.zhanfaMap.get(id);
+				if (zhanfa) zhanfa.Value = times;
+			}
+		}
+		zhanfaCounter(SkillId) {
+			const zhanfa = this.zhanfaMap.get(SkillId);
+			if (!zhanfa) return;
+			if (zhanfa.n === void 0) zhanfa.n = 0;
+			zhanfa.Value = ++zhanfa.n;
+		}
+		zhanfaRegister() {
+			this.gamescene?.SelfSeatUi?.zhanFaItems?.forEach((ui) => {
+				if (this.ZHANFA.has(ui.SkillId)) this.zhanfaMap.set(ui.SkillId, ui);
+			});
+		}
+		zhanfaReset() {
+			for (const [_, ui] of this.zhanfaMap) if (ui?.n !== void 0) ui.Value = ui.n = 0;
+		}
+		resetRoundZhanFa(previousSeatID) {
+			for (const [_, ui] of this.zhanfaMap) {
+				if (ui?.n !== void 0 && ROUND_ZHAN_FA_IDS.has(ui.PlotID)) ui.Value = ui.n = 0;
+				if (previousSeatID === Game.myID && SELF_TURN_ZHAN_FA_IDS.has(ui.PlotID)) ui.Value = 0;
+			}
+		}
+	};
+	var laya = new GameRuntime();
+	function isStrictMultisetSubset(subset, superSet) {
+		if (subset.length >= superSet.length) return false;
+		const counts = new Map();
+		superSet.forEach((number) => counts.set(number, (counts.get(number) || 0) + 1));
+		return subset.every((number) => {
+			const count = counts.get(number) || 0;
+			if (count <= 0) return false;
+			counts.set(number, count - 1);
+			return true;
+		});
+	}
+	function drawChengXiang(array, K) {
+		const arr = normalizeCardNumbers(array);
+		if (!arr.length) return;
+		const results = [];
+		function backtrack(temp, start, sum) {
+			if (sum > 13) return;
+			if (temp.length > 0) {
+				const numbers = temp.slice();
+				const exact = K && sum === 13 ? temp.length : 0;
+				results.push({
+					numbers,
+					exact
+				});
+			}
+			for (let i = start; i < arr.length; i++) {
+				if (i > start && arr[i] === arr[i - 1]) continue;
+				if (sum + arr[i] > 13) break;
+				temp.push(arr[i]);
+				backtrack(temp, i + 1, sum + arr[i]);
+				temp.pop();
+			}
+		}
+		backtrack([], 0, 0);
+		const resDiv = getResultContainer();
+		if (!resDiv) return;
+		const fragment = document.createDocumentFragment();
+		const visibleResults = results.filter((subset, _, self) => !self.some((superSet) => isStrictMultisetSubset(subset.numbers, superSet.numbers))).sort((a, b) => (b.exact || 0) - (a.exact || 0) || b.numbers.length - a.numbers.length);
+		for (const result of visibleResults) {
+			const button = buttonRes(formatCardNumbers(result.numbers, false));
+			if (K && result.exact) button.classList.add("textRes");
+			fragment.appendChild(button);
+		}
+		resDiv.appendChild(fragment);
+	}
+	function drawMiZhu(array) {
+		const arr = normalizeCardNumbers(array);
+		const results = [];
+		function backtrack(temp, start, sum) {
+			if (sum === 13) {
+				results.push(temp.slice());
+				return;
+			}
+			for (let i = start; i < arr.length; i++) {
+				if (i > start && arr[i] === arr[i - 1]) continue;
+				if (sum + arr[i] > 13) break;
+				temp.push(arr[i]);
+				backtrack(temp, i + 1, sum + arr[i]);
+				temp.pop();
+			}
+		}
+		backtrack([], 0, 0);
+		const resDiv = getResultContainer();
+		if (!resDiv) return;
+		const fragment = document.createDocumentFragment();
+		const sortedResults = results.sort((a, b) => b.length - a.length);
+		for (let i = 0; i < sortedResults.length && i < 15; i += 1) fragment.appendChild(buttonRes(formatCardNumbers(sortedResults[i], false)));
+		if (!fragment.childNodes.length) {
+			showTextResult(resDiv, "【资援】无解！");
+			return;
+		}
+		resDiv.appendChild(fragment);
+	}
+	function getYanJiaoRemain(counts, ...subsets) {
+		const remain = counts.slice();
+		for (let i = 0; i < remain.length; i += 1) {
+			for (const subset of subsets) {
+				remain[i] -= subset[i];
+				if (remain[i] < 0) return null;
+			}
+			if (i > 0 && remain[i] >= 2) return null;
+		}
+		return remain;
+	}
+	function createYanJiaoButton(left, right) {
+		const button = document.createElement("button");
+		const spanA = document.createElement("span");
+		const spanB = document.createElement("span");
+		button.className = "calRes";
+		button.title = "点击复制";
+		spanA.innerText = formatNumberCounts(left).join("+");
+		spanB.innerText = formatNumberCounts(right).join("+");
+		button.appendChild(spanA);
+		button.insertAdjacentHTML("beforeend", "<span>=</span>");
+		button.appendChild(spanB);
+		button.onclick = function() {
+			toClipboard(button.innerText, true);
+		};
+		return button;
+	}
+	function drawYanJiao(array) {
+		const counts = countCardNumbers(normalizeCardNumbers(array));
+		const half = Math.floor(getCountedNumbersTotal(counts) / 2);
+		const subsetsBySum = new Map([[0, [Array(14).fill(0)]]]);
+		for (let number = 1; number <= 13; number += 1) {
+			const count = counts[number];
+			if (count === 0) continue;
+			for (const sum of Array.from(subsetsBySum.keys()).sort((a, b) => b - a)) {
+				const subsets = subsetsBySum.get(sum);
+				for (let n = 1; n <= count; n += 1) {
+					const newSum = sum + number * n;
+					if (newSum > half) break;
+					if (!subsetsBySum.has(newSum)) subsetsBySum.set(newSum, []);
+					const targetSubsets = subsetsBySum.get(newSum);
+					for (const subset of subsets) {
+						const nextSubset = subset.slice();
+						nextSubset[0] += n;
+						nextSubset[number] += n;
+						targetSubsets.push(nextSubset);
+					}
+				}
+			}
+		}
+		subsetsBySum.delete(0);
+		const pairs = new Map();
+		for (const sum of Array.from(subsetsBySum.keys()).sort((a, b) => b - a)) {
+			const subsets = subsetsBySum.get(sum);
+			for (let i = 0; i < subsets.length; i += 1) for (let j = i; j < subsets.length; j += 1) {
+				const remain = getYanJiaoRemain(counts, subsets[i], subsets[j]);
+				if (!remain) continue;
+				const [left, right] = subsets[i][0] <= subsets[j][0] ? [subsets[i], subsets[j]] : [subsets[j], subsets[i]];
+				if (!pairs.has(remain[0])) pairs.set(remain[0], []);
+				pairs.get(remain[0]).push([
+					left,
+					right,
+					remain
+				]);
+			}
+		}
+		const resDiv = getResultContainer();
+		if (!resDiv) return;
+		const fragment = document.createDocumentFragment();
+		let rendered = 0;
+		for (const remainCount of Array.from(pairs.keys()).sort((a, b) => a - b)) {
+			const pairsByRemain = pairs.get(remainCount).sort((a, b) => a[0][0] - b[0][0]);
+			for (const [left, right] of pairsByRemain) {
+				fragment.appendChild(createYanJiaoButton(left, right));
+				rendered += 1;
+				if (rendered >= 5) break;
+			}
+			if (rendered >= 5) break;
+		}
+		if (!rendered) {
+			showTextResult(resDiv, "【严教】无解！");
+			return;
+		}
+		resDiv.appendChild(fragment);
+	}
+	var MAX_RENDERED_RESULTS = 15;
+	function getYiChengGroups(numbers, length) {
+		const groups = [];
+		function backtrack(start, selected, sum) {
+			if (selected.length === length) {
+				groups.push({
+					selected: selected.slice(),
+					sum
+				});
+				return;
+			}
+			for (let i = start; i < numbers.length; i += 1) {
+				if (i > start && numbers[i] === numbers[i - 1]) continue;
+				selected.push(numbers[i]);
+				backtrack(i + 1, selected, sum + numbers[i]);
+				selected.pop();
+			}
+		}
+		backtrack(0, [], 0);
+		return groups;
+	}
+	function hasNumberOverlap(left, right) {
+		const rightSet = new Set(right);
+		return left.some((number) => rightSet.has(number));
+	}
+	function drawYiCheng(paiduiNumbers, shoupaiNumbers) {
+		if (!paiduiNumbers?.length || !shoupaiNumbers?.length) return;
+		const resDiv = getResultContainer();
+		if (!resDiv) return;
+		const paidui = normalizeCardNumbers(paiduiNumbers);
+		const shoupai = normalizeCardNumbers(shoupaiNumbers);
+		const max = Math.min(paidui.length, shoupai.length);
+		const fragment = document.createDocumentFragment();
+		let rendered = 0;
+		for (let n = 2; n <= max && rendered < MAX_RENDERED_RESULTS; n++) {
+			const paiduiGroups = getYiChengGroups(paidui, n);
+			const handGroups = getYiChengGroups(shoupai, n);
+			for (const handGroup of handGroups) {
+				if (rendered >= MAX_RENDERED_RESULTS) break;
+				for (const paiduiGroup of paiduiGroups) {
+					if (rendered >= MAX_RENDERED_RESULTS) break;
+					if (handGroup.sum <= paiduiGroup.sum) continue;
+					if (hasNumberOverlap(handGroup.selected, paiduiGroup.selected)) continue;
+					if (max >= 3 && !handGroup.selected.some((number, index) => number < paiduiGroup.selected[index])) continue;
+					fragment.appendChild(buttonRes(`${formatCardNumbers(handGroup.selected)}→${formatCardNumbers(paiduiGroup.selected)}`, "点击复制", false));
+					rendered += 1;
+				}
+			}
+		}
+		const shoupaiSet = Array.from(new Set(shoupai));
+		const paiduiSet = Array.from(new Set(paidui));
+		for (const sp of shoupaiSet) {
+			if (rendered >= MAX_RENDERED_RESULTS) break;
+			const pd = paiduiSet.filter((n) => n < sp);
+			if (!pd.length) continue;
+			fragment.appendChild(buttonRes(n2N(sp) + "→" + pd.map((n) => n2N(n)).join("/"), "点击复制", false));
+			rendered += 1;
+		}
+		if (!rendered) {
+			showTextResult(resDiv, "【易城】无法交换！");
+			return;
+		}
+		resDiv.appendChild(fragment);
+	}
+	function drawLastUseCard(cardIDs = [], { spellId, color } = {}) {
+		const toBeAdd = document.getElementById("lastUseCard");
+		if (!toBeAdd) return;
+		const ids = (cardIDs || []).filter((id) => id);
+		let card;
+		let isRed;
+		if (ids.length === 1) {
+			card = CardConfig.GetInstance().getCard(ids[0]);
+			isRed = card?.color === 1 || card?.color === 2;
+		} else {
+			card = spellId ? SkillsConfig.GetInstance().getSpell(spellId) : null;
+			isRed = color === 1;
+		}
+		if (!card) return;
+		const button = document.createElement("button");
+		button.classList.add("shoupai");
+		button.classList.toggle("red-card", isRed);
+		button.innerHTML = getCardFaceHtml(card);
+		clearDirectCards(toBeAdd);
+		toBeAdd.appendChild(button);
+	}
+	function clearDirectCards(element) {
+		if (!(element instanceof HTMLElement)) return;
+		invalidateEllipsisOverflow(element);
+		element.querySelectorAll(":scope > .shoupai, :scope > .markedCard").forEach((e) => e.remove());
+	}
+	function clearZoneMirrors() {
+		document.querySelectorAll("#seatUI .sorder-body").forEach(clearDirectCards);
+		document.querySelectorAll("#seatUI .markedCard").forEach((element) => element.remove());
+	}
+	function debounce(func, wait) {
+		let timeout;
+		function debounced(...args) {
+			clearTimeout(timeout);
+			timeout = setTimeout(() => func.apply(this, args), wait);
+		}
+		debounced.cancel = function() {
+			clearTimeout(timeout);
+			timeout = null;
+		};
+		return debounced;
+	}
+	var optimizedResizeHandler = debounce(() => {
+		requestAnimationFrame(() => {
+			document.querySelectorAll(".sorder-body").forEach((orderBody) => {
+				checkEllipsisOverflow(orderBody, 40);
+			});
+		});
+	}, 500);
+	window.addEventListener("resize", optimizedResizeHandler);
+	function drawSeatUIs() {
+		const seatUI = document.getElementById("seatUI");
+		if (!seatUI) return false;
+		const seats = UI.seatUIs.slice(1);
+		if (seats.length === 0 || seats.some((seat) => !hasSeatPosition(seat))) return false;
+		const defaultWidth = UI.unscaledWidth + UI.paddingRight;
+		const layouts = seats.map((seat) => {
+			const displayID = seat.fixedViewId;
+			return {
+				displayID,
+				orderContainer: seatUI.querySelector("#or" + displayID),
+				seat
+			};
+		});
+		if (layouts.some(({ orderContainer }) => !orderContainer)) return false;
+		const visibleContainers = new Set(layouts.map(({ orderContainer }) => orderContainer));
+		for (const container of seatUI.querySelectorAll(".sorderContainer:not(.deckEdgeUI)")) {
+			const isShown = visibleContainers.has(container);
+			container.style.display = isShown ? "flex" : "none";
+			container.style.visibility = isShown && Game.turn > 0 ? "visible" : "hidden";
+		}
+		for (const { displayID, orderContainer, seat } of layouts) {
+			applySeatContainerLayout(orderContainer, seat, defaultWidth);
+			ensureSeatOrderBody(orderContainer, displayID).className = `sorder-body sNo${displayID}`;
+		}
+		UI.firstUpdateSeatUI = true;
+		window.dispatchEvent(new CustomEvent("dxc-seat-overlay-layout"));
+		return true;
+	}
+	function hasSeatPosition(seat) {
+		return Number.isFinite(seat?.posX) && Number.isFinite(seat?.posY) && Number.isFinite(seat?.fixedViewId);
+	}
+	function applySeatContainerLayout(orderContainer, seat, defaultWidth) {
+		orderContainer.style.top = seat.posY + "px";
+		orderContainer.style.left = seat.posX + "px";
+		orderContainer.style.width = (seat.width || defaultWidth) + "px";
+	}
+	function ensureSeatOrderBody(orderContainer, displayID) {
+		let orderBody = orderContainer.querySelector("#s" + displayID);
+		if (!orderBody) {
+			orderBody = document.createElement("div");
+			orderBody.id = "s" + displayID;
+			orderContainer.appendChild(orderBody);
+		}
+		return orderBody;
+	}
+	function revealPlayerHandCards(seatID, cardIDs, options = {}) {
+		tracker.revealTrackerCards({
+			type: "player",
+			seatID,
+			...options
+		}, cardIDs);
+	}
+	function revealPileCards(cardIDs) {
+		tracker.revealTrackerCards({
+			type: "public",
+			zoneName: "pile",
+			reposition: true,
+			cardIDsTopFirst: true
+		}, cardIDs);
+	}
+	function getCardNumbers(ids) {
+		const config = CardConfig.GetInstance();
+		return ids.map((id) => config.getCardNumber(id));
+	}
+	function handleRoleOptTargetNtf(msg) {
+		const { SpellID, Param, Params, SeatID, SrcSeatID, targetSeatID, Type } = msg;
+		tracker.dispatchSkillProtocolEvent({
+			type: "targetNotice",
+			message: msg
+		});
+		if (FULL_HAND_ROLE_OPT_SPELL_IDS.has(SpellID)) {
+			if (targetSeatID === void 0 || targetSeatID === 255) return;
+			if (Params?.length > 0) revealPlayerHandCards(targetSeatID, Params, { fullHand: true });
+			return;
+		}
+		if (PARTIAL_HAND_ROLE_OPT_SPELL_IDS.has(SpellID)) {
+			if (targetSeatID === void 0 || targetSeatID === 255) return;
+			if (Param == 0 && Params?.length > 0) revealPlayerHandCards(targetSeatID, Params);
+			return;
+		}
+		switch (SpellID) {
+			case 945:
+				if (Param == 0 && Params?.length > 0) drawYanJiao(getCardNumbers(Params));
+				break;
+			case 3440:
+				if (Param == 0 && Params?.length > 0 && Game.myID !== void 0 && Game.myID === SeatID) {
+					if (Type == 28) drawYiCheng(getCardNumbers(Params), getCardNumbers(tracker.getTrackedPlayerHandCardIDs(SeatID)));
+				}
+				break;
+			case 11003: break;
+			case 943:
+				if (Param == 0 && Params?.length == 1) revealPileCards(Params);
+				break;
+			case 898:
+				if (SrcSeatID === void 0) break;
+				if (Param == 0 && Params?.length > 2 && SrcSeatID !== 255) revealPlayerHandCards(SrcSeatID, Params.slice(1, Params[0] + 1));
+				break;
+			case 987:
+			case 988:
+				if (targetSeatID === void 0) break;
+				if (Param == 1 && Params?.length > 2) {
+					const pileCount = Number(Params[0]) || 0;
+					const handCount = Number(Params[1]) || 0;
+					if (pileCount > 0) revealPileCards(Params.slice(2, 2 + pileCount));
+					if (handCount > 0 && targetSeatID !== 255) revealPlayerHandCards(targetSeatID, Params.slice(2 + pileCount, 2 + pileCount + handCount));
+				}
+				break;
+			case 3903:
+				if (targetSeatID != 255 || Param != 0) break;
+				if (Type == 28 && Params?.length > 2) {
+					const pileCount = Number(Params[0]) || 0;
+					const pileCardIDs = Params.slice(2, 2 + pileCount);
+					if (pileCount > 0 && pileCardIDs.length == pileCount) revealPileCards(pileCardIDs);
+					break;
+				}
+				if (Type == 29 && Params?.length == 4) revealPileCards(Params.slice(1));
+				break;
+			case 3266: break;
+			case 3483:
+				if (targetSeatID === void 0) break;
+				if (Param == 1 && Params?.length > 0) {
+					const notice = parseJieLiNotice(msg);
+					if (!notice?.pileCardIDs) break;
+					revealPileCards(notice.pileCardIDs);
+					if (notice.handCardIDs.length > 0 && notice.targetSeat !== 255) revealPlayerHandCards(notice.targetSeat, notice.handCardIDs, { inferFullHand: true });
+				}
+				break;
+			case 3571: break;
+			case 7010:
+			case 7011: break;
+			case 2900:
+				if (Type == 28) Game.setGeneral(targetSeatID, Params[2], Params[1], true);
+				break;
+			case 4021:
+				if (Type == 78) {
+					destroyPeiXiuMapWindow();
+					Game.deleteSpellState(4022);
+				}
+				break;
+			case 3641:
+				if (Type == 67 && SeatID !== Game.myID) wait(() => laya.GetWindow("TianShuWindow")).then((win) => win.Close?.()).catch((err) => {
+					console.error(err);
+				});
+				break;
+			case 441:
+			case 3492: {
+				if (SrcSeatID === void 0 || targetSeatID !== 255) break;
+				const cardIDs = Game.getSpellState(SpellID);
+				Game.deleteSpellState(SpellID);
+				if (SrcSeatID !== Game.myID) break;
+				if (!Array.isArray(cardIDs) || !cardIDs.length) break;
+				drawChengXiang(getCardNumbers(cardIDs), SpellID == 3492);
+				break;
+			}
+			case 3911: {
+				if (Type !== 28 || SeatID === void 0 || SeatID !== Game.myID) break;
+				if (!Array.isArray(Params) || Params.length < 5) break;
+				const count = Number(Params[0]) || 0;
+				if (count <= 0) break;
+				const validParams = Params.slice(1, 1 + count * 4);
+				const pingJianDic = SpellExtendConfig.GetInstance().PingJianDic;
+				const entries = [];
+				for (let i = 0; i < validParams.length; i += 4) {
+					const group = validParams.slice(i, i + 4);
+					if (group.length < 4) break;
+					const zhangongId = group[2];
+					if (!zhangongId) continue;
+					const pj = pingJianDic.get(Number(zhangongId));
+					if (pj?.name) {
+						const startPos = Number(group[0]);
+						if (Number.isInteger(startPos) && startPos >= 0 && startPos < 36) {
+							const row = Math.floor(startPos / 6) + 1;
+							const col = startPos % 6 + 1;
+							entries.push({
+								startPos,
+								text: `${pj.name} (${row}行${col}列)`
+							});
+						} else entries.push({
+							startPos: Infinity,
+							text: pj.name
+						});
+					}
+				}
+				if (entries.length > 0) {
+					entries.sort((a, b) => a.startPos - b.startPos);
+					renderPingJianWindow(entries.map((entry) => entry.text));
+				}
+				Game.setSpellState(3911, [count, ...validParams]);
+				break;
+			}
+			case 3854:
+				if (Type !== 29 || SeatID === void 0 || SeatID !== Game.myID) break;
+				if (Params?.length > 0) revealPlayerHandCards(targetSeatID, Params);
+				break;
+			default: break;
+		}
+	}
+	var excludeNames = new Set([
+		"乐",
+		"兵",
+		"闪电"
+	]);
+	var shaNames = new Set([
+		"杀",
+		"火杀",
+		"雷杀",
+		"冰杀"
+	]);
+	function updateResult(html) {
+		if (typeof document === "undefined") return;
+		const result = document.getElementById("result");
+		if (!result) return;
+		result.innerHTML = html;
+	}
+	function updateQuanDaoDisplay(context) {
+		const { game, patched } = context;
+		if (!((patched.FromZone == 5 || patched.ToZone == 5) && (patched.ToID == game.myID || patched.FromID == game.myID))) return;
+		let cards = tracker.getTrackedPlayerHandCardIDs(game.myID).slice();
+		if (patched.ToZone == 5) cards.push(...patched.CardIDs);
+		else if (patched.FromZone == 5) cards = cards.filter((card) => !patched.CardIDs.includes(card));
+		cards = cards.filter((id) => id > 0).map((id) => CardConfig.GetInstance().getCard(id)).filter(Boolean);
+		const { countType2, countSha } = cards.reduce((acc, card) => {
+			if (card.type === 2 && !excludeNames.has(card.name)) acc.countType2++;
+			if (shaNames.has(card.name)) acc.countSha++;
+			return acc;
+		}, {
+			countType2: 0,
+			countSha: 0
+		});
+		updateResult("<span class=\"textRes\">【权道】杀：普通锦囊</span><br><span class=\"textRes\">" + countSha + "：" + countType2 + "</span>");
+	}
+	function handleGameFlowState(context) {
+		const { game, patched } = context;
+		if (patched.FromZone == 1 && patched.MoveType == 19 && patched.SpellID == 0 && !game.isGameStart && !game.isPassed) {
+			if (game.isPassed === false) game.isPassed = null;
+			if (game.isGameStart !== null && patched.FromZone == 1) patched.FromPosition = POSITION_RANDOM;
+		}
+		if (patched.FromZone == 1 && patched.ToZone == 5 && patched.MoveType == 1) {
+			const isFaceUpDraw = patched.CardIDs.filter((id) => id > 0).length == patched.CardCount;
+			if (game.isRecord && game.myID === void 0 && isFaceUpDraw) tracker.setTrackerMySeatID(patched.ToID);
+			if (!game.isGameStart && !game.isPassed) {
+				if (game.isGameStart === null) game.isGameStart = false;
+				if (isFaceUpDraw) patched.FromPosition = POSITION_RANDOM;
+			}
+			if (game.myID !== void 0 && patched.ToID === game.myID && game.turn > 0) {
+				game.drawCounter(patched.CardCount);
+				laya.drawCounter();
+			}
+		}
+		updateQuanDaoDisplay(context);
+	}
+	function handleSpecialZones(context) {
+		const { game, patched } = context;
+		if (patched.ToZone == 12 || patched.FromZone == 12) return { handled: true };
+		if (patched.FromZone == 0 && patched.ToZone == 1 && patched.ToPosition == 65280 && patched.MoveType == 19) {
+			if (!game.isGameStart) game.isGameStart = null;
+			return { handled: true };
+		}
+		if (patched.FromZone == 2 && patched.ToZone == 9 && patched.MoveType == 255) {
+			game.isPassed = false;
+			return { handled: true };
+		}
+		return { handled: false };
+	}
+	function handleChengXiang(context) {
+		const { patched } = context;
+		if (patched.ToZone != 8 || patched.MoveType != 6) return;
+		context.game.setSpellState(patched.SpellID, [...patched.CardIDs || []]);
+	}
+	var spellEffectHandlers = new Map([[441, handleChengXiang], [3492, handleChengXiang]]);
+	function applySpellEffect(context) {
+		const handler = spellEffectHandlers.get(context.patched.SpellID);
+		if (!handler) return false;
+		handler(context);
+		return true;
+	}
+	function handleMoveCard(msg) {
+		const raw = Object.freeze({
+			CardCount: msg.CardCount,
+			CardIDs: Object.freeze([...msg.CardIDs]),
+			FromID: msg.FromID,
+			FromZone: msg.FromZone,
+			FromZoneParam: msg.FromZoneParam,
+			FromPosition: msg.FromPosition,
+			ToID: msg.ToID,
+			ToZone: msg.ToZone,
+			ToZoneParam: msg.ToZoneParam,
+			ToPosition: msg.ToPosition,
+			MoveType: msg.MoveType,
+			SpellID: msg.SpellID,
+			SrcSeatID: msg.SrcSeatID,
+			Label: msg.Label,
+			isSend: msg.isSend
+		});
+		const patched = {
+			...raw,
+			CardIDs: raw.CardIDs.slice()
+		};
+		if (shouldIgnoreTrackerMove(raw)) return;
+		const context = {
+			raw,
+			patched,
+			game: Game
+		};
+		if (!handleSpecialZones(context).handled) {
+			handleGameFlowState(context);
+			applySpellEffect(context);
+		}
+		tracker.syncTrackerMove(patched, raw);
+	}
+	var cityRenderVersion = 0;
+	function drawCitiesUI(cities) {
+		const renderVersion = ++cityRenderVersion;
+		wait(() => {
+			if (renderVersion !== cityRenderVersion) return true;
+			const rogueScene = laya.find("SceneLayer", "RogueSmallMapScene");
+			return rogueScene?.cityView ? rogueScene : void 0;
+		}, 10, 500, { immediate: true }).then((rogueScene) => {
+			if (renderVersion !== cityRenderVersion) return;
+			const cityView = rogueScene?.cityView;
+			if (!cityView || cityView.destroyed) return;
+			renderCities(cities, cityView);
+		}).catch((err) => {
+			console.error(err);
+		});
+	}
+	function renderCities(cities, cityView) {
+		for (let i = cityView.numChildren - 1; i >= 0; i--) {
+			const child = cityView.getChildAt(i);
+			if (child.name === "city") child.destroy(true);
+		}
+		rogueMap.res = [];
+		const roguelikeConfig = RoguelikeConfig.GetInstance();
+		for (const city of cities) {
+			const cityData = roguelikeConfig.getCity(city.id);
+			if (!cityData) continue;
+			const { x, y } = cityData;
+			const cityContainer = new Laya.Sprite();
+			cityContainer.pos(x, y - 10);
+			cityContainer.zOrder = 999;
+			cityContainer.name = "city";
+			const rows = [];
+			const fight = roguelikeConfig.getFight(city.event);
+			if (fight) processFightEvent({
+				...fight,
+				event: city.event
+			}, rows);
+			else processChooseEvent(city.event, rows);
+			layoutCityContainer(cityContainer, rows);
+			rogueMap.res.push({
+				id: city.id,
+				city: cityContainer
+			});
+			cityView.addChild(cityContainer);
+		}
+	}
+	var STYLES = {
+		TITLE: {
+			color: "#f2de9c",
+			fontSize: 18,
+			bold: false
+		},
+		GENERAL: {
+			normal: "#f2de9c",
+			warning: "rgb(240, 65, 85)",
+			fontSize: 18
+		},
+		GET_INFO: {
+			color: "#f2de9c",
+			fontSize: 16,
+			bold: false
+		}
+	};
+	var CITY_LAYOUT = {
+		paddingX: 5,
+		space: 4,
+		minContentWidth: 120,
+		dividerHeight: 1,
+		backgroundColor: "rgba(59, 58, 39, 0.75)",
+		dividerColor: "rgba(255, 255, 255, 0.2)"
+	};
+	function layoutCityContainer(container, rows) {
+		if (rows.length === 0) return;
+		const { paddingX, space, minContentWidth, backgroundColor, dividerColor } = CITY_LAYOUT;
+		const contentWidth = Math.max(minContentWidth, ...rows.map((row) => row.width));
+		const width = contentWidth + paddingX * 2;
+		const height = rows.reduce((sum, row) => sum + row.height + (row.text ? 0 : space * 2), 0) + 4;
+		container.size(width, height);
+		container.graphics.drawRect(0, 0, width, height, backgroundColor);
+		let y = 2;
+		for (const row of rows) {
+			if (row.text) {
+				row.text.pos(paddingX + (contentWidth - row.width) / 2, y);
+				container.addChild(row.text);
+			} else {
+				y += space;
+				container.graphics.drawRect(paddingX, y, contentWidth, row.height, dividerColor);
+				y += space;
+			}
+			y += row.height;
+		}
+	}
+	function createTextRow(config) {
+		const text = new Laya.Text();
+		text.text = config.text || "";
+		text.color = config.color || "#ffffff";
+		text.fontSize = config.fontSize || 16;
+		text.bold = config.bold || false;
+		text.font = "fzltchjw";
+		text.stroke = config.stroke || 2;
+		text.strokeColor = config.strokeColor || "#18140f";
+		text.typeset();
+		return {
+			text,
+			width: text.textWidth,
+			height: text.textHeight
+		};
+	}
+	function createDividerRow() {
+		return {
+			text: null,
+			width: CITY_LAYOUT.minContentWidth,
+			height: CITY_LAYOUT.dividerHeight
+		};
+	}
+	function processFightEvent(eventData, rows) {
+		eventData.generals.forEach((general) => {
+			rows.push(createGeneralRow(general, rogueMap.difficulty, eventData));
+		});
+		rows.push(createDividerRow());
+		rows.push(createTextRow({
+			text: eventData.get,
+			...STYLES.GET_INFO
+		}));
+	}
+	function processChooseEvent(baseEvent, rows) {
+		const roguelikeConfig = RoguelikeConfig.GetInstance();
+		const adventure = roguelikeConfig.getAdventure(baseEvent);
+		const title = roguelikeConfig.getText(adventure?.chapname);
+		rows.push(createTextRow({
+			text: title,
+			...STYLES.TITLE
+		}));
+		for (const option of adventure?.options || []) {
+			const eventData = roguelikeConfig.getChoice(option.effect);
+			if (!eventData) continue;
+			rows.push(createDividerRow());
+			if (eventData.generals) eventData.generals.forEach((general) => {
+				rows.push(createGeneralRow(general, rogueMap.difficulty, eventData));
+			});
+			const textParts = [];
+			if (!eventData.generals && eventData.lost) textParts.push(`${eventData.lost} ${findLostItemByName(eventData.lost)}`);
+			if (eventData.get) textParts.push(`${eventData.get}`);
+			if (textParts.length > 0) rows.push(createTextRow({
+				text: textParts.join("\n"),
+				...STYLES.GET_INFO
+			}));
+		}
+	}
+	function findLostItemByName(descText) {
+		const parts = descText.split(" ");
+		if (parts.length !== 2) return null;
+		const [_, typeLevel] = parts;
+		const typeMap = {
+			战法: 2,
+			技能: 3
+		};
+		const levelMap = {
+			普通: 1,
+			稀有: 2,
+			史诗: 3
+		};
+		const matchedType = Object.keys(typeMap).find((t) => typeLevel.includes(t));
+		const matchedLevel = Object.keys(levelMap).find((l) => typeLevel.includes(l));
+		if (!matchedType || !matchedLevel) return "";
+		const targetType = typeMap[matchedType];
+		const targetLevel = levelMap[matchedLevel];
+		const roguelikeConfig = RoguelikeConfig.GetInstance();
+		for (const itemId of rogueMap.itemId) {
+			const item = roguelikeConfig.getPlot(itemId);
+			if (item && item.type === targetType && item.level === targetLevel) return item.name;
+		}
+		return "";
+	}
+	function createGeneralRow(general, difficulty, eventData) {
+		const [skills, red] = highlightedSkill(general, difficulty);
+		const canStart = String(eventData.CanStart || "").split(";").includes(String(difficulty));
+		const start = general.start && canStart ? "[先行]" : "";
+		return createTextRow({
+			text: `${general.generalname}${start}${red ? " " + skills.join(" ") : ""}`,
+			color: red ? STYLES.GENERAL.warning : STYLES.GENERAL.normal,
+			fontSize: STYLES.GENERAL.fontSize
+		});
+	}
+	var spellList = [
+		"巳蛇",
+		"灵动",
+		"八门",
+		"智迟",
+		"持盈",
+		"卫主",
+		"不死",
+		"刚烈",
+		"觉醒",
+		"悲鸣",
+		"断肠",
+		"节命",
+		"先机",
+		"悲鸣",
+		"忘魂",
+		"雅士",
+		"挥泪",
+		"不屈",
+		"封冻",
+		"灵躯",
+		"武魂",
+		"已蛇",
+		"邪徒",
+		"魅步",
+		"雷击",
+		"恢拓",
+		"夺炁",
+		"恩怨",
+		"鸡肋",
+		"反击"
+	];
+	function highlightedSkill(generalInfo, difficulty) {
+		const difficultySpells = [
+			generalInfo.getspell,
+			generalInfo.getspell_ZD,
+			generalInfo.getspell_KN,
+			generalInfo.getspell_EM,
+			generalInfo.getspell_LY
+		];
+		const difficultyInfo = RoguelikeConfig.GetInstance().difficultDict.get(String(difficulty));
+		const difficultyLevel = Number(difficultyInfo?.bdif) || 1;
+		const currentLevelIndex = Math.min(Math.max(difficultyLevel - 1, 0), difficultySpells.length - 1);
+		const skills = difficultySpells.slice(0, currentLevelIndex + 1).flatMap((spell) => String(spell || "").split(";")).filter(Boolean).map((spell) => SkillsConfig.GetInstance().getSpellName(spell)).filter((spell) => spellList.includes(spell));
+		return [skills, skills.length > 0];
+	}
+	function drawStore(filteredPairs) {
+		var StoreHTML = document.getElementById("storeDetail");
+		StoreHTML.innerText = "";
+		if (filteredPairs.length == 0) filteredPairs = ["暂无集市数据"];
+		for (const sebs of filteredPairs) {
+			const span = document.createElement("button");
+			span.className = "storeDetail";
+			span.innerText = sebs;
+			StoreHTML.append(span);
+		}
+	}
+	async function showShanHeTuSponsorPrompt(ProtoObj) {
+		if (!ProtoObj?.allData) return;
+		const allData = ProtoObj.allData;
+		rogueMap.general = allData.gameData?.myGeneral?.uGeneralId ?? 0;
+		rogueMap.itemId = allData.gameData?.itemId ?? [];
+	}
+	async function handleRogueLike(ProtoObj) {
+		if (!ProtoObj?.allData) return;
+		const allData = ProtoObj.allData;
+		const dataMark = ProtoObj.dataMark;
+		const shopData = allData.shopData;
+		const chapterData = allData.chapterData;
+		const generalpool = allData.generalpool;
+		if ((dataMark & 16) !== 0) if (!shopData) return req();
+		else {
+			shopData.bShow = true;
+			req(0);
+		}
+		renderRogueAttrInfo(allData.gameData?.attrInfo);
+		if (shopData) {
+			const storeItem = [];
+			const roguelikeConfig = RoguelikeConfig.GetInstance();
+			if (shopData.itemId && roguelikeConfig.shopDict.size) for (const i of shopData.itemId) {
+				const plot = roguelikeConfig.getPlot(i);
+				if (plot) storeItem.push(plot["name"]);
+			}
+			drawStore(storeItem);
+		}
+		if (generalpool?.general_change?.length > 0) addTooltip(`小抄提示：可换将为${generalpool.general_change.map((element) => CharacterConfig.GetInstance().generalDict[element] || `Unknown (${element})`).reverse().join(", ")}`, "acTooltip", 1e4, "green", null, true);
+		const seasonData = allData.seasonData;
+		const difficulty = seasonData && seasonData.difficulty;
+		difficulty && (rogueMap.difficulty = difficulty);
+		rogueMap.general = allData.gameData?.myGeneral?.uGeneralId ?? 0;
+		rogueMap.itemId = allData.gameData?.itemId ?? [];
+		if (chapterData?.locations) {
+			UI.cities = chapterData.locations.map((l) => ({
+				id: l.location,
+				event: l.event
+			}));
+			RoguelikeConfig.GetInstance().levelDict.size && globalConfig.rogueCitySwitch && drawCitiesUI(UI.cities, "");
+		}
+	}
+	var ROGUE_ATTR_LABELS = {
+		rep: "声望",
+		tro: "战功",
+		wis: "智谋",
+		mar: "商才",
+		loy: "忠诚",
+		ass: "权谋",
+		cha: "魅力"
+	};
+	function renderRogueAttrInfo(attrInfo) {
+		const container = document.getElementById("rogueAttrInfo");
+		if (!container) return;
+		for (const badge of container.querySelectorAll("[data-rogue-attr]")) {
+			const valueContainer = badge.querySelector(".rogue-attr-value");
+			if (!valueContainer) continue;
+			const value = Number(attrInfo?.[badge.dataset.rogueAttr]);
+			const nextValue = Number.isFinite(value) ? value : 0;
+			const currentValue = Number(valueContainer.textContent);
+			if (Number.isFinite(currentValue) && currentValue !== nextValue) addTooltip(`${ROGUE_ATTR_LABELS[badge.dataset.rogueAttr] ?? badge.dataset.rogueAttr}值变成了${nextValue}`, "acTooltip", 3e3);
+			valueContainer.textContent = nextValue;
+		}
+	}
+	var req = (() => {
+		let ok = false;
+		return function(dm = 63) {
+			if (!dm) return ok = false;
+			if (ok) {
+				console.warn("req: 已请求过，跳过重复请求, dm=", dm);
+				return true;
+			}
+			ok = true;
+			return laya.class("RogueLikePveManager")?.RogueLikeDataReq(dm);
+		};
+	})();
+	var ConfigManager = class ConfigManager {
+		configUrl = "https://web.sanguosha.com/220/h5_2/res/config/Config_w.sgs";
+		fileNames = [
+			"sys_playcard",
+			"cha_spell",
+			"character",
+			"hd_roguelike",
+			"cha_spellextend"
+		];
+		static GetInstance() {
+			if (null == this.instance) this.instance = new ConfigManager();
+			return this.instance;
+		}
+		constructor() {
+			this.preloadConfigerList = [
+				CardConfig.GetInstance(),
+				SkillsConfig.GetInstance(),
+				CharacterConfig.GetInstance(),
+				RoguelikeConfig.GetInstance(),
+				SpellExtendConfig.GetInstance()
+			];
+		}
+		async loadAndParseConfigs() {
+			const response = await fetch(this.configUrl);
+			if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+			const zipData = await response.arrayBuffer();
+			const zip = await JSZip.loadAsync(zipData);
+			const promises = this.preloadConfigerList.map(async (configer) => {
+				if (!configer) return;
+				const data = await this.loadConfigFile(zip, configer.FileName);
+				configer.parse(data);
+			});
+			await Promise.all(promises);
+			console.info("[ConfigManager] Config_w 解析完成");
+		}
+		async loadConfigFile(zip, fileName) {
+			const file = zip.file(fileName + ".sgs");
+			if (!file) throw new Error(`File not found in zip: ${fileName}.sgs`);
+			const arrayBuffer = await file.async("arraybuffer");
+			const decryptedData = CtrUtil.Ctr.Ofb_Dec(arrayBuffer);
+			const uint8Array = decryptedData instanceof Uint8Array ? decryptedData : new Uint8Array(decryptedData);
+			const decompressedData = new Zlib.Gunzip(uint8Array).decompress();
+			const fileData = new TextDecoder().decode(decompressedData);
+			return JSON.parse(fileData);
+		}
+	};
 	var ALWAYS_RECORDED_CLASSES = new Set([
 		"MsgReconnectGame",
 		"decodeGameRecordInitInfo",
@@ -13296,247 +15113,6 @@
 		link.remove();
 		setTimeout(() => URL.revokeObjectURL(url), 0);
 	}
-	var cityRenderVersion = 0;
-	function drawCitiesUI(cities) {
-		const renderVersion = ++cityRenderVersion;
-		wait(() => {
-			if (renderVersion !== cityRenderVersion) return true;
-			const rogueScene = laya.find("SceneLayer", "RogueSmallMapScene");
-			return rogueScene?.cityView ? rogueScene : void 0;
-		}, 10, 500, { immediate: true }).then((rogueScene) => {
-			if (renderVersion !== cityRenderVersion) return;
-			const cityView = rogueScene?.cityView;
-			if (!cityView || cityView.destroyed) return;
-			renderCities(cities, cityView);
-		}).catch((err) => {
-			console.error(err);
-		});
-	}
-	function renderCities(cities, cityView) {
-		for (let i = cityView.numChildren - 1; i >= 0; i--) {
-			const child = cityView.getChildAt(i);
-			if (child.name === "city") child.destroy(true);
-		}
-		rogueMap.res = [];
-		const roguelikeConfig = RoguelikeConfig.GetInstance();
-		for (const city of cities) {
-			const cityData = roguelikeConfig.getCity(city.id);
-			if (!cityData) continue;
-			const { x, y } = cityData;
-			const cityContainer = new Laya.Sprite();
-			cityContainer.pos(x, y - 10);
-			cityContainer.zOrder = 999;
-			cityContainer.name = "city";
-			const rows = [];
-			const fight = roguelikeConfig.getFight(city.event);
-			if (fight) processFightEvent({
-				...fight,
-				event: city.event
-			}, rows);
-			else processChooseEvent(city.event, rows);
-			layoutCityContainer(cityContainer, rows);
-			rogueMap.res.push({
-				id: city.id,
-				city: cityContainer
-			});
-			cityView.addChild(cityContainer);
-		}
-	}
-	var STYLES = {
-		TITLE: {
-			color: "#f2de9c",
-			fontSize: 18,
-			bold: false
-		},
-		GENERAL: {
-			normal: "#f2de9c",
-			warning: "rgb(240, 65, 85)",
-			fontSize: 18
-		},
-		GET_INFO: {
-			color: "#f2de9c",
-			fontSize: 16,
-			bold: false
-		}
-	};
-	var CITY_LAYOUT = {
-		paddingX: 5,
-		space: 4,
-		minContentWidth: 120,
-		dividerHeight: 1,
-		backgroundColor: "rgba(59, 58, 39, 0.75)",
-		dividerColor: "rgba(255, 255, 255, 0.2)"
-	};
-	function layoutCityContainer(container, rows) {
-		if (rows.length === 0) return;
-		const { paddingX, space, minContentWidth, backgroundColor, dividerColor } = CITY_LAYOUT;
-		const contentWidth = Math.max(minContentWidth, ...rows.map((row) => row.width));
-		const width = contentWidth + paddingX * 2;
-		const height = rows.reduce((sum, row) => sum + row.height + (row.text ? 0 : space * 2), 0) + 4;
-		container.size(width, height);
-		container.graphics.drawRect(0, 0, width, height, backgroundColor);
-		let y = 2;
-		for (const row of rows) {
-			if (row.text) {
-				row.text.pos(paddingX + (contentWidth - row.width) / 2, y);
-				container.addChild(row.text);
-			} else {
-				y += space;
-				container.graphics.drawRect(paddingX, y, contentWidth, row.height, dividerColor);
-				y += space;
-			}
-			y += row.height;
-		}
-	}
-	function createTextRow(config) {
-		const text = new Laya.Text();
-		text.text = config.text || "";
-		text.color = config.color || "#ffffff";
-		text.fontSize = config.fontSize || 16;
-		text.bold = config.bold || false;
-		text.font = "fzltchjw";
-		text.stroke = config.stroke || 2;
-		text.strokeColor = config.strokeColor || "#18140f";
-		text.typeset();
-		return {
-			text,
-			width: text.textWidth,
-			height: text.textHeight
-		};
-	}
-	function createDividerRow() {
-		return {
-			text: null,
-			width: CITY_LAYOUT.minContentWidth,
-			height: CITY_LAYOUT.dividerHeight
-		};
-	}
-	function processFightEvent(eventData, rows) {
-		eventData.generals.forEach((general) => {
-			rows.push(createGeneralRow(general, rogueMap.difficulty, eventData));
-		});
-		rows.push(createDividerRow());
-		rows.push(createTextRow({
-			text: eventData.get,
-			...STYLES.GET_INFO
-		}));
-	}
-	function processChooseEvent(baseEvent, rows) {
-		const roguelikeConfig = RoguelikeConfig.GetInstance();
-		const adventure = roguelikeConfig.getAdventure(baseEvent);
-		const title = roguelikeConfig.getText(adventure?.chapname);
-		rows.push(createTextRow({
-			text: title,
-			...STYLES.TITLE
-		}));
-		for (const option of adventure?.options || []) {
-			const eventData = roguelikeConfig.getChoice(option.effect);
-			if (!eventData) continue;
-			rows.push(createDividerRow());
-			if (eventData.generals) eventData.generals.forEach((general) => {
-				rows.push(createGeneralRow(general, rogueMap.difficulty, eventData));
-			});
-			const textParts = [];
-			if (!eventData.generals && eventData.lost) textParts.push(`${eventData.lost} ${findLostItemByName(eventData.lost)}`);
-			if (eventData.get) textParts.push(`${eventData.get}`);
-			if (textParts.length > 0) rows.push(createTextRow({
-				text: textParts.join("\n"),
-				...STYLES.GET_INFO
-			}));
-		}
-	}
-	function findLostItemByName(descText) {
-		const parts = descText.split(" ");
-		if (parts.length !== 2) return null;
-		const [_, typeLevel] = parts;
-		const typeMap = {
-			战法: 2,
-			技能: 3
-		};
-		const levelMap = {
-			普通: 1,
-			稀有: 2,
-			史诗: 3
-		};
-		const matchedType = Object.keys(typeMap).find((t) => typeLevel.includes(t));
-		const matchedLevel = Object.keys(levelMap).find((l) => typeLevel.includes(l));
-		if (!matchedType || !matchedLevel) return "";
-		const targetType = typeMap[matchedType];
-		const targetLevel = levelMap[matchedLevel];
-		const roguelikeConfig = RoguelikeConfig.GetInstance();
-		for (const itemId of rogueMap.itemId) {
-			const item = roguelikeConfig.getPlot(itemId);
-			if (item && item.type === targetType && item.level === targetLevel) return item.name;
-		}
-		return "";
-	}
-	function createGeneralRow(general, difficulty, eventData) {
-		const [skills, red] = highlightedSkill(general, difficulty);
-		const canStart = String(eventData.CanStart || "").split(";").includes(String(difficulty));
-		const start = general.start && canStart ? "[先行]" : "";
-		return createTextRow({
-			text: `${general.generalname}${start}${red ? " " + skills.join(" ") : ""}`,
-			color: red ? STYLES.GENERAL.warning : STYLES.GENERAL.normal,
-			fontSize: STYLES.GENERAL.fontSize
-		});
-	}
-	var spellList = [
-		"巳蛇",
-		"灵动",
-		"八门",
-		"智迟",
-		"持盈",
-		"卫主",
-		"不死",
-		"刚烈",
-		"觉醒",
-		"悲鸣",
-		"断肠",
-		"节命",
-		"先机",
-		"悲鸣",
-		"忘魂",
-		"雅士",
-		"挥泪",
-		"不屈",
-		"封冻",
-		"灵躯",
-		"武魂",
-		"已蛇",
-		"邪徒",
-		"魅步",
-		"雷击",
-		"恢拓",
-		"夺炁",
-		"恩怨",
-		"鸡肋",
-		"反击"
-	];
-	function highlightedSkill(generalInfo, difficulty) {
-		const difficultySpells = [
-			generalInfo.getspell,
-			generalInfo.getspell_ZD,
-			generalInfo.getspell_KN,
-			generalInfo.getspell_EM,
-			generalInfo.getspell_LY
-		];
-		const difficultyInfo = RoguelikeConfig.GetInstance().difficultDict.get(String(difficulty));
-		const difficultyLevel = Number(difficultyInfo?.bdif) || 1;
-		const currentLevelIndex = Math.min(Math.max(difficultyLevel - 1, 0), difficultySpells.length - 1);
-		const skills = difficultySpells.slice(0, currentLevelIndex + 1).flatMap((spell) => String(spell || "").split(";")).filter(Boolean).map((spell) => SkillsConfig.GetInstance().getSpellName(spell)).filter((spell) => spellList.includes(spell));
-		return [skills, skills.length > 0];
-	}
-	function drawStore(filteredPairs) {
-		var StoreHTML = document.getElementById("storeDetail");
-		StoreHTML.innerText = "";
-		if (filteredPairs.length == 0) filteredPairs = ["暂无集市数据"];
-		for (const sebs of filteredPairs) {
-			const span = document.createElement("button");
-			span.className = "storeDetail";
-			span.innerText = sebs;
-			StoreHTML.append(span);
-		}
-	}
 	var tooltipDelegationBound = false;
 	var activeTooltipTarget = null;
 	var activeTooltipElement = null;
@@ -13618,915 +15194,6 @@
 			if (!mark || mark !== activeTooltipTarget || mark.contains(event.relatedTarget)) return;
 			hideReusableTooltip();
 		});
-	}
-	function addDragHint() {
-		var sidebarHint = document.createElement("div");
-		sidebarHint.id = "sidebarHint";
-		sidebarHint.innerText = "拖到这里变为变为侧边栏，再次拖动取消侧边栏";
-		document.body.appendChild(sidebarHint);
-	}
-	function getLayoutViewportWidth() {
-		return document.documentElement.clientWidth || window.innerWidth;
-	}
-	function initDragElement(globalConfig, globalState, refreshSidebarViewport) {
-		let mousePressed = false;
-		document.addEventListener("mousedown", function(e) {
-			if (!mousePressed) {
-				mousePressed = true;
-				const clickedSorderBody = e.target.closest(".sorder-body");
-				if (clickedSorderBody) {
-					document.body.classList.add("mouse-pressed");
-					e.preventDefault();
-					e.stopImmediatePropagation();
-					setTimeout(() => {
-						const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
-						if (elementBelow && elementBelow !== clickedSorderBody) elementBelow.dispatchEvent(new MouseEvent("mousedown", {
-							bubbles: true,
-							cancelable: true,
-							clientX: e.clientX,
-							clientY: e.clientY,
-							button: e.button,
-							buttons: e.buttons
-						}));
-					}, 0);
-				} else document.body.classList.add("mouse-pressed");
-			}
-		}, true);
-		document.addEventListener("mouseup", () => {
-			if (mousePressed) {
-				mousePressed = false;
-				document.body.classList.remove("mouse-pressed");
-			}
-		});
-		const draggable = document.getElementById("header");
-		const container = document.getElementById("tracker-shell");
-		const sidebarHint = document.getElementById("sidebarHint");
-		let isDragging = false;
-		let startX = 0, startY = 0;
-		let translateX = 0, translateY = 0;
-		let pendingFrame = false;
-		const startDrag = (e) => {
-			draggable.style.cursor = "grabbing";
-			isDragging = true;
-			startX = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
-			startY = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
-			container.style.userSelect = "none";
-			container.style.willChange = "transform";
-			document.addEventListener("mousemove", onDrag);
-			document.addEventListener("mouseup", stopDrag);
-			document.addEventListener("touchmove", onDrag);
-			document.addEventListener("touchend", stopDrag);
-		};
-		draggable.addEventListener("mousedown", startDrag);
-		draggable.addEventListener("touchstart", startDrag);
-		function onDrag(e) {
-			if (!isDragging) return;
-			sidebarHint.style.display = "flex";
-			const clientX = e.clientX ?? e.touches?.[0]?.clientX ?? startX;
-			const clientY = e.clientY ?? e.touches?.[0]?.clientY ?? startY;
-			const deltaX = clientX - startX;
-			const deltaY = clientY - startY;
-			const rect = container.getBoundingClientRect();
-			const left0 = rect.left - translateX;
-			const top0 = rect.top - translateY;
-			const width = rect.width || 230;
-			const viewportWidth = getLayoutViewportWidth();
-			translateX += deltaX;
-			translateY += deltaY;
-			const minX = -left0;
-			const maxX = viewportWidth - width - left0;
-			const minY = -top0;
-			const maxY = window.innerHeight - 30 - top0;
-			translateX = Math.max(minX, Math.min(maxX, translateX));
-			translateY = Math.max(minY, Math.min(maxY, translateY));
-			if (globalConfig.padding) {
-				globalConfig.padding = 0;
-				container.style.height = "500px";
-				refreshSidebarViewport();
-			}
-			if (!pendingFrame) {
-				pendingFrame = true;
-				requestAnimationFrame(() => {
-					container.style.transform = `translate(${translateX}px, ${translateY}px)`;
-					pendingFrame = false;
-				});
-			}
-			if (viewportWidth - clientX < 25) sidebarHint.style.backgroundColor = "rgba(55, 40, 32, 1)";
-			else sidebarHint.style.backgroundColor = "rgba(55, 40, 32, 0.8)";
-			startX = clientX;
-			startY = clientY;
-		}
-		function stopDrag(e) {
-			sidebarHint.style.display = "none";
-			draggable.style.cursor = "grab";
-			isDragging = false;
-			document.removeEventListener("mousemove", onDrag);
-			document.removeEventListener("mouseup", stopDrag);
-			document.removeEventListener("touchmove", onDrag);
-			document.removeEventListener("touchend", stopDrag);
-			container.style.willChange = "auto";
-			const finalClientX = e.clientX ?? e.changedTouches?.[0]?.clientX ?? e.touches?.[0]?.clientX ?? startX;
-			if (getLayoutViewportWidth() - finalClientX < 25 && draggable.id === "header") {
-				if (!globalConfig.padding) {
-					if (globalState.closeIframe) document.getElementById("toggle-me").click();
-					globalConfig.padding = 232;
-					refreshSidebarViewport();
-					translateX = 0;
-					translateY = 0;
-					container.style.transform = `translate(${translateX}px, ${translateY}px)`;
-				}
-			}
-		}
-	}
-	var PEIXIU_DIRECTIONS = {
-		1: {
-			name: "红桃",
-			shortDirection: "左",
-			mark: "♥",
-			dx: -1,
-			dy: 0
-		},
-		2: {
-			name: "方块",
-			shortDirection: "上",
-			mark: "♦",
-			dx: 0,
-			dy: -1
-		},
-		3: {
-			name: "黑桃",
-			shortDirection: "右",
-			mark: "♠",
-			dx: 1,
-			dy: 0
-		},
-		4: {
-			name: "梅花",
-			shortDirection: "下",
-			mark: "♣",
-			dx: 0,
-			dy: 1
-		}
-	};
-	var DIR = PEIXIU_DIRECTIONS;
-	var DIRECTIONS = [
-		1,
-		2,
-		3,
-		4
-	];
-	function nums(text) {
-		if (Array.isArray(text)) return text.map(Number).filter(Number.isFinite);
-		return String(text || "").split(",").map((n) => Number(n.trim())).filter(Number.isFinite);
-	}
-	function firstField(raw, ...keys) {
-		for (const key of keys) if (raw && raw[key] !== void 0 && raw[key] !== null) return raw[key];
-	}
-	function field(raw, lower, upper, fallback = 0) {
-		return firstField(raw, lower, upper) ?? fallback;
-	}
-	function normalizeCell(cell) {
-		const n = Number(cell) || 0;
-		if (n <= 25) return n;
-		const row = Math.floor(n / 10);
-		const col = n % 10;
-		return row >= 1 && row <= 5 && col >= 1 && col <= 5 ? (row - 1) * 5 + col : n;
-	}
-	function pos(cell) {
-		const n = normalizeCell(cell);
-		return {
-			row: Math.floor((n - 1) / 5),
-			col: (n - 1) % 5
-		};
-	}
-	function cellAt(row, col) {
-		if (row < 0 || row >= 5 || col < 0 || col >= 5) return 0;
-		return row * 5 + col + 1;
-	}
-	function validCell(cell) {
-		return cell >= 1 && cell <= 25;
-	}
-	function parseCells(value) {
-		return nums(value).map(normalizeCell).filter(validCell);
-	}
-	function parseSpecialCells(value) {
-		return (Array.isArray(value) ? value : String(value || "").split("|").filter(Boolean)).map((item) => {
-			if (!Array.isArray(item) && typeof item == "object") return {
-				cell: field(item, "cell", "CellID"),
-				effect: field(item, "effect", "EffectID"),
-				param1: field(item, "param1", "Param1"),
-				param2: field(item, "param2", "Param2")
-			};
-			const [cell, effect, param1 = 0, param2 = 0] = nums(item);
-			return {
-				cell,
-				effect,
-				param1,
-				param2
-			};
-		});
-	}
-	function parseRewards(value) {
-		return (Array.isArray(value) ? value : String(value || "").split("|").filter(Boolean)).map((item) => {
-			if (!Array.isArray(item) && typeof item == "object") {
-				const cell = field(item, "cell", "CellID");
-				return {
-					cell: normalizeCell(cell),
-					rawCell: Number(cell),
-					rewardId: field(item, "rewardId", "RewardID")
-				};
-			}
-			const [cell, rewardId] = nums(item);
-			return {
-				cell: normalizeCell(cell),
-				rawCell: Number(cell),
-				rewardId
-			};
-		});
-	}
-	function parsePeiXiuMap(raw) {
-		const cells = new Set(parseCells(firstField(raw, "cell", "Cells", "cells")));
-		const specials = new Map();
-		parseSpecialCells(firstField(raw, "spcell", "SpecialCells", "specialCells")).forEach((item) => {
-			const id = normalizeCell(item.cell);
-			if (validCell(id)) specials.set(id, {
-				cell: id,
-				effect: Number(item.effect) || 0,
-				param1: Number(item.param1) || 0,
-				param2: Number(item.param2) || 0
-			});
-		});
-		const rewards = parseRewards(firstField(raw, "reward", "RewardCells", "rewardCells"));
-		const mapReward = rewards.find((reward) => reward.rawCell === 26) || null;
-		const rewardCells = rewards.filter((reward) => reward.rawCell !== 26 && validCell(reward.cell) && cells.has(reward.cell)).map((r) => r.cell);
-		return {
-			id: firstField(raw, "cellID", "CellID", "id", "mapId") || 0,
-			name: raw?.name || "",
-			cells,
-			start: normalizeCell(firstField(raw, "precell", "PreCell", "start") || 0),
-			specials,
-			rewards,
-			mapReward,
-			rewardCells: [...new Set(rewardCells)].sort((a, b) => a - b),
-			color: Number(firstField(raw, "color", "Color")) || 0,
-			bigMapPos: firstField(raw, "bigMapPos", "bigmappos", "BigMapPos") || ""
-		};
-	}
-	function orderedLineCells(from, dir, cells) {
-		const p = pos(from);
-		const step = DIR[dir];
-		const list = [];
-		if (!step) return list;
-		for (let i = 1; i <= 4; i += 1) {
-			const next = cellAt(p.row + step.dy * i, p.col + step.dx * i);
-			if (!next || !cells.has(next)) break;
-			list.push(next);
-		}
-		return list;
-	}
-	function forcedMove(from, special, map) {
-		const dir = DIR[special.param1];
-		const steps = Number(special.param2) || 0;
-		if (!dir || steps <= 0) return null;
-		const start = pos(from);
-		const path = [];
-		let end = from;
-		for (let i = 1; i <= steps; i += 1) {
-			const next = cellAt(start.row + dir.dy * i, start.col + dir.dx * i);
-			if (!next) break;
-			if (!map.cells.has(next)) break;
-			path.push(next);
-			end = next;
-		}
-		return {
-			dir: special.param1,
-			steps,
-			path,
-			end
-		};
-	}
-	function rewardIndexMap(map) {
-		const index = new Map();
-		map.rewardCells.forEach((cell, i) => index.set(cell, i));
-		return index;
-	}
-	function collectMask(cells, index) {
-		let mask = 0;
-		for (const cell of cells) {
-			const i = index.get(cell);
-			if (i !== void 0) mask |= 1 << i;
-		}
-		return mask;
-	}
-	function applySpecials(startPos, index, startMask, map) {
-		let current = startPos;
-		let mask = startMask;
-		const specialMoves = [];
-		const seen = new Set();
-		while (map.specials.get(current)?.effect === 3 && !seen.has(current)) {
-			seen.add(current);
-			const special = map.specials.get(current);
-			const forced = forcedMove(current, special, map);
-			if (!forced || forced.end === current) break;
-			mask |= collectMask(forced.path, index);
-			specialMoves.push({
-				from: current,
-				to: forced.end,
-				dir: forced.dir,
-				steps: forced.steps,
-				path: forced.path
-			});
-			current = forced.end;
-		}
-		return {
-			pos: current,
-			mask,
-			specialMoves
-		};
-	}
-	function buildTransition(from, dir, map, index) {
-		const line = orderedLineCells(from, dir, map.cells);
-		if (!line.length) return null;
-		const specialResult = applySpecials(line[line.length - 1], index, collectMask(line, index), map);
-		return {
-			pos: specialResult.pos,
-			mask: specialResult.mask,
-			step: {
-				dir,
-				from,
-				to: specialResult.pos,
-				line,
-				specialMoves: specialResult.specialMoves
-			}
-		};
-	}
-	function buildTransitionTable(map, index) {
-		const table = new Map();
-		const positions = new Set(map.cells);
-		positions.add(map.start);
-		for (const from of positions) {
-			const transitions = [];
-			for (const dir of DIRECTIONS) {
-				const next = buildTransition(from, dir, map, index);
-				if (next) transitions.push(next);
-			}
-			if (transitions.length) table.set(from, transitions);
-		}
-		return table;
-	}
-	function betterRoute(state, best) {
-		return state.count > best.count || state.count === best.count && state.depth < best.depth;
-	}
-	function buildSolution(state) {
-		const path = [];
-		for (let current = state; current?.parent; current = current.parent) path.push(current.step);
-		path.reverse();
-		return {
-			pos: state.pos,
-			mask: state.mask,
-			path
-		};
-	}
-	function solvePeiXiuMap(raw, options = {}) {
-		const map = parsePeiXiuMap(raw);
-		const startCell = normalizeCell(options.startCell ?? map.start);
-		if (!validCell(startCell) || !map.cells.has(startCell)) throw new RangeError(`裴秀地图起始格无效: ${startCell}`);
-		map.start = startCell;
-		const index = rewardIndexMap(map);
-		const target = map.rewardCells.length ? (1 << map.rewardCells.length) - 1 : 0;
-		const collectedCells = Array.isArray(options.collectedCells) ? options.collectedCells.map(normalizeCell) : [];
-		const startMask = options.collectStart === false ? collectMask(collectedCells, index) : collectMask([map.start].concat(collectedCells), index);
-		const start = {
-			pos: map.start,
-			mask: startMask,
-			count: bitCount(startMask),
-			depth: 0,
-			parent: null,
-			step: null
-		};
-		const queue = [start];
-		const seen = new Set([`${start.pos}:${start.mask}`]);
-		const transitions = buildTransitionTable(map, index);
-		let best = start;
-		for (let head = 0; head < queue.length; head += 1) {
-			const state = queue[head];
-			if (state.mask === target) return {
-				map,
-				solution: buildSolution(state),
-				complete: true
-			};
-			if (betterRoute(state, best)) best = state;
-			for (const next of transitions.get(state.pos) || []) {
-				const mask = state.mask | next.mask;
-				const key = `${next.pos}:${mask}`;
-				if (seen.has(key)) continue;
-				seen.add(key);
-				queue.push({
-					pos: next.pos,
-					mask,
-					count: bitCount(mask),
-					depth: state.depth + 1,
-					parent: state,
-					step: {
-						...next.step,
-						gainedMask: mask & ~state.mask
-					}
-				});
-			}
-		}
-		return {
-			map,
-			solution: buildSolution(best),
-			complete: false
-		};
-	}
-	function parsePeiXiuRoleData(datas) {
-		if (!Array.isArray(datas) || datas.length < 4) return null;
-		const mapId = Number(datas[0]);
-		const currentCell = normalizeCell(datas[1]);
-		const historyCount = Number(datas[2]);
-		if (!Number.isInteger(mapId) || !validCell(currentCell) || !Number.isInteger(historyCount) || historyCount < 0) return null;
-		const historyCells = datas.slice(3, 3 + historyCount).map(normalizeCell);
-		if (historyCells.length !== historyCount || historyCells.some((cell) => !validCell(cell))) return null;
-		if (datas[3 + historyCount] !== 0) return null;
-		return {
-			mapId,
-			currentCell,
-			historyCount,
-			historyCells
-		};
-	}
-	function solvePeiXiuRoleData(raw, datas) {
-		const roleData = parsePeiXiuRoleData(datas);
-		if (!roleData) return null;
-		const map = parsePeiXiuMap(raw);
-		if (Number(map.id) !== roleData.mapId || !map.cells.has(roleData.currentCell)) return null;
-		return {
-			...roleData,
-			result: solvePeiXiuMap(raw, {
-				startCell: roleData.currentCell,
-				collectedCells: roleData.historyCells
-			})
-		};
-	}
-	function bitCount(n) {
-		let count = 0;
-		while (n) {
-			n &= n - 1;
-			count += 1;
-		}
-		return count;
-	}
-	var windowStates = new Map();
-	function createDraggableWindow({ id, styleId, styleText, markup, handleSelector }) {
-		ensureStyle$1(styleId, `${getShellStyle(id)}${styleText}`);
-		const element = document.createElement("section");
-		element.id = id;
-		element.innerHTML = markup;
-		document.body.appendChild(element);
-		const state = windowStates.get(id) || {
-			lastPosition: null,
-			cleanupDrag: null,
-			cleanupPosition: null
-		};
-		windowStates.set(id, state);
-		restorePosition(element, state);
-		bindDrag(element, element.querySelector(handleSelector), state);
-		bindPositionCorrection(element, state);
-		return element;
-	}
-	function destroyDraggableWindow(id) {
-		const state = windowStates.get(id);
-		state?.cleanupDrag?.();
-		state?.cleanupPosition?.();
-		document.getElementById(id)?.remove();
-	}
-	function setDraggableWindowVisible(id, visible) {
-		const element = document.getElementById(id);
-		if (!element) return;
-		element.style.display = visible ? "" : "none";
-		const state = windowStates.get(id);
-		if (visible && state) correctPosition(element, state);
-	}
-	function ensureStyle$1(styleId, styleText) {
-		if (document.getElementById(styleId)) return;
-		const style = document.createElement("style");
-		style.id = styleId;
-		style.textContent = styleText;
-		document.head.appendChild(style);
-	}
-	function getShellStyle(id) {
-		return `
-    #${id} {
-      position: fixed;
-      right: 20px;
-      z-index: 10000000020;
-      box-sizing: border-box;
-      padding: 0 6px 6px;
-      color: #f4ead8;
-      background: #292724;
-      border: 1px solid #7b292d;
-      box-shadow: 0 7px 18px rgba(0, 0, 0, 0.42);
-      font-family: "Microsoft YaHei", sans-serif;
-      user-select: none;
-    }
-    #${id} * { box-sizing: border-box; }
-    #${id} .draggable-window-header {
-      height: 22px;
-      margin: 0 -6px;
-      padding: 0 6px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: #7b292d;
-      cursor: grab;
-    }
-    #${id}.is-dragging .draggable-window-header { cursor: grabbing; }
-    #${id} .draggable-window-title {
-      overflow: hidden;
-      font-weight: 700;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-  `;
-	}
-	function bindDrag(element, handle, state) {
-		state.cleanupDrag?.();
-		let pointerId = null;
-		let offsetX = 0;
-		let offsetY = 0;
-		const move = (event) => {
-			if (event.pointerId !== pointerId) return;
-			state.lastPosition = setPosition(element, event.clientX - offsetX, event.clientY - offsetY);
-		};
-		const stop = (event) => {
-			if (event.pointerId !== pointerId) return;
-			pointerId = null;
-			element.classList.remove("is-dragging");
-			handle.releasePointerCapture?.(event.pointerId);
-		};
-		const start = (event) => {
-			if (event.button !== 0) return;
-			const rect = element.getBoundingClientRect();
-			pointerId = event.pointerId;
-			offsetX = event.clientX - rect.left;
-			offsetY = event.clientY - rect.top;
-			element.classList.add("is-dragging");
-			handle.setPointerCapture?.(pointerId);
-		};
-		handle.addEventListener("pointerdown", start);
-		handle.addEventListener("pointermove", move);
-		handle.addEventListener("pointerup", stop);
-		handle.addEventListener("pointercancel", stop);
-		state.cleanupDrag = () => {
-			handle.removeEventListener("pointerdown", start);
-			handle.removeEventListener("pointermove", move);
-			handle.removeEventListener("pointerup", stop);
-			handle.removeEventListener("pointercancel", stop);
-			state.cleanupDrag = null;
-		};
-	}
-	function bindPositionCorrection(element, state) {
-		state.cleanupPosition?.();
-		const correct = () => correctPosition(element, state);
-		const observer = new ResizeObserver(correct);
-		observer.observe(element, { box: "border-box" });
-		window.addEventListener("resize", correct);
-		correct();
-		state.cleanupPosition = () => {
-			observer.disconnect();
-			window.removeEventListener("resize", correct);
-			state.cleanupPosition = null;
-		};
-	}
-	function correctPosition(element, state) {
-		if (!element.getClientRects().length) return;
-		const { left, top } = element.getBoundingClientRect();
-		const position = clampPosition(element, left, top);
-		if (position.left === left && position.top === top) return;
-		state.lastPosition = setPosition(element, position.left, position.top);
-	}
-	function restorePosition(element, state) {
-		if (!state.lastPosition) return;
-		state.lastPosition = setPosition(element, state.lastPosition.left, state.lastPosition.top);
-	}
-	function setPosition(element, left, top) {
-		const position = clampPosition(element, left, top);
-		element.style.left = `${position.left}px`;
-		element.style.top = `${position.top}px`;
-		element.style.right = "auto";
-		return position;
-	}
-	function clampPosition(element, left, top) {
-		return {
-			left: Math.min(Math.max(0, getLayoutViewportWidth() - element.offsetWidth), Math.max(0, left)),
-			top: Math.min(Math.max(0, window.innerHeight - element.offsetHeight), Math.max(0, top))
-		};
-	}
-	var WINDOW_ID$1 = "peixiu-map-window";
-	var STYLE_ID$2 = "peixiu-map-style";
-	var CELL_SIZE = 50;
-	var SUIT_ORDER = [
-		3,
-		4,
-		1,
-		2
-	];
-	function getRewardInfo(reward, bonuses) {
-		if (!reward) return null;
-		const config = bonuses?.get(Number(reward.rewardId));
-		return {
-			id: Number(reward.rewardId),
-			name: config?.name || `奖励 ${reward.rewardId}`,
-			desc: config?.desc || ""
-		};
-	}
-	function getRouteCells(solution) {
-		const cells = new Set();
-		for (const step of solution?.path || []) {
-			for (const cell of step.line || []) cells.add(cell);
-			for (const move of step.specialMoves || []) for (const cell of move.path || []) cells.add(cell);
-		}
-		return cells;
-	}
-	function formatRoute(solution, emptyText = "已完成") {
-		const path = Array.isArray(solution) ? solution : solution?.path || [];
-		if (!path.length) return emptyText;
-		return path.map((step) => {
-			const direction = typeof step === "number" ? step : step.dir;
-			const mark = PEIXIU_DIRECTIONS[direction]?.mark || direction;
-			return typeof step === "number" ? mark : `${mark}${step.to}`;
-		}).join(" → ");
-	}
-	function setSuitText(element, text, prefix = "") {
-		element.replaceChildren();
-		const parts = `${prefix}${text}`.split(/([♥♦])/);
-		for (const part of parts) {
-			if (!part) continue;
-			if (part === "♥" || part === "♦") {
-				const suit = document.createElement("span");
-				suit.className = "peixiu-red-suit";
-				suit.textContent = part;
-				element.appendChild(suit);
-			} else element.appendChild(document.createTextNode(part));
-		}
-	}
-	function formatSuitCounts(suits) {
-		const counts = new Map(SUIT_ORDER.map((direction) => [direction, 0]));
-		for (const suit of suits || []) if (counts.has(suit)) counts.set(suit, counts.get(suit) + 1);
-		return SUIT_ORDER.map((direction) => `${PEIXIU_DIRECTIONS[direction].mark}${counts.get(direction)}`).join("");
-	}
-	function formatRequiredSuits(solution) {
-		return formatSuitCounts((solution?.path || []).map((step) => step.dir));
-	}
-	function buildPeiXiuMapViewModel(state, bonuses) {
-		const map = state?.result?.map;
-		if (!map) return null;
-		const rewardsByCell = new Map(map.rewards.filter((reward) => reward.rawCell !== 26).map((reward) => [reward.cell, getRewardInfo(reward, bonuses)]));
-		const historyCells = new Set(state.historyCells || []);
-		const collectedCells = new Set(historyCells).add(state.currentCell);
-		const routeCells = getRouteCells(state.result.solution);
-		return {
-			width: 264,
-			mapName: map.name || `地图 ${map.id}`,
-			mapReward: getRewardInfo(map.mapReward, bonuses),
-			currentCell: state.currentCell,
-			presetRoutes: (state.presetRoutes || []).slice(0, 2).map(formatRoute),
-			requiredSuits: formatRequiredSuits(state.result.solution),
-			handSuits: Array.isArray(state.handSuitColors) ? formatSuitCounts(state.handSuitColors) : "",
-			dynamicRoute: state.result.complete ? formatRoute(state.result.solution) : `无法拿全奖励，当前最优：${formatRoute(state.result.solution, "无可行路线")}`,
-			historyCells,
-			routeCells,
-			cells: [...map.cells].map((id) => ({
-				id,
-				row: Math.floor((id - 1) / 5) + 1,
-				column: (id - 1) % 5 + 1,
-				current: id === state.currentCell,
-				visited: historyCells.has(id),
-				onRoute: routeCells.has(id),
-				reward: rewardsByCell.get(id) || null,
-				rewardCollected: collectedCells.has(id),
-				special: map.specials.get(id) || null
-			}))
-		};
-	}
-	function createWindow$1() {
-		return createDraggableWindow({
-			id: WINDOW_ID$1,
-			styleId: STYLE_ID$2,
-			styleText: `
-    #${WINDOW_ID$1} {
-      top: 50px;
-      width: 264px;
-    }
-    #${WINDOW_ID$1} .peixiu-title {
-      font-size: 12px;
-    }
-    #${WINDOW_ID$1} .peixiu-fixed-skill {
-      min-height: 38px;
-      padding: 4px 0;
-      overflow: hidden;
-      border-bottom: 1px solid #706457;
-    }
-    #${WINDOW_ID$1} .peixiu-fixed-skill span {
-      overflow: hidden;
-      font-size: 12px;
-      line-height: 14px;
-      white-space: normal;
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
-    }
-    #${WINDOW_ID$1} .peixiu-presets {
-      padding: 2px 0;
-      display: grid;
-      gap: 1px;
-      color: #dce9ef;
-      font-size: 16px;
-      line-height: 16px;
-    }
-    #${WINDOW_ID$1} .peixiu-presets .peixiu-route {
-      min-height: 16px;
-    }
-    #${WINDOW_ID$1} .peixiu-presets .peixiu-route.is-empty {
-      visibility: hidden;
-    }
-    #${WINDOW_ID$1} .peixiu-presets .peixiu-route + .peixiu-route {
-      margin-top: 2px;
-      padding-top: 2px;
-      border-top: 1px solid #706457;
-    }
-    #${WINDOW_ID$1} .peixiu-dynamic-route {
-      min-height: 36px;
-      padding: 2px 0;
-      color: #9ed4b4;
-      font-size: 16px;
-      line-height: 16px;
-    }
-    #${WINDOW_ID$1} .peixiu-required-suits {
-      min-height: 22px;
-      padding: 3px 0;
-      color: #f2d06b;
-      font-size: 16px;
-      line-height: 16px;
-    }
-    #${WINDOW_ID$1} .peixiu-hand-suits {
-      min-height: 22px;
-      padding: 3px 0;
-      color: #dce9ef;
-      font-size: 16px;
-      line-height: 16px;
-    }
-    #${WINDOW_ID$1} .peixiu-hand-suits.is-empty {
-      visibility: hidden;
-    }
-    #${WINDOW_ID$1} .peixiu-route {
-      overflow: hidden;
-      display: -webkit-box;
-      white-space: normal;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
-    }
-    #${WINDOW_ID$1} .peixiu-red-suit {
-      color: #ff5f5f;
-    }
-    #${WINDOW_ID$1} .peixiu-board {
-      width: 250px;
-      height: 250px;
-      margin: 0 auto;
-      display: grid;
-      grid-template-columns: repeat(5, ${CELL_SIZE}px);
-      grid-template-rows: repeat(5, ${CELL_SIZE}px);
-      background: rgba(219, 189, 134, 0.95);
-      box-shadow: inset 0 0 0 1px #51463b;
-    }
-    #${WINDOW_ID$1} .peixiu-cell {
-      position: relative;
-      width: ${CELL_SIZE}px;
-      height: ${CELL_SIZE}px;
-      padding: 3px;
-      color: #33261d;
-      background: rgb(213, 175, 123);
-      border: 1px solid rgba(70, 50, 36, 0.46);
-      font-size: 12px;
-      font-weight: 700;
-    }
-    #${WINDOW_ID$1} .peixiu-cell.is-visited { background: #66aa77; }
-    #${WINDOW_ID$1} .peixiu-cell.is-route { box-shadow: inset 0 0 0 2px #3f6f86; }
-    #${WINDOW_ID$1} .peixiu-cell.is-current {
-      color: #fff;
-      background: #8f3438;
-      box-shadow: inset 0 0 0 2px #f2d06b;
-    }
-    #${WINDOW_ID$1} .peixiu-cell-number { position: absolute; top: 3px; left: 3px; }
-    #${WINDOW_ID$1} .peixiu-reward-badge {
-      position: absolute;
-      right: 3px;
-      bottom: 3px;
-      max-width: 40px;
-      padding: 2px;
-      overflow: hidden;
-      color: #fff8dd;
-      background: #2f6652;
-      border: 1px solid #d9c477;
-      font-size: 12px;
-      line-height: 8px;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    #${WINDOW_ID$1} .peixiu-reward-badge.is-collected {
-      color: #2c2925;
-      background: #fff;
-      border-color: #8a8177;
-    }
-    #${WINDOW_ID$1} .peixiu-special {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: #6f2025;
-      font-size: 13px;
-    }
-  `,
-			markup: `
-    <header class="draggable-window-header peixiu-header">
-      <div class="draggable-window-title peixiu-title"></div>
-    </header>
-    <div class="peixiu-fixed-skill"></div>
-    <div class="peixiu-presets">
-      <div class="peixiu-route" data-route="preset-1"></div>
-      <div class="peixiu-route" data-route="preset-2"></div>
-    </div>
-    <div class="peixiu-board"></div>
-    <div class="peixiu-required-suits"></div>
-    <div class="peixiu-route peixiu-dynamic-route" data-route="dynamic"></div>
-    <div class="peixiu-hand-suits"></div>
-  `,
-			handleSelector: ".peixiu-header"
-		});
-	}
-	function setSkillLine(element, desc) {
-		element.replaceChildren();
-		const text = document.createElement("span");
-		text.textContent = desc || "";
-		element.appendChild(text);
-	}
-	function renderPeiXiuMapWindow(state, bonuses) {
-		const model = buildPeiXiuMapViewModel(state, bonuses);
-		if (!model) return false;
-		const element = document.getElementById(WINDOW_ID$1) || createWindow$1();
-		element.querySelector(".peixiu-title").textContent = model.mapName;
-		[element.querySelector("[data-route=\"preset-1\"]"), element.querySelector("[data-route=\"preset-2\"]")].forEach((routeElement, index) => {
-			const route = model.presetRoutes[index] || "";
-			setSuitText(routeElement, route);
-			routeElement.classList.toggle("is-empty", !route);
-		});
-		setSuitText(element.querySelector(".peixiu-required-suits"), model.requiredSuits, "需求：");
-		setSuitText(element.querySelector("[data-route=\"dynamic\"]"), model.dynamicRoute, "动态：");
-		const handSuits = element.querySelector(".peixiu-hand-suits");
-		setSuitText(handSuits, model.handSuits, model.handSuits ? "手牌：" : "");
-		handSuits.classList.toggle("is-empty", !model.handSuits);
-		const fixedSkill = element.querySelector(".peixiu-fixed-skill");
-		const fixedSkillDesc = model.mapReward?.desc || "";
-		setSkillLine(fixedSkill, fixedSkillDesc);
-		const board = element.querySelector(".peixiu-board");
-		board.replaceChildren();
-		for (const cell of model.cells) {
-			const cellElement = document.createElement("div");
-			cellElement.className = "peixiu-cell";
-			cellElement.style.gridRow = cell.row;
-			cellElement.style.gridColumn = cell.column;
-			cellElement.classList.toggle("is-visited", cell.visited);
-			cellElement.classList.toggle("is-route", cell.onRoute);
-			cellElement.classList.toggle("is-current", cell.current);
-			const number = document.createElement("span");
-			number.className = "peixiu-cell-number";
-			number.textContent = cell.id;
-			cellElement.appendChild(number);
-			if (cell.reward) {
-				const badge = document.createElement("span");
-				badge.className = "peixiu-reward-badge";
-				badge.classList.toggle("is-collected", cell.rewardCollected);
-				badge.textContent = cell.reward.name;
-				cellElement.appendChild(badge);
-				cellElement.addEventListener("mouseenter", () => setSkillLine(fixedSkill, cell.reward.desc));
-				cellElement.addEventListener("mouseleave", () => setSkillLine(fixedSkill, fixedSkillDesc));
-			}
-			if (cell.special?.effect === 3) {
-				const special = document.createElement("span");
-				special.className = "peixiu-special";
-				special.textContent = `${PEIXIU_DIRECTIONS[cell.special.param1]?.shortDirection || cell.special.param1}${cell.special.param2}`;
-				cellElement.appendChild(special);
-			}
-			board.appendChild(cellElement);
-		}
-		return true;
-	}
-	function destroyPeiXiuMapWindow() {
-		destroyDraggableWindow(WINDOW_ID$1);
-	}
-	function setPeiXiuMapWindowVisible(visible) {
-		setDraggableWindowVisible(WINDOW_ID$1, visible);
 	}
 	var unsubscribeRenderedMainHandCardIDs = null;
 	function getRenderedPeiXiuHandSuitColors() {
@@ -14686,12 +15353,12 @@
 			orderContainer.style.visibility = "visible";
 		}
 	}
-	var STYLE_ID$1 = "dxc-shell-style";
+	var STYLE_ID = "dxc-shell-style";
 	function ensureStyle() {
-		let style = document.getElementById(STYLE_ID$1);
+		let style = document.getElementById(STYLE_ID);
 		if (style) return;
 		style = document.createElement("style");
-		style.id = STYLE_ID$1;
+		style.id = STYLE_ID;
 		style.textContent = `
     #tracker-shell {
       position: fixed;
@@ -14873,7 +15540,7 @@
 		return response.text();
 	}
 	var iframe = null;
-	var version = "0.19.0";
+	var version = "0.19.1";
 	function getTrackedHandNumbers(seatID) {
 		const config = CardConfig.GetInstance();
 		return tracker.getTrackedPlayerHandCardIDs(seatID).map((id) => config.getCardNumber(id)).filter((number) => number > 0);
@@ -15204,7 +15871,7 @@
 			} else {
 				container.classList.remove("collapsed");
 				toggle.innerText = "-";
-				document.getElementById("title").innerText = "三国杀小抄0.19.0";
+				document.getElementById("title").innerText = "三国杀小抄0.19.1";
 				expandJiePanel({ defer: true });
 			}
 		};
@@ -15266,715 +15933,6 @@
 		if (defer) requestAnimationFrame(apply);
 		else apply();
 	}
-	var retainedLogicMessages = new Set([
-		"ClientLoginRep",
-		"ClientUserDataCounterNtf",
-		"SmsgUpdateTaskListToClient",
-		"ClientGuildMemberChangeNtf",
-		"MsgReconnectGame",
-		"MsgHeartAliveRep",
-		"decodeGameRecordInitInfo",
-		"ClientBindKeyRep",
-		"decodeSyncGameDataEvent",
-		"ClientUserbaseinfoRep",
-		"ClientUserdetailRep",
-		"decodeSSCChatmsgNtf",
-		"decodeClientActSysBroadMsgListResp",
-		"CClientGameRewardPointNTF",
-		"ClientGeneralSkinRep",
-		"ClientChestOpenReplaceInfoNtf",
-		"decodeServerGeneralWishPoolDataResp",
-		"decodeServerDrawGeneralWishResp",
-		"decodeServerSkinWishPoolDataResp",
-		"decodeRogueLikeDataSync",
-		"ClientActivitysetDataRep",
-		"decodeRougeBaseInfoRep",
-		"ClientTableinfoRep",
-		"MsgGameShowFigure",
-		"decodeGsClientUserSeatFlagNtf",
-		"GsCModifyUserseatNtf",
-		"GsCUpdateRoleDataNtf",
-		"MsgGameOver",
-		"ClientLeavetableRep",
-		"MsgGamePlayCardNtf",
-		"SmsgGameSetCharacter",
-		"GsCGuoZhanSetCharacter",
-		"GsCFirstPhaseRole",
-		"MsgGameTurnNtf",
-		"GsCGamephaseNtf",
-		"GsCUpdateRoleDataExNtf",
-		"MsgGameRoundNtf",
-		"ClientRecommendShopItemRep",
-		"ClientModifyTblsetingNtf",
-		"MsgGamePlayerShowStatusNtf",
-		"GsCUpdateHpNtf",
-		"GsCTriggerSpellNew",
-		"ClientHappyGetFriendHandcardRep",
-		"MsgNtfUseCardType",
-		"PubGsCUseCard",
-		"PubGsCUseSpell",
-		"GsCRoleOptTargetNtf",
-		"CGsRoleSpellOptRep",
-		"PubGsCMoveCard",
-		"decodeGameDealPileTopCardList"
-	]);
-	function isRetainedLogicMessage(className) {
-		return retainedLogicMessages.has(className);
-	}
-	var POWER_SLOGAN_TEXTS = new Set([
-		"中原人杰地灵，天下归心！",
-		"一统中原，天下归心！",
-		"赴此雄途，一统山河！",
-		"对酒当歌，人生几何！",
-		"周公吐哺，天下归心。",
-		"雄踞北方，睥睨天下！",
-		"兵锋四向，所向披靡！",
-		"势贯长虹，锐不可当！",
-		"魏武挥鞭，龙骧虎战！",
-		"魏风烈烈，霸业千秋！",
-		"枕山河之固，展霸业鸿图！",
-		"执戟兴邦，志在八方！",
-		"魏骑驰骋，踏破山河！",
-		"枕山河之固，扬魏武雄风！",
-		"魏德昭彰，恩威并施！",
-		"志在魏邦，雄图万里！",
-		"战合肥，破成都，胜者为王！",
-		"外驱胡虏，内平吴蜀！",
-		"魏武藏奇略，霸业定乾坤！",
-		"诸公半虎狼，魏旗不留藏!",
-		"长驱蹈匈奴，左顾凌鲜卑！",
-		"扇挥白羽迥，甲锁黄金明！",
-		"魏光璀璨耀星河",
-		"魏恩广布润人心",
-		"护魏山河，霸业千秋！",
-		"舳舻千里，旌旗蔽空",
-		"受禅汉庭，魏起征程！",
-		"奇谋鬼才，算无遗策！",
-		"魏威如岳，气吞山河！",
-		"大魏雄师，势不可挡！",
-		"匡扶汉室，入主中原",
-		"忠义为先，蜀汉必兴！",
-		"鞠躬尽瘁，死而后已！",
-		"惟贤惟德，方能匡复汉室！",
-		"能进能退，方能百战不殆！",
-		"蜀风烈烈，其志昭昭！",
-		"天地英雄气，千秋尚凛然",
-		"蜀道崎岖，壮志不屈！",
-		"蜀锦为裳，剑指北方！",
-		"血染征袍，荡涤乱世！",
-		"汉业兴亡惟我在！",
-		"蜀汉精忠，义贯长虹！",
-		"壮志盈怀，忠义为先！",
-		"蜀汉英魂，壮志凌云！",
-		"蜀汉兴邦，志在四方",
-		"犯我大吴疆土，虽远必诛",
-		"上有天堂，下有苏杭！",
-		"羽扇纶巾，计定天下！",
-		"何人敢犯大吴疆土",
-		"赴汤蹈火，在所不辞！",
-		"犯大吴疆土者，吾必击而破之！",
-		"江东子弟，何惧于天下！",
-		"天下英雄谁敌手？",
-		"英雄何不带吴钩！",
-		"东吴水师，横行江海！",
-		"吴钩似霜，斩破千障！",
-		"吴营谋深，弹指乾坤！",
-		"天险固垒，欲攻则锐！",
-		"智谋如渊，踏浪焚天！",
-		"江东子弟多才俊，谁怕！"
-	]);
-	var HALL_CHAT_REPEAT_WINDOW = 15 * 1e3;
-	var hallChatRepeatMap = new Map();
-	var BLOCKED_CHAT_CONTENT_PATTERN = /((?:桃|烧)[bB8]|桃花|鲜花|菜篮子|0\.5(?:一|个)|女大(?:学生|妹妹)?|可[约玥]|福利|交友|进[群裙]|加[群裙]|群聊|裙聊|私聊|绿泡泡|[加嘉家].{0,2}[vV微薇].{0,2}[心芯新]|开放啪|代练|代打|陪玩|接单|带打|包上分|上分|(?:出|卖|收|回收).{0,3}号|成品号|收[^徒]*$|[帮代带].*[玩练打]|出.{0,3}的|[加家+＋十].{0,3}我)/;
-	function normalizeHallChatMsg(text) {
-		if (typeof text != "string" || !text) return "";
-		return text.normalize("NFKC").toLowerCase().replace(/#[0-9]+/g, "").replace(/[0-9]+/g, "").replace(/[ \t\r\n\u00a0❤♥♡❥ⅤⅴvVⅠⅰiI丨|]/g, "").replace(/[.,，。!！?？:：;；'"“”‘’_\-+＋=~～*＊/\\()[\]（）【】<>《》]/g, "");
-	}
-	function isPurePlaceholderChatMsg(text) {
-		if (typeof text != "string" || !text) return false;
-		const cleaned = text.replace(/\s/g, "");
-		if (!cleaned) return false;
-		return /^[:：=＝\-—_·.。•＊*#■□▢▣▤▥▦▧▨▩▪▫◆◇◈◼◻◾◽█▌▐▓▒░]+$/.test(cleaned);
-	}
-	function shouldBlockHallChat({ ProtoObj, chatMsg, channel, hallChatRepeatBlocked }) {
-		if (ProtoObj.Channel == 2 && chatMsg && POWER_SLOGAN_TEXTS.has(chatMsg)) return true;
-		if (ProtoObj.chatMsg?.startsWith("oldback@") || ProtoObj.MsgType == 26 || ProtoObj.MsgKind == 2) return true;
-		if (channel == 7 && (ProtoObj.officeLevel == null || ProtoObj.officeLevel <= 6 || isPurePlaceholderChatMsg(chatMsg)) || hallChatRepeatBlocked) return true;
-		return BLOCKED_CHAT_CONTENT_PATTERN.test(ProtoObj.chatMsg || "");
-	}
-	function updateHallChatRepeatState(chatMsg, channel) {
-		if (channel != 7 || !chatMsg) return false;
-		const key = normalizeHallChatMsg(chatMsg);
-		if (!key) return false;
-		const now = Date.now();
-		const prev = hallChatRepeatMap.get(key);
-		let blocked = false;
-		if (prev && now - prev.time <= HALL_CHAT_REPEAT_WINDOW) {
-			prev.time = now;
-			prev.count += 1;
-			blocked = prev.count >= 3;
-		} else hallChatRepeatMap.set(key, {
-			time: now,
-			count: 1
-		});
-		if (hallChatRepeatMap.size > 200) {
-			for (const [name, item] of hallChatRepeatMap) if (now - item.time > HALL_CHAT_REPEAT_WINDOW) hallChatRepeatMap.delete(name);
-		}
-		return blocked;
-	}
-	function handleChatMessage(msg, ProtoObj) {
-		if (!ProtoObj) return;
-		if (ProtoObj.scene == 11) ProtoObj.scene = 2;
-		const chatMsg = ProtoObj.chatMsg || ProtoObj.ChatMsg || "";
-		const channel = ProtoObj.Channel || ProtoObj.channel;
-		if (shouldBlockHallChat({
-			ProtoObj,
-			chatMsg,
-			channel,
-			hallChatRepeatBlocked: updateHallChatRepeatState(chatMsg, channel)
-		})) {
-			delete msg.data.protoObj;
-			return;
-		}
-	}
-	function handleBroadMsg(ProtoObj) {
-		if (!ProtoObj) return;
-		if (Array.isArray(ProtoObj.msgList)) ProtoObj.msgList.length = 0;
-	}
-	var WINDOW_ID = "pingjian-window";
-	var STYLE_ID = "pingjian-style";
-	function createWindow() {
-		return createDraggableWindow({
-			id: WINDOW_ID,
-			styleId: STYLE_ID,
-			styleText: `
-    #${WINDOW_ID} {
-      top: 60px;
-      min-width: 140px;
-    }
-    #${WINDOW_ID} .pingjian-title {
-      font-size: 16px;
-    }
-    #${WINDOW_ID} .pingjian-list {
-      margin: 4px 0 0;
-      padding: 0;
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    #${WINDOW_ID} .pingjian-item {
-      padding: 3px 6px;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(242, 208, 107, 0.2);
-      border-radius: 2px;
-      font-size: 16px;
-      color: #f2d06b;
-      white-space: nowrap;
-      text-align: center;
-    }
-  `,
-			markup: `
-    <header class="draggable-window-header pingjian-header">
-      <div class="draggable-window-title pingjian-title">评鉴</div>
-    </header>
-    <ul class="pingjian-list"></ul>
-  `,
-			handleSelector: ".pingjian-header"
-		});
-	}
-	function renderPingJianWindow(names) {
-		if (!Array.isArray(names) || !names.length) return false;
-		const list = (document.getElementById(WINDOW_ID) || createWindow()).querySelector(".pingjian-list");
-		if (!list) return false;
-		const items = names.map((name) => {
-			const li = document.createElement("li");
-			li.className = "pingjian-item";
-			li.textContent = name;
-			return li;
-		});
-		list.replaceChildren(...items);
-		return true;
-	}
-	function destroyPingJianWindow() {
-		destroyDraggableWindow(WINDOW_ID);
-	}
-	var PROTOCOL_PILE_ZONE = 1;
-	var PROTOCOL_HAND_ZONE = 5;
-	function revealCardsInProtocolZone(id, cardIDs, zone = PROTOCOL_HAND_ZONE, pos = void 0) {
-		tracker.revealTrackerCardsInZone({
-			id,
-			zone,
-			pos
-		}, cardIDs);
-	}
-	function handleResultType({ Type }) {
-		switch (Type) {
-			case 44: break;
-			case 45: break;
-			default: break;
-		}
-	}
-	function handleRoleSpellOptRep(msg = {}) {
-		const { Datas, SeatID, SpellID, Type } = msg;
-		handleResultType(msg);
-		tracker.dispatchSkillProtocolEvent({
-			type: "choice",
-			message: msg
-		});
-		switch (SpellID) {
-			case 2022:
-				Game.setGeneral(SeatID, Datas[0], Datas[1], true);
-				break;
-			case 3659:
-				revealCardsInProtocolZone(SeatID, Datas);
-				break;
-			case 3744:
-				if (Type !== 73) revealCardsInProtocolZone(255, Datas, PROTOCOL_PILE_ZONE);
-				break;
-			case 3868:
-				if (Type === 50) revealCardsInProtocolZone(255, Datas, PROTOCOL_PILE_ZONE);
-				break;
-			case 7009:
-				if (Type === 30 && Array.isArray(Datas) && Datas.length > 0) revealCardsInProtocolZone(255, Datas, PROTOCOL_PILE_ZONE);
-				break;
-			case 3336:
-				if (Type === 50 && Array.isArray(Datas)) revealCardsInProtocolZone(255, [...Datas].reverse(), PROTOCOL_PILE_ZONE, 0);
-				break;
-			case 3571: break;
-			case 3483:
-				if (Type === 53) {
-					const room = tracker.getReadyTrackerRoom();
-					if (!room || !Array.isArray(Datas) || room.mySeatID !== Datas[1]) break;
-					const [actorSeat, targetSeat, handCount] = Datas;
-					const handEnd = 3 + handCount;
-					const pileStart = handEnd + 1;
-					const pileCount = Datas[handEnd];
-					if (!Number.isInteger(handCount) || !Number.isInteger(pileCount) || handCount <= 0 || pileCount <= 0 || handCount !== pileCount || Datas.length !== pileStart + pileCount) break;
-					recordJieLiSelection(room, {
-						actorSeat,
-						targetSeat,
-						handCardIDs: Datas.slice(3, handEnd),
-						pileCardIDs: Datas.slice(pileStart, pileStart + pileCount)
-					});
-				}
-				break;
-			case 3911:
-				if (Type !== 82 || SeatID !== Game.myID) break;
-				if (Array.isArray(Datas) && Datas.length === 0) {
-					destroyPingJianWindow();
-					Game.deleteSpellState(3911);
-				}
-				if (Array.isArray(Datas) && Datas.length > 0) {
-					const storedParams = Game.getSpellState(3911);
-					if (Array.isArray(storedParams) && storedParams.length > 0) {
-						const successCount = Number(Datas[0]) || 0;
-						const successData = Datas.slice(1, 1 + successCount * 4);
-						const helpCount = Number(storedParams[0]) || 0;
-						const helpData = storedParams.slice(1, 1 + helpCount * 4);
-						const nextDatas = [
-							successCount,
-							...successData,
-							helpCount,
-							...helpData,
-							0
-						];
-						Datas.splice(0, Datas.length, ...nextDatas);
-						msg.Datas = Datas;
-					}
-				}
-				break;
-			default: break;
-		}
-	}
-	function revealPlayerHandCards(seatID, cardIDs, options = {}) {
-		tracker.revealTrackerCards({
-			type: "player",
-			seatID,
-			...options
-		}, cardIDs);
-	}
-	function revealPileCards(cardIDs) {
-		tracker.revealTrackerCards({
-			type: "public",
-			zoneName: "pile",
-			reposition: true,
-			cardIDsTopFirst: true
-		}, cardIDs);
-	}
-	function shouldRevealTrackedHandAsFullHand(seatID, handCount) {
-		const room = tracker.getReadyTrackerRoom();
-		if (!room) return false;
-		const player = room.getPlayer?.(seatID);
-		if (player?.hasObservedHandCount === true) return shouldRevealAsFullHand({
-			handCount,
-			observedHandCount: player.observedHandCount
-		});
-		const localHandCount = room.playerCardsSnapshot.filter((card) => card.subZone === "hand" && card.seats?.has?.(Number(seatID))).length;
-		return shouldRevealAsFullHand({
-			handCount,
-			localHandCount
-		});
-	}
-	function getCardNumbers(ids) {
-		const config = CardConfig.GetInstance();
-		return ids.map((id) => config.getCardNumber(id));
-	}
-	function parseJieLiNotice(msg) {
-		const { Params, SeatID, SrcSeatID, targetSeatID } = msg;
-		if (!Array.isArray(Params) || Params.length === 0) return null;
-		const actorSeat = SrcSeatID ?? SeatID;
-		const targetSeat = targetSeatID;
-		const [pileCount, handCount] = Params;
-		if (!Number.isInteger(pileCount) || pileCount <= 0) return null;
-		if (Params.length === 1) return {
-			actorSeat,
-			targetSeat,
-			pileCount,
-			pileCardIDs: null,
-			handCardIDs: null
-		};
-		if (!Number.isInteger(handCount) || handCount < 0 || Params.length !== 2 + pileCount + handCount) return null;
-		return {
-			actorSeat,
-			targetSeat,
-			pileCount,
-			pileCardIDs: Params.slice(2, 2 + pileCount),
-			handCardIDs: Params.slice(2 + pileCount)
-		};
-	}
-	function handleRoleOptTargetNtf(msg) {
-		const { SpellID, Param, Params, SeatID, SrcSeatID, targetSeatID, Type } = msg;
-		tracker.dispatchSkillProtocolEvent({
-			type: "targetNotice",
-			message: msg
-		});
-		if (FULL_HAND_ROLE_OPT_SPELL_IDS.has(SpellID)) {
-			if (targetSeatID === void 0 || targetSeatID === 255) return;
-			if (Params?.length > 0) revealPlayerHandCards(targetSeatID, Params, { fullHand: true });
-			return;
-		}
-		if (PARTIAL_HAND_ROLE_OPT_SPELL_IDS.has(SpellID)) {
-			if (targetSeatID === void 0 || targetSeatID === 255) return;
-			if (Param == 0 && Params?.length > 0) revealPlayerHandCards(targetSeatID, Params);
-			return;
-		}
-		switch (SpellID) {
-			case 945:
-				if (Param == 0 && Params?.length > 0) drawYanJiao(getCardNumbers(Params));
-				break;
-			case 3440:
-				if (Param == 0 && Params?.length > 0 && Game.myID !== void 0 && Game.myID === SeatID) {
-					if (Type == 28) drawYiCheng(getCardNumbers(Params), getCardNumbers(tracker.getTrackedPlayerHandCardIDs(SeatID)));
-				}
-				break;
-			case 11003: break;
-			case 943:
-				if (Param == 0 && Params?.length == 1) revealPileCards(Params);
-				break;
-			case 898:
-				if (SrcSeatID === void 0) break;
-				if (Param == 0 && Params?.length > 2 && SrcSeatID !== 255) revealPlayerHandCards(SrcSeatID, Params.slice(1, Params[0] + 1));
-				break;
-			case 987:
-			case 988:
-				if (targetSeatID === void 0) break;
-				if (Param == 1 && Params?.length > 2) {
-					const pileCount = Number(Params[0]) || 0;
-					const handCount = Number(Params[1]) || 0;
-					if (pileCount > 0) revealPileCards(Params.slice(2, 2 + pileCount));
-					if (handCount > 0 && targetSeatID !== 255) revealPlayerHandCards(targetSeatID, Params.slice(2 + pileCount, 2 + pileCount + handCount));
-				}
-				break;
-			case 3903:
-				if (targetSeatID != 255 || Param != 0) break;
-				if (Type == 28 && Params?.length > 2) {
-					const pileCount = Number(Params[0]) || 0;
-					const pileCardIDs = Params.slice(2, 2 + pileCount);
-					if (pileCount > 0 && pileCardIDs.length == pileCount) revealPileCards(pileCardIDs);
-					break;
-				}
-				if (Type == 29 && Params?.length == 4) revealPileCards(Params.slice(1));
-				break;
-			case 3266: break;
-			case 3483:
-				if (targetSeatID === void 0) break;
-				if (Param == 1 && Params?.length > 0) {
-					const notice = parseJieLiNotice(msg);
-					const trackerRoom = tracker.getReadyTrackerRoom();
-					if (!notice) {
-						if (trackerRoom) clearJieLiState(trackerRoom);
-						break;
-					}
-					if (trackerRoom) recordJieLiContext(trackerRoom, {
-						actorSeat: notice.actorSeat,
-						targetSeat: notice.targetSeat,
-						pileCount: notice.pileCount
-					});
-					if (!notice.pileCardIDs) break;
-					revealPileCards(notice.pileCardIDs);
-					if (notice.handCardIDs.length > 0 && notice.targetSeat !== 255) revealPlayerHandCards(notice.targetSeat, notice.handCardIDs, shouldRevealTrackedHandAsFullHand(notice.targetSeat, notice.handCardIDs.length) ? { fullHand: true } : {});
-				}
-				break;
-			case 3571: break;
-			case 7010:
-			case 7011: break;
-			case 2900:
-				if (Type == 28) Game.setGeneral(targetSeatID, Params[2], Params[1], true);
-				break;
-			case 4021:
-				if (Type == 78) {
-					destroyPeiXiuMapWindow();
-					Game.deleteSpellState(4022);
-				}
-				break;
-			case 3641:
-				if (Type == 67 && SeatID !== Game.myID) wait(() => laya.GetWindow("TianShuWindow")).then((win) => win.Close?.()).catch((err) => {
-					console.error(err);
-				});
-				break;
-			case 441:
-			case 3492: {
-				if (SrcSeatID === void 0 || targetSeatID !== 255) break;
-				const cardIDs = Game.getSpellState(SpellID);
-				Game.deleteSpellState(SpellID);
-				if (SrcSeatID !== Game.myID) break;
-				if (!Array.isArray(cardIDs) || !cardIDs.length) break;
-				drawChengXiang(getCardNumbers(cardIDs), SpellID == 3492);
-				break;
-			}
-			case 3911: {
-				if (Type !== 28 || SeatID === void 0 || SeatID !== Game.myID) break;
-				if (!Array.isArray(Params) || Params.length < 5) break;
-				const count = Number(Params[0]) || 0;
-				if (count <= 0) break;
-				const validParams = Params.slice(1, 1 + count * 4);
-				const pingJianDic = SpellExtendConfig.GetInstance().PingJianDic;
-				const entries = [];
-				for (let i = 0; i < validParams.length; i += 4) {
-					const group = validParams.slice(i, i + 4);
-					if (group.length < 4) break;
-					const zhangongId = group[2];
-					if (!zhangongId) continue;
-					const pj = pingJianDic.get(Number(zhangongId));
-					if (pj?.name) {
-						const startPos = Number(group[0]);
-						if (Number.isInteger(startPos) && startPos >= 0 && startPos < 36) {
-							const row = Math.floor(startPos / 6) + 1;
-							const col = startPos % 6 + 1;
-							entries.push({
-								startPos,
-								text: `${pj.name} (${row}行${col}列)`
-							});
-						} else entries.push({
-							startPos: Infinity,
-							text: pj.name
-						});
-					}
-				}
-				if (entries.length > 0) {
-					entries.sort((a, b) => a.startPos - b.startPos);
-					renderPingJianWindow(entries.map((entry) => entry.text));
-				}
-				Game.setSpellState(3911, [count, ...validParams]);
-				break;
-			}
-			case 3854:
-				if (Type !== 29 || SeatID === void 0 || SeatID !== Game.myID) break;
-				if (Params?.length > 0) revealPlayerHandCards(targetSeatID, Params);
-				break;
-			default: break;
-		}
-	}
-	var excludeNames = new Set([
-		"乐",
-		"兵",
-		"闪电"
-	]);
-	var shaNames = new Set([
-		"杀",
-		"火杀",
-		"雷杀",
-		"冰杀"
-	]);
-	function updateResult(html) {
-		if (typeof document === "undefined") return;
-		const result = document.getElementById("result");
-		if (!result) return;
-		result.innerHTML = html;
-	}
-	function updateQuanDaoDisplay(context) {
-		const { game, patched } = context;
-		if (!((patched.FromZone == 5 || patched.ToZone == 5) && (patched.ToID == game.myID || patched.FromID == game.myID))) return;
-		let cards = tracker.getTrackedPlayerHandCardIDs(game.myID).slice();
-		if (patched.ToZone == 5) cards.push(...patched.CardIDs);
-		else if (patched.FromZone == 5) cards = cards.filter((card) => !patched.CardIDs.includes(card));
-		cards = cards.filter((id) => id > 0).map((id) => CardConfig.GetInstance().getCard(id)).filter(Boolean);
-		const { countType2, countSha } = cards.reduce((acc, card) => {
-			if (card.type === 2 && !excludeNames.has(card.name)) acc.countType2++;
-			if (shaNames.has(card.name)) acc.countSha++;
-			return acc;
-		}, {
-			countType2: 0,
-			countSha: 0
-		});
-		updateResult("<span class=\"textRes\">【权道】杀：普通锦囊</span><br><span class=\"textRes\">" + countSha + "：" + countType2 + "</span>");
-	}
-	function handleGameFlowState(context) {
-		const { game, patched } = context;
-		if (patched.FromZone == 1 && patched.MoveType == 19 && patched.SpellID == 0 && !game.isGameStart && !game.isPassed) {
-			if (game.isPassed === false) game.isPassed = null;
-			if (game.isGameStart !== null && patched.FromZone == 1) patched.FromPosition = POSITION_RANDOM;
-		}
-		if (patched.FromZone == 1 && patched.ToZone == 5 && patched.MoveType == 1) {
-			const isFaceUpDraw = patched.CardIDs.filter((id) => id > 0).length == patched.CardCount;
-			if (game.isRecord && game.myID === void 0 && isFaceUpDraw) tracker.setTrackerMySeatID(patched.ToID);
-			if (!game.isGameStart && !game.isPassed) {
-				if (game.isGameStart === null) game.isGameStart = false;
-				if (isFaceUpDraw) patched.FromPosition = POSITION_RANDOM;
-			}
-			if (game.myID !== void 0 && patched.ToID === game.myID && game.turn > 0) {
-				game.drawCounter(patched.CardCount);
-				laya.drawCounter();
-			}
-		}
-		updateQuanDaoDisplay(context);
-	}
-	function handleSpecialZones(context) {
-		const { game, patched } = context;
-		if (patched.ToZone == 12 || patched.FromZone == 12) return { handled: true };
-		if (patched.FromZone == 0 && patched.ToZone == 1 && patched.ToPosition == 65280 && patched.MoveType == 19) {
-			if (!game.isGameStart) game.isGameStart = null;
-			return { handled: true };
-		}
-		if (patched.FromZone == 2 && patched.ToZone == 9 && patched.MoveType == 255) {
-			game.isPassed = false;
-			return { handled: true };
-		}
-		return { handled: false };
-	}
-	function handleChengXiang(context) {
-		const { patched } = context;
-		if (patched.ToZone != 8 || patched.MoveType != 6) return;
-		context.game.setSpellState(patched.SpellID, [...patched.CardIDs || []]);
-	}
-	var spellEffectHandlers = new Map([[441, handleChengXiang], [3492, handleChengXiang]]);
-	function applySpellEffect(context) {
-		const handler = spellEffectHandlers.get(context.patched.SpellID);
-		if (!handler) return false;
-		handler(context);
-		return true;
-	}
-	function handleMoveCard(msg) {
-		const raw = Object.freeze({
-			CardCount: msg.CardCount,
-			CardIDs: Object.freeze([...msg.CardIDs]),
-			FromID: msg.FromID,
-			FromZone: msg.FromZone,
-			FromZoneParam: msg.FromZoneParam,
-			FromPosition: msg.FromPosition,
-			ToID: msg.ToID,
-			ToZone: msg.ToZone,
-			ToZoneParam: msg.ToZoneParam,
-			ToPosition: msg.ToPosition,
-			MoveType: msg.MoveType,
-			SpellID: msg.SpellID,
-			SrcSeatID: msg.SrcSeatID,
-			Label: msg.Label,
-			isSend: msg.isSend
-		});
-		const patched = {
-			...raw,
-			CardIDs: raw.CardIDs.slice()
-		};
-		if (shouldIgnoreTrackerMove(raw)) return;
-		const context = {
-			raw,
-			patched,
-			game: Game
-		};
-		if (!handleSpecialZones(context).handled) {
-			handleGameFlowState(context);
-			applySpellEffect(context);
-		}
-		tracker.syncTrackerMove(patched, raw);
-	}
-	async function showShanHeTuSponsorPrompt(ProtoObj) {
-		if (!ProtoObj?.allData) return;
-		const allData = ProtoObj.allData;
-		rogueMap.general = allData.gameData?.myGeneral?.uGeneralId ?? 0;
-		rogueMap.itemId = allData.gameData?.itemId ?? [];
-	}
-	async function handleRogueLike(ProtoObj) {
-		if (!ProtoObj?.allData) return;
-		const allData = ProtoObj.allData;
-		const dataMark = ProtoObj.dataMark;
-		const shopData = allData.shopData;
-		const chapterData = allData.chapterData;
-		const generalpool = allData.generalpool;
-		if ((dataMark & 16) !== 0) if (!shopData) return req();
-		else {
-			shopData.bShow = true;
-			req(0);
-		}
-		renderRogueAttrInfo(allData.gameData?.attrInfo);
-		if (shopData) {
-			const storeItem = [];
-			const roguelikeConfig = RoguelikeConfig.GetInstance();
-			if (shopData.itemId && roguelikeConfig.shopDict.size) for (const i of shopData.itemId) {
-				const plot = roguelikeConfig.getPlot(i);
-				if (plot) storeItem.push(plot["name"]);
-			}
-			drawStore(storeItem);
-		}
-		if (generalpool?.general_change?.length > 0) addTooltip(`小抄提示：可换将为${generalpool.general_change.map((element) => CharacterConfig.GetInstance().generalDict[element] || `Unknown (${element})`).reverse().join(", ")}`, "acTooltip", 1e4, "green", null, true);
-		const seasonData = allData.seasonData;
-		const difficulty = seasonData && seasonData.difficulty;
-		difficulty && (rogueMap.difficulty = difficulty);
-		rogueMap.general = allData.gameData?.myGeneral?.uGeneralId ?? 0;
-		rogueMap.itemId = allData.gameData?.itemId ?? [];
-		if (chapterData?.locations) {
-			UI.cities = chapterData.locations.map((l) => ({
-				id: l.location,
-				event: l.event
-			}));
-			RoguelikeConfig.GetInstance().levelDict.size && globalConfig.rogueCitySwitch && drawCitiesUI(UI.cities, "");
-		}
-	}
-	var ROGUE_ATTR_LABELS = {
-		rep: "声望",
-		tro: "战功",
-		wis: "智谋",
-		mar: "商才",
-		loy: "忠诚",
-		ass: "权谋",
-		cha: "魅力"
-	};
-	function renderRogueAttrInfo(attrInfo) {
-		const container = document.getElementById("rogueAttrInfo");
-		if (!container) return;
-		for (const badge of container.querySelectorAll("[data-rogue-attr]")) {
-			const valueContainer = badge.querySelector(".rogue-attr-value");
-			if (!valueContainer) continue;
-			const value = Number(attrInfo?.[badge.dataset.rogueAttr]);
-			const nextValue = Number.isFinite(value) ? value : 0;
-			const currentValue = Number(valueContainer.textContent);
-			if (Number.isFinite(currentValue) && currentValue !== nextValue) addTooltip(`${ROGUE_ATTR_LABELS[badge.dataset.rogueAttr] ?? badge.dataset.rogueAttr}值变成了${nextValue}`, "acTooltip", 3e3);
-			valueContainer.textContent = nextValue;
-		}
-	}
-	var req = (() => {
-		let ok = false;
-		return function(dm = 63) {
-			if (!dm) return ok = false;
-			if (ok) {
-				console.warn("req: 已请求过，跳过重复请求, dm=", dm);
-				return true;
-			}
-			ok = true;
-			return laya.class("RogueLikePveManager")?.RogueLikeDataReq(dm);
-		};
-	})();
 	var closeGameOverWindowsTimer = null;
 	var gameOverTask = null;
 	function cancelGameOverTask() {
@@ -16035,7 +15993,7 @@
 		if (typeof TurnCnt !== "number" || !Number.isFinite(TurnCnt)) return;
 		if (TurnCnt === 1) {
 			laya.zhanfaRegister();
-			hideSelfOrderContainer(Game.room?.getMyDisplayID());
+			hideSelfOrderContainer(Game.myDisplayID);
 			if (UI.firstUpdateSeatUI) showOrderContainers();
 		}
 		if (TurnCnt > 0) {
@@ -16437,12 +16395,65 @@
 		clearTimeout(timer);
 		entry[field] = null;
 	}
-	var ALLOWED_CLASSES = new Set([
+	function handleAdWindow() {
+		if (!globalConfig.skipAdWindowSwitch) return;
+		wait(() => laya.GetWindow("AdPushWindow")).then((win) => win?.Close()).catch((error) => console.error(error));
+	}
+	function handleKillEffect(msg) {
+		if (globalConfig.blockKillEffectSwitch) msg.Type = 0;
+	}
+	function handleGeneralSkin(msg) {
+		if (!Game.isGameStart || !globalConfig.blockSkinStateSwitch) return;
+		(msg.GeneralSkinList || []).forEach((GeneralSkin) => {
+			if (!GeneralSkin) return;
+			if (Game.myGenerals.includes(GeneralSkin.GeneralID)) return;
+			GeneralSkin.state = 0;
+		});
+	}
+	function handleUserProfileSkin(msg) {
+		if (!globalConfig.blockSkinStateSwitch) return;
+		if (msg.ProtoObj?.nickname_usertempid === user.userID) return;
+		if (msg.Info) msg.Info.IsUseDySkinShow = false;
+	}
+	function handleTableInfo() {
+		wait(() => laya.blockPowerSlogan()).catch((error) => console.error(error));
+	}
+	function handlePackageOpened() {
+		if (!globalConfig.skipPackageWindowSwitch) return;
+		wait(() => laya.GetWindow("GeneralOpenResultWindow")).then((win) => win?.Close()).catch((error) => console.error(error));
+	}
+	function handleGeneralWishPool(data) {
+		const progress = Array.isArray(data?.list) ? data.list[0] : null;
+		if (!progress?.ratio) return;
+		showStatusTip("wishPool", `心愿武将当前进度: ${progress.ratio / 100}%`);
+	}
+	function handleSkinWishPool(data) {
+		const list = Array.isArray(data?.list) ? data.list : [];
+		const progress = list.find((item) => item?.round === list.length);
+		if (!progress?.ratio) return;
+		showStatusTip("wishPool", `心愿皮肤当前进度: ${progress.ratio / 100}%`);
+	}
+	var USER_IDENTITY_MESSAGES = new Set([
 		"ClientLoginRep",
 		"ClientUserDataCounterNtf",
 		"SmsgUpdateTaskListToClient",
 		"ClientGuildMemberChangeNtf"
 	]);
+	function handleUserSession(msg, className) {
+		if (user.userID !== 0 || !USER_IDENTITY_MESSAGES.has(className)) return;
+		const frameReady = initFrame();
+		user.userID = msg.userID;
+		user.nickname = msg.Nickname || user.nickname || "";
+		console.info("[logic] userID: %s", msg.userID);
+		frameReady.then(() => {
+			const uuidElement = document.getElementById("uuid");
+			if (uuidElement) uuidElement.textContent = "id：" + user.userID;
+			const nicknameElement = document.getElementById("nickName");
+			if (nicknameElement) nicknameElement.textContent = "昵称：" + user.nickname;
+		}).catch((error) => {
+			console.error("[logic] initFrame failed:", error);
+		});
+	}
 	var lastClassName = null;
 	function logic(msg) {
 		try {
@@ -16458,27 +16469,11 @@
 				currentSeatID: Game.currentID
 			});
 			if (!isRetainedLogicMessage(className)) return;
-			if (user.userID === 0 && ALLOWED_CLASSES.has(className)) {
-				const frameReady = initFrame();
-				user.userID = msg.userID;
-				user.nickname = msg.Nickname || user.nickname || "";
-				console.info("[logic] userID: %s", msg.userID);
-				frameReady.then(() => {
-					const uuidElement = document.getElementById("uuid");
-					if (uuidElement) uuidElement.textContent = "id：" + user.userID;
-					const nicknameElement = document.getElementById("nickName");
-					if (nicknameElement) nicknameElement.textContent = "昵称：" + user.nickname;
-				}).catch((error) => {
-					console.error("[logic] initFrame failed:", error);
-				});
-			}
+			handleUserSession(msg, className);
 			switch (className) {
 				case "ClientBindKeyRep": break;
 				case "decodeSyncGameDataEvent":
-					if (!globalConfig.skipAdWindowSwitch) break;
-					wait(() => laya.GetWindow("AdPushWindow")).then((win) => win?.Close()).catch((err) => {
-						console.error(err);
-					});
+					handleAdWindow();
 					break;
 				case "MsgReconnectGame":
 					Game.isDuanXian = true;
@@ -16593,47 +16588,28 @@
 					break;
 				case "decodeGameDealPileTopCardList": break;
 				case "CClientGameRewardPointNTF":
-					if (globalConfig.blockKillEffectSwitch) msg.Type = 0;
+					handleKillEffect(msg);
 					break;
 				case "ClientGeneralSkinRep":
-					if (!Game.isGameStart) return;
-					if (globalConfig.blockSkinStateSwitch) (msg.GeneralSkinList || []).forEach((GeneralSkin) => {
-						if (!GeneralSkin) return;
-						if (Game.myGenerals.includes(GeneralSkin?.GeneralID)) return;
-						GeneralSkin.state = 0;
-					});
+					handleGeneralSkin(msg);
 					break;
 				case "ClientUserbaseinfoRep":
 				case "ClientUserdetailRep":
-					if (!globalConfig.blockSkinStateSwitch) return;
-					if (ProtoObj?.nickname_usertempid === user.userID) return;
-					if (msg.Info) msg.Info.IsUseDySkinShow = false;
+					handleUserProfileSkin(msg);
 					break;
 				case "ClientTableinfoRep":
-					wait(() => laya.blockPowerSlogan()).catch((err) => {
-						console.error(err);
-					});
+					handleTableInfo();
 					break;
 				case "ClientModifyTblsetingNtf": break;
 				case "ClientChestOpenReplaceInfoNtf":
-					if (!globalConfig.skipPackageWindowSwitch) break;
-					wait(() => laya.GetWindow("GeneralOpenResultWindow")).then((win) => win?.Close()).catch((err) => {
-						console.error(err);
-					});
+					handlePackageOpened();
 					break;
-				case "decodeServerGeneralWishPoolDataResp": {
-					const data = Array.isArray(ProtoObj?.list) ? ProtoObj.list[0] : null;
-					if (!data?.ratio) break;
-					showStatusTip("wishPool", `心愿武将当前进度: ${data.ratio / 100}%`);
+				case "decodeServerGeneralWishPoolDataResp":
+					handleGeneralWishPool(ProtoObj);
 					break;
-				}
-				case "decodeServerSkinWishPoolDataResp": {
-					const list = Array.isArray(ProtoObj?.list) ? ProtoObj.list : [];
-					const data = list.find((item) => item?.round === list.length);
-					if (!data?.ratio) break;
-					showStatusTip("wishPool", `心愿皮肤当前进度: ${data.ratio / 100}%`);
+				case "decodeServerSkinWishPoolDataResp":
+					handleSkinWishPool(ProtoObj);
 					break;
-				}
 				default: break;
 			}
 		} catch (e) {
