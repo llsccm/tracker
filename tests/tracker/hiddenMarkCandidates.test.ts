@@ -224,16 +224,19 @@ describe('隐藏标记区候选', () => {
     expect(placeholder.seats.has(7)).toBe(true)
   })
 
-  it('玩家暗标记来源保留 spell ID 数组中的全部兼容值', () => {
+  it.each([0, 100])('玩家暗标记来源只匹配指定空间 %s，未限定时保留全部空间', (spellID) => {
     const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [6] })
     const first = takeAnonymousCard(room)
     const second = takeAnonymousCard(room)
 
     room.clearCardsFromPublicZones([first, second])
-    first.bindCandidates([6], 'mark', 100, { known: false })
+    first.bindCandidates([6], 'mark', spellID, { known: false })
     second.bindCandidates([6], 'mark', 200, { known: false })
 
-    expect(getUnknownPlayerSourceCards(room, 6, 'mark', [100, 200])).toEqual([first, second])
+    expect(getUnknownPlayerSourceCards(room, 6, 'mark', spellID)).toEqual([first])
+    expect(getUnknownPlayerSourceCards(room, 6, 'mark', 200)).toEqual([second])
+    expect(getUnknownPlayerSourceCards(room, 6, 'mark')).toEqual([first, second])
+    expect(getUnknownPlayerSourceCards(room, 6, 'mark', null)).toEqual([first, second])
   })
 
   it('混合完整位置候选即使投影为空也可作为玩家标记来源', () => {

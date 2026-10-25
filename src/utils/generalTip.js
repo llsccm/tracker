@@ -1,5 +1,3 @@
-import { hasAdvancedFeature, notifyAdvancedFeatureTrial } from './trial.js'
-
 export function setGeneralTip({
   key,
   seatUis = [],
@@ -9,15 +7,14 @@ export function setGeneralTip({
   getText = null
 } = {}) {
   if (!key) return
-  const allowed = hasAdvancedFeature(key)
+
   const list = avatar ? [{ seat: avatar.seat, seatAvatar: avatar }] : seatUis
   list.forEach((ui) => {
     if (seat && ui?.seat != seat) return
     const card = ui?.seatAvatar
     if (!card) return
-    const value = allowed ? (typeof getText == 'function' ? getText(ui) : text) : ''
+    const value = typeof getText == 'function' ? getText(ui) : text
     const content = value ? String(value) : ''
-    if (content) notifyAdvancedFeatureTrial(key)
     const prop = `__xcGeneralTip_${key}`
     let txt = card[prop]
     if (!txt && !content) return

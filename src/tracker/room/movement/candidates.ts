@@ -270,26 +270,26 @@ export class RoomMovementCandidates {
     sourceEvent
   }: StoredToHandCandidatesOptions): boolean {
     if (!(count > 0) || toSeat === null) return false
-    if (fromPopupSpaceID === undefined && (fromSeat === null || fromSpellID == null)) return false
+    const markCandidate =
+      fromPopupSpaceID !== undefined
+        ? { type: 'popup' as const, spaceID: fromPopupSpaceID }
+        : fromSeat !== null && fromSpellID !== null
+          ? { type: 'player' as const, seatID: fromSeat, subZone: 'mark', spellID: fromSpellID }
+          : null
+    if (!markCandidate) return false
 
-    const isPopup = fromPopupSpaceID !== undefined
-    const spaceCards = isPopup ? getPopupSpaceCards(this.room, fromPopupSpaceID) : []
+    const isPopup = markCandidate.type === 'popup'
+    const spaceCards =
+      markCandidate.type === 'popup' ? getPopupSpaceCards(this.room, markCandidate.spaceID) : []
     // 混合明暗不能把可见身份数冒充空间总数。
     if (isPopup && spaceCards.some((card) => !card.isKnown)) return false
-    const markCards = isPopup
-      ? spaceCards
-      : getVisibleMarkSpaceCards(this.room, fromSeat, fromSpellID)
+    const markCards =
+      markCandidate.type === 'popup'
+        ? spaceCards
+        : getVisibleMarkSpaceCards(this.room, markCandidate.seatID, markCandidate.spellID)
     // 只有可见牌多于协议张数时才是“多选一”；唯一解仍由来源取牌直接搬走。
     if (!isPopup && markCards.length <= count) return false
 
-    const markCandidate = isPopup
-      ? { type: 'popup' as const, spaceID: fromPopupSpaceID }
-      : {
-          type: 'player' as const,
-          seatID: fromSeat,
-          subZone: 'mark',
-          spellID: fromSpellID
-        }
     const handCandidate: PlayerLocationCandidate = {
       type: 'player',
       seatID: toSeat,
@@ -350,7 +350,10 @@ export class RoomMovementCandidates {
     this.room.createConstraintGroup({
       id: previousGroup?.id,
       cards: markCards,
-      candidateSeats: isPopup ? [toSeat] : Array.from(new Set([fromSeat, toSeat])),
+      candidateSeats:
+        markCandidate.type === 'popup'
+          ? [toSeat]
+          : Array.from(new Set([markCandidate.seatID, toSeat])),
       expectedSlotsByLocation: slots,
       known: previousGroup?.known ?? true,
       sourceEvent: sourceEvent ?? { type: 'markStoredToHandCandidates' }

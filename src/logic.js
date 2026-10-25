@@ -1,5 +1,4 @@
 import { CardConfig } from './config'
-import { initFrame } from './dom'
 import { isRetainedLogicMessage } from './featureFlags'
 import {
   handleChatMessage,
@@ -18,21 +17,23 @@ import {
   handleUseCard
 } from './handler'
 import { handleRecordStartGame } from './handler/StartGame'
+import {
+  handleAdWindow,
+  handleGeneralSkin,
+  handleGeneralWishPool,
+  handleKillEffect,
+  handlePackageOpened,
+  handleSkinWishPool,
+  handleTableInfo,
+  handleUserProfileSkin
+} from './handler/clientEnhancements'
+import { handleUserSession } from './handler/userSession'
 import { laya } from './runtime/gameAdapter'
 import { Game, globalConfig, UI, user } from './tracker'
 import { tracker } from './tracker/runtime/browser'
 import { recordTrackerProtocol } from './tracker/runtime/protocolRecorder'
-import { showStatusTip } from './ui/statusTip'
-import { wait } from './utils'
 import { addTooltip } from './utils/notification'
 import { handleBroadMsg } from './handler/chat'
-
-const ALLOWED_CLASSES = new Set([
-  'ClientLoginRep',
-  'ClientUserDataCounterNtf',
-  'SmsgUpdateTaskListToClient',
-  'ClientGuildMemberChangeNtf'
-])
 
 // const DOUDIZHU_MSGS = new Set([
 //   'decodeMsgGameStart',
@@ -63,24 +64,7 @@ export function logic(msg) {
 
     if (!isRetainedLogicMessage(className)) return
 
-    if (user.userID === 0 && ALLOWED_CLASSES.has(className)) {
-      //渠道服没有localStorage.SGS_LASTLOGIN_ACCOUNT，而是localStorage.LastUserName
-      const frameReady = initFrame()
-      user.userID = msg.userID
-      user.nickname = msg.Nickname || user.nickname || ''
-      console.info('[logic] userID: %s', msg.userID)
-      frameReady
-        .then(() => {
-          const uuidElement = document.getElementById('uuid')
-          if (uuidElement) uuidElement.textContent = 'id：' + user.userID
-
-          const nicknameElement = document.getElementById('nickName')
-          if (nicknameElement) nicknameElement.textContent = '昵称：' + user.nickname
-        })
-        .catch((error) => {
-          console.error('[logic] initFrame failed:', error)
-        })
-    }
+    handleUserSession(msg, className)
 
     // if (typeof PUERTS_JS_RESOURCES !== 'undefined') {
     //   if (!hasRuntime()) return
@@ -97,13 +81,7 @@ export function logic(msg) {
       // 收到此消息后会请求公告 可以尝试在此关闭 AdPushWindow
       case 'decodeSyncGameDataEvent':
         // 充值也会有此消息 但是暂无更好方案
-        if (!globalConfig.skipAdWindowSwitch) break
-        wait(() => laya.GetWindow('AdPushWindow'))
-          .then((win) => win?.Close())
-          .catch((err) => {
-            console.error(err)
-          })
-
+        handleAdWindow()
         break
 
       // 断线重连
@@ -359,43 +337,22 @@ export function logic(msg) {
 
       // 击杀特效
       case 'CClientGameRewardPointNTF':
-        if (globalConfig.blockKillEffectSwitch) msg.Type = 0
+        handleKillEffect(msg)
         break
 
       // 皮肤信息
       case 'ClientGeneralSkinRep':
-        if (import.meta.env.DEV) console.info(msg)
-        if (!Game.isGameStart) return
-        // 屏蔽动态
-        if (globalConfig.blockSkinStateSwitch) {
-          const GeneralSkinList = msg.GeneralSkinList || []
-
-          GeneralSkinList.forEach((GeneralSkin) => {
-            if (!GeneralSkin) return
-            // 只显示主视角动态皮肤
-            if (Game.myGenerals.includes(GeneralSkin?.GeneralID)) return
-            GeneralSkin.state = 0
-          })
-        }
-
+        handleGeneralSkin(msg)
         break
 
       // 个人信息
       case 'ClientUserbaseinfoRep':
       case 'ClientUserdetailRep':
-        // if (import.meta.env.DEV) console.info(msg)
-        if (!globalConfig.blockSkinStateSwitch) return
-        if (ProtoObj?.nickname_usertempid === user.userID) return
-        // 屏蔽动态三国秀 效果有点差
-        // if (ProtoObj.baseinfos) ProtoObj.baseinfos.sanguoxiu_skin_state = false
-        if (msg.Info) msg.Info.IsUseDySkinShow = false
-
+        handleUserProfileSkin(msg)
         break
 
       case 'ClientTableinfoRep':
-        wait(() => laya.blockPowerSlogan()).catch((err) => {
-          console.error(err)
-        })
+        handleTableInfo()
         break
 
       case 'ClientModifyTblsetingNtf':
@@ -404,29 +361,16 @@ export function logic(msg) {
 
       // 武将包开启后消息 用于关闭 GeneralOpenResultWindow
       case 'ClientChestOpenReplaceInfoNtf':
-        if (!globalConfig.skipPackageWindowSwitch) break
-        wait(() => laya.GetWindow('GeneralOpenResultWindow'))
-          .then((win) => win?.Close())
-          .catch((err) => {
-            console.error(err)
-          })
+        handlePackageOpened()
         break
 
-      case 'decodeServerGeneralWishPoolDataResp': {
-        // {round: 1, wish_item: 9052101, epic_num: 5, ratio: 1162}
-        const data = Array.isArray(ProtoObj?.list) ? ProtoObj.list[0] : null
-        if (!data?.ratio) break
-        showStatusTip('wishPool', `心愿武将当前进度: ${data.ratio / 100}%`)
+      case 'decodeServerGeneralWishPoolDataResp':
+        handleGeneralWishPool(ProtoObj)
         break
-      }
 
-      case 'decodeServerSkinWishPoolDataResp': {
-        const list = Array.isArray(ProtoObj?.list) ? ProtoObj.list : []
-        const data = list.find((item) => item?.round === list.length)
-        if (!data?.ratio) break
-        showStatusTip('wishPool', `心愿皮肤当前进度: ${data.ratio / 100}%`)
+      case 'decodeServerSkinWishPoolDataResp':
+        handleSkinWishPool(ProtoObj)
         break
-      }
 
       default:
         break

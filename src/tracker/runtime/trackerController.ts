@@ -286,7 +286,7 @@ export class TrackerController {
             card.suspended ||
             card.hasLocationCandidates() ||
             card.resolvedSeat !== normalizedEvent.options.fromSeatID ||
-            !['equip', 'judge', 'mark'].includes(card.subZone)
+            (card.subZone !== 'equip' && card.subZone !== 'judge' && card.subZone !== 'mark')
           ) {
             return
           }

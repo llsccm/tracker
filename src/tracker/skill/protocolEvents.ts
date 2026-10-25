@@ -16,7 +16,7 @@ export interface SkillTargetNotice {
   SpellID: SpellID
   Type?: number
   Param?: number
-  Params?: CardID[]
+  Params: CardID[]
   targetSeatID?: SeatID
 }
 
@@ -24,14 +24,14 @@ export interface SkillChoiceMessage {
   SpellID?: SpellID
   Type?: number
   SeatID?: SeatID
-  Datas?: number[]
+  Datas: number[]
   data_count?: number
 }
 
 export interface SkillRoleDataMessage {
   DataID: number
-  SeatID?: SeatID
-  Datas?: number[]
+  SeatID: SeatID
+  Datas: number[]
 }
 
 /** 只表达技能推断需要的协议事实；不承载 UI、宿主对象或回调。 */

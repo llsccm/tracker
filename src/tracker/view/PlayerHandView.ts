@@ -153,7 +153,7 @@ export function renderPlayerHand(doc: Document, player: Player): void {
     renderedNodes.push(createHandCardNode(doc, card, 'candidate', true))
   }
 
-  const markSpell = SkillsConfig.GetInstance().markSpell
+  const markSpell: Partial<Record<number, string>> = SkillsConfig.GetInstance().markSpell
 
   player.markCards.forEach((cards, spellID) => {
     if (!cards || !cards.length) return
@@ -237,7 +237,7 @@ function reconcileRenderedNodes(container: Element, desiredNodes: Element[]): vo
     if (!retainedNodes.has(node)) node.remove()
   })
 
-  let cursor = getDirectRenderedNodes(container)[0] ?? null
+  let cursor: Element | null = getDirectRenderedNodes(container)[0] ?? null
   nextNodes.forEach((node) => {
     if (node === cursor) {
       cursor = getNextRenderedSibling(cursor)

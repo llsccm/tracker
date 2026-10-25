@@ -96,6 +96,12 @@ pnpm exec vitest run tests/tracker/traversalBaseline.test.ts -u
 pnpm exec vitest run --coverage
 ```
 
+### 类型检查范围
+
+- `pnpm typecheck:tracker`：生产 TypeScript 的严格检查，启用 `strict` 与 `noImplicitOverride`；外围 JS 只提供类型推导，不检查 JS 自身。
+- `pnpm typecheck`：保留根配置非严格检查，覆盖现有测试与全仓入口；测试夹具的严格迁移另行安排。
+- 两项类型检查都在 CI 中运行；测试移出严格配置不影响 `pnpm test:tracker` 的执行范围。
+
 ### 协议回放（按需）
 
 协议回放只在 Node/Vitest 中运行，且与普通 tracker 回归隔离。目录地图、JSONL 格式、环境变量、诊断流程
@@ -119,7 +125,7 @@ pnpm exec vitest run --coverage
 | Serena 记忆                                                | `serena memories check`                                         |
 
 CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑：`lint`、默认 `typecheck`、
-`test:tracker`、`build`；`main` 的 push 额外 `build:prod`。默认 TypeScript/Vitest 范围不加载
+`typecheck:tracker`、`test:tracker`、`build`；`main` 的 push 额外 `build:prod`。默认 TypeScript/Vitest 范围不加载
 `tests/replay/`，回放改动需显式补跑 [`replay.md`](replay.md) 中的专用命令。
 
 ---

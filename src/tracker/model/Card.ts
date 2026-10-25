@@ -121,7 +121,7 @@ export class Card extends BaseCard {
   }
 
   recordHandGain(seatID: SeatID, spellID: SpellID | null): void {
-    const next = spellID > 0 ? spellID : null
+    const next = spellID !== null && spellID > 0 ? spellID : null
     if (this.getHandGainSpellID(seatID) === next) return
     if (next === null) this.handGainSpellIDs.delete(seatID)
     else this.handGainSpellIDs.set(seatID, next)
@@ -715,7 +715,8 @@ export class Card extends BaseCard {
     candidate: SubZoneCandidateInput,
     reason = 'resolveSubZoneCandidate'
   ): boolean {
-    return this.resolveLocationCandidate(fromSubZoneCandidate(candidate), reason)
+    const normalized = fromSubZoneCandidate(candidate)
+    return normalized ? this.resolveLocationCandidate(normalized, reason) : false
   }
 
   /**
@@ -727,7 +728,7 @@ export class Card extends BaseCard {
    */
   bindCandidates(
     seats: SeatInput,
-    subZone: SubZone = 'hand',
+    subZone: SubZone | null = 'hand',
     spellID: SpellID | null = null,
     options: BindOptions = {}
   ): void {
@@ -833,9 +834,12 @@ export class Card extends BaseCard {
         return parts.join('/')
       }
 
+      const subZone = this.subZone
+      if (subZone === null) return '未知'
+      const zoneName = getSubZoneName(subZone)
       this.seats.forEach((seatID) => {
         const prefix = this.room.formatSeatPrefix(seatID)
-        parts.push(`${prefix}${getSubZoneName(this.subZone)}`)
+        parts.push(`${prefix}${zoneName}`)
       })
 
       return parts.join('/')
@@ -857,12 +861,14 @@ export class Card extends BaseCard {
         : this.getResolvedLocationCandidates()
 
     return this.setLocationCandidates(
-      [...baseCandidates, fromPublicCandidate(normalized)].filter(Boolean),
+      [...baseCandidates, fromPublicCandidate(normalized)].filter(
+        (candidate) => candidate !== null
+      ),
       'addPublicCandidate'
     )
   }
 
-  removePublicCandidates(predicate: (candidate: PublicCandidate | null) => boolean): boolean {
+  removePublicCandidates(predicate: (candidate: PublicCandidate) => boolean): boolean {
     if (!this.locationCandidates.some((candidate) => candidate.type === 'public')) return false
 
     const nextCandidates = this.locationCandidates.filter((candidate) => {
@@ -871,7 +877,7 @@ export class Card extends BaseCard {
         candidate,
         (zone, position, count) => getPublicCandidateLabel(zone, position, count) ?? null
       )
-      return !predicate(publicCandidate)
+      return publicCandidate === null || !predicate(publicCandidate)
     })
     return this.setLocationCandidates(nextCandidates, 'removePublicCandidates')
   }

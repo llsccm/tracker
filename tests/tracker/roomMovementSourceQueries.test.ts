@@ -61,7 +61,7 @@ describe('移动组件共享来源查询', () => {
     const before = snapshot()
 
     expect(getUnknownPlayerSourceCards(room, 1)).toEqual([exact, laterExact, candidate])
-    expect(getUnknownPlayerSourceCards(room, 1, 'hand', [], [exact])).toEqual([
+    expect(getUnknownPlayerSourceCards(room, 1, 'hand', null, [exact])).toEqual([
       laterExact,
       candidate
     ])
@@ -87,6 +87,7 @@ describe('移动组件共享来源查询', () => {
     expect(getKnownHandCardsBySeat(room, 1)).toEqual([known])
     expect(getUnknownPlayerSourceCards(room, 1)).toEqual([unknown])
     expect(getUnknownPlayerSourceCards(room, 1, 'mark', 700)).toEqual([mark])
+    expect(takeUnknownCardsFromPlayer(room, 1, 1, 'mark', 700)).toEqual([mark])
     expect(getPlayerHandCardsBySeat(room, 2)).toEqual([unknown])
   })
 

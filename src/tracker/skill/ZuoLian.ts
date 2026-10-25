@@ -11,7 +11,7 @@
  * - 协议已给出正 CardID，或没有符合的火杀/雷杀时，保留默认移动路径。
  */
 import { POSITION_RANDOM } from '../candidate/cardPositions'
-import type { Card } from '@/tracker/model/Card'
+import type { Card } from '@/tracker/model'
 import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import { PROTOCOL_ZONE } from '../protocol/protocolZones'
 import type { Room } from '../Room'
@@ -58,7 +58,8 @@ export function prepareZuoLianMove(patched: PatchedMoveCardFields, room: Room): 
   if (patched.FromZone === 10 && [1, 2].includes(patched.ToZone) && patched.MoveType === 11) {
     const state = room.readSkillState<ZuoLianState>(ZUO_LIAN_SPELL_ID)
     const cardID = state?.stack
-    if (!patched.CardIDs.some((id) => id > 0) && cardID > 0) patched.CardIDs[0] = cardID
+    if (!patched.CardIDs.some((id) => id > 0) && cardID !== undefined && cardID > 0)
+      patched.CardIDs[0] = cardID
     if (state) delete state.stack
   }
 }

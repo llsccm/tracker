@@ -32,7 +32,8 @@ export function resolveEquipmentContainerLocationCandidates(
   // 装备本体离开装备区后标记空间不再存在，不能继续投影到旧观测座位。
   if (equipment?.location !== 'player' || equipment.subZone !== 'equip') return []
 
-  const container = getEquipmentMarkContainerByMarkSpellID(normalized.spellID)
+  const container =
+    normalized.spellID === null ? null : getEquipmentMarkContainerByMarkSpellID(normalized.spellID)
   const markSeat = container?.equipmentCardID === normalized.cardID ? observedMarkSeat : null
   // 已观察到 mark700 后只按标记协议更新座位；尚无观测时才回退到装备位置。
   const seats =
@@ -49,9 +50,10 @@ export function resolveEquipmentContainerLocationCandidates(
 /** 识别目标装备标记空间及真正的跨座迁移；数量与状态写入时机由调用阶段负责。 */
 export function getEquipmentMarkSeatChange(
   context: RoomMoveContext,
-  markSpellID: SpellID | null = context.spellID
+  markSpellID: SpellID | null | undefined = context.spellID
 ): EquipmentMarkSeatChange | null {
   if (
+    markSpellID == null ||
     context.toZone !== 'player' ||
     context.subZone !== 'mark' ||
     context.targetSeats.length !== 1 ||
@@ -68,7 +70,7 @@ export function getEquipmentMarkSeatChange(
   const transferFromSeat =
     context.fromSubZone === 'mark' &&
     sourceSpellID === context.spellID &&
-    Number.isFinite(context.fromSeat) &&
+    context.fromSeat !== null &&
     context.fromSeat !== targetSeat
       ? context.fromSeat
       : null
@@ -81,11 +83,15 @@ export function getEquipmentMarkRecordKey(
   sourceSeat: SeatID,
   spellID: SpellID | null
 ): string | null {
+  if (spellID === null) return null
   const container = getEquipmentMarkContainerByMarkSpellID(spellID)
   return container ? `${sourceSeat}:muniu:${container.equipmentCardID}` : null
 }
 
-/** 只识别协议完整可见快照，不把空 CardIDs 的暗迁座通知解释为清空容器。 */
+/**
+ * 识别单一目标座位、无暗牌且已知 ID 数量完整的装备标记区快照，不把空 CardIDs 的暗迁座通知解释为清空容器。
+ * 返回标记 ID 和观测承载座位；普通标记或不完整快照返回 null，不修改状态。
+ */
 export function getObservedEquipmentMarkSnapshot(
   context: RoomMoveContext
 ): ObservedEquipmentMarkSnapshot | null {
@@ -101,11 +107,12 @@ export function getObservedEquipmentMarkSnapshot(
   }
 
   const markSpellID = context.fromSpellID !== undefined ? context.fromSpellID : context.spellID
+  if (markSpellID == null) return null
   const container = getEquipmentMarkContainerByMarkSpellID(markSpellID)
   if (!container) return null
 
   const observedSeat = Number(context.targetSeats[0])
   if (!Number.isFinite(observedSeat)) return null
 
-  return { markSpellID, observedSeat }
+  return { markSpellID: container.markSpellID, observedSeat }
 }

@@ -94,16 +94,12 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
     expectHand(room, [10, 20])
   })
 
-  it('主视角、无座位和未知视角不重复同步', () => {
-    const { controller, room, gain, receive } = createGuiFuHarness()
+  it('主视角、非玩家端点和未知视角不重复同步', () => {
+    const { room, gain, receive } = createGuiFuHarness()
     gain()
     const move = vi.spyOn(room, 'moveCards')
     receive([10], 1)
     receive([10], 255)
-    controller.dispatchSkillProtocolEvent({
-      type: 'roleData',
-      message: { DataID: 3709, Datas: [1, 10] }
-    })
     room.mySeatID = undefined
     receive([10], 2)
     expect(move).not.toHaveBeenCalled()

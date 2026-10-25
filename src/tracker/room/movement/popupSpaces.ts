@@ -1,4 +1,4 @@
-import type { Card } from '@/tracker/model/Card'
+import type { Card } from '@/tracker/model'
 import type { Room } from '@/tracker/Room'
 import { POPUP_SPACE_STATE_KEY, type PopupSpaceState } from './types'
 
@@ -33,7 +33,8 @@ function isLivePopupSpaceCard(card: Card, spaceIDs: number[] = []): boolean {
 }
 
 /** 空间读面同时包含明牌、匿名槽及仍可能留在本空间的候选身份。 */
-export function getPopupSpaceCards(room: Room, spaceID: number): Card[] {
+export function getPopupSpaceCards(room: Room, spaceID: number | undefined): Card[] {
+  if (spaceID === undefined) return []
   const state = room.readSkillState<PopupSpaceState>(POPUP_SPACE_STATE_KEY)
   if (!state) return []
   const cards = state.spaces.get(spaceID) ?? []
@@ -47,8 +48,12 @@ export function getPopupSpaceCards(room: Room, spaceID: number): Card[] {
  * 将明牌或暗槽登记到弹窗空间。
  * 物理成员与逻辑候选共用空间索引；数组长度不是物理容量。
  */
-export function registerPopupSpaceCards(room: Room, spaceID: number | null, cards: Card[]): void {
-  if (spaceID === null || cards.length === 0) return
+export function registerPopupSpaceCards(
+  room: Room,
+  spaceID: number | null | undefined,
+  cards: Card[]
+): void {
+  if (spaceID == null || cards.length === 0) return
 
   const state = getPopupSpaceState(room)
   const liveCards = cards.filter((card) => isLivePopupSpaceCard(card, [spaceID]))
@@ -73,8 +78,12 @@ export function registerPopupSpaceCards(room: Room, spaceID: number | null, card
  * 只读取明确的 spaceID，不从玩家标记或其它弹窗空间补取。
  * 如果无法确定 spaceID，则不从任何空间兜底取牌，避免串用其它技能空间。
  */
-export function takePopupSpaceCards(room: Room, count: number, spaceID: number): Card[] {
-  if (!(count > 0)) return []
+export function takePopupSpaceCards(
+  room: Room,
+  count: number,
+  spaceID: number | undefined
+): Card[] {
+  if (!(count > 0) || spaceID === undefined) return []
 
   const state = room.readSkillState<PopupSpaceState>(POPUP_SPACE_STATE_KEY)
   if (!state?.spaces?.size) return []

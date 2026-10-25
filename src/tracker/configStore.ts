@@ -72,7 +72,7 @@ function readStoredValue(storage: StorageAdapter, id: string, defaultValue: unkn
     return defaultValue
   }
 
-  if (rawValue === null) {
+  if (rawValue == null) {
     writeStoredValue(storage, id, defaultValue)
     return defaultValue
   }
@@ -135,7 +135,7 @@ export function createConfigStore<
       if (!writeStoredValue(resolvedStorage, meta.id, value)) return false
       target[property] = value
 
-      effects[property]?.(value)
+      effects[property as keyof ConfigStore<TEntries>]?.(value)
 
       if (eventTarget && typeof CustomEvent !== 'undefined') {
         eventTarget.dispatchEvent(
