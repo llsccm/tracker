@@ -675,7 +675,7 @@ export class Room extends RoomBase {
     }
 
     const normalizedSeat = Number(seatID)
-    const localHandCount = this.playerCardsSnapshot.filter(
+    const localHandCount = this.refreshPlayerSnapshot().filter(
       (card) => card.subZone === 'hand' && card.seats.has(normalizedSeat)
     ).length
     return shouldRevealAsFullHand({ handCount, localHandCount })
