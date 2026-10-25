@@ -92,6 +92,21 @@ if (!room) return
 技能 `MoveEventPatch` 只修改 `type`、`cardIDs`、`cardCount` 和 `options`，不覆盖
 `protocol` 或 `raw`。
 
+### 来源座位与 `NaN` 边界
+
+`protocol/MoveEventNormalizer.ts` 的 `normalizeMoveEndpoints()` 仅在玩家区来源时将协议数字
+`FromID` 原样写入 `fromSeatID`；公共区来源不设置该字段，弹窗使用 `fromPopupSpaceID`。
+`room/movement/context.ts` 的 `createMoveContext()` 优先使用显式 `fromSeatID`；没有显式座位时，
+公共区名或 `null` 得到 `fromSeat: null`，领域直调使用的数字座位得到相应座位。
+`RoomMovementUnknownPlacement.move()` 将该值原样传给 `RoomMovementSources.takeSourceCards()`。
+当前符合协议与领域约定的调用不会产生 `fromSeat: NaN`；无座位也不使用 `NaN` 表达。
+
+这不是 TypeScript `number` 的运行时保证：人为传入 `fromSeatID: NaN` 会直接透传；传入全空白
+`fromZone` 时，`Number(fromZone)` 为 `0` 而 `parseInt(String(fromZone))` 为 `NaN`。
+这些输入违反当前端点语义，不构成消费路径新增防御的依据。`takeSourceCards()` 的两处
+`fromSeat != null` 只区分有无来源座位，保留该判断；周边既有 `Number.isNaN()` 也不证明合法输入可达。
+若出现真实协议或合法调用反例，应先定位产生位置并更新入口契约，再决定修复范围。
+
 ## 协议 CardID 输入约定
 
 技能/协议模块需要提取消息中的真实牌身份时，统一从 `src/tracker/helper/cardIDs.ts`
