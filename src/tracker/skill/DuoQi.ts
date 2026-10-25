@@ -200,6 +200,8 @@ export function recordDuoQiRoleDataTarget(
   const room = game.room
   if (!room) return undefined
 
+  if (msg.Datas?.length < 2) return undefined
+
   const state = getDuoQiState(room)
   if (!state) return undefined
 
