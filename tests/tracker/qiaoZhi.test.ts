@@ -1,71 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { getPopupSpaceCards } from '@/tracker/room/movement/popupSpaces'
-import { summarizeMoveContext } from '@/tracker/helper/moveSummary'
 
 import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
 
 describe('巧织默认协议管线', () => {
-  it('暗取期间只记录目标分支来源，确认未取到的身份不保留来源', () => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 300 }], 300)
-    controller.initTrackerDeck([37, 92])
-    const room = controller.getTrackerRoom()!
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [37, 92],
-        CardCount: 2,
-        FromZone: 1,
-        ToZone: 8,
-        ToID: 255,
-        MoveType: 6,
-        SpellID: 3544
-      })
-    )
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [],
-        CardCount: 1,
-        FromZone: 8,
-        FromID: 3544,
-        ToZone: 5,
-        ToID: 3,
-        MoveType: 18,
-        SpellID: 3544
-      })
-    )
-    const card = room.cardIndex.get(37)!
-    const other = room.cardIndex.get(92)!
-    expect(card.gainSpellID).toBeNull()
-    expect(card.getHandGainSpellID(3)).toBe(3544)
-    const context = room.movement.createMoveContext([37], {
-      from: { type: 'player', seatID: 3, subZone: 'hand' },
-      to: { type: 'player', seatID: 3, subZone: 'hand' },
-      triggerSpellID: null,
-      handMoveCount: 0,
-      gainSpellID: 3544
-    })
-    expect(summarizeMoveContext(context)).toMatchObject({ triggerSpellID: null, gainSpellID: 3544 })
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [92],
-        CardCount: 1,
-        FromZone: 8,
-        FromID: 3544,
-        ToZone: 2,
-        ToID: 255,
-        MoveType: 4,
-        SpellID: 3544
-      })
-    )
-    expect(card.gainSpellID).toBe(3544)
-    expect(other.getHandGainSpellID(3)).toBeNull()
-    expect(other.location).toBe('discard')
-    card.reset()
-    expect(card.gainSpellID).toBeNull()
-    expect(card.getHandGainSpellID(3)).toBeNull()
-  })
-
   it('明弃未选牌后由通用数量约束确认暗取牌身份', () => {
     const { controller } = createTrackerControllerHarness()
     controller.initTrackerRoom()
@@ -137,7 +75,6 @@ describe('巧织默认协议管线', () => {
     expect(selectedCard.seats.has(3)).toBe(true)
     // 收敛后的牌必须是普通手牌，不能残留 spellID=3544 / 模糊 hand/巧织 描述
     expect(selectedCard.spellID).toBeNull()
-    expect(selectedCard.gainSpellID).toBe(3544)
     expect(selectedCard.isKnown).toBe(true)
     expect(selectedCard.hasLocationCandidates?.()).toBe(false)
     expect(selectedCard.getLocationDescription()).not.toMatch(/巧织/)
@@ -345,9 +282,6 @@ describe('巧织默认协议管线', () => {
       expect(room.cardIndex.get(37)!.getPossibleLocations()).toEqual([
         { type: 'player', seatID: 3, subZone: 'hand', spellID: null }
       ])
-      expect(room.cardIndex.get(37)!.gainSpellID).toBe(3544)
-      expect(room.cardIndex.get(92)!.gainSpellID).toBeNull()
-      expect(room.cardIndex.get(92)!.getHandGainSpellID(3)).toBeNull()
       expect(room.cards).toHaveLength(2)
       expect(getPopupSpaceCards(room, 3544)).toEqual([])
       expect(room.assertPileIdentityLedgerConsistency('qiaoZhi:roleData')).toEqual([])

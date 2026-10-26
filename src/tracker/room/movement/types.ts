@@ -22,7 +22,6 @@ export type KnownCardCreationReason = 'external-source' | 'known-fallback'
 
 export interface RoomMoveContext extends MoveRoute {
   triggerSpellID?: SpellID | null
-  gainSpellID: SpellID | null | undefined
   pileIdentityCardIDs?: readonly CardID[]
   pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
   cardIDs: readonly CardID[]
@@ -121,7 +120,6 @@ export interface RandomHandTransferOptions {
 
 export interface StoredToHandCandidatesOptions {
   fromPopupSpaceID?: number
-  gainSpellID?: SpellID | null
   /** 玩家标记来源座位；弹窗来源使用 fromPopupSpaceID。 */
   fromSeat: SeatID | null
   /** 标记空间 ID；缺省时不接管，避免跨空间误合并候选。 */

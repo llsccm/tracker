@@ -24,7 +24,6 @@ export function summarizeMoveEvent(event: NormalizedMoveEvent, options: MoveSumm
     to: event.to,
     ...(options.includeEventCardCount ? { cardCount: event.cardCount } : {}),
     options: {
-      gainSpellID: eventOptions.gainSpellID ?? eventOptions.sourceEvent?.spellID,
       combinationID: eventOptions.combinationID,
       cardCount: eventOptions.cardCount,
       moveType: eventOptions.moveType,
@@ -41,7 +40,6 @@ export function summarizeMoveContext(context: RoomMoveContext, options: MoveSumm
     to: context.to,
     triggerSpellID: context.triggerSpellID,
     cardIDs: context.cardIDs,
-    gainSpellID: context.gainSpellID,
     combinationID: context.combinationID,
     cardCount: context.cardCount,
     handMoveCount: context.handMoveCount,

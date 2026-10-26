@@ -45,15 +45,6 @@ export function createMoveContext(
     from,
     to,
     triggerSpellID,
-    gainSpellID:
-      opt.gainSpellID !== undefined
-        ? opt.gainSpellID
-        : targetHandSeat !== null && targetHandSeat !== sourceHandSeat
-          ? (opt.pileIdentityEvent?.protocol.SpellID ??
-            sourceEvent?.spellID ??
-            triggerSpellID ??
-            null)
-          : undefined,
     pileIdentityCardIDs: opt.pileIdentityCardIDs,
     pileIdentityEvent: opt.pileIdentityEvent,
     cardIDs,

@@ -44,9 +44,8 @@ if (!room) return
 弹窗入区使用 `room.moveCards(ids, { from: { type: 'public', zone: 'pile', position: POSITION_TOP }, to: { type: 'popup', spaceID: 35 }, cardCount })`；出区使用 `from: { type: 'popup', spaceID: 35 }` 并明确目标。玩家标记使用 `{ type: 'player', seatID, subZone: 'mark', markSpellID }`。来源 414 与动作 3389 分别保存在来源端点和 triggerSpellID 中。
 巧织暗取通过弹窗与手牌的数量约束保留候选，剩余牌明弃后确认入手身份；角色数据通知不参与揭示，移动自带正 ID 时直接确认。
 
-读取当前确定手牌的获得技能用 `card.gainSpellID`；候选分支用 `card.getHandGainSpellID(seatID)`。
-`Room.moveCards()` 的 `gainSpellID` 可显式提供来源，默认从获得协议读取；同座位揭示省略该参数时保留已有来源。
-日志分别输出 `spellID` 与获得来源 `gainSpellID`；标记归属以完整位置为准，普通手牌位置不使用 `spellID`。巧织确认入手后为普通手牌，`gainSpellID` 为 `3544`。
+移动摘要通过 `triggerSpellID` 输出本次动作技能，`Card` 不保存手牌获得技能历史。
+标记归属以完整位置为准，普通手牌位置不使用 `spellID`；巧织确认入手后为普通手牌。
 
 `RawMoveCardEvent` 的 12 个核心字段全部必填：
 
@@ -91,7 +90,7 @@ if (!room) return
 - playerCandidates 的只读非空座位元组表示同一批牌的可能归属；去重后单座位归一为 player，
   多目标不重复计算移动张数，也不任意选择一个玩家增加手牌数。
 - 原始动作技能读取 event.protocol.SpellID；领域直调使用 triggerSpellID。标记空间只读取端点
-  markSpellID，gainSpellID 继续区分 undefined（保留）与 null（无技能来源）。
+  markSpellID，不从动作技能反推来源空间。
 - MoveEventPatch 可替换完整 from/to，禁止局部端点深合并；执行 options 继续浅合并，不能覆盖 protocol/raw。
   事件、端点和候选座位数组均通过只读类型约束，修改需创建新对象。
 

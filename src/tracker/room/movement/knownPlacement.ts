@@ -154,9 +154,6 @@ export class RoomMovementKnownPlacement {
           subZone === 'hand' && fromSubZone === 'mark' ? null : spellID,
           { known: true }
         )
-        if (context.targetHandSeat !== null && context.gainSpellID !== undefined) {
-          card.recordHandGain(context.targetHandSeat, context.gainSpellID)
-        }
       }
     })
   }
