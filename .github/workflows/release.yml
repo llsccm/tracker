@@ -92,40 +92,44 @@ jobs:
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
 
       - name: Setup pnpm
-        if: steps.release-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
+        if: steps.release-check.outputs.publish == 'true'
         uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        if: steps.release-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
+        if: steps.release-check.outputs.publish == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
 
       - name: Install dependencies
-        if: steps.release-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
+        if: steps.release-check.outputs.publish == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Build production userscript
         if: steps.release-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
         run: pnpm build:prod
 
-      - name: Download published userscripts for retry
-        if: steps.release-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            --pattern daxiaochao.user.js --pattern daxiaochao.meta.js --dir dist
-
       - name: Validate release artifacts
-        if: steps.release-check.outputs.publish == 'true'
+        if: steps.release-check.outputs.publish == 'true' && steps.release-check.outputs.exists == 'false'
         run: |
+          expected_update_url="https://github.com/$GITHUB_REPOSITORY/releases/latest/download/daxiaochao.meta.js"
+          expected_download_url="https://github.com/$GITHUB_REPOSITORY/releases/latest/download/daxiaochao.user.js"
           for file in dist/daxiaochao.user.js dist/daxiaochao.meta.js; do
             test -s "$file"
             artifact_version="$(awk '$1 == "//" && $2 == "@version" { print $3 }' "$file")"
             if [ "$artifact_version" != "$VITE_version" ]; then
               echo "::error::$file has version $artifact_version; expected $VITE_version."
+              exit 1
+            fi
+            update_url="$(awk '$1 == "//" && $2 == "@updateURL" { print $3 }' "$file")"
+            if [ "$update_url" != "$expected_update_url" ]; then
+              echo "::error::$file has updateURL $update_url; expected $expected_update_url."
+              exit 1
+            fi
+            download_url="$(awk '$1 == "//" && $2 == "@downloadURL" { print $3 }' "$file")"
+            if [ "$download_url" != "$expected_download_url" ]; then
+              echo "::error::$file has downloadURL $download_url; expected $expected_download_url."
               exit 1
             fi
           done
@@ -141,15 +145,43 @@ jobs:
             dist/daxiaochao.meta.js \
             --verify-tag \
             --latest \
-            --notes-file release-notes/install.md \
+            --notes-file .github/release-notes/install.md \
             --generate-notes \
             --title "$GITHUB_REF_NAME"
+
+      - name: Build CDN userscript
+        if: steps.release-check.outputs.publish == 'true'
+        run: pnpm build:cdn
+
+      - name: Validate CDN artifacts
+        if: steps.release-check.outputs.publish == 'true'
+        run: |
+          expected_update_url="https://cdn.jsdelivr.net/gh/$GITHUB_REPOSITORY@releases/daxiaochao.meta.js"
+          expected_download_url="https://cdn.jsdelivr.net/gh/$GITHUB_REPOSITORY@releases/daxiaochao.user.js"
+          for file in dist/daxiaochao.user.js dist/daxiaochao.meta.js; do
+            test -s "$file"
+            artifact_version="$(awk '$1 == "//" && $2 == "@version" { print $3 }' "$file")"
+            if [ "$artifact_version" != "$VITE_version" ]; then
+              echo "::error::$file has version $artifact_version; expected $VITE_version."
+              exit 1
+            fi
+            update_url="$(awk '$1 == "//" && $2 == "@updateURL" { print $3 }' "$file")"
+            if [ "$update_url" != "$expected_update_url" ]; then
+              echo "::error::$file has updateURL $update_url; expected $expected_update_url."
+              exit 1
+            fi
+            download_url="$(awk '$1 == "//" && $2 == "@downloadURL" { print $3 }' "$file")"
+            if [ "$download_url" != "$expected_download_url" ]; then
+              echo "::error::$file has downloadURL $download_url; expected $expected_download_url."
+              exit 1
+            fi
+          done
 
       - name: Push userscripts to releases branch
         if: steps.release-check.outputs.publish == 'true'
         working-directory: release-branch
         run: |
-          # Release 已发布后才更新 CDN 分支；重跑使用已发布附件继续同步。
+          # Release 已发布后才使用 CDN 渠道产物更新 releases 分支。
           cp ../dist/daxiaochao.user.js ../dist/daxiaochao.meta.js .
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

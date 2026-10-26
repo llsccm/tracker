@@ -23,6 +23,7 @@
 - 启动开发服务器：`pnpm dev`
 - 开发模式构建：`pnpm build`
 - 生产模式构建：`pnpm build:prod`
+- CDN 渠道构建：`pnpm build:cdn`
 - 预览构建产物：`pnpm preview`
 - 格式化源码：`pnpm format`
 - 代码检查：`pnpm lint`
