@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         三国杀小抄 Lite
 // @namespace    https://greasyfork.org/scripts/448004
-// @version      0.19.1
+// @version      0.20.0
 // @author       三国杀小抄
 // @description  三国杀记牌器
 // @license      GPL-3.0-or-later
@@ -10,6 +10,8 @@
 // @homepageURL  https://github.com/llsccm/tracker#readme
 // @source       https://github.com/llsccm/tracker.git
 // @supportURL   https://github.com/llsccm/tracker/issues
+// @downloadURL  https://cdn.jsdelivr.net/gh/llsccm/tracker@releases/daxiaochao.user.js
+// @updateURL    https://cdn.jsdelivr.net/gh/llsccm/tracker@releases/daxiaochao.meta.js
 // @match        *://game.4399iw2.com/yxsgs/*
 // @match        *://my.4399.com/yxsgs/*
 // @match        *://*.sanguosha.com/*
@@ -1959,6 +1961,53 @@
 		orderedCards.splice(insertionIndex, 0, ...[...cards].reverse());
 		return true;
 	}
+	function getMoveZone(endpoint) {
+		if (endpoint.type === "public") return endpoint.zone;
+		if (endpoint.type === "playerCandidates") return "player";
+		return endpoint.type === "unresolved" ? null : endpoint.type;
+	}
+	function getMoveSeat(endpoint) {
+		return endpoint.type === "player" ? endpoint.seatID : null;
+	}
+	function getMoveSubZone(endpoint) {
+		return endpoint.type === "player" || endpoint.type === "playerCandidates" ? endpoint.subZone : void 0;
+	}
+	function getMoveMarkSpellID(endpoint) {
+		return (endpoint.type === "player" || endpoint.type === "playerCandidates") && endpoint.subZone === "mark" ? endpoint.markSpellID : null;
+	}
+	function getMovePosition(endpoint) {
+		return endpoint.type === "public" || endpoint.type === "unresolved" ? endpoint.position : POSITION_TOP;
+	}
+	function getPopupSpaceID(endpoint) {
+		return endpoint.type === "popup" ? endpoint.spaceID : void 0;
+	}
+	function getMoveTargetSeats(endpoint) {
+		if (endpoint.type === "player") return [endpoint.seatID];
+		if (endpoint.type === "playerCandidates") return [...endpoint.seatIDs];
+		return [];
+	}
+	function getMoveCallbackSpellID(route, triggerSpellID) {
+		if (route.to.type === "player" || route.to.type === "playerCandidates") return route.to.subZone === "mark" ? route.to.markSpellID : triggerSpellID;
+		if (route.from.type === "player" && route.from.subZone === "mark") return route.from.markSpellID;
+		return triggerSpellID;
+	}
+	function playerMoveTarget(seats, area) {
+		const unique = [...new Set(seats)];
+		const playerArea = area.subZone === "mark" ? {
+			subZone: "mark",
+			markSpellID: area.markSpellID
+		} : { subZone: area.subZone };
+		if (unique.length === 1) return {
+			type: "player",
+			seatID: unique[0],
+			...playerArea
+		};
+		return {
+			type: "playerCandidates",
+			seatIDs: unique,
+			...playerArea
+		};
+	}
 	function normalizeCandidateSpellID(spellID) {
 		if (spellID === null || spellID === void 0 || spellID === "") return null;
 		const value = Number(spellID);
@@ -2193,58 +2242,36 @@
 		const label = eventOptions.sourceEvent?.label;
 		return {
 			type: event.type,
+			triggerSpellID: event.protocol.SpellID,
 			cardIDs: options.normalizeCardIDs ? [...event.cardIDs] : event.cardIDs,
 			...moveType !== void 0 ? { moveType } : {},
 			...label ? { label } : {},
-			toZone: event.toZone,
+			from: event.from,
+			to: event.to,
 			...options.includeEventCardCount ? { cardCount: event.cardCount } : {},
 			options: {
-				fromPopupSpaceID: eventOptions.fromPopupSpaceID,
-				toPopupSpaceID: eventOptions.toPopupSpaceID,
-				toSeatID: eventOptions.toSeatID,
-				subZone: eventOptions.subZone,
-				spellID: eventOptions.spellID,
-				gainSpellID: eventOptions.gainSpellID ?? eventOptions.sourceEvent?.spellID,
 				combinationID: eventOptions.combinationID,
-				fromZone: eventOptions.fromZone,
-				fromSeatID: eventOptions.fromSeatID,
-				fromSubZone: eventOptions.fromSubZone,
-				fromSpellID: eventOptions.fromSpellID,
 				cardCount: eventOptions.cardCount,
 				moveType: eventOptions.moveType,
-				position: eventOptions.position,
-				fromPosition: eventOptions.fromPosition,
 				...options.includeSourceCards ? { sourceCards: eventOptions.sourceCards?.map((card) => card.id) } : {}
 			}
 		};
 	}
 	function summarizeMoveContext(context, options = {}) {
 		return {
-			fromPopupSpaceID: context.fromPopupSpaceID,
-			toPopupSpaceID: context.toPopupSpaceID,
+			from: context.from,
+			to: context.to,
+			triggerSpellID: context.triggerSpellID,
 			cardIDs: context.cardIDs,
-			toZone: context.toZone,
-			toSeatID: context.toSeatID,
-			subZone: context.subZone,
-			spellID: context.spellID,
-			gainSpellID: context.gainSpellID,
 			combinationID: context.combinationID,
-			fromZone: context.fromZone,
-			fromSeat: context.fromSeat,
-			fromSubZone: context.fromSubZone,
-			fromSpellID: context.fromSpellID,
 			cardCount: context.cardCount,
-			position: context.position,
-			fromPosition: context.fromPosition,
-			targetSeats: context.targetSeats,
 			handMoveCount: context.handMoveCount,
 			sourceHandSeat: context.sourceHandSeat,
 			targetHandSeat: context.targetHandSeat,
 			knownIDs: context.knownIDs,
 			...options.includeKnownCardIDs ? { knownCardIDs: context.knownCards?.map((card) => card.id) } : {},
 			unknownCount: context.unknownCount,
-			...options.includeSourceCardIDs ? { sourceCardIDs: context.sourceCards?.map((card) => card.id) } : {},
-			sourceIsOutside: context.sourceIsOutside
+			...options.includeSourceCardIDs ? { sourceCardIDs: context.sourceCards?.map((card) => card.id) } : {}
 		};
 	}
 	var PROTOCOL_ZONE = Object.freeze({
@@ -2395,30 +2422,49 @@
 		if (fromZone === "discard") return "从弃牌堆获取牌";
 	}
 	function normalizeMoveEndpoints(move) {
-		const fromPublicZone = getProtocolPublicZone(move.FromZone);
-		const targetIsPlayerZone = isProtocolPlayerZone(move.ToZone);
-		const sourceIsPlayerZone = isProtocolPlayerZone(move.FromZone);
-		const targetSpellID = targetIsPlayerZone ? getProtocolMarkSpellID(move.ToZone, {
-			param: move.ToZoneParam,
-			toZoneParam: move.ToZoneParam,
-			spellID: move.SpellID
-		}, move.SpellID) : void 0;
-		const fromSpellID = sourceIsPlayerZone ? getProtocolMarkSpellID(move.FromZone, {
-			param: move.FromZoneParam,
-			fromZoneParam: move.FromZoneParam,
-			spellID: move.SpellID
-		}, move.SpellID) : void 0;
-		const spellID = targetIsPlayerZone ? targetSpellID : fromSpellID ?? move.SpellID;
+		const playerEndpoint = (zone, seatID, param) => {
+			const subZone = getProtocolPlayerSubZone(zone);
+			if (subZone === "mark") return {
+				type: "player",
+				seatID,
+				subZone,
+				markSpellID: getProtocolMarkSpellID(zone, {
+					param,
+					spellID: move.SpellID
+				}, move.SpellID)
+			};
+			return {
+				type: "player",
+				seatID,
+				subZone
+			};
+		};
+		const publicEndpoint = (zone, position) => {
+			if (zone === 0) return { type: "outside" };
+			const name = getProtocolPublicZone(zone);
+			if (name === "pile" || name === "discard" || name === "process" || name === "exchange" || name === "exile") return {
+				type: "public",
+				zone: name,
+				position
+			};
+			return null;
+		};
 		return {
-			fromPopupSpaceID: move.FromZone === 8 ? move.FromID === 255 ? move.SpellID : move.FromID : void 0,
-			toPopupSpaceID: move.ToZone === 8 ? move.SpellID : void 0,
-			toSeatID: targetIsPlayerZone ? move.ToID : void 0,
-			fromSeatID: sourceIsPlayerZone ? move.FromID : void 0,
-			fromZone: fromPublicZone,
-			subZone: targetIsPlayerZone ? getProtocolPlayerSubZone(move.ToZone) : sourceIsPlayerZone ? getProtocolPlayerSubZone(move.FromZone) : void 0,
-			fromSubZone: sourceIsPlayerZone ? getProtocolPlayerSubZone(move.FromZone) : void 0,
-			fromSpellID,
-			spellID
+			from: isProtocolPlayerZone(move.FromZone) ? playerEndpoint(move.FromZone, move.FromID, move.FromZoneParam) : move.FromZone === 8 ? {
+				type: "popup",
+				spaceID: move.FromID === 255 ? move.SpellID : move.FromID
+			} : publicEndpoint(move.FromZone, move.FromPosition) ?? {
+				type: "unresolved",
+				position: move.FromPosition
+			},
+			to: isProtocolPlayerZone(move.ToZone) ? playerEndpoint(move.ToZone, move.ToID, move.ToZoneParam) : move.ToZone === 8 ? {
+				type: "popup",
+				spaceID: move.SpellID
+			} : publicEndpoint(move.ToZone, move.ToPosition) ?? {
+				type: "public",
+				zone: "process",
+				position: move.ToPosition
+			}
 		};
 	}
 	function normalizeMoveEvent(patched, raw = patched) {
@@ -2426,21 +2472,16 @@
 		logMoveEventValidationWarnings(validateMoveEvent(patched, cardIDs), raw);
 		const cardCount = patched.CardCount;
 		const type = inferEventType(patched, cardIDs);
-		const toPublicZoneName = getProtocolPublicZone(patched.ToZone);
-		const targetIsPlayerZone = isProtocolPlayerZone(patched.ToZone);
 		return {
 			type,
 			cardIDs,
 			cardCount,
 			protocol: patched,
 			moveType: patched.MoveType,
-			toZone: targetIsPlayerZone ? "player" : toPublicZoneName ?? "process",
+			...normalizeMoveEndpoints(patched),
 			options: {
-				...normalizeMoveEndpoints(patched),
 				cardCount,
 				moveType: patched.MoveType,
-				position: patched.ToPosition,
-				fromPosition: patched.FromPosition,
 				sourceEvent: {
 					type,
 					spellID: patched.SpellID,
@@ -2552,7 +2593,6 @@
 	var Card = class extends BaseCard {
 		popupSpaceID = null;
 		_locationCandidates = Object.freeze([]);
-		handGainSpellIDs = new Map();
 		constructor(id, room) {
 			super(id);
 			this.room = room;
@@ -2570,29 +2610,6 @@
 		}
 		get hasRealIdentity() {
 			return this.id > 0;
-		}
-		get gainSpellID() {
-			if (this.location !== "player" || this.subZone !== "hand" || this.hasLocationCandidates()) return null;
-			return this.owner === null ? null : this.getHandGainSpellID(this.owner);
-		}
-		getHandGainSpellID(seatID) {
-			return this.handGainSpellIDs.get(seatID) ?? null;
-		}
-		recordHandGain(seatID, spellID) {
-			const next = spellID !== null && spellID > 0 ? spellID : null;
-			if (this.getHandGainSpellID(seatID) === next) return;
-			if (next === null) this.handGainSpellIDs.delete(seatID);
-			else this.handGainSpellIDs.set(seatID, next);
-			this.room.notifyCardChanged(this, {
-				type: "card-hand-gain-source",
-				seatID,
-				gainSpellID: next
-			});
-		}
-		pruneHandGainSources() {
-			if (this.handGainSpellIDs.size === 0) return;
-			const seats = new Set(this.getPossibleLocations().flatMap((candidate) => candidate.type === "player" && candidate.subZone === "hand" ? [candidate.seatID] : []));
-			for (const seatID of this.handGainSpellIDs.keys()) if (!seats.has(seatID)) this.handGainSpellIDs.delete(seatID);
 		}
 		get isAnonymous() {
 			return !this.hasRealIdentity;
@@ -2847,7 +2864,6 @@
 			const previousSeats = this.seats;
 			this.storeLocationCandidates(nextCandidates);
 			this.reconcileLocationStateFromCandidates(reason, previousSeats);
-			this.pruneHandGainSources();
 			this.room.notifyCardChanged(this, {
 				type: "card-location-candidates-changed",
 				reason,
@@ -2895,7 +2911,6 @@
 			});
 			this.room.markCounterDirty(this);
 			const changed = hadCandidates || previousLocation !== this.location || previousSubZone !== this.subZone || previousSpellID !== this.spellID || previousPopupSpaceID !== this.popupSpaceID || seatsChanged;
-			this.pruneHandGainSources();
 			if (changed) this.room.notifyCardChanged(this, {
 				type: "card-location-resolved",
 				reason,
@@ -2933,7 +2948,6 @@
 			this.suspended = false;
 			if (known) this.confirmKnown();
 			this.setSeats(seats, "bindCandidates");
-			this.pruneHandGainSources();
 			this.room.markCounterDirty(this);
 			this.room.notifyCardChanged(this, {
 				type: "card-bound",
@@ -2950,7 +2964,6 @@
 		}
 		moveToPublicZone(destination) {
 			const previous = this.capturePublicMigrationSnapshot();
-			this.handGainSpellIDs.clear();
 			const seatsChanged = this.clearSeats(`moveToPublicZone:${destination}`);
 			this.location = destination;
 			this.popupSpaceID = null;
@@ -3019,7 +3032,6 @@
 		}
 		reset() {
 			const previous = this.capturePublicMigrationSnapshot();
-			this.handGainSpellIDs.clear();
 			const seatsChanged = this.clearSeats("reset");
 			this.location = "pile";
 			this.subZone = null;
@@ -5250,14 +5262,14 @@
 			const pileCards = this.room.getZone("pile").cards;
 			const pileCountBefore = pileCards.length;
 			const cardIDs = context.pileIdentityEvent?.protocol.CardIDs ?? context.knownIDs;
-			if (context.fromZone !== "pile" || cardIDs.some((id) => id > 0) || context.moveType !== MOVE_TYPE.DRAW) return {
+			if (getMoveZone(context.from) !== "pile" || cardIDs.some((id) => id > 0) || context.moveType !== MOVE_TYPE.DRAW) return {
 				pileCountBefore,
 				knownPileDrawCards: []
 			};
 			const count = Math.min(Math.max(0, context.cardCount), pileCountBefore);
 			return {
 				pileCountBefore,
-				knownPileDrawCards: (count === 0 ? [] : context.fromPosition === 0 ? pileCards.slice(0, count) : pileCards.slice(-count)).filter((card) => card.id > 0 && card.isKnown)
+				knownPileDrawCards: (count === 0 ? [] : getMovePosition(context.from) === 0 ? pileCards.slice(0, count) : pileCards.slice(-count)).filter((card) => card.id > 0 && card.isKnown)
 			};
 		}
 		commitPileIdentityForMove(context, snapshot) {
@@ -5265,26 +5277,27 @@
 			const pileCountAfter = this.room.getZone("pile").cards.length;
 			const cardIDs = (context.pileIdentityCardIDs ?? event?.protocol.CardIDs ?? context.knownIDs).filter((id) => id > 0);
 			const knownPileIdentityIDsConsumed = snapshot.knownPileDrawCards.filter((card) => card.location !== "pile" && card.id > 0).map((card) => card.id);
-			const fromZone = event?.protocol.FromZone ?? this.getIdentityZone(context.fromZone);
+			const fromZone = event?.protocol.FromZone ?? this.getIdentityZone(context.from);
 			this.room.applyPileIdentityMove({
 				eventType: event?.type ?? (context.knownIDs.length > 0 ? "moveKnown" : "moveUnknown"),
 				fromZone,
-				toZone: event?.protocol.ToZone ?? this.getIdentityZone(context.toZone),
+				toZone: event?.protocol.ToZone ?? this.getIdentityZone(context.to),
 				cardIDs,
 				cardCount: event?.cardCount ?? context.cardCount,
 				pileCountBefore: snapshot.pileCountBefore,
 				anonymousPileConsumptionCount: fromZone === 1 && cardIDs.length === 0 ? Math.max(0, snapshot.pileCountBefore - pileCountAfter - knownPileIdentityIDsConsumed.length) : void 0,
 				knownPileIdentityIDsConsumed,
 				visiblePileIdentityIDsAfter: this.collectVisiblePileTopIdentityIDs(),
-				fromPosition: context.fromPosition,
-				toPosition: context.position,
+				fromPosition: getMovePosition(context.from),
+				toPosition: getMovePosition(context.to),
 				moveType: context.moveType,
-				spellID: event?.protocol.SpellID ?? context.spellID
+				spellID: event?.protocol.SpellID ?? context.triggerSpellID
 			});
 		}
-		getIdentityZone(zone) {
-			if (zone === "pile") return 1;
-			if (zone === "discard") return 2;
+		getIdentityZone(endpoint) {
+			if (endpoint.type !== "public") return null;
+			if (endpoint.zone === "pile") return 1;
+			if (endpoint.zone === "discard") return 2;
 			return null;
 		}
 		collectVisiblePileTopIdentityIDs() {
@@ -5342,7 +5355,7 @@
 			};
 		}
 		anonymizeRandomPileReturn(context) {
-			if (context.toZone !== "pile" || context.position !== 65282 && context.position !== "random") return [];
+			if (getMoveZone(context.to) !== "pile" || getMovePosition(context.to) !== 65282 && getMovePosition(context.to) !== "random") return [];
 			const inferredIdentityIDs = [];
 			context.publicMovedCards.forEach((card) => {
 				if (card.id <= 0) return;
@@ -5715,7 +5728,7 @@
 			for (const plugin of this.selectPlugins([patched.SpellID])) if (plugin.beforeNormalizeMove?.(patched, raw, this.room) === "defer") return "defer";
 		}
 		decorateMoveEvent(event) {
-			const spellIDs = Array.from(new Set([event.protocol.SpellID, event.options.spellID])).filter((spellID) => spellID != null);
+			const spellIDs = Array.from(new Set([event.protocol.SpellID, getMoveCallbackSpellID(event, event.protocol.SpellID)])).filter((spellID) => spellID != null);
 			return this.selectPlugins(spellIDs).reduce((nextEvent, plugin) => {
 				try {
 					const decorated = plugin.decorateMove?.(nextEvent, this.room);
@@ -5732,7 +5745,7 @@
 			}, event);
 		}
 		afterMoveCommitted(event) {
-			this.notifyPlugins(this.selectPlugins([event.protocol.SpellID, event.options.spellID].filter((id) => id != null)), "afterMoveCommitted", (plugin) => plugin.afterMoveCommitted?.(event, this.room));
+			this.notifyPlugins(this.selectPlugins([event.protocol.SpellID, getMoveCallbackSpellID(event, event.protocol.SpellID)].filter((id) => id != null)), "afterMoveCommitted", (plugin) => plugin.afterMoveCommitted?.(event, this.room));
 		}
 		notifyCardsRevealed(cardIDs) {
 			const ids = Object.freeze([...new Set(cardIDs.filter((id) => id > 0))]);
@@ -5938,12 +5951,12 @@
 		return seatID !== null && card.location === "player" && card.isKnown !== true && card.suspended !== true && card.owner === seatID && !card.hasLocationCandidates();
 	}
 	function getUnknownStoredSourceCards(room, context, excludedCards = []) {
-		if (context.fromZone === "popup") {
+		if (getMoveZone(context.from) === "popup") {
 			const excluded = new Set(excludedCards);
-			return getPopupSpaceCards(room, context.fromPopupSpaceID).filter((card) => !card.isKnown && !card.hasLocationCandidates() && !excluded.has(card));
+			return getPopupSpaceCards(room, getPopupSpaceID(context.from)).filter((card) => !card.isKnown && !card.hasLocationCandidates() && !excluded.has(card));
 		}
-		if (context.fromSeat === null) return [];
-		return getUnknownPlayerSourceCards(room, context.fromSeat, context.fromSubZone, context.fromSpellID ?? context.spellID, excludedCards);
+		if (context.from.type !== "player") return [];
+		return getUnknownPlayerSourceCards(room, context.from.seatID, context.from.subZone, getMoveMarkSpellID(context.from), excludedCards);
 	}
 	function takeUnknownCardsFromPlayer(room, seatID, count, subZone = "hand", spellID = null) {
 		if (!(count > 0)) return [];
@@ -6053,7 +6066,7 @@
 			});
 			return sourceCandidateCards;
 		}
-		markStoredToHandCandidates({ fromPopupSpaceID, gainSpellID, fromSeat, fromSpellID, toSeat, count, sourceEvent }) {
+		markStoredToHandCandidates({ fromPopupSpaceID, fromSeat, fromSpellID, toSeat, count, sourceEvent }) {
 			if (!(count > 0) || toSeat === null) return false;
 			const markCandidate = fromPopupSpaceID !== void 0 ? {
 				type: "popup",
@@ -6115,7 +6128,6 @@
 					markCandidate,
 					handCandidate
 				], "markStoredToHandCandidates");
-				if (gainSpellID !== void 0) card.recordHandGain(toSeat, gainSpellID);
 			});
 			this.room.createConstraintGroup({
 				id: previousGroup?.id,
@@ -6274,7 +6286,7 @@
 		};
 	}
 	function isHiddenMarkMove(context) {
-		return context.toZone === "player" && context.subZone === "mark" && context.fromSubZone === "hand" && context.knownIDs.length === 0 && context.unknownCount > 0 && context.sourceHandSeat !== null && context.targetSeats.length === 1;
+		return getMoveZone(context.to) === "player" && getMoveSubZone(context.to) === "mark" && getMoveSubZone(context.from) === "hand" && context.knownIDs.length === 0 && context.unknownCount > 0 && context.sourceHandSeat !== null && getMoveTargetSeats(context.to).length === 1;
 	}
 	function resolveEquipmentContainerLocationCandidates(candidate, cardIndex, observedMarkSeat) {
 		const normalized = normalizeLocationCandidate(candidate);
@@ -6289,13 +6301,13 @@
 			spellID: normalized.spellID
 		}));
 	}
-	function getEquipmentMarkSeatChange(context, markSpellID = context.spellID) {
-		if (markSpellID == null || context.toZone !== "player" || context.subZone !== "mark" || context.targetSeats.length !== 1 || context.spellID !== markSpellID) return null;
+	function getEquipmentMarkSeatChange(context, markSpellID = getMoveMarkSpellID(context.to)) {
+		if (markSpellID == null || context.to.type !== "player" || context.to.subZone !== "mark" || getMoveMarkSpellID(context.to) !== markSpellID) return null;
 		const container = getEquipmentMarkContainerByMarkSpellID(markSpellID);
 		if (!container) return null;
-		const targetSeat = context.targetSeats[0];
-		const sourceSpellID = context.fromSpellID ?? context.spellID;
-		const transferFromSeat = context.fromSubZone === "mark" && sourceSpellID === context.spellID && context.fromSeat !== null && context.fromSeat !== targetSeat ? context.fromSeat : null;
+		const targetSeat = context.to.seatID;
+		const sourceSpellID = getMoveMarkSpellID(context.from);
+		const transferFromSeat = getMoveSubZone(context.from) === "mark" && sourceSpellID === getMoveMarkSpellID(context.to) && getMoveSeat(context.from) !== null && getMoveSeat(context.from) !== targetSeat ? getMoveSeat(context.from) : null;
 		return {
 			markSpellID: container.markSpellID,
 			targetSeat,
@@ -6308,13 +6320,12 @@
 		return container ? `${sourceSeat}:muniu:${container.equipmentCardID}` : null;
 	}
 	function getObservedEquipmentMarkSnapshot(context) {
-		if (context.toZone !== "player" || context.fromSubZone !== "mark" || context.subZone !== "mark" || context.targetSeats.length !== 1 || context.unknownCount !== 0 || context.knownIDs.length !== context.cardCount) return null;
-		const markSpellID = context.fromSpellID !== void 0 ? context.fromSpellID : context.spellID;
+		if (context.to.type !== "player" || context.from.type !== "player" || context.from.subZone !== "mark" || context.to.subZone !== "mark" || context.unknownCount !== 0 || context.knownIDs.length !== context.cardCount) return null;
+		const markSpellID = getMoveMarkSpellID(context.from);
 		if (markSpellID == null) return null;
 		const container = getEquipmentMarkContainerByMarkSpellID(markSpellID);
 		if (!container) return null;
-		const observedSeat = Number(context.targetSeats[0]);
-		if (!Number.isFinite(observedSeat)) return null;
+		const observedSeat = context.to.seatID;
 		return {
 			markSpellID: container.markSpellID,
 			observedSeat
@@ -6427,11 +6438,11 @@
 		handleHiddenMarkMove(context) {
 			if (!isHiddenMarkMove(context)) return false;
 			const sourceSeat = context.sourceHandSeat;
-			const targetSeat = context.targetSeats[0];
+			const targetSeat = getMoveTargetSeats(context.to)[0];
 			const candidateCards = this.getKnownHandCandidatesForHiddenMark(sourceSeat);
 			if (candidateCards.length === 0) return false;
 			const state = this.getHiddenMarkState();
-			const spellID = context.spellID ?? null;
+			const spellID = getMoveMarkSpellID(context.to) ?? null;
 			const recordKey = getEquipmentMarkRecordKey(sourceSeat, spellID) ?? [
 				sourceSeat,
 				targetSeat,
@@ -6687,7 +6698,7 @@
 			const state = this.room.readSkillState(HIDDEN_MARK_STATE_KEY);
 			if (!state?.records?.size) return false;
 			const seat = context.sourceHandSeat;
-			if (seat === null || context.fromSubZone !== "hand") return false;
+			if (seat === null || getMoveSubZone(context.from) !== "hand") return false;
 			if (!(context.sourceHandTotalObserved && context.unknownCount === 0 && context.knownIDs.length > 0 && context.knownIDs.length === context.cardCount && context.cardCount === context.sourceHandTotalBefore)) return false;
 			const revealedIDs = new Set(context.knownIDs.map((id) => Number(id)));
 			let changed = false;
@@ -6737,10 +6748,10 @@
 			records.forEach((record) => {
 				if (state.records.get(record.id) !== record) return;
 				if (!record.cards.has(card)) return;
-				if (context.fromSubZone === "mark") {
-					const moveSpellID = context.fromSpellID !== void 0 ? context.fromSpellID : context.spellID ?? null;
+				if (getMoveSubZone(context.from) === "mark") {
+					const moveSpellID = getMoveMarkSpellID(context.from);
 					const seatChange = getEquipmentMarkSeatChange(context, moveSpellID);
-					const moveMarkSeat = seatChange ? seatChange.targetSeat : context.fromSeat !== null ? context.fromSeat : record.targetSeat;
+					const moveMarkSeat = seatChange ? seatChange.targetSeat : getMoveSeat(context.from) ?? record.targetSeat;
 					if (moveSpellID !== record.spellID) return;
 					if (moveMarkSeat !== record.targetSeat) {
 						if (record.spellID === null) return;
@@ -6761,14 +6772,14 @@
 						sourceSeat: record.sourceSeat,
 						targetSeat: record.targetSeat,
 						cardID: card.id,
-						fromSubZone: context.fromSubZone,
-						fromSpellID: context.fromSpellID ?? context.spellID ?? null,
+						fromSubZone: getMoveSubZone(context.from),
+						fromSpellID: getMoveMarkSpellID(context.from),
 						confirmedMarkCount: record.confirmedMarkCards.size,
 						confirmedHandCount: record.confirmedHandCards.size,
 						placeholderCount: record.placeholderCards.size
 					});
-				} else if (context.fromSubZone === "hand") {
-					const moveHandSeat = context.fromSeat !== null ? context.fromSeat : record.sourceSeat;
+				} else if (getMoveSubZone(context.from) === "hand") {
+					const moveHandSeat = getMoveSeat(context.from) !== null ? getMoveSeat(context.from) : record.sourceSeat;
 					if (moveHandSeat !== record.sourceSeat) return;
 					const candidate = {
 						type: "player",
@@ -6784,7 +6795,7 @@
 						sourceSeat: record.sourceSeat,
 						targetSeat: record.targetSeat,
 						cardID: card.id,
-						fromSubZone: context.fromSubZone,
+						fromSubZone: getMoveSubZone(context.from),
 						confirmedMarkCount: record.confirmedMarkCards.size,
 						confirmedHandCount: record.confirmedHandCards.size,
 						placeholderCount: record.placeholderCards.size
@@ -6925,15 +6936,16 @@
 			return playerCards;
 		}
 		getSourceSpellID(context) {
-			return context.fromSpellID ?? context.spellID ?? null;
+			return getMoveMarkSpellID(context.from);
 		}
 		resolveStoredSourceCandidate(card, context) {
-			const { fromSeat, fromSubZone } = context;
+			const fromSeat = getMoveSeat(context.from);
+			const fromSubZone = getMoveSubZone(context.from);
 			const sourceSpellID = this.getSourceSpellID(context);
-			if (context.fromZone === "popup") {
+			if (getMoveZone(context.from) === "popup") {
 				const candidate = {
 					type: "popup",
-					spaceID: context.fromPopupSpaceID
+					spaceID: getPopupSpaceID(context.from)
 				};
 				if (card.hasLocationCandidate(candidate)) return card.resolveLocationCandidate(candidate, "move:sourcePopup");
 				return false;
@@ -6949,19 +6961,21 @@
 			return false;
 		}
 		isCardInStoredSource(card, context) {
-			const { fromSeat, fromSubZone } = context;
+			const fromSeat = getMoveSeat(context.from);
+			const fromSubZone = getMoveSubZone(context.from);
 			const sourceSpellID = this.getSourceSpellID(context);
-			if (context.fromZone === "popup") return card.getPossibleLocations().some((candidate) => candidate.type === "popup" && candidate.spaceID === context.fromPopupSpaceID);
+			if (getMoveZone(context.from) === "popup") return card.getPossibleLocations().some((candidate) => candidate.type === "popup" && candidate.spaceID === getPopupSpaceID(context.from));
 			if (fromSeat === null || fromSeat === void 0 || Number.isNaN(fromSeat) || !fromSubZone) return false;
 			return card.location === "player" && getCardPlayerLocationCandidates(card).some((candidate) => candidate.seatID === fromSeat && candidate.subZone === fromSubZone && (fromSubZone !== "mark" || sourceSpellID === null || sourceSpellID === void 0 || candidate.spellID === sourceSpellID));
 		}
 		isCardInPublicSource(card, context) {
-			const { fromZone } = context;
+			const fromZone = getMoveZone(context.from);
 			return (typeof fromZone === "string" ? this.room.zones.get(fromZone) : void 0)?.cards.includes(card) === true;
 		}
 		findUnknownStoredSourcePlaceholder(context, excludeCard = null) {
-			const { fromSeat, fromSubZone } = context;
-			if (context.fromZone !== "popup" && (fromSeat === null || fromSeat === void 0 || Number.isNaN(fromSeat) || !fromSubZone)) return null;
+			const fromSeat = getMoveSeat(context.from);
+			const fromSubZone = getMoveSubZone(context.from);
+			if (getMoveZone(context.from) !== "popup" && (fromSeat === null || fromSeat === void 0 || Number.isNaN(fromSeat) || !fromSubZone)) return null;
 			const excludedCards = [excludeCard, ...context.knownCards].filter((card) => Boolean(card));
 			const sourceCards = getUnknownStoredSourceCards(this.room, context, excludedCards);
 			if (fromSubZone === "mark" && excludeCard) {
@@ -6971,20 +6985,24 @@
 			return sourceCards[0] ?? null;
 		}
 		findExactUnknownStoredSourcePlaceholder(context, excludeCard = null) {
-			const { fromSeat, fromSubZone } = context;
-			if (context.fromZone !== "popup" && (fromSeat === null || fromSeat === void 0 || Number.isNaN(fromSeat) || !fromSubZone)) return null;
+			const fromSeat = getMoveSeat(context.from);
+			const fromSubZone = getMoveSubZone(context.from);
+			if (getMoveZone(context.from) !== "popup" && (fromSeat === null || fromSeat === void 0 || Number.isNaN(fromSeat) || !fromSubZone)) return null;
 			const excludedCards = [excludeCard, ...context.knownCards].filter((card) => Boolean(card));
-			return getUnknownStoredSourceCards(this.room, context, excludedCards).find((card) => context.fromZone === "popup" ? !card.hasLocationCandidates() : isExactUnknownPlayerSourceCard(card, fromSeat)) ?? null;
+			return getUnknownStoredSourceCards(this.room, context, excludedCards).find((card) => getMoveZone(context.from) === "popup" ? !card.hasLocationCandidates() : isExactUnknownPlayerSourceCard(card, fromSeat)) ?? null;
 		}
 		getSourcePlaceholderReplacementCandidate(card, context) {
-			const { fromSeat, fromSubZone } = context;
+			const fromSeat = getMoveSeat(context.from);
+			const fromSubZone = getMoveSubZone(context.from);
 			const sourceSpellID = this.getSourceSpellID(context);
 			return getCardPlayerLocationCandidates(card).find((candidate) => {
 				return !(Number(candidate.seatID) === Number(fromSeat) && candidate.subZone === fromSubZone && (fromSubZone !== "mark" || candidate.spellID === sourceSpellID));
 			}) ?? null;
 		}
 		createPlayerSourcePlaceholderForKnownCard(card, context) {
-			const { fromSeat, fromSubZone, sourceEvent } = context;
+			const { sourceEvent } = context;
+			const fromSeat = getMoveSeat(context.from);
+			const fromSubZone = getMoveSubZone(context.from);
 			if (fromSeat === null || fromSeat === void 0 || Number.isNaN(fromSeat)) return null;
 			if (fromSubZone !== "hand") return null;
 			if (card.id <= 0) return null;
@@ -7004,7 +7022,8 @@
 			return placeholder;
 		}
 		alignVisibleSubZoneTransfer(card, context) {
-			const { fromSeat, fromSubZone } = context;
+			const fromSeat = getMoveSeat(context.from);
+			const fromSubZone = getMoveSubZone(context.from);
 			if (fromSeat === null || fromSeat === void 0 || Number.isNaN(fromSeat) || !fromSubZone) return false;
 			const sourceSubZone = card.subZone;
 			if (card.location !== "player" || card.isKnown !== true || card.seats.size !== 1 || sourceSubZone === null || sourceSubZone === "hand" || card.hasLocationCandidates()) return false;
@@ -7033,7 +7052,8 @@
 		swapKnownCardWithPlayerSourcePlaceholder(card, context) {
 			const placeholder = this.findUnknownStoredSourcePlaceholder(context, card);
 			if (!placeholder) return null;
-			const { fromSeat, fromSubZone } = context;
+			const fromSeat = getMoveSeat(context.from);
+			const fromSubZone = getMoveSubZone(context.from);
 			const sourceSpellID = this.getSourceSpellID(context);
 			const replacementCandidate = this.getSourcePlaceholderReplacementCandidate(card, context);
 			const oldLocation = card.location;
@@ -7047,10 +7067,10 @@
 			this.resolveStoredSourceCandidate(placeholder, context);
 			this.room.removeCardsFromConstraintGroups([placeholder]);
 			if (preserveAmbiguousIdentity) this.room.constraints.replaceCardInConstraintGroups(card, placeholder);
-			if (context.fromZone === "popup") {
+			if (getMoveZone(context.from) === "popup") {
 				card.resolveLocationCandidate({
 					type: "popup",
-					spaceID: context.fromPopupSpaceID
+					spaceID: getPopupSpaceID(context.from)
 				});
 				card.confirmKnown();
 			} else card.bindCandidates([fromSeat], fromSubZone, fromSubZone === "mark" ? sourceSpellID : null, { known: true });
@@ -7139,7 +7159,8 @@
 			zone.add([...knownTopCards].reverse(), POSITION_TOP);
 		}
 		swapKnownCardWithPublicSourcePlaceholder(card, context) {
-			const { fromZone, fromPosition } = context;
+			const fromZone = getMoveZone(context.from);
+			const fromPosition = getMovePosition(context.from);
 			const sourceZone = typeof fromZone === "string" ? this.room.zones.get(fromZone) : void 0;
 			if (!sourceZone || sourceZone.cards.includes(card) || card.suspended === true) return null;
 			const previousPublicZoneEntry = Array.from(this.room.zones.entries()).find(([, zone]) => {
@@ -7184,59 +7205,48 @@
 			});
 			return replacement;
 		}
-		takeSourceCards(count, options = {}) {
-			const { sourceIsOutside, fromSeat, fromSubZone, subZone, spellID, fromZone, fromPosition, fromSpellID, sourceCards, sourceEvent } = options;
-			const moveType = Number(sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType ?? options.moveType);
-			const isDiscardGain = (fromZone === "discard" || Number(fromZone) === 2) && (moveType === MOVE_TYPE.GAIN || moveType === MOVE_TYPE.MOVE && options.toZone === "player");
+		takeSourceCards(count, options) {
+			const { from, to, sourceCards, sourceEvent } = options;
+			const moveType = sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType ?? options.moveType;
+			const isDiscardGain = from.type === "public" && from.zone === "discard" && (moveType === MOVE_TYPE.GAIN || moveType === MOVE_TYPE.MOVE && (to.type === "player" || to.type === "playerCandidates"));
 			if (sourceCards?.length) {
-				if (fromSeat != null) {
-					const explicitCards = Array.from(new Set(sourceCards)).filter(Boolean).slice(0, count);
+				if (from.type === "player") {
+					const explicitCards = [...new Set(sourceCards)].slice(0, count);
 					removePopupSpaceCards(this.room, explicitCards);
-					if (isDiscardGain && explicitCards.length < count) explicitCards.push(...this.room.createExternalCards([], count - explicitCards.length));
 					return explicitCards;
 				}
 				return this.takeSpecificSourceCards(sourceCards, count, {
-					fromZone,
-					fromPosition,
+					fromZone: from.type === "public" ? from.zone : null,
+					fromPosition: getMovePosition(from),
 					anonymousFallback: isDiscardGain
 				});
 			}
-			if (sourceIsOutside) {
+			if (from.type === "outside") {
 				const externalCards = this.room.createExternalCards([], count);
-				const placeholderCards = externalCards.filter((card) => card.isAnonymous);
-				if (placeholderCards.length > 0) trackerLogger.warn("游戏外来源创建匿名暗占位", {
+				if (externalCards.length > 0) trackerLogger.warn("游戏外来源创建匿名暗占位", {
 					reason: "takeSourceCards:sourceOutside",
 					requestedCount: count,
-					createdPlaceholderCount: placeholderCards.length,
-					placeholderCardIDs: placeholderCards.map((card) => card.id),
-					fromSeat,
-					fromSubZone,
-					subZone,
-					spellID,
-					fromSpellID,
-					fromZone,
-					fromPosition,
+					placeholderCardIDs: externalCards.map((card) => card.id),
+					from,
+					to,
 					sourceEvent
 				});
 				return externalCards;
 			}
 			if (isDiscardGain) return this.room.createExternalCards([], count);
-			if (fromZone === "popup") return takePopupSpaceCards(this.room, count, options.fromPopupSpaceID);
-			if (fromSeat != null) {
-				const sourceSubZone = fromSubZone ?? subZone ?? "hand";
-				const sourceSpellID = sourceSubZone === "mark" ? fromSpellID ?? spellID : spellID;
-				const unknownCards = takeUnknownCardsFromPlayer(this.room, fromSeat, count, sourceSubZone, sourceSpellID);
+			if (from.type === "popup") return takePopupSpaceCards(this.room, count, from.spaceID);
+			if (from.type === "player") {
+				const markSpellID = getMoveMarkSpellID(from);
+				const unknownCards = takeUnknownCardsFromPlayer(this.room, from.seatID, count, from.subZone, markSpellID);
 				removePopupSpaceCards(this.room, unknownCards);
-				const selectedUnknownCards = unknownCards;
-				if (selectedUnknownCards.length >= count || sourceSubZone === "hand") return selectedUnknownCards.slice(0, count);
-				const selected = new Set(selectedUnknownCards);
-				const knownCards = this.takeKnownCardsFromPlayerSubZone(fromSeat, count - selectedUnknownCards.length, sourceSubZone, sourceSpellID).filter((card) => !selected.has(card));
-				return [...selectedUnknownCards, ...knownCards];
+				if (unknownCards.length >= count || from.subZone === "hand") return unknownCards.slice(0, count);
+				const selected = new Set(unknownCards);
+				const knownCards = this.takeKnownCardsFromPlayerSubZone(from.seatID, count - unknownCards.length, from.subZone, markSpellID).filter((card) => !selected.has(card));
+				return [...unknownCards, ...knownCards];
 			}
-			const isPileSource = fromZone === "pile" || Number(fromZone) === 1;
-			const isRegularPileDraw = isPileSource && moveType === MOVE_TYPE.DRAW;
-			if (!isPileSource || isRegularPileDraw) return this.takeCardsFromPublicZone(count, fromZone, fromPosition);
-			return this.takeUnknownCardsFromPublicZone(count, fromZone, fromPosition);
+			if (from.type === "unresolved") return this.takeCardsFromPublicZone(count, "pile", from.position);
+			if (from.zone !== "pile" || moveType === MOVE_TYPE.DRAW) return this.takeCardsFromPublicZone(count, from.zone, from.position);
+			return this.takeUnknownCardsFromPublicZone(count, from.zone, from.position);
 		}
 		applyHandTotalDelta(sourceSeat, targetSeat, count) {
 			if (!(count > 0) || sourceSeat === targetSeat) return;
@@ -7252,11 +7262,14 @@
 			this.sources = sources;
 		}
 		resolve(context) {
-			const { fromSeat, fromSubZone, fromZone, knownIDs, sourceIsOutside } = context;
+			const { knownIDs } = context;
+			const fromSeat = getMoveSeat(context.from);
+			const fromZone = getMoveZone(context.from);
+			const sourceIsOutside = context.from.type === "outside";
 			const isExternalSource = sourceIsOutside || fromZone === "exile";
 			if (sourceIsOutside) return this.resolveOutsideSource(context, isExternalSource);
-			if (typeof fromZone === "string" && this.room.zones.has(fromZone)) return this.resolvePublicSource(context, fromZone, isExternalSource);
-			if (fromZone === "popup" || fromSeat !== null && !Number.isNaN(fromSeat) && fromSubZone) return this.resolvePlayerSource(context, fromSeat, isExternalSource);
+			if (context.from.type === "public") return this.resolvePublicSource(context, context.from.zone, isExternalSource);
+			if (context.from.type === "popup" || context.from.type === "player") return this.resolvePlayerSource(context, fromSeat, isExternalSource);
 			context.knownCards = this.room.findCardsByIDs(knownIDs);
 			return {
 				missingIDs: knownIDs.filter((id) => !this.room.cardIndex.has(id)),
@@ -7266,7 +7279,10 @@
 			};
 		}
 		confirm(context, resolution) {
-			const { knownIDs, fromZone, fromSeat, sourceIsOutside } = context;
+			const { knownIDs } = context;
+			const fromZone = getMoveZone(context.from);
+			const fromSeat = getMoveSeat(context.from);
+			const sourceIsOutside = context.from.type === "outside";
 			const { missingIDs, createdCards, knownCardCreationReason, isExternalSource } = resolution;
 			const createdCardSet = new Set(createdCards);
 			const resumedCardIDs = [];
@@ -7332,7 +7348,8 @@
 			};
 		}
 		resolvePublicSource(context, fromZone, isExternalSource) {
-			const { fromPosition, knownIDs } = context;
+			const { knownIDs } = context;
+			const fromPosition = getMovePosition(context.from);
 			let missingIDs;
 			let createdCards = [];
 			let knownCardCreationReason = isExternalSource ? "external-source" : null;
@@ -7412,19 +7429,20 @@
 			};
 		}
 		resolvePlayerSource(context, fromSeat, isExternalSource) {
-			const { fromSubZone, knownIDs, sourceCards } = context;
+			const { knownIDs, sourceCards } = context;
+			const fromSubZone = getMoveSubZone(context.from);
 			let missingIDs;
 			let createdCards = [];
 			let knownCardCreationReason = isExternalSource ? "external-source" : null;
-			const markSpellID = context.fromSpellID ?? context.spellID;
+			const markSpellID = getMoveMarkSpellID(context.from);
 			const explicitTargets = sourceCards?.filter((card) => card.isAnonymous) ?? [];
 			let sourceTargets = explicitTargets.length > 0 ? explicitTargets : getUnknownStoredSourceCards(this.room, context).filter((card) => card.isAnonymous).slice(0, knownIDs.length);
-			if (context.fromZone !== "popup" && fromSubZone === "hand") sourceTargets = sourceTargets.filter((card) => card.subZone === "hand");
+			if (getMoveZone(context.from) !== "popup" && fromSubZone === "hand") sourceTargets = sourceTargets.filter((card) => card.subZone === "hand");
 			const availableTargets = [...sourceTargets];
 			const sourceAnonymousCountBefore = availableTargets.length;
-			if (fromSubZone === "mark" && context.subZone === "mark" && context.toZone === "player" && context.unknownCount === 0 && knownIDs.length === context.cardCount && knownIDs.length > 0 && availableTargets.length < knownIDs.length) {
+			if (fromSubZone === "mark" && getMoveSubZone(context.to) === "mark" && getMoveZone(context.to) === "player" && context.unknownCount === 0 && knownIDs.length === context.cardCount && knownIDs.length > 0 && availableTargets.length < knownIDs.length) {
 				const usedTargets = new Set(availableTargets);
-				context.targetSeats.forEach((targetSeat) => {
+				getMoveTargetSeats(context.to).forEach((targetSeat) => {
 					if (Number(targetSeat) === Number(fromSeat)) return;
 					getUnknownPlayerSourceCards(this.room, targetSeat, fromSubZone, markSpellID).filter((card) => card.isAnonymous).forEach((card) => {
 						if (usedTargets.has(card) || availableTargets.length >= knownIDs.length) return;
@@ -7502,7 +7520,8 @@
 			this.hiddenMarks = hiddenMarks;
 		}
 		prepare(context) {
-			const { knownCards, toZone } = context;
+			const { knownCards } = context;
+			const toZone = getMoveZone(context.to);
 			if (knownCards.length === 0) {
 				if (toZone === "player") this.hiddenMarks.resolveHiddenMarkCandidatesFromObservedMarkSnapshot(context);
 				return null;
@@ -7520,19 +7539,28 @@
 				playerSourceSwapAttempts,
 				playerSourceContext: observedEquipmentMarkSnapshot ? {
 					...context,
-					fromSeat: observedEquipmentMarkSnapshot.observedSeat
+					from: {
+						type: "player",
+						seatID: observedEquipmentMarkSnapshot.observedSeat,
+						subZone: "mark",
+						markSpellID: observedEquipmentMarkSnapshot.markSpellID
+					}
 				} : context
 			};
 		}
 		moveEachCard(context, placement) {
-			const { fromSubZone, knownCards, sourceEvent, spellID, subZone, targetSeats, toZone, toSeatID } = context;
+			const { knownCards, sourceEvent } = context;
+			const fromSubZone = getMoveSubZone(context.from);
+			const spellID = getMoveCallbackSpellID(context, context.triggerSpellID);
+			const subZone = getMoveSubZone(context.to);
+			const targetSeats = getMoveTargetSeats(context.to);
+			const toZone = getMoveZone(context.to);
 			const { swappedCardIDs, handledSpellCardIDs, resolvedSourceCardIDs, playerSourceContext } = placement;
-			const effectiveFromSeat = playerSourceContext.fromSeat;
 			knownCards.forEach((card) => {
-				const isFromPlayerSource = context.fromZone === "popup" || effectiveFromSeat !== null && effectiveFromSeat !== void 0 && !Number.isNaN(effectiveFromSeat) && Boolean(fromSubZone);
+				const isFromPlayerSource = playerSourceContext.from.type === "popup" || playerSourceContext.from.type === "player";
 				const shouldSwapSpeculativePlayerIdentity = isFromPlayerSource && card.isKnown !== true && card.locationCandidates.length > 1 && Boolean(this.sources.findExactUnknownStoredSourcePlaceholder(playerSourceContext, card));
 				if (isFromPlayerSource && (!this.sources.isCardInStoredSource(card, playerSourceContext) || shouldSwapSpeculativePlayerIdentity)) this.swapPlayerSourceCard(card, context, placement);
-				if (!isFromPlayerSource && typeof context.fromZone === "string" && this.room.zones.has(context.fromZone) && !this.sources.isCardInPublicSource(card, context)) {
+				if (!isFromPlayerSource && context.from.type === "public" && !this.sources.isCardInPublicSource(card, context)) {
 					const placeholder = this.sources.swapKnownCardWithPublicSourcePlaceholder(card, context);
 					if (placeholder) {
 						swappedCardIDs.push(card.id);
@@ -7544,9 +7572,8 @@
 				this.room.removeCardsFromConstraintGroups([card]);
 				if (spellID && this.room.skillHandlers.has(spellID)) {
 					this.room.skillHandlers.get(spellID)?.(card, {
-						toZone,
-						toSeatID,
-						subZone,
+						from: context.from,
+						to: context.to,
 						sourceEvent
 					});
 					handledSpellCardIDs.push(card.id);
@@ -7554,18 +7581,20 @@
 				if (toZone === "player") {
 					this.room.clearCardsFromPublicZones([card]);
 					card.bindCandidates(targetSeats, subZone, subZone === "hand" && fromSubZone === "mark" ? null : spellID, { known: true });
-					if (context.targetHandSeat !== null && context.gainSpellID !== void 0) card.recordHandGain(context.targetHandSeat, context.gainSpellID);
 				}
 			});
 		}
 		swapPlayerSourceCard(card, context, placement) {
-			const { fromSeat, fromSubZone, sourceEvent, toZone } = context;
+			const { sourceEvent } = context;
+			const fromSeat = getMoveSeat(context.from);
+			const fromSubZone = getMoveSubZone(context.from);
+			const toZone = getMoveZone(context.to);
 			const { swappedCardIDs, playerSourceSwapAttempts, playerSourceContext } = placement;
 			if (this.sources.alignVisibleSubZoneTransfer(card, playerSourceContext)) return;
 			const locationBeforeSwap = card.location;
 			const placeholder = this.sources.swapKnownCardWithPlayerSourcePlaceholder(card, playerSourceContext);
 			let fallbackPlaceholder = null;
-			if (!placeholder && context.fromZone !== "popup" && fromSubZone === "hand") {
+			if (!placeholder && getMoveZone(context.from) !== "popup" && fromSubZone === "hand") {
 				const createdSourcePlaceholder = !(context.sourceHandTotalObserved && context.sourceHandTotalBefore <= context.handMoveCount && toZone !== "player") ? this.sources.createPlayerSourcePlaceholderForKnownCard(card, playerSourceContext) : null;
 				if (createdSourcePlaceholder) fallbackPlaceholder = this.sources.swapKnownCardWithPlayerSourcePlaceholder(card, playerSourceContext);
 				if (!fallbackPlaceholder && createdSourcePlaceholder) trackerLogger.warn("已创建来源瞬时匿名占位但仍未完成置换", {
@@ -7613,14 +7642,19 @@
 			if (placeholder?.popupSpaceID !== null && placeholder?.popupSpaceID !== void 0) registerPopupSpaceCards(this.room, placeholder.popupSpaceID, [placeholder]);
 		}
 		finishMove(context, placement) {
-			const { combinationID, expectedSlotsByLocation, knownCards, position, sourceEvent, spellID, subZone, targetSeats, toZone } = context;
+			const { combinationID, expectedSlotsByLocation, knownCards, sourceEvent } = context;
+			const position = getMovePosition(context.to);
+			const spellID = getMoveCallbackSpellID(context, context.triggerSpellID);
+			const subZone = getMoveSubZone(context.to);
+			const targetSeats = getMoveTargetSeats(context.to);
+			const toZone = getMoveZone(context.to);
 			const { swappedCardIDs, handledSpellCardIDs, resolvedSourceCardIDs } = placement;
 			if (toZone === "popup") {
 				knownCards.forEach((card) => card.resolveLocationCandidate({
 					type: "popup",
-					spaceID: context.toPopupSpaceID
+					spaceID: getPopupSpaceID(context.to)
 				}));
-				registerPopupSpaceCards(this.room, context.toPopupSpaceID, knownCards);
+				registerPopupSpaceCards(this.room, getPopupSpaceID(context.to), knownCards);
 				return;
 			}
 			if (toZone === "player") {
@@ -7684,7 +7718,11 @@
 			});
 		}
 		repairPublicResidues(context, placement) {
-			const { fromSeat, fromSubZone, knownCards, position, sourceEvent, toZone } = context;
+			const { knownCards, sourceEvent } = context;
+			const fromSeat = getMoveSeat(context.from);
+			const fromSubZone = getMoveSubZone(context.from);
+			const position = getMovePosition(context.to);
+			const toZone = getMoveZone(context.to);
 			if (fromSeat === null || fromSeat === void 0 || Number.isNaN(fromSeat)) return;
 			const { playerSourceSwapAttempts } = placement;
 			const knownCardSet = new Set(knownCards);
@@ -7765,39 +7803,24 @@
 			}
 		}
 	};
-	function createMoveContext(room, cardIDs, toZone, opt = {}) {
-		const { toSeatID, subZone = "hand", spellID, combinationID, fromZone: requestedFromZone, fromSeatID, fromSpellID, cardCount = cardIDs.length, handMoveCount: requestedHandMoveCount, moveType, position = POSITION_TOP, fromPosition = position, expectedSlotsByLocation, anonymizeCards = [], requireAnonymizeSuccess = false, sourceCards, publicCandidateSource, forceRandomHandTransferCandidates = false, postMovePublicCandidates, sourceEvent } = opt;
-		const targetSeats = room.normalizeSeats(toSeatID ?? []);
-		const hasExplicitFromSeat = fromSeatID !== void 0 && fromSeatID !== null;
-		const fromZone = requestedFromZone !== void 0 ? requestedFromZone : hasExplicitFromSeat ? null : "pile";
-		const fromZoneNumber = Number(fromZone);
-		const fromSeat = hasExplicitFromSeat ? fromSeatID : fromZone !== null && fromZone !== void 0 && fromZone !== "" && Number.isFinite(fromZoneNumber) ? parseInt(String(fromZone)) : null;
-		const fromSubZone = opt.fromSubZone ?? subZone ?? "hand";
+	function createMoveContext(room, cardIDs, opt) {
+		const { from, to: requestedTo, triggerSpellID, combinationID, cardCount = cardIDs.length, handMoveCount: requestedHandMoveCount, moveType, expectedSlotsByLocation, anonymizeCards = [], requireAnonymizeSuccess = false, sourceCards, publicCandidateSource, forceRandomHandTransferCandidates = false, postMovePublicCandidates, sourceEvent } = opt;
+		const to = requestedTo.type === "playerCandidates" ? playerMoveTarget(requestedTo.seatIDs, requestedTo) : requestedTo;
 		const handMoveCount = Math.max(0, Number(requestedHandMoveCount ?? cardCount ?? cardIDs.length));
-		const sourceHandSeat = fromSeat !== null && !Number.isNaN(fromSeat) && fromSubZone === "hand" ? fromSeat : null;
-		const targetHandSeat = toZone === "player" && subZone === "hand" && targetSeats.length === 1 ? targetSeats[0] : null;
+		const sourceHandSeat = getMoveSubZone(from) === "hand" ? getMoveSeat(from) : null;
+		const targetHandSeat = getMoveSubZone(to) === "hand" ? getMoveSeat(to) : null;
 		const knownIDs = cardIDs.filter((id) => id > 0);
-		const sourcePlayer = fromSeat !== null && !Number.isNaN(fromSeat) ? room.getPlayer(fromSeat) : null;
+		const sourcePlayer = from.type === "player" ? room.getPlayer(from.seatID) : null;
 		const context = {
-			fromPopupSpaceID: opt.fromPopupSpaceID,
-			toPopupSpaceID: opt.toPopupSpaceID,
-			gainSpellID: opt.gainSpellID !== void 0 ? opt.gainSpellID : targetHandSeat !== null && targetHandSeat !== sourceHandSeat ? opt.pileIdentityEvent?.protocol.SpellID ?? sourceEvent?.spellID ?? spellID ?? null : void 0,
+			from,
+			to,
+			triggerSpellID,
 			pileIdentityCardIDs: opt.pileIdentityCardIDs,
 			pileIdentityEvent: opt.pileIdentityEvent,
 			cardIDs,
-			toZone,
-			toSeatID,
-			subZone,
-			spellID,
 			combinationID,
-			fromZone,
-			fromSeat,
-			fromSubZone,
-			fromSpellID,
 			cardCount: Number(cardCount),
 			moveType,
-			position,
-			fromPosition,
 			expectedSlotsByLocation,
 			anonymizeCards: Array.from(new Set(anonymizeCards)).filter(Boolean),
 			requireAnonymizeSuccess,
@@ -7806,7 +7829,6 @@
 			forceRandomHandTransferCandidates,
 			postMovePublicCandidates,
 			sourceEvent,
-			targetSeats,
 			handMoveCount,
 			sourceHandSeat,
 			targetHandSeat,
@@ -7814,17 +7836,13 @@
 			sourceHandTotalBefore: sourcePlayer?.observedHandCount ?? 0,
 			sourceHandUnknownCount: sourcePlayer?.unknownCardCount ?? 0,
 			knownIDs,
-			sourceIsOutside: fromZone === "outside",
 			unknownCount: Math.max(0, Number(cardCount) || 0, cardIDs.length) - knownIDs.length,
 			knownCards: [],
 			movedUnknownCards: [],
 			publicMovedCards: [],
 			skipUnknownMovement: false
 		};
-		trackerLogger.debug("移动上下文创建", summarizeMoveContext({
-			...context,
-			toSeatID: targetSeats.length === 1 ? targetSeats[0] : null
-		}, { includeSourceCardIDs: true }));
+		trackerLogger.debug("移动上下文创建", summarizeMoveContext(context, { includeSourceCardIDs: true }));
 		return context;
 	}
 	var RoomMovementUnknownPlacement = class {
@@ -7837,7 +7855,16 @@
 			this.candidates = candidates;
 		}
 		move(context) {
-			const { combinationID, expectedSlotsByLocation, fromSeat, fromSubZone, fromSpellID, fromPosition, fromZone, position, sourceCards, sourceEvent, sourceIsOutside, spellID, subZone, targetSeats, toZone, unknownCount, moveType } = context;
+			const { combinationID, expectedSlotsByLocation, sourceEvent, unknownCount } = context;
+			const fromSeat = getMoveSeat(context.from);
+			const fromSubZone = getMoveSubZone(context.from);
+			const fromPosition = getMovePosition(context.from);
+			const fromZone = getMoveZone(context.from);
+			const position = getMovePosition(context.to);
+			const spellID = getMoveCallbackSpellID(context, context.triggerSpellID);
+			const subZone = getMoveSubZone(context.to);
+			const targetSeats = getMoveTargetSeats(context.to);
+			const toZone = getMoveZone(context.to);
 			if (unknownCount <= 0) return;
 			if (context.skipUnknownMovement) {
 				trackerLogger.debug("未知牌移动已由特殊候选逻辑接管", {
@@ -7851,21 +7878,7 @@
 				return;
 			}
 			if (toZone === "player") {
-				const movedUnknownCards = this.sources.takeSourceCards(unknownCount, {
-					fromPopupSpaceID: context.fromPopupSpaceID,
-					toZone,
-					sourceIsOutside,
-					fromSeat,
-					fromSubZone,
-					subZone,
-					spellID,
-					fromSpellID,
-					fromZone,
-					fromPosition,
-					sourceCards,
-					sourceEvent,
-					moveType
-				});
+				const movedUnknownCards = this.sources.takeSourceCards(unknownCount, context);
 				context.movedUnknownCards = movedUnknownCards;
 				movedUnknownCards.forEach((card) => {
 					this.sources.resolveStoredSourceCandidate(card, context);
@@ -7873,7 +7886,6 @@
 				this.room.removeCardsFromConstraintGroups(movedUnknownCards);
 				movedUnknownCards.forEach((card) => {
 					card.bindCandidates(targetSeats, subZone, subZone === "hand" && fromSubZone === "mark" ? null : spellID, { known: card.isKnown });
-					if (context.targetHandSeat !== null && context.gainSpellID !== void 0) card.recordHandGain(context.targetHandSeat, context.gainSpellID);
 				});
 				if (movedUnknownCards.length > 0 && targetSeats.length > 0) this.room.createConstraintGroup({
 					id: combinationID ?? void 0,
@@ -7897,21 +7909,7 @@
 				});
 				return;
 			}
-			const movedUnknownCards = this.sources.takeSourceCards(unknownCount, {
-				fromPopupSpaceID: context.fromPopupSpaceID,
-				toZone,
-				sourceIsOutside,
-				fromSeat,
-				fromSubZone,
-				subZone,
-				spellID,
-				fromSpellID,
-				fromZone,
-				fromPosition,
-				sourceCards,
-				sourceEvent,
-				moveType
-			});
+			const movedUnknownCards = this.sources.takeSourceCards(unknownCount, context);
 			const takenCount = movedUnknownCards.length;
 			if (takenCount < unknownCount) {
 				const fallbackCount = unknownCount - takenCount;
@@ -7942,9 +7940,9 @@
 			if (toZone === "popup") {
 				movedUnknownCards.forEach((card) => card.resolveLocationCandidate({
 					type: "popup",
-					spaceID: context.toPopupSpaceID
+					spaceID: getPopupSpaceID(context.to)
 				}));
-				registerPopupSpaceCards(this.room, context.toPopupSpaceID, movedUnknownCards);
+				registerPopupSpaceCards(this.room, getPopupSpaceID(context.to), movedUnknownCards);
 				return;
 			}
 			if (targetZone) targetZone.add(movedUnknownCards, position);
@@ -7987,24 +7985,28 @@
 			this.knownPlacement = new RoomMovementKnownPlacement(room, this.sources, this.hiddenMarks);
 			this.unknownPlacement = new RoomMovementUnknownPlacement(room, this.sources, this.candidates);
 		}
-		createMoveContext(cardIDs, toZone, opt = {}) {
-			return createMoveContext(this.room, cardIDs, toZone, opt);
+		createMoveContext(cardIDs, request) {
+			return createMoveContext(this.room, cardIDs, request);
 		}
 		resolveKnownMoveCards(context) {
 			const resolution = this.knownSources.resolve(context);
 			this.knownSources.confirm(context, resolution);
 		}
 		applyMoveCandidatePropagation(context) {
-			const { fromZone, fromPosition, handMoveCount, position, sourceEvent, sourceHandSeat, subZone, targetHandSeat, toZone, unknownCount, forceRandomHandTransferCandidates } = context;
+			const { handMoveCount, sourceEvent, sourceHandSeat, targetHandSeat, unknownCount, forceRandomHandTransferCandidates } = context;
+			const fromZone = getMoveZone(context.from);
+			const fromPosition = getMovePosition(context.from);
+			const position = getMovePosition(context.to);
+			const subZone = getMoveSubZone(context.to);
+			const toZone = getMoveZone(context.to);
 			if (this.hiddenMarks.handleMuniuMarkMove(context)) return;
 			if (this.hiddenMarks.handleHiddenMarkMove(context)) return;
 			if (this.candidates.markStoredToHandCandidates({
-				fromPopupSpaceID: context.knownIDs.length === 0 ? context.fromPopupSpaceID : void 0,
-				fromSeat: context.fromSubZone === "mark" && context.knownIDs.length === 0 ? context.fromSeat : null,
-				fromSpellID: context.fromSpellID ?? context.spellID ?? null,
+				fromPopupSpaceID: context.knownIDs.length === 0 ? getPopupSpaceID(context.from) : void 0,
+				fromSeat: getMoveSubZone(context.from) === "mark" && context.knownIDs.length === 0 ? getMoveSeat(context.from) : null,
+				fromSpellID: getMoveMarkSpellID(context.from),
 				toSeat: context.targetHandSeat,
 				count: context.unknownCount,
-				gainSpellID: context.gainSpellID,
 				sourceEvent: context.sourceEvent
 			})) context.skipUnknownMovement = true;
 			if (forceRandomHandTransferCandidates || this.candidates.shouldPropagateRandomHandTransferCandidates({
@@ -8016,21 +8018,16 @@
 				sourceHandTotalBefore: context.sourceHandTotalBefore,
 				sourceHandUnknownCount: context.sourceHandUnknownCount,
 				sourceEvent
-			})) {
-				const propagatedCards = this.candidates.markRandomHandTransferCandidates({
-					fromSeat: sourceHandSeat,
-					targetSeat: targetHandSeat,
-					count: handMoveCount,
-					sourceTotalBefore: context.sourceHandTotalObserved ? context.sourceHandTotalBefore : void 0,
-					sourceHandTotalObserved: context.sourceHandTotalObserved,
-					sourceUnknownCount: context.sourceHandTotalObserved ? context.sourceHandUnknownCount : void 0,
-					sourceEvent,
-					force: forceRandomHandTransferCandidates
-				});
-				context.skipUnknownMovement = propagatedCards.length > 0;
-				const gainSpellID = context.gainSpellID;
-				if (gainSpellID !== void 0 && targetHandSeat !== null) propagatedCards.forEach((card) => card.recordHandGain(targetHandSeat, gainSpellID));
-			}
+			})) context.skipUnknownMovement = this.candidates.markRandomHandTransferCandidates({
+				fromSeat: sourceHandSeat,
+				targetSeat: targetHandSeat,
+				count: handMoveCount,
+				sourceTotalBefore: context.sourceHandTotalObserved ? context.sourceHandTotalBefore : void 0,
+				sourceHandTotalObserved: context.sourceHandTotalObserved,
+				sourceUnknownCount: context.sourceHandTotalObserved ? context.sourceHandUnknownCount : void 0,
+				sourceEvent,
+				force: forceRandomHandTransferCandidates
+			}).length > 0;
 			if (this.candidates.shouldMarkRandomHandToPublicCandidates(sourceHandSeat, targetHandSeat, toZone, unknownCount)) this.candidates.markRandomHandToPublicCandidates({
 				fromSeat: sourceHandSeat,
 				toZone,
@@ -8038,7 +8035,7 @@
 				unknownCount,
 				candidateSource: context.publicCandidateSource
 			});
-			const publicHandCandidates = this.candidates.propagatePublicCandidatesToHand({
+			this.candidates.propagatePublicCandidatesToHand({
 				fromZone,
 				fromPosition,
 				toZone,
@@ -8047,8 +8044,6 @@
 				count: handMoveCount,
 				sourceEvent
 			});
-			const gainSpellID = context.gainSpellID;
-			if (gainSpellID !== void 0 && targetHandSeat !== null) publicHandCandidates.forEach((card) => card.recordHandGain(targetHandSeat, gainSpellID));
 		}
 		moveUnknownCardsForContext(context) {
 			this.unknownPlacement.move(context);
@@ -8060,8 +8055,8 @@
 			this.knownPlacement.finishMove(context, placement);
 		}
 		createPublicMoveConstraintGroup(context) {
-			const { combinationID, publicMovedCards, sourceEvent, toZone } = context;
-			if (toZone === "player" || !combinationID || publicMovedCards.length === 0) return;
+			const { combinationID, publicMovedCards, sourceEvent } = context;
+			if (getMoveZone(context.to) === "player" || !combinationID || publicMovedCards.length === 0) return;
 			this.room.createConstraintGroup({
 				id: combinationID,
 				cards: publicMovedCards,
@@ -8613,8 +8608,8 @@
 			player.syncObservedHandCount(count);
 			if (options.resolve !== false) this.resolveConstraints();
 		}
-		moveCards(cardIDs, toZone, opt = {}) {
-			const context = this.movement.createMoveContext(cardIDs, toZone, opt);
+		moveCards(cardIDs, request) {
+			const context = this.movement.createMoveContext(cardIDs, request);
 			const pileSnapshot = this.identity.capturePileMoveSnapshot(context);
 			const anonymization = this.identity.anonymizeMoveSourceCards(context.anonymizeCards, context.requireAnonymizeSuccess);
 			if (!anonymization.success) return false;
@@ -8704,6 +8699,8 @@
 			type: patch.type ?? event.type,
 			cardIDs: patch.cardIDs ?? event.cardIDs,
 			cardCount: patch.cardCount ?? event.cardCount,
+			from: patch.from ?? event.from,
+			to: patch.to ?? event.to,
 			options: {
 				...event.options,
 				...patch.options ?? {}
@@ -8711,16 +8708,14 @@
 		};
 	}
 	function getSourceZoneCards(event, room) {
-		const zoneID = event.options?.fromZone;
-		if (typeof zoneID !== "string") return [];
-		return room.zones.get(zoneID)?.cards ?? [];
+		if (event.from.type !== "public") return [];
+		return room.zones.get(event.from.zone)?.cards ?? [];
 	}
 	function getEventSourceCards(event, room) {
 		const count = getCount(event);
 		const knownCards = room.findCardsByIDs(event.cardIDs);
 		if (knownCards.length > 0) return knownCards.slice(0, count);
-		const fromSeat = event.options?.fromSeatID;
-		if (fromSeat !== void 0 && fromSeat !== null) return getUnknownPlayerCards(room, fromSeat, count, event.options?.fromSubZone ?? "hand");
+		if (event.from.type === "player") return getUnknownPlayerCards(room, event.from.seatID, count, event.from.subZone);
 		return getTopFirstCards(getSourceZoneCards(event, room)).slice(0, count);
 	}
 	function getUnknownPlayerCards(room, seatID, count, subZone = "hand") {
@@ -8787,8 +8782,11 @@
 		room.setSkillState(CHENG_LIE_DISCARD_QUEUE, [...new Set([...pendingIDs ?? [], ...cardIDs])]);
 		return patchEvent(event, {
 			cardIDs,
+			from: event.from.type === "public" ? {
+				...event.from,
+				position: POSITION_TOP
+			} : event.from,
 			options: {
-				fromPosition: POSITION_TOP,
 				sourceCards: cards.filter((card) => !knownCards.has(card)),
 				pileIdentityCardIDs: cardIDs
 			}
@@ -8950,10 +8948,13 @@
 			pileBucketID,
 			spellID
 		};
-		return patchEvent(event, { options: {
-			fromPosition: POSITION_TOP,
-			sourceCards: splitProtocolKnownAndUnknown(event, selectedCards)
-		} });
+		return patchEvent(event, {
+			from: event.from.type === "public" ? {
+				...event.from,
+				position: POSITION_TOP
+			} : event.from,
+			options: { sourceCards: splitProtocolKnownAndUnknown(event, selectedCards) }
+		});
 	}
 	function stageHandToExchange$1(event, room, spellID) {
 		const move = event.protocol;
@@ -9022,11 +9023,16 @@
 		room.publicZones.deleteExchangeBatch(bucket.batchKey);
 		delete batch.buckets[bucketKey];
 		clearBatchIfEmpty(room, spellID, batch);
-		return patchEvent(event, { options: {
-			position: POSITION_TOP,
-			sourceCards: splitProtocolKnownAndUnknown(event, cardsBottomFirst),
-			...postMovePublicCandidates.length > 0 ? { postMovePublicCandidates } : {}
-		} });
+		return patchEvent(event, {
+			to: event.to.type === "public" ? {
+				...event.to,
+				position: POSITION_TOP
+			} : event.to,
+			options: {
+				sourceCards: splitProtocolKnownAndUnknown(event, cardsBottomFirst),
+				...postMovePublicCandidates.length > 0 ? { postMovePublicCandidates } : {}
+			}
+		});
 	}
 	function returnBucketToHand(event, room, spellID) {
 		const move = event.protocol;
@@ -9520,7 +9526,7 @@
 		const pileSlots = batch.pileSlots.filter((card) => card.location === "exchange");
 		const handCards = batch.handCards.filter((card) => card.location === "exchange");
 		const finalPileCards = buildFinalPileOrder(batch);
-		if (getCount(event) !== batch.pileSlots.length || pileSlots.length !== batch.pileSlots.length || handCards.length !== batch.handCards.length || event.options.position !== 65280 || !finalPileCards || finalPileCards.some((card) => card.location !== "exchange")) return failTargetInference(event, room, informationMode);
+		if (getCount(event) !== batch.pileSlots.length || pileSlots.length !== batch.pileSlots.length || handCards.length !== batch.handCards.length || getMovePosition(event.to) !== 65280 || !finalPileCards || finalPileCards.some((card) => card.location !== "exchange")) return failTargetInference(event, room, informationMode);
 		batch.returnedToPile = true;
 		return patchEvent(event, {
 			...informationMode === "limited" ? { cardIDs: [] } : {},
@@ -9540,10 +9546,13 @@
 		const handResultSlots = cardIDs.map((cardID) => pileSlotByResultID.get(cardID)).filter((card) => Boolean(card));
 		clearJieLiState(room);
 		if (cardIDs.length !== getCount(event) || handResultSlots.length !== selection.pileToHandSlots.length || handResultSlots.length !== cardIDs.length || handResultSlots.some((card) => card.location !== "exchange")) return informationMode === "full" ? event : noOp(event);
-		return patchEvent(event, { options: {
-			sourceCards: handResultSlots,
-			fromPosition: POSITION_TOP
-		} });
+		return patchEvent(event, {
+			from: event.from.type === "public" ? {
+				...event.from,
+				position: POSITION_TOP
+			} : event.from,
+			options: { sourceCards: handResultSlots }
+		});
 	}
 	function decorateJieLi(event, room) {
 		const move = event.protocol;
@@ -9621,7 +9630,10 @@
 				handBatchKey: null,
 				returnedToHand: false
 			});
-			return patchEvent(patchBatchCards(event, room, pileCards), { options: { fromPosition: 0 } });
+			return patchEvent(patchBatchCards(event, room, pileCards), { from: event.from.type === "public" ? {
+				...event.from,
+				position: 0
+			} : event.from });
 		}
 		const batch = room.readSkillState(XING_ZUO_SPELL_ID);
 		if (!batch) return event;
@@ -9968,13 +9980,19 @@
 		} });
 	}
 	function decorateTopGain(event, room) {
-		if (hasPositiveID(event.cardIDs)) return patchEvent(event, { options: { fromPosition: POSITION_TOP } });
+		if (hasPositiveID(event.cardIDs)) return patchEvent(event, { from: event.from.type === "public" ? {
+			...event.from,
+			position: POSITION_TOP
+		} : event.from });
 		const sourceCards = room.getPublicEndpointCards("pile", 1, POSITION_TOP);
 		const cardIDs = sourceCards.filter((card) => card.id > 0 && card.isKnown).map((card) => card.id);
 		return patchEvent(event, {
 			cardIDs,
+			from: event.from.type === "public" ? {
+				...event.from,
+				position: POSITION_TOP
+			} : event.from,
 			options: {
-				fromPosition: POSITION_TOP,
 				sourceCards: cardIDs.length > 0 ? [] : sourceCards,
 				pileIdentityCardIDs: cardIDs
 			}
@@ -9994,7 +10012,7 @@
 			});
 			return event;
 		}
-		if (!pending || move.MoveType !== MOVE_TYPE.MOVE || move.ToZone !== 1 || move.FromID !== pending.toSeat || event.options.position !== 65280 && event.options.position !== 0) return event;
+		if (!pending || move.MoveType !== MOVE_TYPE.MOVE || move.ToZone !== 1 || move.FromID !== pending.toSeat || getMovePosition(event.to) !== 65280 && getMovePosition(event.to) !== 0) return event;
 		return patchEvent(event, { options: { publicCandidateSource: {
 			fromSeat: pending.fromSeat,
 			cards: room.findCardsByIDs(pending.cardIDs)
@@ -10116,9 +10134,9 @@
 		return activation;
 	}
 	function activationMatchesMove(activation, event) {
-		if (event.toZone !== "player" || event.options.subZone !== "hand" || event.options.toSeatID !== activation.ownerSeatID) return false;
-		if (event.options.fromZone === "discard") return true;
-		return event.options.fromZone == null && event.options.fromSubZone === "hand" && event.options.fromSeatID === activation.targetSeatID;
+		if (getMoveZone(event.to) !== "player" || getMoveSubZone(event.to) !== "hand" || getMoveSeat(event.to) !== activation.ownerSeatID) return false;
+		if (getMoveZone(event.from) === "discard") return true;
+		return event.from.type === "player" && getMoveSubZone(event.from) === "hand" && getMoveSeat(event.from) === activation.targetSeatID;
 	}
 	function getInitialCardIDsForSeat(state, seatID) {
 		return Array.from(state.initialCardIDsBySeat.get(seatID) ?? []);
@@ -10133,7 +10151,7 @@
 		const activation = state.activations.get(DUO_QI_GAIN_ALL_SPELL_ID);
 		if (!activation || activation.skipInference || !activationMatchesMove(activation, event)) return event;
 		if (event.cardIDs.some((cardID) => cardID > 0)) return event;
-		const sourceZone = event.options.fromZone === "discard" ? 2 : 5;
+		const sourceZone = getMoveZone(event.from) === "discard" ? 2 : 5;
 		resolveRandomHandCandidatesForGainAll(event, room, state, activation, sourceZone);
 		const sourceCards = collectGainAllSourceCards(room, state, activation.targetSeatID, activation.ownerSeatID, sourceZone);
 		const cardCount = getCount(event);
@@ -10210,7 +10228,7 @@
 	function decorateRandomDiscardGain(event, room, state) {
 		const activation = state.activations.get(DUO_QI_RANDOM_GAIN_SPELL_ID);
 		if (!activation || activation.skipInference || !activationMatchesMove(activation, event)) return event;
-		if (event.options.fromZone !== "discard" || event.cardIDs.some((cardID) => cardID > 0)) return event;
+		if (getMoveZone(event.from) !== "discard" || event.cardIDs.some((cardID) => cardID > 0)) return event;
 		const gainedCount = getCount(event);
 		const sourceCards = collectRecentDiscardSourceCards(event, room, state, activation);
 		if (gainedCount <= 0 || sourceCards.length !== gainedCount) return event;
@@ -10230,7 +10248,7 @@
 	function decorateRandomHandGain(event, state) {
 		const activation = state.activations.get(DUO_QI_RANDOM_GAIN_SPELL_ID);
 		if (!activation || activation.skipInference || !activationMatchesMove(activation, event)) return event;
-		if (event.options.fromZone != null || event.options.fromSubZone !== "hand" || event.cardIDs.some((cardID) => cardID > 0) || event.options.sourceCards?.length) return event;
+		if (event.from.type !== "player" || getMoveSubZone(event.from) !== "hand" || event.cardIDs.some((cardID) => cardID > 0) || event.options.sourceCards?.length) return event;
 		const count = getCount(event);
 		const candidateEntities = new Set(getInitialEntitiesForSeat(state, activation.targetSeatID).filter((card) => card.location === "player" && card.subZone === "hand" && card.seats.has(activation.targetSeatID)));
 		if (count <= 0 || candidateEntities.size < count) return event;
@@ -10251,8 +10269,8 @@
 	function decorateDuoQiKnownMove(event, room) {
 		const state = getDuoQiState(room);
 		if (!state || state.pendingRandomHandGroups.length === 0) return event;
-		const fromSeatID = event.options.fromSeatID;
-		if (event.options.fromSubZone !== "hand" || !Number.isFinite(fromSeatID) || !event.cardIDs.some((cardID) => cardID > 0)) return event;
+		const fromSeatID = getMoveSeat(event.from);
+		if (getMoveSubZone(event.from) !== "hand" || !Number.isFinite(fromSeatID) || !event.cardIDs.some((cardID) => cardID > 0)) return event;
 		const group = state.pendingRandomHandGroups.slice().reverse().find((candidate) => candidate.ownerSeatID === fromSeatID && candidate.gainedCount > 0);
 		if (!group) return event;
 		const candidateIDs = event.cardIDs.filter((cardID) => cardID > 0).filter((cardID) => state.allCardIDs.has(cardID) && !state.initialSeatByCardID.has(cardID));
@@ -10307,7 +10325,7 @@
 	}
 	function finishRandomHandGroupsAfterGainAll(state, event) {
 		if (!state || state.pendingRandomHandGroups.length === 0) return;
-		if (event.protocol.SpellID !== 3730 || event.options.fromSubZone !== "hand" || !Number.isFinite(event.options.fromSeatID)) return;
+		if (event.protocol.SpellID !== 3730 || getMoveSubZone(event.from) !== "hand" || !Number.isFinite(getMoveSeat(event.from))) return;
 		const activation = state.activations.get(DUO_QI_GAIN_ALL_SPELL_ID);
 		if (!activation || !activationMatchesMove(activation, event)) return;
 		state.pendingRandomHandGroups = state.pendingRandomHandGroups.filter((group) => group.ownerSeatID !== activation.ownerSeatID || group.targetSeatID !== activation.targetSeatID);
@@ -10418,14 +10436,20 @@
 	function settleXiaShuAfterMove(event, room) {
 		const state = room.readSkillState(XIA_SHU_SPELL_ID);
 		if (!state || state.choice !== 1 && state.choice !== 2) return;
-		const { fromSeatID, toSeatID, fromSubZone, subZone } = event.options;
-		if (event.type === "showCards" || event.type === "noop" || event.toZone !== "player" || fromSubZone !== "hand" || subZone !== "hand" || event.cardCount <= 0 || fromSeatID !== state.targetSeatID || toSeatID == null || toSeatID === 255 || state.actorSeatID != null && state.actorSeatID !== toSeatID) return;
+		const { from, to } = event;
+		if (event.type === "showCards" || event.type === "noop" || from.type !== "player" || to.type !== "player" || from.subZone !== "hand" || to.subZone !== "hand" || event.cardCount <= 0 || from.seatID !== state.targetSeatID || to.seatID === 255 || state.actorSeatID != null && state.actorSeatID !== to.seatID) return;
 		if (state.choice === 2) {
-			if (!room.moveCards(state.shownCardIDs, "player", {
-				fromSeatID: state.targetSeatID,
-				toSeatID: state.targetSeatID,
-				fromSubZone: "hand",
-				subZone: "hand",
+			if (!room.moveCards(state.shownCardIDs, {
+				from: {
+					type: "player",
+					seatID: state.targetSeatID,
+					subZone: "hand"
+				},
+				to: {
+					type: "player",
+					seatID: state.targetSeatID,
+					subZone: "hand"
+				},
 				cardCount: state.shownCardIDs.length,
 				handMoveCount: 0,
 				sourceEvent: {
@@ -10779,13 +10803,13 @@
 					patched.CardIDs = [];
 				}
 				const normalizedEvent = normalizeMoveEvent(patched, raw);
-				if (normalizedEvent.options.fromSubZone === "hand") normalizedEvent.cardIDs.forEach((cardID) => {
+				if (getMoveSubZone(normalizedEvent.from) === "hand") normalizedEvent.cardIDs.forEach((cardID) => {
 					const card = readyRoom.cardIndex.get(cardID);
-					if (!card || card.suspended || card.hasLocationCandidates() || card.resolvedSeat !== normalizedEvent.options.fromSeatID || card.subZone !== "equip" && card.subZone !== "judge" && card.subZone !== "mark") return;
+					if (!card || card.suspended || card.hasLocationCandidates() || card.resolvedSeat !== getMoveSeat(normalizedEvent.from) || card.subZone !== "equip" && card.subZone !== "judge" && card.subZone !== "mark") return;
 					this.controllerLogger.warn("协议手牌来源与本地确定子区冲突，仍按协议处理", {
 						cardID,
-						fromSeatID: normalizedEvent.options.fromSeatID,
-						fromSubZone: normalizedEvent.options.fromSubZone,
+						fromSeatID: getMoveSeat(normalizedEvent.from),
+						fromSubZone: getMoveSubZone(normalizedEvent.from),
 						localSubZone: card.subZone,
 						localSpellID: card.spellID,
 						raw: this.summarizeProtocolMove(raw),
@@ -10798,10 +10822,10 @@
 					before: summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS),
 					after: summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
 				});
-				if (normalizedEvent.options.fromSubZone !== event.options.fromSubZone) this.controllerLogger.info("移动事件来源修正", {
+				if (normalizedEvent.from !== event.from) this.controllerLogger.info("移动事件来源修正", {
 					cardIDs: event.cardIDs,
-					fromSubZone: normalizedEvent.options.fromSubZone,
-					correctedFromSubZone: event.options.fromSubZone
+					from: normalizedEvent.from,
+					correctedFrom: event.from
 				});
 				if (event.type === "revealPublicCandidate") {
 					this.controllerLogger.info("移动事件分支: revealPublicCandidate", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
@@ -10817,7 +10841,10 @@
 					readyRoom.shufflePile({ cardCount: event.cardCount });
 				} else {
 					this.controllerLogger.info("移动事件分支: moveCards", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
-					if (!readyRoom.moveCards(event.cardIDs, event.toZone, {
+					if (!readyRoom.moveCards(event.cardIDs, {
+						from: event.from,
+						to: event.to,
+						triggerSpellID: event.protocol.SpellID,
 						...event.options,
 						pileIdentityEvent: event
 					})) {
@@ -10852,50 +10879,31 @@
 			const ids = event.cardIDs.filter((id) => id > 0);
 			if (ids.length === 0) return false;
 			const raw = event.raw ?? event.options.sourceEvent?.raw ?? {};
-			const move = event.protocol;
-			const zone = move.ToZone ?? move.FromZone;
-			const seatID = move.ToID ?? move.FromID;
-			const subZone = getProtocolPlayerSubZone(zone, null);
-			const spellID = getProtocolMarkSpellID(zone, {
-				toZoneParam: move.ToZoneParam,
-				fromZoneParam: move.FromZoneParam,
-				spellID: move.SpellID
-			}, move.SpellID);
-			if (zone === 8) return room.moveCards(ids, "popup", {
-				fromZone: "popup",
-				fromPopupSpaceID: event.options.toPopupSpaceID,
-				toPopupSpaceID: event.options.toPopupSpaceID,
+			const to = event.to;
+			if (to.type === "popup") return room.moveCards(ids, {
+				from: to,
+				to,
 				handMoveCount: 0,
+				triggerSpellID: event.protocol.SpellID,
 				sourceEvent: event.options.sourceEvent
 			});
-			if (subZone && seatID != null && seatID !== 255) {
-				this.controllerLogger.info("展示明牌进入玩家区", {
-					ids,
-					seatID,
-					subZone,
-					spellID
-				});
-				return room.moveCards(ids, "player", {
-					toSeatID: seatID,
-					fromSeatID: seatID,
-					fromZone: null,
-					fromSubZone: subZone,
-					subZone,
-					spellID,
-					cardCount: ids.length,
-					sourceEvent: event.options.sourceEvent ?? {
-						type: "showCards",
-						raw
-					}
-				});
-			}
-			const zoneName = getProtocolPublicZone(zone, event.toZone ?? "process");
-			const position = event.options.position ?? event.options.fromPosition ?? 65280;
-			const sourceZoneName = getProtocolPublicZone(move.FromZone);
+			if (to.type === "player" && to.seatID !== 255) return room.moveCards(ids, {
+				from: to,
+				to,
+				triggerSpellID: event.protocol.SpellID,
+				cardCount: ids.length,
+				sourceEvent: event.options.sourceEvent ?? {
+					type: "showCards",
+					raw
+				}
+			});
+			const zoneName = getMoveZone(to);
+			const position = getMovePosition(to);
+			const sourceZoneName = event.from.type === "public" || event.from.type === "outside" ? getMoveZone(event.from) : null;
 			const materializationZone = sourceZoneName && sourceZoneName !== zoneName ? sourceZoneName : zoneName;
 			const knownCards = room.resolvePublicKnownCards(ids, {
 				zoneName: materializationZone,
-				position: event.options.fromPosition ?? position
+				position: event.from.type === "public" || event.from.type === "unresolved" ? event.from.position : event.protocol.FromPosition ?? position
 			}, this.controllerLogger);
 			this.controllerLogger.info("展示明牌进入公共区", {
 				ids,
@@ -10905,11 +10913,11 @@
 			});
 			if (sourceZoneName && sourceZoneName !== zoneName) {
 				knownCards.forEach((card) => card.confirmKnown());
-				return room.moveCards(ids, zoneName, {
+				return room.moveCards(ids, {
 					...event.options,
-					fromZone: sourceZoneName,
-					fromSeatID: null,
-					fromSubZone: null,
+					from: event.from,
+					to: event.to,
+					triggerSpellID: event.protocol.SpellID,
 					cardCount: ids.length
 				});
 			}
@@ -10921,6 +10929,26 @@
 			}, this.controllerLogger);
 			room.applyPileIdentityReveal(ids);
 			return true;
+		}
+		playerRevealEndpoint(seatID, subZone, markSpellID) {
+			return subZone === "mark" ? {
+				type: "player",
+				seatID,
+				subZone,
+				markSpellID
+			} : {
+				type: "player",
+				seatID,
+				subZone
+			};
+		}
+		publicRevealEndpoint(zone, position) {
+			if (zone === "outside") return { type: "outside" };
+			return {
+				type: "public",
+				zone,
+				position
+			};
 		}
 		revealTrackerCards(target = {}, cardIDs = []) {
 			const readyRoom = this.getReadyTrackerRoom();
@@ -10940,13 +10968,13 @@
 						const handCount = Number(target.handCount ?? ids.length);
 						readyRoom.syncObservedPlayerHandCount(seatID, handCount, { resolve: false });
 					}
-					if (!readyRoom.moveCards(ids, "player", {
-						toSeatID: seatID,
-						fromSeatID: target.fromSeatID ?? (target.fromZone == null ? seatID : void 0),
-						fromZone: target.fromZone ?? null,
-						fromSubZone: target.fromSubZone ?? subZone,
-						subZone,
-						spellID: target.spellID ?? null,
+					const to = this.playerRevealEndpoint(seatID, subZone, target.spellID ?? null);
+					const sourceSeat = target.fromSeatID ?? (target.fromZone == null ? seatID : void 0);
+					const from = sourceSeat !== void 0 ? this.playerRevealEndpoint(sourceSeat, target.fromSubZone ?? subZone, target.spellID ?? null) : this.publicRevealEndpoint(target.fromZone, POSITION_TOP);
+					if (!readyRoom.moveCards(ids, {
+						from,
+						to,
+						triggerSpellID: target.spellID,
 						cardCount: ids.length,
 						handMoveCount: target.handMoveCount,
 						sourceEvent: target.sourceEvent ?? {
@@ -10958,10 +10986,15 @@
 						}
 					})) return;
 				} else if (target.type === "popup") {
-					if (!readyRoom.moveCards(ids, "popup", {
-						fromZone: "popup",
-						fromPopupSpaceID: target.popupSpaceID,
-						toPopupSpaceID: target.popupSpaceID,
+					if (!readyRoom.moveCards(ids, {
+						from: {
+							type: "popup",
+							spaceID: target.popupSpaceID
+						},
+						to: {
+							type: "popup",
+							spaceID: target.popupSpaceID
+						},
 						handMoveCount: 0,
 						sourceEvent: target.sourceEvent
 					})) return;
@@ -13942,12 +13975,6 @@
 		"雷杀",
 		"冰杀"
 	]);
-	function updateResult(html) {
-		if (typeof document === "undefined") return;
-		const result = document.getElementById("result");
-		if (!result) return;
-		result.innerHTML = html;
-	}
 	function updateQuanDaoDisplay(context) {
 		const { game, patched } = context;
 		if (!((patched.FromZone == 5 || patched.ToZone == 5) && (patched.ToID == game.myID || patched.FromID == game.myID))) return;
@@ -13963,7 +13990,9 @@
 			countType2: 0,
 			countSha: 0
 		});
-		updateResult("<span class=\"textRes\">【权道】杀：普通锦囊</span><br><span class=\"textRes\">" + countSha + "：" + countType2 + "</span>");
+		if (typeof document === "undefined") return;
+		const quanDao = document.getElementById("quanDao");
+		if (quanDao) quanDao.textContent = `【权道】杀：${countSha} 普通锦囊：${countType2}`;
 	}
 	function handleGameFlowState(context) {
 		const { game, patched } = context;
@@ -15540,7 +15569,7 @@
 		return response.text();
 	}
 	var iframe = null;
-	var version = "0.19.1";
+	var version = "0.20.0";
 	function getTrackedHandNumbers(seatID) {
 		const config = CardConfig.GetInstance();
 		return tracker.getTrackedPlayerHandCardIDs(seatID).map((id) => config.getCardNumber(id)).filter((number) => number > 0);
@@ -15871,7 +15900,7 @@
 			} else {
 				container.classList.remove("collapsed");
 				toggle.innerText = "-";
-				document.getElementById("title").innerText = "三国杀小抄0.19.1";
+				document.getElementById("title").innerText = "三国杀小抄0.20.0";
 				expandJiePanel({ defer: true });
 			}
 		};
@@ -16045,6 +16074,8 @@
 		if (suitEl) suitEl.innerText = "";
 		const resultEl = document.getElementById("result");
 		if (resultEl) resultEl.innerHTML = "";
+		const quanDaoEl = document.getElementById("quanDao");
+		if (quanDaoEl) quanDaoEl.textContent = "";
 	}
 	function updateRoundStateLabel(round) {
 		const roundStateName = SeatRoundState.GetRoundStateName(round) || ROUND_STATE_FALLBACK_NAMES[round];

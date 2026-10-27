@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         三国杀小抄 Lite
 // @namespace    https://greasyfork.org/scripts/448004
-// @version      0.19.1
+// @version      0.20.0
 // @author       三国杀小抄
 // @description  三国杀记牌器
 // @license      GPL-3.0-or-later
@@ -10,6 +10,8 @@
 // @homepageURL  https://github.com/llsccm/tracker#readme
 // @source       https://github.com/llsccm/tracker.git
 // @supportURL   https://github.com/llsccm/tracker/issues
+// @downloadURL  https://cdn.jsdelivr.net/gh/llsccm/tracker@releases/daxiaochao.user.js
+// @updateURL    https://cdn.jsdelivr.net/gh/llsccm/tracker@releases/daxiaochao.meta.js
 // @match        *://game.4399iw2.com/yxsgs/*
 // @match        *://my.4399.com/yxsgs/*
 // @match        *://*.sanguosha.com/*
