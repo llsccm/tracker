@@ -417,10 +417,12 @@
     }
 
     .cardDetail {
-      width: 100%;
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 8px;
+      min-height: 40px;
+      padding: 4px;
+      box-shadow: 0px 0px 2px;
+      margin: 2px;
+      border-radius: 5px;
+      overflow: hidden;
     }
 
     .type {
@@ -497,26 +499,13 @@
       box-shadow: inset 1px 1px 1px #000;
     }
 
-    .detail {
-      width: 100%;
-      padding-bottom: 4px;
-    }
-
-    .detail-body {
-      min-height: 40px;
-      padding: 5px;
-      display: block;
-      box-shadow: 0px 0px 2px;
-      margin: 1px;
-      border-radius: 5px;
-      overflow: hidden;
-    }
-
     fieldset {
+      margin: 0 2px 2px;
+      padding: 4px;
+      min-height: 40px;
       border: none;
       box-shadow: 0px 0px 2px;
       border-radius: 4px;
-      padding: 4px;
     }
 
     /* 阴影充当边框，legend 处用底色遮断阴影线，避免文字压线 */
@@ -527,8 +516,8 @@
 
     .rogue-attr-body {
       display: flex;
+      margin-top: 2px;
       flex-wrap: wrap;
-      margin: 4px 1px;
       gap: 6px;
       align-items: center;
       min-height: 0;
@@ -598,7 +587,7 @@
     .panel-content.order>.panel-content-inner {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 1px;
     }
 
     .panel-header.active .triangle {
@@ -676,26 +665,6 @@
       background: var(--text-gold);
     }
 
-    #shandian {
-      width: 100%;
-      float: left;
-    }
-
-    .function {
-      width: 50%;
-      margin: 1px;
-    }
-
-    .jizhan {
-      width: 100%;
-      float: left;
-    }
-
-    .yanjiao {
-      width: 50%;
-      float: left;
-    }
-
     .yanjiaospan {
       border: 1px solid #0000;
       box-sizing: border-box;
@@ -731,15 +700,13 @@
     }
 
     .mizhuBTN {
-      width: 48%;
-      height: 20px;
+      margin-top: 2px;
+      width: 50%;
       text-align: center;
       color: var(--text-gold);
       background: var(--bg-primary);
       border: 1px solid var(--text-gold);
-      display: block;
       border-radius: 5px;
-      font-size: 13px;
     }
 
     .mizhuBTN:hover {
@@ -750,25 +717,11 @@
       animation-iteration-count: infinite;
     }
 
-    .mizhu {
-      width: 100%;
+    #quanDao {
       height: 20px;
-      float: left;
-      text-align: center;
-      color: var(--text-gold);
-      background: var(--bg-primary);
-      margin-left: 3px;
-      border: 1px solid var(--text-gold);
-      display: block;
-      border-radius: 5px;
-    }
-
-    .mizhu:hover {
-      color: var(--text-gold);
-      background: var(--bg-hover);
-      border: 1px var(--bg-primary) solid;
-      animation: blink 2s;
-      animation-iteration-count: infinite;
+      line-height: 20px;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
     }
 
     #result {
@@ -1521,7 +1474,8 @@
     }
 
     .tab-panel.active {
-      display: block;
+      display: flex;
+      flex-direction: column;
     }
   </style>
   <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"
@@ -1565,6 +1519,7 @@
 
     <!-- Tab 1: 卡牌 -->
     <div class="tab-panel active" id="tab-cards">
+      <!-- 手牌 -->
       <div id="orderAndShouPai">
         <button class="panel-header">
           <span class="triangle"></span>
@@ -1647,45 +1602,39 @@
             <div class="order-body No8" id="8" style="--No-content: '界诸葛亮丨八'"></div>
           </div>
         </div>
-
         <div class="order-body knownCards" id="knownCards"></div>
         <div class="order-body paiduiCards" id="paiduiCards"></div>
         <div class="order-body qipaiCards" id="qipaiCards"></div>
-        <div class="knownCards quanBianYanXi" id="quanBian"></div>
-        <div class="knownCards quanBianYanXi" id="yanXi"></div>
       </div>
-      <div class="cardDetail" id="cardDetail">
-        <div class="detail">
-          <div class="detail-body">
-            <div class="suits-grid">
-              <div class="suit suit-heart" id="heart"><span class="suit-glyph">♥</span>红桃 × 0</div>
-              <div class="suit suit-spade" id="spade"><span class="suit-glyph">♠</span>黑桃 × 0</div>
-              <div class="suit suit-club" id="club"><span class="suit-glyph">♣</span>梅花 × 0</div>
-              <div class="suit suit-diamond" id="diamond">
-                <span class="suit-glyph">♦</span>方片 × 0
-              </div>
-              <div class="suit r" id="hongsha">红杀 × 0</div>
-              <div class="suit" id="heisha">黑杀 × 0</div>
-              <span> 乱击/权变</span>
-              <div class="suitRec" id="suit"></div>
-            </div>
-            <br />
-            <fieldset id="lastUseCard">
-              <legend>上一张使用的牌</legend>
-              <button class="shoupai red-card">
-                <span class="card-name">＾＾</span>
-                <span class="card-name">•ω•</span>
-              </button>
-            </fieldset>
-            <br />
-            <div class="function yanjiao" id="yanjiao">严教小抄</div>
-            <button class="function mizhuBTN" id="mizhu">糜竺小抄</button>
-            <!-- <button class="function mizhu mySeatID" id="mySeatID1">座位：1</button> -->
-            <!-- <button class="function mizhu mySeatID" id="mySeatID2">座位：2</button> -->
-            <div class="function" id="result">结果样式：1 1 1 1 = 4</div>
+      <!-- last -->
+      <fieldset id="lastUseCard">
+        <legend>上一张使用的牌</legend>
+        <button class="shoupai red-card">
+          <span class="card-name">＾＾</span>
+          <span class="card-name">•ω•</span>
+        </button>
+      </fieldset>
+      <div class="cardDetail">
+        <div class="suits-grid">
+          <div class="suit suit-heart" id="heart"><span class="suit-glyph">♥</span>红桃 × 0</div>
+          <div class="suit suit-spade" id="spade"><span class="suit-glyph">♠</span>黑桃 × 0</div>
+          <div class="suit suit-club" id="club"><span class="suit-glyph">♣</span>梅花 × 0</div>
+          <div class="suit suit-diamond" id="diamond">
+            <span class="suit-glyph">♦</span>方片 × 0
           </div>
+          <div class="suit r" id="hongsha">红杀 × 0</div>
+          <div class="suit" id="heisha">黑杀 × 0</div>
+          <span> 乱击/权变</span>
+          <div class="suitRec" id="suit"></div>
         </div>
+        <button class="mizhuBTN" id="mizhu">糜竺小抄</button>
+        <div id="quanDao"></div>
       </div>
+      <!-- 技能计算结果 -->
+      <fieldset>
+        <legend>计算结果</legend>
+        <div id="result"></div>
+      </fieldset>
     </div>
 
     <!-- Tab 2: 统计器 -->
