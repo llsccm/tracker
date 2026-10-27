@@ -79,7 +79,6 @@ export interface MoveRoute {
 /** 移动执行选项不携带来源或目标的镜像。 */
 export interface MoveExecutionOptions {
   triggerSpellID?: SpellID | null
-  gainSpellID?: SpellID | null
   combinationID?: number | string | null
   cardCount?: number
   handMoveCount?: number

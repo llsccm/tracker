@@ -89,7 +89,6 @@ export class RoomMovement {
         fromSpellID: getMoveMarkSpellID(context.from),
         toSeat: context.targetHandSeat,
         count: context.unknownCount,
-        gainSpellID: context.gainSpellID,
         sourceEvent: context.sourceEvent
       })
     ) {
@@ -129,10 +128,6 @@ export class RoomMovement {
       // 完整候选覆盖已经表达了这次 K 张转移；此时不能再确定性挑选暗实体搬到目标。
       // 返回空数组表示候选建模失败，仍允许默认未知移动路径执行保守回退。
       context.skipUnknownMovement = propagatedCards.length > 0
-      const gainSpellID = context.gainSpellID
-      if (gainSpellID !== undefined && targetHandSeat !== null) {
-        propagatedCards.forEach((card) => card.recordHandGain(targetHandSeat, gainSpellID))
-      }
     }
 
     if (
@@ -154,7 +149,7 @@ export class RoomMovement {
     }
 
     // 若来源公共区已有候选牌，摸入手牌时把公共候选转化为目标玩家手牌候选。
-    const publicHandCandidates = this.candidates.propagatePublicCandidatesToHand({
+    this.candidates.propagatePublicCandidatesToHand({
       fromZone,
       fromPosition,
       toZone,
@@ -163,10 +158,6 @@ export class RoomMovement {
       count: handMoveCount,
       sourceEvent
     })
-    const gainSpellID = context.gainSpellID
-    if (gainSpellID !== undefined && targetHandSeat !== null) {
-      publicHandCandidates.forEach((card) => card.recordHandGain(targetHandSeat, gainSpellID))
-    }
   }
 
   /**

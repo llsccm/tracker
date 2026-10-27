@@ -53,7 +53,7 @@ describe('已知牌来源与落区阶段顺序', () => {
   it.each([
     { toZone: 5, selected: 3389 },
     { toZone: 3, selected: 414 }
-  ])('标记回调按目标类型 $toZone 选择，获得来源仍使用动作技能', ({ toZone, selected }) => {
+  ])('标记回调按目标类型 $toZone 选择，普通手牌不保留标记技能', ({ toZone, selected }) => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0] })
     room.moveCards([1], {
       from: { type: 'public', zone: 'pile', position: POSITION_TOP },
@@ -84,7 +84,6 @@ describe('已知牌来源与落区阶段顺序', () => {
     expect(calls).toEqual([selected])
     const card = room.cardIndex.get(1)!
     expect(card.spellID).toBeNull()
-    if (toZone === 5) expect(card.gainSpellID).toBe(3389)
   })
 
   it.each(['outside', 'pile', 'player'] as const)(

@@ -20,7 +20,7 @@ function setup(ids: number[]) {
 }
 
 describe('玩家标记与弹窗协议边界', () => {
-  it('同技能玩家标记与弹窗隔离，集运暗交按 3657 空间和 3658 获得来源收敛', () => {
+  it('同技能玩家标记与弹窗隔离，集运 3658 暗交按 3657 来源空间收敛', () => {
     const { controller, room } = setup([43, 40, 96, 37])
     controller.syncTrackerMove(
       protocolMove({
@@ -234,7 +234,6 @@ describe('玩家标记与弹窗协议边界', () => {
     expect(room.cardIndex.get(136)!.getPossibleLocations()).toEqual([
       { type: 'player', seatID: 6, subZone: 'hand', spellID: null }
     ])
-    expect(room.cardIndex.get(136)!.gainSpellID).toBe(3389)
     expect(room.getPlayer(6)!.markCards.size).toBe(0)
     expect(room.cards).toHaveLength(4)
   })

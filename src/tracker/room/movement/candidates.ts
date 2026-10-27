@@ -262,7 +262,6 @@ export class RoomMovementCandidates {
    */
   markStoredToHandCandidates({
     fromPopupSpaceID,
-    gainSpellID,
     fromSeat,
     fromSpellID,
     toSeat,
@@ -346,7 +345,6 @@ export class RoomMovementCandidates {
         [...otherCandidates, markCandidate, handCandidate],
         'markStoredToHandCandidates'
       )
-      if (gainSpellID !== undefined) card.recordHandGain(toSeat, gainSpellID)
     })
 
     // 全部参与牌共同竞争空间与历次目标手牌名额。
