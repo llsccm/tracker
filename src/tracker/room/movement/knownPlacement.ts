@@ -1,3 +1,12 @@
+import {
+  getMoveZone,
+  getMoveSubZone,
+  getMoveCallbackSpellID,
+  getMoveTargetSeats,
+  getMoveSeat,
+  getMovePosition,
+  getPopupSpaceID
+} from '@/tracker/helper/moveEndpoint'
 import { trackerLogger } from '@/utils/logger'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import type { Card } from '@/tracker/model'
@@ -40,7 +49,8 @@ export class RoomMovementKnownPlacement {
   ) {}
 
   prepare(context: RoomMoveContext): KnownMovePlacement | null {
-    const { knownCards, toZone } = context
+    const { knownCards } = context
+    const toZone = getMoveZone(context.to)
     if (knownCards.length === 0) {
       // 装备容器全明快照可能因来源迁座暂未物化成功；仍按协议 CardIDs 收敛弱候选。
       if (toZone === 'player') {
@@ -57,8 +67,16 @@ export class RoomMovementKnownPlacement {
     const resolvedSourceCardIDs: CardID[] = []
     const playerSourceSwapAttempts: unknown[] = []
     const observedEquipmentMarkSnapshot = getObservedEquipmentMarkSnapshot(context)
-    const playerSourceContext = observedEquipmentMarkSnapshot
-      ? { ...context, fromSeat: observedEquipmentMarkSnapshot.observedSeat }
+    const playerSourceContext: RoomMoveContext = observedEquipmentMarkSnapshot
+      ? {
+          ...context,
+          from: {
+            type: 'player',
+            seatID: observedEquipmentMarkSnapshot.observedSeat,
+            subZone: 'mark',
+            markSpellID: observedEquipmentMarkSnapshot.markSpellID
+          }
+        }
       : context
     return {
       swappedCardIDs,
@@ -71,29 +89,20 @@ export class RoomMovementKnownPlacement {
 
   /** 每张牌按原顺序完成来源置换、候选结算、旧约束移除、技能回调和玩家目标绑定。 */
   moveEachCard(context: RoomMoveContext, placement: KnownMovePlacement): void {
-    const {
-      fromSubZone,
-      knownCards,
-      sourceEvent,
-      spellID,
-      subZone,
-      targetSeats,
-      toZone,
-      toSeatID
-    } = context
+    const { knownCards, sourceEvent } = context
+    const fromSubZone = getMoveSubZone(context.from)
+    const spellID = getMoveCallbackSpellID(context, context.triggerSpellID)
+    const subZone = getMoveSubZone(context.to)
+    const targetSeats = getMoveTargetSeats(context.to)
+    const toZone = getMoveZone(context.to)
     const { swappedCardIDs, handledSpellCardIDs, resolvedSourceCardIDs, playerSourceContext } =
       placement
-    const effectiveFromSeat = playerSourceContext.fromSeat
     knownCards.forEach((card) => {
       // 如果协议声明该明牌来自玩家区，而本地认为它在别处，用未知占位交换来修正物理身份。
       // 木牛流马完整快照通常只给目标座位；此时把目标座位视为 mark:700 来源座位，
       // 让明牌与木马里的实体暗占位交换，而不是额外残留一张占位牌。
       const isFromPlayerSource =
-        context.fromZone === 'popup' ||
-        (effectiveFromSeat !== null &&
-          effectiveFromSeat !== undefined &&
-          !Number.isNaN(effectiveFromSeat) &&
-          Boolean(fromSubZone))
+        playerSourceContext.from.type === 'popup' || playerSourceContext.from.type === 'player'
 
       const shouldSwapSpeculativePlayerIdentity =
         isFromPlayerSource &&
@@ -110,10 +119,7 @@ export class RoomMovementKnownPlacement {
       }
 
       // 已知牌来自公共区但实体不在公共 Zone 时，优先按占位语义置换，避免偷走玩家暗牌。
-      const isFromPublicSource =
-        !isFromPlayerSource &&
-        typeof context.fromZone === 'string' &&
-        this.room.zones.has(context.fromZone)
+      const isFromPublicSource = !isFromPlayerSource && context.from.type === 'public'
       if (isFromPublicSource && !this.sources.isCardInPublicSource(card, context)) {
         const placeholder = this.sources.swapKnownCardWithPublicSourcePlaceholder(card, context)
         if (placeholder) {
@@ -133,9 +139,8 @@ export class RoomMovementKnownPlacement {
       if (spellID && this.room.skillHandlers.has(spellID)) {
         const handler = this.room.skillHandlers.get(spellID)
         handler?.(card, {
-          toZone,
-          toSeatID,
-          subZone,
+          from: context.from,
+          to: context.to,
           sourceEvent
         })
         handledSpellCardIDs.push(card.id)
@@ -149,9 +154,6 @@ export class RoomMovementKnownPlacement {
           subZone === 'hand' && fromSubZone === 'mark' ? null : spellID,
           { known: true }
         )
-        if (context.targetHandSeat !== null && context.gainSpellID !== undefined) {
-          card.recordHandGain(context.targetHandSeat, context.gainSpellID)
-        }
       }
     })
   }
@@ -161,7 +163,10 @@ export class RoomMovementKnownPlacement {
     context: RoomMoveContext,
     placement: KnownMovePlacement
   ): void {
-    const { fromSeat, fromSubZone, sourceEvent, toZone } = context
+    const { sourceEvent } = context
+    const fromSeat = getMoveSeat(context.from)
+    const fromSubZone = getMoveSubZone(context.from)
+    const toZone = getMoveZone(context.to)
     const { swappedCardIDs, playerSourceSwapAttempts, playerSourceContext } = placement
     // 可见子区的明牌被转移到别的玩家区时不需要占位替身：直接对齐到协议来源，
     // 多余的匿名手牌由 reconcileAnonymousHandCards 按观测数量回收。
@@ -173,7 +178,7 @@ export class RoomMovementKnownPlacement {
       playerSourceContext
     )
     let fallbackPlaceholder: Card | null = null
-    if (!placeholder && context.fromZone !== 'popup' && fromSubZone === 'hand') {
+    if (!placeholder && getMoveZone(context.from) !== 'popup' && fromSubZone === 'hand') {
       const canDeferToKnownSourcePlaceholder =
         context.sourceHandTotalObserved &&
         context.sourceHandTotalBefore <= context.handMoveCount &&
@@ -245,23 +250,18 @@ export class RoomMovementKnownPlacement {
   }
 
   finishMove(context: RoomMoveContext, placement: KnownMovePlacement): void {
-    const {
-      combinationID,
-      expectedSlotsByLocation,
-      knownCards,
-      position,
-      sourceEvent,
-      spellID,
-      subZone,
-      targetSeats,
-      toZone
-    } = context
+    const { combinationID, expectedSlotsByLocation, knownCards, sourceEvent } = context
+    const position = getMovePosition(context.to)
+    const spellID = getMoveCallbackSpellID(context, context.triggerSpellID)
+    const subZone = getMoveSubZone(context.to)
+    const targetSeats = getMoveTargetSeats(context.to)
+    const toZone = getMoveZone(context.to)
     const { swappedCardIDs, handledSpellCardIDs, resolvedSourceCardIDs } = placement
     if (toZone === 'popup') {
       knownCards.forEach((card) =>
-        card.resolveLocationCandidate({ type: 'popup', spaceID: context.toPopupSpaceID })
+        card.resolveLocationCandidate({ type: 'popup', spaceID: getPopupSpaceID(context.to) })
       )
-      registerPopupSpaceCards(this.room, context.toPopupSpaceID, knownCards)
+      registerPopupSpaceCards(this.room, getPopupSpaceID(context.to), knownCards)
       return
     }
     if (toZone === 'player') {
@@ -340,7 +340,11 @@ export class RoomMovementKnownPlacement {
   }
 
   private repairPublicResidues(context: RoomMoveContext, placement: KnownMovePlacement): void {
-    const { fromSeat, fromSubZone, knownCards, position, sourceEvent, toZone } = context
+    const { knownCards, sourceEvent } = context
+    const fromSeat = getMoveSeat(context.from)
+    const fromSubZone = getMoveSubZone(context.from)
+    const position = getMovePosition(context.to)
+    const toZone = getMoveZone(context.to)
     if (fromSeat === null || fromSeat === undefined || Number.isNaN(fromSeat)) return
     const { playerSourceSwapAttempts } = placement
     const knownCardSet = new Set(knownCards)

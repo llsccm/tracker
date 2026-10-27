@@ -2,6 +2,7 @@ import type { Card } from '@/tracker/model'
 import type { ConstraintGroupOptions } from '@/tracker/constraint/ConstraintGroup'
 import type {
   CardID,
+  MoveRoute,
   MoveSourceEvent,
   NormalizedMoveEvent,
   PostMovePublicCandidate,
@@ -13,68 +14,20 @@ import type {
   SubZone
 } from '@/tracker/types'
 
-export type SeatInput = SeatID | SeatID[]
-export type SourceZoneInput = PublicZoneName | number | null | undefined
-export type MoveTargetZone = PublicZoneName | 'player'
-
 /**
  * known 移动中补建正 ID 的语义来源。
  * external-source 表示协议从 outside/exile 带来新牌，known-fallback 表示原有实体无法物化后的兜底。
  */
 export type KnownCardCreationReason = 'external-source' | 'known-fallback'
 
-export interface RoomMovementOptions {
-  fromPopupSpaceID?: number
-  toPopupSpaceID?: number
-  gainSpellID?: SpellID | null
-  pileIdentityCardIDs?: readonly CardID[]
-  pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
-  toSeatID?: SeatInput | null
-  subZone?: SubZone
-  spellID?: SpellID | null
-  combinationID?: string | number | null
-  fromZone?: SourceZoneInput
-  fromSeatID?: SeatID | null
-  fromSubZone?: SubZone | null
-  fromSpellID?: SpellID | null
-  cardCount?: number
-  /** 协议手牌总数变化量；省略时沿用实际移动实体数 cardCount。 */
-  handMoveCount?: number
-  moveType?: number
-  position?: PublicPosition
-  fromPosition?: PublicPosition
-  expectedSlotsByLocation?: ConstraintGroupOptions['expectedSlotsByLocation']
-  anonymizeCards?: Card[]
-  requireAnonymizeSuccess?: boolean
-  sourceCards?: Card[]
-  publicCandidateSource?: PublicCandidateSource
-  /** 技能需要保留全暗手牌的 N 选 K 身份事实时，强制建立随机转移候选。 */
-  forceRandomHandTransferCandidates?: boolean
-  postMovePublicCandidates?: PostMovePublicCandidate[]
-  sourceEvent?: MoveSourceEvent
-  [key: string]: unknown
-}
-
-export interface RoomMoveContext {
-  fromPopupSpaceID?: number
-  toPopupSpaceID?: number
-  gainSpellID: SpellID | null | undefined
+export interface RoomMoveContext extends MoveRoute {
+  triggerSpellID?: SpellID | null
   pileIdentityCardIDs?: readonly CardID[]
   pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
   cardIDs: readonly CardID[]
-  toZone: MoveTargetZone
-  toSeatID?: SeatInput | null
-  subZone: SubZone
-  spellID: SpellID | null | undefined
   combinationID?: string | number | null
-  fromZone: SourceZoneInput
-  fromSeat: SeatID | null
-  fromSubZone: SubZone
-  fromSpellID?: SpellID | null
   cardCount: number
   moveType?: number
-  position: PublicPosition
-  fromPosition: PublicPosition
   expectedSlotsByLocation?: ConstraintGroupOptions['expectedSlotsByLocation']
   anonymizeCards: Card[]
   requireAnonymizeSuccess: boolean
@@ -83,7 +36,6 @@ export interface RoomMoveContext {
   forceRandomHandTransferCandidates: boolean
   postMovePublicCandidates?: PostMovePublicCandidate[]
   sourceEvent?: MoveSourceEvent
-  targetSeats: SeatID[]
   handMoveCount: number
   sourceHandSeat: SeatID | null
   targetHandSeat: SeatID | null
@@ -91,7 +43,6 @@ export interface RoomMoveContext {
   sourceHandTotalBefore: number
   sourceHandUnknownCount: number
   knownIDs: CardID[]
-  sourceIsOutside: boolean
   unknownCount: number
   knownCards: Card[]
   movedUnknownCards: Card[]
@@ -127,22 +78,12 @@ export interface PopupSpaceState {
 }
 
 export interface TakeSpecificSourceFallback {
-  fromZone?: SourceZoneInput
+  fromZone?: PublicZoneName | null | undefined
   fromPosition?: PublicPosition
   anonymousFallback?: boolean
 }
 
-export interface TakeSourceCardsOptions {
-  fromPopupSpaceID?: number
-  sourceIsOutside?: boolean
-  fromSeat?: SeatID | null
-  fromSubZone?: SubZone
-  subZone?: SubZone
-  spellID?: SpellID | null
-  fromZone?: SourceZoneInput
-  toZone?: MoveTargetZone
-  fromPosition?: PublicPosition
-  fromSpellID?: SpellID | null
+export interface TakeSourceCardsOptions extends MoveRoute {
   sourceCards?: Card[]
   sourceEvent?: MoveSourceEvent
   moveType?: number
@@ -179,7 +120,6 @@ export interface RandomHandTransferOptions {
 
 export interface StoredToHandCandidatesOptions {
   fromPopupSpaceID?: number
-  gainSpellID?: SpellID | null
   /** 玩家标记来源座位；弹窗来源使用 fromPopupSpaceID。 */
   fromSeat: SeatID | null
   /** 标记空间 ID；缺省时不接管，避免跨空间误合并候选。 */
@@ -205,11 +145,11 @@ export interface UnknownPileReturnOptions {
 }
 
 export interface PublicCandidatesToHandOptions {
-  fromZone: SourceZoneInput
+  fromZone: PublicZoneName | null | undefined
   fromPosition: PublicPosition
-  toZone: MoveTargetZone
+  toZone: PublicZoneName
   targetSeat: SeatID | null
-  subZone: SubZone
+  subZone: SubZone | undefined
   count: number
   sourceEvent?: MoveSourceEvent
 }

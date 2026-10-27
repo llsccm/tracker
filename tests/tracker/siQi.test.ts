@@ -68,7 +68,12 @@ describe('思泣来源牌推断', () => {
 
     const event = createSiQiEvent(2)
     const decorated = room.decorateMoveEvent(event)
-    room.moveCards(decorated.cardIDs, decorated.toZone, decorated.options)
+    room.moveCards(decorated.cardIDs, {
+      ...decorated.options,
+      from: decorated.from,
+      to: decorated.to,
+      triggerSpellID: decorated.protocol.SpellID
+    })
 
     expect(room.zones.get('discard')!.cards).toEqual([])
     expect(room.zones.get('pile')!.cards.map((card) => card.id)).toEqual([18, 17])

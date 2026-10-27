@@ -6,13 +6,6 @@ import { laya } from '@/runtime/gameAdapter'
 const excludeNames = new Set(['乐', '兵', '闪电'])
 const shaNames = new Set(['杀', '火杀', '雷杀', '冰杀'])
 
-function updateResult(html) {
-  if (typeof document === 'undefined') return
-  const result = document.getElementById('result')
-  if (!result) return
-  result.innerHTML = html
-}
-
 function updateQuanDaoDisplay(context) {
   const { game, patched } = context
 
@@ -53,14 +46,9 @@ function updateQuanDaoDisplay(context) {
     { countType2: 0, countSha: 0 }
   )
 
-  updateResult(
-    '<span class="textRes">【权道】杀：普通锦囊</span>' +
-      '<br><span class="textRes">' +
-      countSha +
-      '：' +
-      countType2 +
-      '</span>'
-  )
+  if (typeof document === 'undefined') return
+  const quanDao = document.getElementById('quanDao')
+  if (quanDao) quanDao.textContent = `【权道】杀：${countSha} 普通锦囊：${countType2}`
 }
 
 export function handleGameFlowState(context) {

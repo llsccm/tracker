@@ -231,10 +231,8 @@ function stagePileToExchange(event: MoveEventDraft, room: Room, spellID: number)
   }
 
   return patchEvent(event, {
-    options: {
-      fromPosition: POSITION_TOP,
-      sourceCards: splitProtocolKnownAndUnknown(event, selectedCards)
-    }
+    from: event.from.type === 'public' ? { ...event.from, position: POSITION_TOP } : event.from,
+    options: { sourceCards: splitProtocolKnownAndUnknown(event, selectedCards) }
   })
 }
 
@@ -361,8 +359,8 @@ function returnBucketToPile(event: MoveEventDraft, room: Room, spellID: number):
   clearBatchIfEmpty(room, spellID, batch)
 
   return patchEvent(event, {
+    to: event.to.type === 'public' ? { ...event.to, position: POSITION_TOP } : event.to,
     options: {
-      position: POSITION_TOP,
       sourceCards: splitProtocolKnownAndUnknown(event, cardsBottomFirst),
       ...(postMovePublicCandidates.length > 0 ? { postMovePublicCandidates } : {})
     }

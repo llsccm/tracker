@@ -59,7 +59,7 @@
 - `RoomConstraints` 位于 `src/tracker/room/constraints.ts`，集中实现不动点收敛、E1/E2 手牌槽懒缓存、匿名手牌实体对账、约束组维护、实体牌解析及稳定态的索引/视图组/计数器同步。Room 保留 `resolveConstraints()` 公开入口和状态所有权，DEV 诊断按需传入。
 - `RoomPublicZones` 位于 `src/tracker/room/publicZones.ts`，负责公共区一致性检查、洗牌槽位校准及玩家手牌 ID 查询。公共区牌序直接读取 `Room.getPublicZone()` 返回的 `Zone.cards`。
 - `RoomDiagnostics` 位于 `src/tracker/room/diagnostics.ts`，负责 DEV 身份/槽位与身份账本守恒、玩家快照和影子索引检查、抽样门控及收敛轮数告警；Room 的公开断言 API 保持不变。
-- `protocol/protocolZones.ts` 将区域 `4` 映射为玩家标记、区域 `8` 映射为独立临时弹窗 `popup`。`MoveEventNormalizer` 只做分类与字段映射，不直接修改 `Room` 状态。玩家端点使用 seat 字段，弹窗端点使用 `fromPopupSpaceID/toPopupSpaceID`；区域 `8` 的 `FromID` 是空间 ID，不是玩家座位。玩家标记空间优先使用端点 `ZoneParam`，与触发移动的 `SpellID` 分开。
+- `protocol/protocolZones.ts` 将区域 `4` 映射为玩家标记、区域 `8` 映射为独立临时弹窗 `popup`。`MoveEventNormalizer` 只做分类与字段映射，不直接修改 `Room` 状态。玩家端点使用 `seatID`，弹窗端点使用 `spaceID`；区域 `8` 的 `FromID` 是空间 ID，不是玩家座位；当 `FromID` 为 `255` 时，`FromID` 作为来源端点的弹窗 `spaceID` 使用 `SpellID`。玩家标记空间在归一化时按端点 `ZoneParam` 解析为 `markSpellID`，与触发移动的 `SpellID` 分开。
 - `Room.moveCards()`、`Room.resolveConstraints()`、`Room.shufflePile()`、`Room.getPublicZone()` 是高频核心入口，应优先留在 `Room` 中；新增内部辅助方法时优先放入对应行为模块，再由 `Room` 暴露必要的薄入口。
 
 ### `Card` / `Player` / `Zone`
@@ -188,8 +188,8 @@
 
 通用命令、补测约定与手工验收见 [testing.md](testing.md)。以下聚焦记牌器领域风险。
 
-- `Room.moveCards()` 中 `fromSubZone` 是区分来源玩家子区的关键字段，手写调用若省略它仍可能误判。
-- 解析 `PubGsCMoveCard` 时不要仅凭 `FromID` / `ToID` 推断座位；必须结合 `FromZone` / `ToZone`、`FromZoneParam` / `ToZoneParam`、`SpellID` 与归一化后的 `fromSubZone` / `spellID` 判断。已知边界包括 `FromZone=8, MoveType=7` 的 `FromID` 可能是技能空间 ID，以及 `FromZone=1, MoveType=6` 的 `FromID=255` 可能表示牌堆/无座位。
+- `Room.moveCards(cardIDs, request)` 必须明确 `from/to`；玩家端点的 `subZone` 区分手牌、装备、判定和标记，mark 另有必填 `markSpellID`。
+- 解析 `PubGsCMoveCard` 时不要仅凭 `FromID` / `ToID` 推断座位；必须结合 `FromZone` / `ToZone`、`FromZoneParam` / `ToZoneParam`、`SpellID` 与归一化后的端点类型、`subZone` / `markSpellID` 判断。已知边界包括 `FromZone=8, MoveType=7` 的 `FromID` 可能是技能空间 ID，以及 `FromZone=1, MoveType=6` 的 `FromID=255` 可能表示牌堆/无座位。
 - 玩家来源已知牌统一通过 `swapKnownCardWithPlayerSourcePlaceholder()` 置换；补造来源占位后也复用此入口，位置与时间戳通过 Card 绑定/候选 API 提交。
 - 部分基于差量同步的逻辑仍缺少覆盖率，重构时容易引发微小不一致。
 - `locationCandidates(type: public)` 负责牌堆顶/底候选传播，和 `ConstraintGroup`、`AmbiguousKnownIndex` 的边界要保持清楚，避免把公共候选误收敛成确定 owner。

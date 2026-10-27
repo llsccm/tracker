@@ -1,3 +1,9 @@
+import {
+  getMoveTargetSeats,
+  getMoveSubZone,
+  getMoveMarkSpellID,
+  getMoveSeat
+} from '@/tracker/helper/moveEndpoint'
 import { trackerLogger } from '@/utils/logger'
 import {
   createEquipmentContainerLocationCandidate,
@@ -271,13 +277,13 @@ export class RoomMovementHiddenMarks {
     if (!isHiddenMarkMove(context)) return false
 
     const sourceSeat = context.sourceHandSeat
-    const targetSeat = context.targetSeats[0]
+    const targetSeat = getMoveTargetSeats(context.to)[0]
     const candidateCards = this.getKnownHandCandidatesForHiddenMark(sourceSeat)
     // 没有可展示的明牌身份时，沿用普通暗牌移动。
     if (candidateCards.length === 0) return false
 
     const state = this.getHiddenMarkState()
-    const spellID = context.spellID ?? null
+    const spellID = getMoveMarkSpellID(context.to) ?? null
     // 只有木牛流马的标记空间随装备迁座；不同来源手牌仍分别记账。
     const recordKey =
       getEquipmentMarkRecordKey(sourceSeat, spellID) ??
@@ -745,7 +751,7 @@ export class RoomMovementHiddenMarks {
     if (!state?.records?.size) return false
 
     const seat = context.sourceHandSeat
-    if (seat === null || context.fromSubZone !== 'hand') return false
+    if (seat === null || getMoveSubZone(context.from) !== 'hand') return false
 
     // 完整揭示：全为明牌 && 数量 == 该座位已观测手牌总数
     const isFullHandReveal =
@@ -837,16 +843,13 @@ export class RoomMovementHiddenMarks {
       if (state.records.get(record.id) !== record) return
       if (!record.cards.has(card)) return
 
-      if (context.fromSubZone === 'mark') {
-        const moveSpellID =
-          context.fromSpellID !== undefined ? context.fromSpellID : (context.spellID ?? null)
+      if (getMoveSubZone(context.from) === 'mark') {
+        const moveSpellID = getMoveMarkSpellID(context.from)
         const seatChange = getEquipmentMarkSeatChange(context, moveSpellID)
         // mark700 迁座已在候选传播阶段完成；随后揭示身份不能按旧 FromID 把账本迁回去。
         const moveMarkSeat = seatChange
           ? seatChange.targetSeat
-          : context.fromSeat !== null
-            ? context.fromSeat
-            : record.targetSeat
+          : (getMoveSeat(context.from) ?? record.targetSeat)
 
         // 同一张明牌可能同时是多个标记账本的候选，必须先匹配实际标记空间。
         if (moveSpellID !== record.spellID) return
@@ -879,14 +882,15 @@ export class RoomMovementHiddenMarks {
           sourceSeat: record.sourceSeat,
           targetSeat: record.targetSeat,
           cardID: card.id,
-          fromSubZone: context.fromSubZone,
-          fromSpellID: context.fromSpellID ?? context.spellID ?? null,
+          fromSubZone: getMoveSubZone(context.from),
+          fromSpellID: getMoveMarkSpellID(context.from),
           confirmedMarkCount: record.confirmedMarkCards.size,
           confirmedHandCount: record.confirmedHandCards.size,
           placeholderCount: record.placeholderCards.size
         })
-      } else if (context.fromSubZone === 'hand') {
-        const moveHandSeat = context.fromSeat !== null ? context.fromSeat : record.sourceSeat
+      } else if (getMoveSubZone(context.from) === 'hand') {
+        const moveHandSeat =
+          getMoveSeat(context.from) !== null ? getMoveSeat(context.from) : record.sourceSeat
         if (moveHandSeat !== record.sourceSeat) return
 
         const candidate: PlayerLocationCandidate = {
@@ -909,7 +913,7 @@ export class RoomMovementHiddenMarks {
           sourceSeat: record.sourceSeat,
           targetSeat: record.targetSeat,
           cardID: card.id,
-          fromSubZone: context.fromSubZone,
+          fromSubZone: getMoveSubZone(context.from),
           confirmedMarkCount: record.confirmedMarkCards.size,
           confirmedHandCount: record.confirmedHandCards.size,
           placeholderCount: record.placeholderCards.size

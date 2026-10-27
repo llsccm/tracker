@@ -1,3 +1,4 @@
+import { getMoveSeat, getMoveSubZone, getPopupSpaceID } from '@/tracker/helper/moveEndpoint'
 import { describe, expect, it } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { getPopupSpaceCards } from '@/tracker/room/movement/popupSpaces'
@@ -19,7 +20,7 @@ function setup(ids: number[]) {
 }
 
 describe('玩家标记与弹窗协议边界', () => {
-  it('同技能玩家标记与弹窗隔离，集运暗交按 3657 空间和 3658 获得来源收敛', () => {
+  it('同技能玩家标记与弹窗隔离，集运 3658 暗交按 3657 来源空间收敛', () => {
     const { controller, room } = setup([43, 40, 96, 37])
     controller.syncTrackerMove(
       protocolMove({
@@ -102,9 +103,9 @@ describe('玩家标记与弹窗协议边界', () => {
         MoveType: 7
       })
     )
-    expect(popup.options).toMatchObject({ fromZone: 'popup', fromPopupSpaceID: 35 })
-    expect(popup.options.fromSeatID).toBeUndefined()
-    expect(popup.options.fromSubZone).toBeUndefined()
+    expect(popup.from).toEqual({ type: 'popup', spaceID: 35 })
+    expect(getMoveSeat(popup.from)).toBeNull()
+    expect(getMoveSubZone(popup.from)).toBeUndefined()
     const mark = normalizeMoveEvent(
       protocolMove({
         FromZone: 4,
@@ -116,8 +117,8 @@ describe('玩家标记与弹窗协议边界', () => {
         MoveType: 15
       })
     )
-    expect(mark.options).toMatchObject({ fromSeatID: 6, fromSubZone: 'mark', fromSpellID: 414 })
-    expect(mark.options.fromPopupSpaceID).toBeUndefined()
+    expect(mark.from).toEqual({ type: 'player', seatID: 6, subZone: 'mark', markSpellID: 414 })
+    expect(getPopupSpaceID(mark.from)).toBeUndefined()
   })
 
   it('技能 35 暂存五张、四张回顶一张回底，复用原槽并释放空间', () => {
@@ -233,7 +234,6 @@ describe('玩家标记与弹窗协议边界', () => {
     expect(room.cardIndex.get(136)!.getPossibleLocations()).toEqual([
       { type: 'player', seatID: 6, subZone: 'hand', spellID: null }
     ])
-    expect(room.cardIndex.get(136)!.gainSpellID).toBe(3389)
     expect(room.getPlayer(6)!.markCards.size).toBe(0)
     expect(room.cards).toHaveLength(4)
   })

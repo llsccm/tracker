@@ -19,6 +19,7 @@
     "dev": "vite",
     "build": "vite build --mode development",
     "build:prod": "vite build --mode production",
+    "build:cdn": "vite build --mode cdn",
     "preview": "vite preview",
     "format": "prettier --write ./src/**/*.{ts,js}",
     "lint": "eslint .",

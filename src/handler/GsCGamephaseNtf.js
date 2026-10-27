@@ -59,6 +59,9 @@ function clearRoundResult() {
 
   const resultEl = document.getElementById('result')
   if (resultEl) resultEl.innerHTML = ''
+
+  const quanDaoEl = document.getElementById('quanDao')
+  if (quanDaoEl) quanDaoEl.textContent = ''
 }
 
 /**

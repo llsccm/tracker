@@ -12,7 +12,9 @@ export type MoveEventDraft = NormalizedMoveEvent
  * 只允许修改领域分支、身份和数量；不覆盖原始协议或追溯数据。
  * `options` 本身已定义可选字段，补丁只与原选项浅合并。
  */
-export type MoveEventPatch = Partial<Pick<MoveEventDraft, 'type' | 'cardIDs' | 'cardCount'>> & {
+export type MoveEventPatch = Partial<
+  Pick<MoveEventDraft, 'type' | 'cardIDs' | 'cardCount' | 'from' | 'to'>
+> & {
   options?: MoveEventDraft['options']
 }
 
@@ -57,6 +59,8 @@ export function patchEvent(event: MoveEventDraft, patch: MoveEventPatch = {}): M
     type: patch.type ?? event.type,
     cardIDs: patch.cardIDs ?? event.cardIDs,
     cardCount: patch.cardCount ?? event.cardCount,
+    from: patch.from ?? event.from,
+    to: patch.to ?? event.to,
     options: {
       ...event.options,
       ...(patch.options ?? {})
@@ -70,9 +74,8 @@ export function patchEvent(event: MoveEventDraft, patch: MoveEventPatch = {}): M
  * 数字协议区和空值还未映射为 Room 公共区名称，不能直接作为 `room.zones` 的键。
  */
 export function getSourceZoneCards(event: MoveEventDraft, room: Room): Card[] {
-  const zoneID = event.options?.fromZone
-  if (typeof zoneID !== 'string') return []
-  return room.zones.get(zoneID)?.cards ?? []
+  if (event.from.type !== 'public') return []
+  return room.zones.get(event.from.zone)?.cards ?? []
 }
 
 /**
@@ -86,9 +89,8 @@ export function getEventSourceCards(event: MoveEventDraft, room: Room): Card[] {
   const knownCards = room.findCardsByIDs(event.cardIDs)
   if (knownCards.length > 0) return knownCards.slice(0, count)
 
-  const fromSeat = event.options?.fromSeatID
-  if (fromSeat !== undefined && fromSeat !== null) {
-    return getUnknownPlayerCards(room, fromSeat, count, event.options?.fromSubZone ?? 'hand')
+  if (event.from.type === 'player') {
+    return getUnknownPlayerCards(room, event.from.seatID, count, event.from.subZone)
   }
 
   return getTopFirstCards(getSourceZoneCards(event, room)).slice(0, count)

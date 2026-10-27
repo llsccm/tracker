@@ -211,12 +211,9 @@ describe('临时弹窗空间通用收敛', () => {
     const { room, move } = setup([1, 2])
     move(3544, 1, 8, [], 2)
     const slots = getPopupSpaceCards(room, 3544)
-    room.moveCards([], 'player', {
-      fromSeatID: 1,
-      fromSubZone: 'mark',
-      fromSpellID: 3544,
-      toSeatID: 2,
-      subZone: 'hand',
+    room.moveCards([], {
+      from: { type: 'player', seatID: 1, subZone: 'mark', markSpellID: 3544 },
+      to: { type: 'player', seatID: 2, subZone: 'hand' },
       cardCount: 1
     })
     expect(getPopupSpaceCards(room, 3544)).toEqual(slots)

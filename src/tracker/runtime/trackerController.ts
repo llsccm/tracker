@@ -1,3 +1,9 @@
+import {
+  getMoveSubZone,
+  getMoveSeat,
+  getMoveZone,
+  getMovePosition
+} from '@/tracker/helper/moveEndpoint'
 import { POSITION_BOTTOM, POSITION_TOP } from '../candidate/cardPositions'
 import { fromPublicCandidate } from '../candidate/locationCandidate'
 import { createPublicCandidate } from '../candidate/publicCandidate'
@@ -5,7 +11,6 @@ import { Game, type GameState } from '../Game'
 import { summarizeMoveEvent } from '../helper/moveSummary'
 import { getProtocolMoveSpecialLabel, normalizeMoveEvent } from '../protocol/MoveEventNormalizer'
 import {
-  getProtocolMarkSpellID,
   getProtocolPlayerSubZone,
   getProtocolPublicZone,
   isProtocolPlayerZone
@@ -14,6 +19,9 @@ import { Room } from '../Room'
 import type {
   CardID,
   MoveOptions,
+  MoveEndpoint,
+  PublicMoveEndpoint,
+  PlayerMoveEndpoint,
   NormalizedMoveEvent,
   PatchedMoveCardFields,
   PublicPosition,
@@ -278,14 +286,14 @@ export class TrackerController {
       const normalizedEvent = normalizeMoveEvent(patched, raw)
 
       // 来源区域由协议给出；本地代表子区可能仍为 mark，不能覆盖 hand/mark 完整位置候选。
-      if (normalizedEvent.options.fromSubZone === 'hand') {
+      if (getMoveSubZone(normalizedEvent.from) === 'hand') {
         normalizedEvent.cardIDs.forEach((cardID) => {
           const card = readyRoom.cardIndex.get(cardID)
           if (
             !card ||
             card.suspended ||
             card.hasLocationCandidates() ||
-            card.resolvedSeat !== normalizedEvent.options.fromSeatID ||
+            card.resolvedSeat !== getMoveSeat(normalizedEvent.from) ||
             (card.subZone !== 'equip' && card.subZone !== 'judge' && card.subZone !== 'mark')
           ) {
             return
@@ -293,8 +301,8 @@ export class TrackerController {
 
           this.controllerLogger.warn('协议手牌来源与本地确定子区冲突，仍按协议处理', {
             cardID,
-            fromSeatID: normalizedEvent.options.fromSeatID,
-            fromSubZone: normalizedEvent.options.fromSubZone,
+            fromSeatID: getMoveSeat(normalizedEvent.from),
+            fromSubZone: getMoveSubZone(normalizedEvent.from),
             localSubZone: card.subZone,
             localSpellID: card.spellID,
             raw: this.summarizeProtocolMove(raw),
@@ -315,11 +323,11 @@ export class TrackerController {
         after: summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
       })
 
-      if (normalizedEvent.options.fromSubZone !== event.options.fromSubZone) {
+      if (normalizedEvent.from !== event.from) {
         this.controllerLogger.info('移动事件来源修正', {
           cardIDs: event.cardIDs,
-          fromSubZone: normalizedEvent.options.fromSubZone,
-          correctedFromSubZone: event.options.fromSubZone
+          from: normalizedEvent.from,
+          correctedFrom: event.from
         })
       }
 
@@ -355,7 +363,10 @@ export class TrackerController {
           '移动事件分支: moveCards',
           summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         )
-        const moveCompleted = readyRoom.moveCards(event.cardIDs, event.toZone, {
+        const moveCompleted = readyRoom.moveCards(event.cardIDs, {
+          from: event.from,
+          to: event.to,
+          triggerSpellID: event.protocol.SpellID,
           ...event.options,
           pileIdentityEvent: event
         })
@@ -419,63 +430,39 @@ export class TrackerController {
     if (ids.length === 0) return false
 
     const raw = event.raw ?? event.options.sourceEvent?.raw ?? {}
-    const move = event.protocol
-    const zone = move.ToZone ?? move.FromZone
-    const seatID = move.ToID ?? move.FromID
-    const subZone = getProtocolPlayerSubZone(zone, null)
-    const spellID = getProtocolMarkSpellID(
-      zone,
-      {
-        toZoneParam: move.ToZoneParam,
-        fromZoneParam: move.FromZoneParam,
-        spellID: move.SpellID
-      },
-      move.SpellID
-    )
-
-    if (zone === 8) {
-      return room.moveCards(ids, 'popup', {
-        fromZone: 'popup',
-        fromPopupSpaceID: event.options.toPopupSpaceID,
-        toPopupSpaceID: event.options.toPopupSpaceID,
+    const to = event.to
+    if (to.type === 'popup') {
+      return room.moveCards(ids, {
+        from: to,
+        to,
         handMoveCount: 0,
+        triggerSpellID: event.protocol.SpellID,
         sourceEvent: event.options.sourceEvent
       })
     }
-
-    if (subZone && seatID != null && seatID !== 255) {
-      this.controllerLogger.info('展示明牌进入玩家区', {
-        ids,
-        seatID,
-        subZone,
-        spellID
-      })
-
-      return room.moveCards(ids, 'player', {
-        toSeatID: seatID,
-        fromSeatID: seatID,
-        fromZone: null,
-        fromSubZone: subZone,
-        subZone,
-        spellID,
+    if (to.type === 'player' && to.seatID !== 255) {
+      return room.moveCards(ids, {
+        from: to,
+        to,
+        triggerSpellID: event.protocol.SpellID,
         cardCount: ids.length,
-        sourceEvent: event.options.sourceEvent ?? {
-          type: 'showCards',
-          raw
-        }
+        sourceEvent: event.options.sourceEvent ?? { type: 'showCards', raw }
       })
     }
-
-    const zoneName = getProtocolPublicZone(zone, event.toZone ?? 'process')
-    const position = event.options.position ?? event.options.fromPosition ?? POSITION_TOP
-    const sourceZoneName = getProtocolPublicZone(move.FromZone)
+    const zoneName = getMoveZone(to)
+    const position = getMovePosition(to)
+    const sourceZoneName =
+      event.from.type === 'public' || event.from.type === 'outside' ? getMoveZone(event.from) : null
     const materializationZone =
       sourceZoneName && sourceZoneName !== zoneName ? sourceZoneName : zoneName
     const knownCards = room.resolvePublicKnownCards(
       ids,
       {
         zoneName: materializationZone,
-        position: event.options.fromPosition ?? position
+        position:
+          event.from.type === 'public' || event.from.type === 'unresolved'
+            ? event.from.position
+            : (event.protocol.FromPosition ?? position)
       },
       this.controllerLogger
     )
@@ -491,11 +478,11 @@ export class TrackerController {
       // 判定获得既会展示牌面，也会把实体移出来源公共区；复用标准移动链路完成来源置换，
       // 并清空协议残留的玩家槽位，避免公共区来源被误判为手牌。
       knownCards.forEach((card) => card.confirmKnown())
-      return room.moveCards(ids, zoneName, {
+      return room.moveCards(ids, {
         ...event.options,
-        fromZone: sourceZoneName,
-        fromSeatID: null,
-        fromSubZone: null,
+        from: event.from,
+        to: event.to,
+        triggerSpellID: event.protocol.SpellID,
         cardCount: ids.length
       })
     }
@@ -523,6 +510,23 @@ export class TrackerController {
    * 将外部技能/协议确认的明牌写入指定目标。
    * target.type 决定进入玩家区候选还是公共区；已有物理牌会复用，缺失物理牌才补建。
    */
+
+  /** 非移动揭示 API 保留原签名，端点转换仅在 Controller 边界执行。 */
+  private playerRevealEndpoint(
+    seatID: SeatID,
+    subZone: string,
+    markSpellID: SpellID | null
+  ): PlayerMoveEndpoint {
+    return subZone === 'mark'
+      ? { type: 'player', seatID, subZone, markSpellID }
+      : { type: 'player', seatID, subZone: subZone as 'hand' | 'equip' | 'judge' }
+  }
+
+  private publicRevealEndpoint(zone: PublicZoneName, position: PublicPosition): MoveEndpoint {
+    if (zone === 'outside') return { type: 'outside' }
+    return { type: 'public', zone: zone as PublicMoveEndpoint['zone'], position }
+  }
+
   revealTrackerCards(target: RevealTarget = {}, cardIDs: CardID[] | CardID = []): void {
     const readyRoom = this.getReadyTrackerRoom()
     if (!readyRoom) return
@@ -548,13 +552,20 @@ export class TrackerController {
           readyRoom.syncObservedPlayerHandCount(seatID, handCount, { resolve: false })
         }
 
-        const completed = readyRoom.moveCards(ids, 'player', {
-          toSeatID: seatID,
-          fromSeatID: target.fromSeatID ?? (target.fromZone == null ? seatID : undefined),
-          fromZone: target.fromZone ?? null,
-          fromSubZone: target.fromSubZone ?? subZone,
-          subZone,
-          spellID: target.spellID ?? null,
+        const to = this.playerRevealEndpoint(seatID, subZone, target.spellID ?? null)
+        const sourceSeat = target.fromSeatID ?? (target.fromZone == null ? seatID : undefined)
+        const from =
+          sourceSeat !== undefined
+            ? this.playerRevealEndpoint(
+                sourceSeat,
+                target.fromSubZone ?? subZone,
+                target.spellID ?? null
+              )
+            : this.publicRevealEndpoint(target.fromZone!, POSITION_TOP)
+        const completed = readyRoom.moveCards(ids, {
+          from,
+          to,
+          triggerSpellID: target.spellID,
           cardCount: ids.length,
           handMoveCount: target.handMoveCount,
           sourceEvent: target.sourceEvent ?? {
@@ -564,10 +575,9 @@ export class TrackerController {
         })
         if (!completed) return
       } else if (target.type === 'popup') {
-        const completed = readyRoom.moveCards(ids, 'popup', {
-          fromZone: 'popup',
-          fromPopupSpaceID: target.popupSpaceID,
-          toPopupSpaceID: target.popupSpaceID,
+        const completed = readyRoom.moveCards(ids, {
+          from: { type: 'popup', spaceID: target.popupSpaceID! },
+          to: { type: 'popup', spaceID: target.popupSpaceID! },
           handMoveCount: 0,
           sourceEvent: target.sourceEvent
         })

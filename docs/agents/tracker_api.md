@@ -27,7 +27,7 @@ if (!room) return
 | 读取当前局                 | `tracker.getReadyTrackerRoom()`                           | 未开局、已销毁、断线状态或牌堆未就绪时返回 `null`。                                   |
 | 写入技能确认的明牌         | `tracker.revealTrackerCards(target, cardIDs)`             | 统一处理玩家区/公共区、物化和索引。                                                   |
 | 按协议 Zone 写入明牌       | `tracker.revealTrackerCardsInZone(protocolZone, cardIDs)` | 先做 Zone 映射，再复用上面的明牌路径。                                                |
-| 直接编排测试或已归一化移动 | `room.moveCards(cardIDs, toZone, options)`                | 所有普通移动的 Room 级主入口。                                                        |
+| 直接编排测试或已归一化移动 | `room.moveCards(cardIDs, request)`                | 所有普通移动的 Room 级主入口。                                                        |
 
 ## PubGsCMoveCard 完整输入契约
 
@@ -41,12 +41,11 @@ if (!room) return
 `candidateSeats` 只接受座位数组，分组标识统一用 `id`。不接收 `cardIDs`、`seatID`、
 `subZone`、`spellID` 或 `combinationID`；查牌及位置写入在建组前完成，候选座位只作为分组快照。
 
-弹窗入区使用 `room.moveCards(ids, 'popup', { fromZone: 'pile', toPopupSpaceID: 35, cardCount })`；出区使用 `fromZone: 'popup', fromPopupSpaceID: 35` 并明确目标。玩家标记继续使用 `toSeatID/subZone: 'mark'/spellID`，来源空间通过 `fromSpellID` 表达。`414` 标记返回时来源仍为 `414`，不能用动作技能 `3389` 查找标记空间。
+弹窗入区使用 `room.moveCards(ids, { from: { type: 'public', zone: 'pile', position: POSITION_TOP }, to: { type: 'popup', spaceID: 35 }, cardCount })`；出区使用 `from: { type: 'popup', spaceID: 35 }` 并明确目标。玩家标记使用 `{ type: 'player', seatID, subZone: 'mark', markSpellID }`。来源 414 与动作 3389 分别保存在来源端点和 triggerSpellID 中。
 巧织暗取通过弹窗与手牌的数量约束保留候选，剩余牌明弃后确认入手身份；角色数据通知不参与揭示，移动自带正 ID 时直接确认。
 
-读取当前确定手牌的获得技能用 `card.gainSpellID`；候选分支用 `card.getHandGainSpellID(seatID)`。
-`Room.moveCards()` 的 `gainSpellID` 可显式提供来源，默认从获得协议读取；同座位揭示省略该参数时保留已有来源。
-日志分别输出 `spellID` 与获得来源 `gainSpellID`；标记归属以完整位置为准，普通手牌位置不使用 `spellID`。巧织确认入手后为普通手牌，`gainSpellID` 为 `3544`。
+移动摘要通过 `triggerSpellID` 输出本次动作技能，`Card` 不保存手牌获得技能历史。
+标记归属以完整位置为准，普通手牌位置不使用 `spellID`；巧织确认入手后为普通手牌。
 
 `RawMoveCardEvent` 的 12 个核心字段全部必填：
 
@@ -69,7 +68,7 @@ if (!room) return
 独立的 `patched`。入口过滤不解释技能编码的牌列表；位置归一化只修改两个 Position。
 特殊区域、局流及技能处理共享同一份 `patched`，不另存可写的顶层协议字段。所有补丁完成后才检查明暗与数量，沿用异常牌列表清空、协议张数保留的降级策略。
 响应器直接读取 `patched`，不预先派生端点字段。最终提交时 Controller 才调用
-`normalizeMoveEvent(patched, raw)`；其私有 `normalizeMoveEndpoints()` 只解析一次座位、区域和标记空间。
+`normalizeMoveEvent(patched, raw)`；`normalizeMoveEndpoints()` 只解析一次座位、区域和标记空间。
 标准事件的 `protocol` 和 `cardIDs` 直接引用最终 `patched` 及其数组，不再复制或拼接协议。
 提交后协议及事件牌列表只读；技能装饰需要变更牌列表时，通过 `patchEvent()` 提供新数组。
 未经过补丁的完整消息可单参数调用 `syncTrackerMove(message)`，此时 `raw` 默认就是该消息。
@@ -79,33 +78,30 @@ if (!room) return
 
 `NormalizedMoveCardFields` 是完整原始协议的只读视图，`Room.decorateMoveEvent()` 只接受完整
 `NormalizedMoveEvent`，不再补造缺失的 `protocol`。领域直调使用已有的
-`room.moveCards(cardIDs, toZone, options)`；导入记录的检查留在导入边界。
+`room.moveCards(cardIDs, request)`；导入记录的检查留在导入边界。
 `moveCards()` 只接收 `readonly CardID[]`，单张牌也传 `[cardID]`；匿名移动传 `[]`，
-实际移动张数由 `options.cardCount` 指定，不支持单个数字 ID。Room 不修改传入数组。
-移动事件与 `Room.moveCards()` 的目标座位统一使用 `toSeatID`，与 `fromSeatID` 对称；
-公共区目标不设置 `toSeatID`，不把协议占位 `255` 当成玩家。移动参数不兼容旧 `seatID` 名称。
-玩家查询、注册、位置候选以及 `revealTrackerCards()` 等非移动 API 的 `seatID` 保持不变。
-`validateMoveEvent()` 也只接收完整协议，负责未知区域和数量一致性诊断，不承担缺字段补全。
-`options.spellID` 在玩家/标记端点按区域规则映射；纯公共区移动保留协议 `SpellID`（包括无技能的 `0`），
-不会因没有玩家端点而丢成 `undefined`。原始触发技能始终可从 `event.protocol.SpellID` 读取，
-来源标记空间仍由 `options.fromSpellID` 单独表示。
-技能 `MoveEventPatch` 只修改 `type`、`cardIDs`、`cardCount` 和 `options`，不覆盖
-`protocol` 或 `raw`。
+实际移动张数由 `request.cardCount` 指定，不支持单个数字 ID。Room 不修改传入数组。
+请求的 `from/to` 必填，分别为 `MoveSource/MoveTarget`；没有旧三参数签名或省略来源的通道。
 
-### 来源座位与 `NaN` 边界
+- 玩家端点明确 seatID 与 hand/equip/judge/mark，mark 必须给出 markSpellID（无空间显式 null，协议 0 保留）。
+- 公共端点明确 pile/discard/process/exchange/exile 与 PublicPosition；popup 使用独立 spaceID。
+- outside 表示明确游戏外；unresolved 表示来源未定位，并保留必填 position。未知来源已知牌只查找既有实体，
+  暗牌集中保留历史牌堆按该位置取牌的行为，不据此创建“游戏外新身份”。
+- playerCandidates 的只读非空座位元组表示同一批牌的可能归属；去重后单座位归一为 player，
+  多目标不重复计算移动张数，也不任意选择一个玩家增加手牌数。
+- 原始动作技能读取 event.protocol.SpellID；领域直调使用 triggerSpellID。标记空间只读取端点
+  markSpellID，不从动作技能反推来源空间。
+- MoveEventPatch 可替换完整 from/to，禁止局部端点深合并；执行 options 继续浅合并，不能覆盖 protocol/raw。
+  事件、端点和候选座位数组均通过只读类型约束，修改需创建新对象。
 
-`protocol/MoveEventNormalizer.ts` 的 `normalizeMoveEndpoints()` 仅在玩家区来源时将协议数字
-`FromID` 原样写入 `fromSeatID`；公共区来源不设置该字段，弹窗使用 `fromPopupSpaceID`。
-`room/movement/context.ts` 的 `createMoveContext()` 优先使用显式 `fromSeatID`；没有显式座位时，
-公共区名或 `null` 得到 `fromSeat: null`，领域直调使用的数字座位得到相应座位。
-`RoomMovementUnknownPlacement.move()` 将该值原样传给 `RoomMovementSources.takeSourceCards()`。
-当前符合协议与领域约定的调用不会产生 `fromSeat: NaN`；无座位也不使用 `NaN` 表达。
+玩家查询、注册、位置候选和 revealTrackerCards 等非移动 API 保持原签名；Controller 内部集中转换为新请求。
+validateMoveEvent 只接收完整协议，负责未知区域和数量诊断。未知目标仍告警并降级 process。
 
-这不是 TypeScript `number` 的运行时保证：人为传入 `fromSeatID: NaN` 会直接透传；传入全空白
-`fromZone` 时，`Number(fromZone)` 为 `0` 而 `parseInt(String(fromZone))` 为 `NaN`。
-这些输入违反当前端点语义，不构成消费路径新增防御的依据。`takeSourceCards()` 的两处
-`fromSeat != null` 只区分有无来源座位，保留该判断；周边既有 `Number.isNaN()` 也不证明合法输入可达。
-若出现真实协议或合法调用反例，应先定位产生位置并更新入口契约，再决定修复范围。
+### 来源座位契约
+
+normalizeMoveEndpoints 只在玩家区域创建 player 端点并原样写入协议 FromID。公共端点没有玩家座位，
+255 不加入 Room.players、seatIDs 或 Card.seats；座位 0 是正常玩家。createMoveContext 不再解析数字区域，
+也不使用 parseInt 猜测来源。合法来源不以 NaN 表示无座位；按端点类型分支即可，不为契约外数值增加转换或兜底。
 
 ## 协议 CardID 输入约定
 
@@ -161,7 +157,7 @@ if (!room) return
 tracker.revealTrackerCards(
   {
     type: 'player',
-    toSeatID: seatID,
+    seatID,
     subZone: 'hand',
     fromZone: 'pile',
     handMoveCount: ids.length
@@ -176,7 +172,7 @@ tracker.revealTrackerCards(
 tracker.revealTrackerCards(
   {
     type: 'player',
-    toSeatID: seatID,
+    seatID,
     subZone: 'hand',
     fullHand: true,
     handCount,
@@ -193,10 +189,9 @@ tracker.revealTrackerCards(
 ### 直接编排 Room 移动（测试或已经归一化的内部路径）
 
 ```ts
-room.moveCards(ids, 'player', {
-  toSeatID: seatID,
-  subZone: 'hand',
-  fromZone: 'pile',
+room.moveCards(ids, {
+  from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+  to: { type: 'player', seatID, subZone: 'hand' },
   cardCount: ids.length,
   handMoveCount: ids.length,
   sourceEvent: { type: 'example' }
@@ -213,11 +208,9 @@ room.moveCards(ids, 'player', {
 ```ts
 room.moveCards(
   Array.from({ length: count }, () => 0),
-  'player',
   {
-    toSeatID: seatID,
-    subZone: 'hand',
-    fromZone: 'pile',
+    from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+    to: { type: 'player', seatID, subZone: 'hand' },
     cardCount: count,
     handMoveCount: count
   }

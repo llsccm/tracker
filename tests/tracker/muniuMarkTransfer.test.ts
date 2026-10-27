@@ -1,3 +1,10 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
+import {
+  getMoveCallbackSpellID,
+  getMoveSubZone,
+  getMoveSeat,
+  getMoveMarkSpellID
+} from '@/tracker/helper/moveEndpoint'
 import { describe, expect, it } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
@@ -51,7 +58,12 @@ const syncMuniuMarks: RawMoveCardEvent = {
 function applyProtocol(room: Room, raw: RawMoveCardEvent): void {
   const event = normalizeMoveEvent(raw)
   expect(event.type).not.toBe('noop')
-  room.moveCards(event.cardIDs, event.toZone, event.options)
+  room.moveCards(event.cardIDs, {
+    ...event.options,
+    from: event.from,
+    to: event.to,
+    triggerSpellID: event.protocol.SpellID
+  })
 }
 
 function createMuniuRoom(knownHandCount: number) {
@@ -60,26 +72,23 @@ function createMuniuRoom(knownHandCount: number) {
     seatIDs: [0, 6],
     materializeDeckIdentities: false
   })
-  room.moveCards([161], 'player', {
-    toSeatID: 0,
-    fromZone: 'pile',
-    subZone: 'equip',
-    spellID: 700,
+  room.moveCards([161], {
+    from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+    to: { type: 'player', seatID: 0, subZone: 'equip' },
+    triggerSpellID: 700,
     cardCount: 1
   })
   if (knownHandCount > 0) {
-    room.moveCards([1, 2].slice(0, knownHandCount), 'player', {
-      toSeatID: 0,
-      fromZone: 'pile',
-      subZone: 'hand',
+    room.moveCards([1, 2].slice(0, knownHandCount), {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 0, subZone: 'hand' },
       cardCount: knownHandCount
     })
   }
   if (knownHandCount < 2) {
-    room.moveCards([], 'player', {
-      toSeatID: 0,
-      fromZone: 'pile',
-      subZone: 'hand',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 0, subZone: 'hand' },
       cardCount: 2 - knownHandCount
     })
   }
@@ -103,17 +112,17 @@ function cardState(room: Room) {
 describe('木牛流马原始协议迁座通知', () => {
   it('zone 4 的来源和目标标记空间按 ZoneParam 识别，不被触发技能覆盖', () => {
     const put = normalizeMoveEvent({ ...putIntoMuniu, SpellID: 987 })
-    expect(put.options.spellID).toBe(700)
-    expect(put.options.fromSubZone).toBe('hand')
-    expect(put.options.toSeatID).toBe(0)
+    expect(getMoveCallbackSpellID(put, put.protocol.SpellID)).toBe(700)
+    expect(getMoveSubZone(put.from)).toBe('hand')
+    expect(getMoveSeat(put.to)).toBe(0)
     expect(put.cardCount).toBe(1)
     expect(put.cardIDs).toEqual([])
     const sync = normalizeMoveEvent({ ...syncMuniuMarks, SpellID: 987 })
     expect(sync.type).toBe('moveToMark')
-    expect(sync.options.fromSpellID).toBe(700)
-    expect(sync.options.spellID).toBe(700)
-    expect(sync.options.fromSeatID).toBe(0)
-    expect(sync.options.toSeatID).toBe(6)
+    expect(getMoveMarkSpellID(sync.from)).toBe(700)
+    expect(getMoveCallbackSpellID(sync, sync.protocol.SpellID)).toBe(700)
+    expect(getMoveSeat(sync.from)).toBe(0)
+    expect(getMoveSeat(sync.to)).toBe(6)
   })
 
   it.each([0, 2])('来源有 %s 张明牌时，仅 mark700 协议迁移内部牌及账本', (knownHandCount) => {

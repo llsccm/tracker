@@ -12,7 +12,7 @@
 - **错误处理**：PowerShell 命令开头包含 `$ErrorActionPreference = 'Stop';`。
 - **文件编码**：读写文件时显式指定 `-Encoding UTF8`。
 - **编码设定**：优先确保控制台输出为 UTF-8；若某个本机 Shell 需要额外设置，把具体写法维护在 Serena 记忆中。
-- **换行符约束**：工作区统一 LF (`\n`)，交由 Prettier（`endOfLine: lf`）在格式化时保证；修改后对改动文件跑 Prettier 即可，无需单独执行 CRLF 检查命令。
+- **换行符约束**：工作区统一 LF (`\n`)，代码交由 Prettier（`endOfLine: lf`）在格式化时保证，无需单独执行 CRLF 检查命令。文档无需 Prettier 格式化或格式检查，编辑时保持 UTF-8、LF 与邻近排版。
 - **命令拆分**：执行检索、构建、校验等任务时，优先使用单一、可读、可复现的命令；避免为了省事拼接复杂命令。
 
 ---
@@ -23,6 +23,7 @@
 - 启动开发服务器：`pnpm dev`
 - 开发模式构建：`pnpm build`
 - 生产模式构建：`pnpm build:prod`
+- CDN 渠道构建：`pnpm build:cdn`
 - 预览构建产物：`pnpm preview`
 - 格式化源码：`pnpm format`
 - 代码检查：`pnpm lint`

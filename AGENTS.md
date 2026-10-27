@@ -38,7 +38,8 @@
 
 ## Always-On Rules
 
-- **换行符规范**：工作区统一使用 LF (`\n`)，由 Prettier（`endOfLine: lf`）保证。修改文件后对改动文件跑 Prettier（`src/` 用 `pnpm format`，其他路径用 `pnpm exec prettier --write <file>`）即可，不必再单独做 CRLF 字节检查；`tests/` 未纳入全量格式化，保持既有风格不整体重排。
+- **换行符规范**：工作区统一使用 LF (`\n`)。修改代码后对改动文件跑 Prettier（`endOfLine: lf`；`src/` 用 `pnpm format`，其他代码路径用 `pnpm exec prettier --write <file>`）即可，不必再单独做 CRLF 字节检查；`tests/` 未纳入全量格式化，保持既有风格不整体重排。
+- **文档格式**：文档无需使用 Prettier 格式化或执行其格式检查；保持 UTF-8、LF 与邻近排版，仅修改任务相关内容。
 - **包管理器**：必须严格使用 `pnpm` 进行依赖的安装和管理。
 - **代码修改约束**：修改局部代码时保持 2 空格缩进，除非有明确命令，否则不做无关的全局格式化。
 - **禁止编写 UI 测试**：不得新增或扩展 UI 自动化测试，包括 DOM/视图渲染、布局、样式、拖拽、点击、快捷键等界面交互测试；UI 改动通过 lint、构建与手工验收验证。

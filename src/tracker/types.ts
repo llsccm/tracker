@@ -1,6 +1,7 @@
 import type { Card } from './model'
 import type { GameState } from './Game'
 import type { Room } from './Room'
+import type { ConstraintGroupOptions } from './constraint/ConstraintGroup'
 
 export type CardID = number
 /** 玩家物理座位为 0–7；协议公共端点 FromID/ToID 另按区域解释。 */
@@ -21,6 +22,83 @@ export type PublicZoneName =
   | string
 
 export type PublicPosition = number | 'top' | 'bottom' | 'random' | 'any' | string
+
+export type PlayerMoveArea =
+  | { readonly subZone: 'hand' | 'equip' | 'judge' }
+  | { readonly subZone: 'mark'; readonly markSpellID: SpellID | null }
+
+export type PlayerMoveEndpoint = Readonly<{
+  type: 'player'
+  seatID: SeatID
+}> &
+  PlayerMoveArea
+
+export interface PublicMoveEndpoint {
+  readonly type: 'public'
+  readonly zone: 'pile' | 'discard' | 'process' | 'exchange' | 'exile'
+  readonly position: PublicPosition
+}
+
+export interface PopupMoveEndpoint {
+  readonly type: 'popup'
+  readonly spaceID: number
+}
+
+export interface OutsideMoveEndpoint {
+  readonly type: 'outside'
+}
+
+export type MoveEndpoint =
+  | PlayerMoveEndpoint
+  | PublicMoveEndpoint
+  | PopupMoveEndpoint
+  | OutsideMoveEndpoint
+
+/** 来源未定位不授予游戏外创建身份的语义。 */
+export interface UnresolvedMoveSource {
+  readonly type: 'unresolved'
+  /** 未知协议区域仍保留原取牌位置，供既有暗牌降级路径使用。 */
+  readonly position: PublicPosition
+}
+
+/** 多座位是同一批牌的可能归属，不是向每个座位分别发牌。 */
+export type PlayerCandidateTarget = Readonly<{
+  type: 'playerCandidates'
+  seatIDs: readonly [SeatID, SeatID, ...SeatID[]]
+}> &
+  PlayerMoveArea
+
+export type MoveSource = MoveEndpoint | UnresolvedMoveSource
+export type MoveTarget = MoveEndpoint | PlayerCandidateTarget
+
+export interface MoveRoute {
+  readonly from: MoveSource
+  readonly to: MoveTarget
+}
+
+/** 移动执行选项不携带来源或目标的镜像。 */
+export interface MoveExecutionOptions {
+  triggerSpellID?: SpellID | null
+  combinationID?: number | string | null
+  cardCount?: number
+  handMoveCount?: number
+  moveType?: number
+  expectedSlotsByLocation?: ConstraintGroupOptions['expectedSlotsByLocation']
+  anonymizeCards?: Card[]
+  requireAnonymizeSuccess?: boolean
+  pileIdentityCardIDs?: readonly CardID[]
+  pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
+  sourceCards?: Card[]
+  publicCandidateSource?: PublicCandidateSource
+  forceRandomHandTransferCandidates?: boolean
+  publicCandidateReveal?: PublicCandidateReveal
+  postMovePublicCandidates?: PostMovePublicCandidate[]
+  duoQiRandomHandGroupSequence?: number
+  duoQiRandomHandCandidateIDs?: readonly CardID[]
+  sourceEvent?: MoveSourceEvent
+}
+
+export interface RoomMoveRequest extends MoveRoute, MoveExecutionOptions {}
 
 export interface SubZoneCandidate {
   seatID: SeatID
@@ -147,72 +225,17 @@ export interface PublicCandidateSource {
   cards: Card[]
 }
 
-export interface MoveOptions {
-  /** 区域 8 的临时空间标识，与玩家座位和本次动作技能分开。 */
-  fromPopupSpaceID?: number
-  toPopupSpaceID?: number
-  /** 手牌获得来源；undefined 表示揭示时保留已有来源，null 表示无技能来源。 */
-  gainSpellID?: SpellID | null
-  toSeatID?: SeatID | null
-  subZone?: SubZone
-  /** 按端点映射的技能 ID；纯公共区移动保留协议 SpellID，内部揭示可用 null 表示无标记空间。 */
-  spellID?: SpellID | null
-  combinationID?: number | string | null
-  fromZone?: PublicZoneName | number | null
-  fromSeatID?: SeatID | null
-  fromSubZone?: SubZone | null
-  fromSpellID?: SpellID
-  cardCount?: number
-  /** 协议手牌总数变化量；候选身份不移动实体时可与 cardCount 不同。 */
-  handMoveCount?: number
-  duoQiRandomHandGroupSequence?: number
-  moveType?: number
-  position?: PublicPosition
-  fromPosition?: PublicPosition
-  /** 在来源选择前把这些已知身份降级为匿名物理代表。 */
-  anonymizeCards?: Card[]
-  /** 匿名化失败时取消本次移动，避免技能候选与身份账本失配。 */
-  requireAnonymizeSuccess?: boolean
-  /** 协议未公开 CardIDs，但技能已可靠确定的身份账本移动。 */
-  pileIdentityCardIDs?: readonly CardID[]
-  /** 协议事件的身份事实；直调 Room 时由移动上下文推导。 */
-  pileIdentityEvent?: Pick<NormalizedMoveEvent, 'type' | 'cardCount' | 'protocol'>
-  sourceCards?: Card[]
-  /** 空集合表示不传播已知牌候选；省略时沿用当前来源手牌集合。 */
-  publicCandidateSource?: PublicCandidateSource
-  publicCandidateReveal?: PublicCandidateReveal
-  postMovePublicCandidates?: PostMovePublicCandidate[]
-  sourceEvent?: MoveSourceEvent
-  [key: string]: unknown
-}
+export type MoveOptions = Omit<MoveExecutionOptions, 'triggerSpellID' | 'pileIdentityEvent'>
 
-export interface NormalizedMoveEvent {
+export interface NormalizedMoveEvent extends MoveRoute {
   /** 直接引用最终 patched，后续只读；raw 仅用于原始数据追溯。 */
   readonly protocol: NormalizedMoveCardFields
   type: RawMoveEventType
   cardIDs: readonly CardID[]
   cardCount: number
   moveType?: number
-  toZone: PublicZoneName | 'player'
   options: MoveOptions
   raw?: RawMoveCardEvent | Record<string, unknown>
-}
-
-export interface MoveContext extends MoveOptions {
-  cardIDs: CardID[]
-  toZone: PublicZoneName | 'player'
-  toSeatID: SeatID | null
-  spellID: SpellID | null
-  fromSeat?: SeatID | null
-  targetSeats?: SeatID[]
-  handMoveCount?: number
-  sourceHandSeat?: SeatID | null
-  targetHandSeat?: SeatID | null
-  knownIDs?: CardID[]
-  knownCards?: Card[]
-  unknownCount?: number
-  sourceCards?: Card[]
-  sourceIsOutside?: boolean
 }
 
 export interface TrackerView {

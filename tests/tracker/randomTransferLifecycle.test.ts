@@ -1,3 +1,4 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { describe, expect, it, vi } from 'vitest'
 import { trackerLogger } from '@/utils/logger'
 import type { Room } from '@/tracker/Room'
@@ -57,12 +58,9 @@ describe('随机手牌转移完整生命周期', () => {
 
     try {
       // 1. 随机转移 3 张暗牌 seat2 → seat3（协议只给数量，不给具体 ID）。
-      room.moveCards([], 'player', {
-        fromZone: null,
-        fromSeatID: 2,
-        fromSubZone: 'hand',
-        toSeatID: 3,
-        subZone: 'hand',
+      room.moveCards([], {
+        from: { type: 'player', seatID: 2, subZone: 'hand' },
+        to: { type: 'player', seatID: 3, subZone: 'hand' },
         cardCount: 3,
         sourceEvent: { type: 'e2e:random-transfer' }
       })
@@ -90,22 +88,18 @@ describe('随机手牌转移完整生命周期', () => {
       expect(room.getPlayer(3).candidateHandCards).toEqual(knownIDs.map((id) => getCard(room, id)))
 
       // 2. 局部展示：seat3 亮出其中一张明牌 42（完整展示前的部分收敛）。
-      room.moveCards([42], 'player', {
-        toSeatID: 3,
-        fromSeatID: 3,
-        fromZone: null,
-        fromSubZone: 'hand',
-        subZone: 'hand',
+      room.moveCards([42], {
+        from: { type: 'player', seatID: 3, subZone: 'hand' },
+        to: { type: 'player', seatID: 3, subZone: 'hand' },
         cardCount: 1,
         sourceEvent: { type: 'e2e:partial-reveal' }
       })
       expect(getCard(room, 42).seats.has(3)).toBe(true)
 
       // 3. 打明牌：seat2 打出候选明牌 137 到处理区（不应缺来源占位）。
-      room.moveCards([137], 'process', {
-        fromZone: null,
-        fromSeatID: 2,
-        fromSubZone: 'hand',
+      room.moveCards([137], {
+        from: { type: 'player', seatID: 2, subZone: 'hand' },
+        to: { type: 'public', zone: 'process', position: POSITION_TOP },
         cardCount: 1,
         sourceEvent: { type: 'e2e:play-known' }
       })
@@ -113,12 +107,9 @@ describe('随机手牌转移完整生命周期', () => {
 
       // 4. 完整展示：seat3 完整手牌 [42, 46, 47]，触发跨座位候选完全收敛。
       room.syncObservedPlayerHandCount(3, 3, { resolve: false })
-      room.moveCards([42, 46, 47], 'player', {
-        toSeatID: 3,
-        fromSeatID: 3,
-        fromZone: null,
-        fromSubZone: 'hand',
-        subZone: 'hand',
+      room.moveCards([42, 46, 47], {
+        from: { type: 'player', seatID: 3, subZone: 'hand' },
+        to: { type: 'player', seatID: 3, subZone: 'hand' },
         cardCount: 3,
         sourceEvent: { type: 'e2e:full-reveal' }
       })
@@ -251,12 +242,9 @@ describe('随机手牌转移完整生命周期', () => {
     room.getPlayer(2).syncObservedHandCount(9)
     room.getPlayer(3).syncObservedHandCount(0)
 
-    room.moveCards([], 'player', {
-      fromZone: null,
-      fromSeatID: 2,
-      fromSubZone: 'hand',
-      toSeatID: 3,
-      subZone: 'hand',
+    room.moveCards([], {
+      from: { type: 'player', seatID: 2, subZone: 'hand' },
+      to: { type: 'player', seatID: 3, subZone: 'hand' },
       cardCount: 3,
       sourceEvent: { type: 'regression:random-transfer' }
     })
@@ -269,10 +257,9 @@ describe('随机手牌转移完整生命周期', () => {
 
     // 2 号位使用一张此前未公开、此时协议才给出具体 ID 的手牌。身份置换只能确认一个
     // 暗实体来自 2 号位，不能把另一张暗实体也锁给 2 号位。
-    room.moveCards([playedHiddenID], 'process', {
-      fromZone: null,
-      fromSeatID: 2,
-      fromSubZone: 'hand',
+    room.moveCards([playedHiddenID], {
+      from: { type: 'player', seatID: 2, subZone: 'hand' },
+      to: { type: 'public', zone: 'process', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'regression:source-uses-hidden' }
     })
@@ -294,10 +281,9 @@ describe('随机手牌转移完整生命周期', () => {
     expect(Array.from(remainingHiddenCard?.seats ?? []).sort()).toEqual([2, 3])
 
     // 后续 2 号位再打出三张明牌，原组只剩 2 号位 2 张、3 号位 3 张。
-    room.moveCards([59, 47, 94], 'discard', {
-      fromZone: null,
-      fromSeatID: 2,
-      fromSubZone: 'hand',
+    room.moveCards([59, 47, 94], {
+      from: { type: 'player', seatID: 2, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 3,
       sourceEvent: { type: 'regression:source-plays-known' }
     })
@@ -311,10 +297,9 @@ describe('随机手牌转移完整生命周期', () => {
     })
 
     // 130 酒是组外新摸到的确定明牌，此时 2 号位总手牌数为 3。
-    room.moveCards([130], 'player', {
-      fromZone: 'pile',
-      toSeatID: 2,
-      subZone: 'hand',
+    room.moveCards([130], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 2, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'regression:source-draws-130' }
     })
@@ -322,17 +307,15 @@ describe('随机手牌转移完整生命周期', () => {
     expect(room.getPlayer(2).knownHandCards.map((card) => card.id)).toEqual([130])
 
     // 3 号位补到 9 张后弃 6 张，其中 137、42 来自最初的随机转移。
-    room.moveCards(targetDrawIDs, 'player', {
-      fromZone: 'pile',
-      toSeatID: 3,
-      subZone: 'hand',
+    room.moveCards(targetDrawIDs, {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 3, subZone: 'hand' },
       cardCount: targetDrawIDs.length,
       sourceEvent: { type: 'regression:target-draws' }
     })
-    room.moveCards([107, 14, 137, 42, 135, 48], 'discard', {
-      fromZone: null,
-      fromSeatID: 3,
-      fromSubZone: 'hand',
+    room.moveCards([107, 14, 137, 42, 135, 48], {
+      from: { type: 'player', seatID: 3, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 6,
       sourceEvent: { type: 'regression:target-discards' }
     })
@@ -351,12 +334,9 @@ describe('随机手牌转移完整生命周期', () => {
     expect(Array.from(remainingHiddenCard?.seats ?? []).sort()).toEqual([2, 3])
 
     // 完整展示才足以确认 46 桃属于 3 号位，并反推出 2 号位为 130、118、暗牌。
-    room.moveCards([39, 46, 114], 'player', {
-      fromZone: null,
-      fromSeatID: 3,
-      fromSubZone: 'hand',
-      toSeatID: 3,
-      subZone: 'hand',
+    room.moveCards([39, 46, 114], {
+      from: { type: 'player', seatID: 3, subZone: 'hand' },
+      to: { type: 'player', seatID: 3, subZone: 'hand' },
       cardCount: 3,
       sourceEvent: { type: 'regression:target-full-hand' }
     })

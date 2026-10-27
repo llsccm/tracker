@@ -1,3 +1,4 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { describe, expect, it, vi } from 'vitest'
 import { CARD_INSTANCE_STATUS } from '@/tracker/projection/CardCounter'
 import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/room/movement/types'
@@ -30,9 +31,9 @@ describe('阶段 1 匿名牌堆 spike', () => {
       materializeDeckIdentities: false
     })
 
-    room.moveCards([], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 2,
       sourceEvent: { type: 'stage1:draw-unknown' }
     })
@@ -56,9 +57,9 @@ describe('阶段 1 匿名牌堆 spike', () => {
     const pile = room.zones.get('pile')!
     const originalTopSlot = pile.cards.at(-1)
 
-    room.moveCards([4], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([4], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'stage1:draw-known' }
     })
@@ -91,9 +92,9 @@ describe('阶段 1 匿名牌堆 spike', () => {
       // 这是 Phase 4 后生产流程不应再产生的兼容状态：牌顶仍承载正 ID 1，但牌面未公开。
       // Phase 5 必须拒绝用协议身份 4 覆盖它；由于端点没有匿名槽，known 路径只能留下
       // 可观测诊断并补建身份 4，不能继续伪造“1 只是可替换的本地代表”。
-      room.moveCards([4], 'player', {
-        toSeatID: 1,
-        fromZone: 'pile',
+      room.moveCards([4], {
+        from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+        to: { type: 'player', seatID: 1, subZone: 'hand' },
         cardCount: 1,
         sourceEvent: { type: 'stage1:draw-unlocated-from-positive-hidden-top' }
       })
@@ -131,12 +132,9 @@ describe('阶段 1 匿名牌堆 spike', () => {
     const [placeholder] = room.createExternalCards([], 1)
     placeholder.bindCandidates([1], 'hand', null, { known: false })
 
-    room.moveCards([60992], 'player', {
-      toSeatID: 1,
-      fromSeatID: 1,
-      fromZone: null,
-      fromSubZone: 'hand',
-      subZone: 'hand',
+    room.moveCards([60992], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'stage1:reveal-external-hand' }
     })
@@ -157,9 +155,9 @@ describe('阶段 1 匿名牌堆 spike', () => {
     const pile = room.zones.get('pile')!
     pile.clear()
 
-    room.moveCards([77], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([77], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'stage1:public-missing-fallback' }
     })
@@ -182,15 +180,16 @@ describe('阶段 1 匿名牌堆 spike', () => {
     const pile = room.zones.get('pile')!
     const discard = room.zones.get('discard')!
 
-    room.moveCards([], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 2,
       sourceEvent: { type: 'stage1:draw-unknown-before-shuffle' }
     })
     room.getPlayer(1).syncObservedHandCount(2)
-    room.moveCards([1, 2, 3], 'discard', {
-      fromZone: 'pile',
+    room.moveCards([1, 2, 3], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 3,
       sourceEvent: { type: 'stage1:discard-before-shuffle' }
     })
@@ -242,14 +241,15 @@ describe('阶段 1 匿名牌堆 spike', () => {
     })
     const pile = room.zones.get('pile')!
 
-    room.moveCards([], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 2,
       sourceEvent: { type: 'stage1:draw-unknown-before-shuffle' }
     })
-    room.moveCards([1, 2, 3], 'discard', {
-      fromZone: 'pile',
+    room.moveCards([1, 2, 3], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 3,
       sourceEvent: { type: 'stage1:discard-before-shuffle' }
     })
@@ -257,9 +257,9 @@ describe('阶段 1 匿名牌堆 spike', () => {
     expect(pile.cards.every((card) => card.isAnonymous)).toBe(true)
     expect(getSuspendedIdentityIDs(room)).toEqual([4, 5, 6])
 
-    room.moveCards([4], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([4], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'stage1:draw-suspended-from-anonymous-top' }
     })
@@ -267,9 +267,9 @@ describe('阶段 1 匿名牌堆 spike', () => {
     expect(room.cardIndex.get(4)).toMatchObject({ location: 'player', isKnown: true })
     expect(getSuspendedIdentityIDs(room)).toEqual([5, 6])
 
-    room.moveCards([5], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([5], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'stage1:draw-suspended-from-positive-hidden-top' }
     })
@@ -287,29 +287,30 @@ describe('阶段 1 匿名牌堆 spike', () => {
       materializeDeckIdentities: false
     })
 
-    room.moveCards([], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 2,
       sourceEvent: { type: 'stage1:draw-unknown-before-shuffle' }
     })
-    room.moveCards([1, 2, 3], 'discard', {
-      fromZone: 'pile',
+    room.moveCards([1, 2, 3], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 3,
       sourceEvent: { type: 'stage1:discard-before-shuffle' }
     })
     room.shufflePile({ cardCount: 4 })
     ;[6, 5].forEach((cardID) => {
-      room.moveCards([cardID], 'player', {
-        toSeatID: 1,
-        fromZone: 'pile',
+      room.moveCards([cardID], {
+        from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+        to: { type: 'player', seatID: 1, subZone: 'hand' },
         cardCount: 1,
         sourceEvent: { type: 'stage1:draw-suspended-out-of-creation-order' }
       })
     })
-    room.moveCards([6], 'discard', {
-      fromSeatID: 1,
-      fromSubZone: 'hand',
+    room.moveCards([6], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'stage1:discard-before-second-shuffle' }
     })
@@ -327,14 +328,15 @@ describe('阶段 1 匿名牌堆 spike', () => {
     const pile = room.zones.get('pile')!
     const discard = room.zones.get('discard')!
 
-    room.moveCards([], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 2,
       sourceEvent: { type: 'stage1:draw-unknown-before-first-shuffle' }
     })
-    room.moveCards([1, 2, 3], 'discard', {
-      fromZone: 'pile',
+    room.moveCards([1, 2, 3], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 3,
       sourceEvent: { type: 'stage1:discard-before-first-shuffle' }
     })
@@ -342,16 +344,17 @@ describe('阶段 1 匿名牌堆 spike', () => {
 
     const hiddenPileCard = pile.cards.at(-1)!
     const hiddenPileEntityID = hiddenPileCard.entityID
-    room.moveCards([], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       sourceCards: [hiddenPileCard],
       cardCount: 1,
       sourceEvent: { type: 'stage1:draw-positive-hidden-before-second-shuffle' }
     })
 
-    room.moveCards([4], 'discard', {
-      fromZone: 'pile',
+    room.moveCards([4], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'stage1:discard-before-second-shuffle-summary' }
     })
@@ -386,24 +389,25 @@ describe('阶段 1 匿名牌堆 spike', () => {
     const pile = room.zones.get('pile')!
     const discard = room.zones.get('discard')!
 
-    room.moveCards([1, 2, 3], 'discard', {
-      fromZone: 'pile',
+    room.moveCards([1, 2, 3], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 3,
       sourceEvent: { type: 'stage1:discard-before-hidden-identity-shuffle' }
     })
     room.shufflePile({ cardCount: 4 })
 
     const hiddenPileCard = pile.cards.at(-1)!
-    room.moveCards([], 'player', {
-      toSeatID: 1,
-      fromZone: 'pile',
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       sourceCards: [hiddenPileCard],
       cardCount: 1,
       sourceEvent: { type: 'stage1:draw-positive-hidden-player-placeholder' }
     })
-    room.moveCards([4], 'discard', {
-      fromSeatID: 1,
-      fromSubZone: 'hand',
+    room.moveCards([4], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'stage1:reveal-suspended-from-positive-hidden-placeholder' }
     })
@@ -436,8 +440,9 @@ describe('阶段 1 匿名牌堆 spike', () => {
     const hiddenMarkCard = room.cardIndex.get(5)!
     const visibleHandCard = room.cardIndex.get(4)!
 
-    room.moveCards([1], 'discard', {
-      fromZone: 'pile',
+    room.moveCards([1], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'stage1:discard-before-appeared-shuffle' }
     })
@@ -467,13 +472,10 @@ describe('阶段 1 匿名牌堆 spike', () => {
     })
     hiddenMarkCard.bindCandidates([1], 'hand', null, { known: false })
     room.getPlayer(1).syncObservedHandCount(2)
-    room.moveCards([0], 'player', {
-      toSeatID: 1,
-      fromSeatID: 1,
-      fromZone: 5,
-      fromSubZone: 'hand',
-      subZone: 'mark',
-      spellID: 700,
+    room.moveCards([0], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'player', seatID: 1, subZone: 'mark', markSpellID: 700 },
+      triggerSpellID: 700,
       cardCount: 1,
       sourceEvent: { type: 'stage1:appeared-hidden-before-shuffle' }
     })

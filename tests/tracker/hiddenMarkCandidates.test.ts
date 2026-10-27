@@ -1,3 +1,9 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
+import {
+  getMoveSubZone,
+  getMoveMarkSpellID,
+  getMoveCallbackSpellID
+} from '@/tracker/helper/moveEndpoint'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
@@ -29,12 +35,10 @@ describe('隐藏标记区候选', () => {
     // 玩家候选会把 location 归一为 player；公共区引用和候选仍可同时保留。
     expect(first.location).toBe('player')
     expect(room.zones.get('pile')!.cards).toContain(first)
-    const context = room.movement.createMoveContext([], 'player', {
-      fromSeatID: 1,
-      fromSubZone: 'hand',
-      toSeatID: 1,
-      subZone: 'mark',
-      spellID: 414,
+    const context = room.movement.createMoveContext([], {
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'player', seatID: 1, subZone: 'mark', markSpellID: 414 },
+      triggerSpellID: 414,
       cardCount: 1
     })
     const filter = vi.spyOn(room.cards, 'filter')
@@ -74,9 +78,9 @@ describe('隐藏标记区候选', () => {
       SpellID: 3389
     })
 
-    expect(event.options.fromSubZone).toBe('mark')
-    expect(event.options.fromSpellID).toBe(414)
-    expect(event.options.spellID).toBe(3389)
+    expect(getMoveSubZone(event.from)).toBe('mark')
+    expect(getMoveMarkSpellID(event.from)).toBe(414)
+    expect(getMoveCallbackSpellID(event, event.protocol.SpellID)).toBe(3389)
   })
 
   it('414 标记区全暗回手牌按来源空间读取，动作技能为 3389', () => {
@@ -84,55 +88,41 @@ describe('隐藏标记区候选', () => {
     const knownCard = getCard(room, 136)
     const hiddenCards = room.zones.get('pile')!.cards.filter((card) => card.isAnonymous)
 
-    room.moveCards([136], 'player', {
-      toSeatID: 6,
-      subZone: 'equip',
-      fromZone: 'pile',
+    room.moveCards([136], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 6, subZone: 'equip' },
       cardCount: 1,
       sourceEvent: { type: 'test:known-equip' }
     })
-    room.moveCards([136], 'player', {
-      toSeatID: 6,
-      fromSeatID: 6,
-      fromZone: null,
-      fromSubZone: 'equip',
-      subZone: 'mark',
-      spellID: 414,
+    room.moveCards([136], {
+      from: { type: 'player', seatID: 6, subZone: 'equip' },
+      to: { type: 'player', seatID: 6, subZone: 'mark', markSpellID: 414 },
+      triggerSpellID: 414,
       cardCount: 1,
       sourceEvent: { type: 'test:known-equip-to-mark' }
     })
-    room.moveCards([0, 0, 0], 'player', {
-      toSeatID: 6,
-      subZone: 'hand',
-      fromZone: 'pile',
+    room.moveCards([0, 0, 0], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 6, subZone: 'hand' },
       cardCount: 3,
       sourceEvent: { type: 'test:unknown-hand' }
     })
     room.players.get(6).syncObservedHandCount(3)
-    room.moveCards([], 'player', {
-      toSeatID: 6,
-      fromSeatID: 6,
-      fromZone: null,
-      fromSubZone: 'hand',
-      subZone: 'mark',
-      spellID: 414,
+    room.moveCards([], {
+      from: { type: 'player', seatID: 6, subZone: 'hand' },
+      to: { type: 'player', seatID: 6, subZone: 'mark', markSpellID: 414 },
+      triggerSpellID: 414,
       cardCount: 3,
       sourceEvent: { type: 'test:hidden-hand-to-mark' }
     })
 
     expect(room.locationIndex.markBySeatAndSpell.get(6).get(414)).toContain(knownCard)
 
-    room.moveCards([], 'player', {
-      toSeatID: 6,
-      fromSeatID: 6,
-      fromZone: null,
-      fromSubZone: 'mark',
-      fromSpellID: 414,
-      subZone: 'hand',
-      spellID: 3389,
+    room.moveCards([], {
+      from: { type: 'player', seatID: 6, subZone: 'mark', markSpellID: 414 },
+      to: { type: 'player', seatID: 6, subZone: 'hand' },
+      triggerSpellID: 3389,
       cardCount: 4,
-      position: 65280,
-      fromPosition: 65282,
       sourceEvent: { type: 'test:hidden-mark-to-hand' }
     })
 
@@ -161,17 +151,11 @@ describe('隐藏标记区候选', () => {
       room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!.records.has('6:6:414')
     ).toBe(true)
 
-    room.moveCards([136], 'player', {
-      toSeatID: 6,
-      fromSeatID: 6,
-      fromZone: null,
-      fromSubZone: 'mark',
-      fromSpellID: 414,
-      subZone: 'hand',
-      spellID: 3389,
+    room.moveCards([136], {
+      from: { type: 'player', seatID: 6, subZone: 'mark', markSpellID: 414 },
+      to: { type: 'player', seatID: 6, subZone: 'hand' },
+      triggerSpellID: 3389,
       cardCount: 1,
-      position: 65280,
-      fromPosition: 65282,
       sourceEvent: { type: 'test:known-mark-to-hand' }
     })
 
@@ -191,10 +175,9 @@ describe('隐藏标记区候选', () => {
     const sourceMark = playerLocation(6, 'mark', 414)
     const otherHand = playerLocation(7, 'hand')
     const context = {
-      fromSeat: 6,
-      fromSubZone: 'mark',
-      fromSpellID: 414,
-      spellID: 3389,
+      from: { type: 'player', seatID: 6, subZone: 'mark', markSpellID: 414 },
+      to: { type: 'player', seatID: 6, subZone: 'hand' },
+      triggerSpellID: 3389,
       knownCards: [knownCard],
       sourceEvent: { type: 'test:source-mark-spell' }
     } as RoomMoveContext
@@ -325,12 +308,19 @@ describe('隐藏标记区候选', () => {
   it('三明两暗暗置一张后，一张明牌从标记明弃可排除其余标记候选', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5], seatIDs: [1] })
     moveKnownCardsToHand(room, [1, 2, 3], 1)
-    room.moveCards([], 'player', { toSeatID: 1, fromZone: 'pile', cardCount: 2 })
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
+      cardCount: 2
+    })
     moveHiddenHandToMark(room, { seatID: 1, count: 1, spellID: 1234 })
     const group = room.constraintGroups.get('hidden_mark_1:1:1234')!
     expect(group.expectedSlotsByLocation.get('player:1:hand:none')).toEqual({ min: 2, max: 3 })
     expect(group.expectedSlotsByLocation.get('player:1:mark:1234')).toEqual({ min: 0, max: 1 })
-    room.moveCards([1], 'discard', { fromSeatID: 1, fromSubZone: 'mark', fromSpellID: 1234 })
+    room.moveCards([1], {
+      from: { type: 'player', seatID: 1, subZone: 'mark', markSpellID: 1234 },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP }
+    })
     expect(
       room
         .getPlayer(1)!

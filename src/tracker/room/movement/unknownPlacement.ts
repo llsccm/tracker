@@ -1,3 +1,12 @@
+import {
+  getMoveSeat,
+  getMoveSubZone,
+  getMovePosition,
+  getMoveZone,
+  getMoveCallbackSpellID,
+  getMoveTargetSeats,
+  getPopupSpaceID
+} from '@/tracker/helper/moveEndpoint'
 import { trackerLogger } from '@/utils/logger'
 import type { Room } from '@/tracker/Room'
 import type { RoomMovementCandidates } from './candidates'
@@ -14,25 +23,16 @@ export class RoomMovementUnknownPlacement {
   ) {}
 
   move(context: RoomMoveContext): void {
-    const {
-      combinationID,
-      expectedSlotsByLocation,
-      fromSeat,
-      fromSubZone,
-      fromSpellID,
-      fromPosition,
-      fromZone,
-      position,
-      sourceCards,
-      sourceEvent,
-      sourceIsOutside,
-      spellID,
-      subZone,
-      targetSeats,
-      toZone,
-      unknownCount,
-      moveType
-    } = context
+    const { combinationID, expectedSlotsByLocation, sourceEvent, unknownCount } = context
+    const fromSeat = getMoveSeat(context.from)
+    const fromSubZone = getMoveSubZone(context.from)
+    const fromPosition = getMovePosition(context.from)
+    const fromZone = getMoveZone(context.from)
+    const position = getMovePosition(context.to)
+    const spellID = getMoveCallbackSpellID(context, context.triggerSpellID)
+    const subZone = getMoveSubZone(context.to)
+    const targetSeats = getMoveTargetSeats(context.to)
+    const toZone = getMoveZone(context.to)
 
     if (unknownCount <= 0) return
 
@@ -49,21 +49,7 @@ export class RoomMovementUnknownPlacement {
     }
 
     if (toZone === 'player') {
-      const movedUnknownCards = this.sources.takeSourceCards(unknownCount, {
-        fromPopupSpaceID: context.fromPopupSpaceID,
-        toZone,
-        sourceIsOutside,
-        fromSeat,
-        fromSubZone,
-        subZone,
-        spellID,
-        fromSpellID,
-        fromZone,
-        fromPosition,
-        sourceCards,
-        sourceEvent,
-        moveType
-      })
+      const movedUnknownCards = this.sources.takeSourceCards(unknownCount, context)
 
       context.movedUnknownCards = movedUnknownCards
 
@@ -79,9 +65,6 @@ export class RoomMovementUnknownPlacement {
           subZone === 'hand' && fromSubZone === 'mark' ? null : spellID,
           { known: card.isKnown }
         )
-        if (context.targetHandSeat !== null && context.gainSpellID !== undefined) {
-          card.recordHandGain(context.targetHandSeat, context.gainSpellID)
-        }
       })
 
       if (movedUnknownCards.length > 0 && targetSeats.length > 0) {
@@ -113,21 +96,7 @@ export class RoomMovementUnknownPlacement {
       return
     }
 
-    const movedUnknownCards = this.sources.takeSourceCards(unknownCount, {
-      fromPopupSpaceID: context.fromPopupSpaceID,
-      toZone,
-      sourceIsOutside,
-      fromSeat,
-      fromSubZone,
-      subZone,
-      spellID,
-      fromSpellID,
-      fromZone,
-      fromPosition,
-      sourceCards,
-      sourceEvent,
-      moveType
-    })
+    const movedUnknownCards = this.sources.takeSourceCards(unknownCount, context)
 
     const takenCount = movedUnknownCards.length
     if (takenCount < unknownCount) {
@@ -163,9 +132,9 @@ export class RoomMovementUnknownPlacement {
 
     if (toZone === 'popup') {
       movedUnknownCards.forEach((card) =>
-        card.resolveLocationCandidate({ type: 'popup', spaceID: context.toPopupSpaceID })
+        card.resolveLocationCandidate({ type: 'popup', spaceID: getPopupSpaceID(context.to) })
       )
-      registerPopupSpaceCards(this.room, context.toPopupSpaceID, movedUnknownCards)
+      registerPopupSpaceCards(this.room, getPopupSpaceID(context.to), movedUnknownCards)
       return
     }
 

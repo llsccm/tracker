@@ -1,3 +1,4 @@
+import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { describe, expect, it, vi } from 'vitest'
 import { trackerLogger } from '@/utils/logger'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
@@ -197,12 +198,9 @@ describe('玩家手牌数观测', () => {
     sourcePlayer.syncObservedHandCount(9)
     targetPlayer.syncObservedHandCount(0)
 
-    room.moveCards([], 'player', {
-      fromZone: null,
-      fromSeatID: 2,
-      fromSubZone: 'hand',
-      toSeatID: 3,
-      subZone: 'hand',
+    room.moveCards([], {
+      from: { type: 'player', seatID: 2, subZone: 'hand' },
+      to: { type: 'player', seatID: 3, subZone: 'hand' },
       cardCount: 3,
       sourceEvent: { type: 'test:all-entity-random-hand-transfer' }
     })
@@ -232,10 +230,9 @@ describe('玩家手牌数观测', () => {
     const { room } = createTestRoom({ cardIDs: [11, 12, 13, 14, 15, 16], seatIDs: [0, 1] })
 
     try {
-      room.moveCards([], 'player', {
-        toSeatID: 1,
-        subZone: 'hand',
-        fromZone: 'pile',
+      room.moveCards([], {
+        from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+        to: { type: 'player', seatID: 1, subZone: 'hand' },
         cardCount: 4,
         sourceEvent: { type: 'test:draw-four-unknown' }
       })
@@ -244,12 +241,9 @@ describe('玩家手牌数观测', () => {
       expect(sourceBefore).toHaveLength(4)
       expect(sourceBefore.every((card) => card.isKnown !== true)).toBe(true)
 
-      room.moveCards([], 'player', {
-        fromZone: null,
-        fromSeatID: 1,
-        fromSubZone: 'hand',
-        toSeatID: 0,
-        subZone: 'hand',
+      room.moveCards([], {
+        from: { type: 'player', seatID: 1, subZone: 'hand' },
+        to: { type: 'player', seatID: 0, subZone: 'hand' },
         cardCount: 1,
         sourceEvent: { type: 'test:all-hidden-random-gain' }
       })
@@ -296,12 +290,9 @@ describe('玩家手牌数观测', () => {
     room.getPlayer(1).syncObservedHandCount(0)
     room.getPlayer(2).syncObservedHandCount(4)
 
-    room.moveCards([], 'player', {
-      fromZone: null,
-      fromSeatID: 2,
-      fromSubZone: 'hand',
-      toSeatID: 1,
-      subZone: 'hand',
+    room.moveCards([], {
+      from: { type: 'player', seatID: 2, subZone: 'hand' },
+      to: { type: 'player', seatID: 1, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'test:random-transfer-with-hidden-coverage' }
     })
@@ -322,17 +313,15 @@ describe('玩家手牌数观测', () => {
       // 1 号：1 明 + 2 暗，再额外叠一张跨座位匿名候选。
       // seats.has(1) 实体数 = 4，唯一归属实体 = 3，对应 sourceTotal=3。
       // 至少 1 张明牌才会触发候选传播门槛。
-      room.moveCards([11], 'player', {
-        toSeatID: 1,
-        subZone: 'hand',
-        fromZone: 'pile',
+      room.moveCards([11], {
+        from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+        to: { type: 'player', seatID: 1, subZone: 'hand' },
         cardCount: 1,
         sourceEvent: { type: 'test:draw-one-known' }
       })
-      room.moveCards([], 'player', {
-        toSeatID: 1,
-        subZone: 'hand',
-        fromZone: 'pile',
+      room.moveCards([], {
+        from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+        to: { type: 'player', seatID: 1, subZone: 'hand' },
         cardCount: 2,
         sourceEvent: { type: 'test:draw-two-unknown' }
       })
@@ -348,12 +337,9 @@ describe('玩家手牌数观测', () => {
       expect(sourceEntitiesBefore.some((card) => card.isKnown === true)).toBe(true)
       expect(room.getPlayer(1).observedHandCount).toBe(3)
 
-      room.moveCards([], 'player', {
-        fromZone: null,
-        fromSeatID: 1,
-        fromSubZone: 'hand',
-        toSeatID: 5,
-        subZone: 'hand',
+      room.moveCards([], {
+        from: { type: 'player', seatID: 1, subZone: 'hand' },
+        to: { type: 'player', seatID: 5, subZone: 'hand' },
         cardCount: 1,
         sourceEvent: { type: 'test:random-transfer-after-residual-candidate' }
       })
@@ -478,10 +464,9 @@ describe('玩家手牌数观测', () => {
     expect(anonymousCard.entityID).toBeLessThan(0)
     expect(player.unknownCardCount).toBe(1)
 
-    room.moveCards([2], 'process', {
-      fromZone: null,
-      fromSeatID: 2,
-      fromSubZone: 'hand',
+    room.moveCards([2], {
+      from: { type: 'player', seatID: 2, subZone: 'hand' },
+      to: { type: 'public', zone: 'process', position: POSITION_TOP },
       cardCount: 1,
       sourceEvent: { type: 'test:reveal-unknown-hand-card' }
     })
@@ -571,10 +556,9 @@ describe('玩家手牌数观测', () => {
 
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
     try {
-      room.moveCards([29], 'process', {
-        fromZone: null,
-        fromSeatID: 2,
-        fromSubZone: 'hand',
+      room.moveCards([29], {
+        from: { type: 'player', seatID: 2, subZone: 'hand' },
+        to: { type: 'public', zone: 'process', position: POSITION_TOP },
         cardCount: 1,
         sourceEvent: { type: 'test:known-card-from-candidate-only-hand' }
       })
@@ -607,8 +591,8 @@ describe('玩家手牌数观测', () => {
     const sourceHand = playerLocation(1, 'hand')
     const otherHand = playerLocation(2, 'hand')
     const context = {
-      fromSeat: 1,
-      fromSubZone: 'hand',
+      from: { type: 'player', seatID: 1, subZone: 'hand' },
+      to: { type: 'player', seatID: 2, subZone: 'hand' },
       knownCards: [],
       sourceEvent: { type: 'test:preserve-migrated-combination-id' }
     } as RoomMoveContext

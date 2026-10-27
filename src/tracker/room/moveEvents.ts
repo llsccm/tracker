@@ -1,9 +1,10 @@
+import { getMoveCallbackSpellID } from '@/tracker/helper/moveEndpoint'
 import type { Card } from '@/tracker/model'
 import type { Room } from '../Room'
-import type { SeatInput } from './movement/types'
 import type {
   CardID,
-  MoveOptions,
+  MoveRoute,
+  MoveSourceEvent,
   NormalizedMoveEvent,
   PatchedMoveCardFields,
   RawMoveCardEvent,
@@ -20,10 +21,7 @@ export type MoveEventHandler = (
 
 export type SkillHandler = (
   card: Card,
-  context: Pick<MoveOptions, 'subZone' | 'sourceEvent'> & {
-    toSeatID?: SeatInput | null
-    toZone: NormalizedMoveEvent['toZone']
-  }
+  context: MoveRoute & { sourceEvent?: MoveSourceEvent }
 ) => unknown
 
 export interface RoomSkillPlugin {
@@ -103,9 +101,9 @@ export class RoomMoveEvents {
 
   /** 技能处理器 */
   decorateMoveEvent(event: NormalizedMoveEvent): NormalizedMoveEvent {
-    const spellIDs = Array.from(new Set([event.protocol.SpellID, event.options.spellID])).filter(
-      (spellID) => spellID != null
-    )
+    const spellIDs = Array.from(
+      new Set([event.protocol.SpellID, getMoveCallbackSpellID(event, event.protocol.SpellID)])
+    ).filter((spellID) => spellID != null)
     return this.selectPlugins(spellIDs).reduce((nextEvent, plugin) => {
       try {
         const decorated = plugin.decorateMove?.(nextEvent, this.room)
@@ -125,7 +123,9 @@ export class RoomMoveEvents {
   afterMoveCommitted(event: NormalizedMoveEvent): void {
     this.notifyPlugins(
       this.selectPlugins(
-        [event.protocol.SpellID, event.options.spellID].filter((id) => id != null)
+        [event.protocol.SpellID, getMoveCallbackSpellID(event, event.protocol.SpellID)].filter(
+          (id) => id != null
+        )
       ),
       'afterMoveCommitted',
       (plugin) => plugin.afterMoveCommitted?.(event, this.room)

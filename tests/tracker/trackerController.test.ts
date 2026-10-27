@@ -114,8 +114,10 @@ describe('TrackerController', () => {
     )
     expect(moveSpy).toHaveBeenCalledWith(
       [1],
-      'discard',
-      expect.objectContaining({ fromSeatID: 3, fromSubZone: 'hand' })
+      expect.objectContaining({
+        from: { type: 'player', seatID: 3, subZone: 'hand' },
+        to: { type: 'public', zone: 'discard', position: 65280 }
+      })
     )
     expect(room.cardIndex.get(1)?.location).toBe('discard')
     expect(move.FromZone).toBe(5)
@@ -144,8 +146,10 @@ describe('TrackerController', () => {
     expect(warn).not.toHaveBeenCalled()
     expect(moveSpy).toHaveBeenCalledWith(
       [1],
-      'discard',
-      expect.objectContaining({ fromSeatID: 3, fromSubZone: 'hand' })
+      expect.objectContaining({
+        from: { type: 'player', seatID: 3, subZone: 'hand' },
+        to: { type: 'public', zone: 'discard', position: 65280 }
+      })
     )
     expect(card.location).toBe('discard')
   })
@@ -970,28 +974,23 @@ describe('TrackerController', () => {
     const hiddenCard = getCardFixture(room, 153)!
     hiddenCard.isKnown = false
 
-    room.moveCards([152], 'player', {
-      toSeatID: 4,
-      subZone: 'hand',
-      fromZone: 'pile',
+    room.moveCards([152], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 4, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'test:known-hand' }
     })
-    room.moveCards([0], 'player', {
-      toSeatID: 4,
-      subZone: 'hand',
-      fromZone: 'pile',
+    room.moveCards([0], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 4, subZone: 'hand' },
       cardCount: 1,
       sourceEvent: { type: 'test:unknown-hand' }
     })
     room.getPlayer(4).syncObservedHandCount(2)
-    room.moveCards([0], 'player', {
-      toSeatID: 4,
-      fromSeatID: 4,
-      fromZone: 5,
-      fromSubZone: 'hand',
-      subZone: 'mark',
-      spellID: 700,
+    room.moveCards([0], {
+      from: { type: 'player', seatID: 4, subZone: 'hand' },
+      to: { type: 'player', seatID: 4, subZone: 'mark', markSpellID: 700 },
+      triggerSpellID: 700,
       cardCount: 1,
       sourceEvent: { type: 'test:hidden-muniu-mark' }
     })
@@ -1572,6 +1571,44 @@ describe('TrackerController', () => {
 
     expect(controller.getReadyTrackerRoom()).toBe(null)
     expect(room.zones.get('pile').cards).toEqual(initialPile)
+  })
+
+  it.each([
+    { source: '判定区', FromZone: 7, FromID: 0 },
+    { source: '弹窗', FromZone: 8, FromID: 35 }
+  ])('$source 明示到公共区时按协议来源位置物化，目标位置不覆盖来源牌序', ({ FromZone, FromID }) => {
+    const { controller } = createTrackerControllerHarness()
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }], 100)
+    controller.initTrackerDeck([1, 2, 3])
+    const room = controller.getTrackerRoom()!
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'process', position: POSITION_TOP },
+      cardCount: 3
+    })
+    const slots = [...room.getZone('process').cards]
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [1, 2],
+        FromZone,
+        FromID,
+        FromPosition: POSITION_BOTTOM,
+        ToZone: 3,
+        ToID: 255,
+        ToPosition: POSITION_TOP,
+        MoveType: 6
+      })
+    )
+
+    expect(room.cardIndex.get(1)).toBe(slots[0])
+    expect(room.cardIndex.get(2)).toBe(slots[1])
+    expect(slots[2].isAnonymous).toBe(true)
+    expect(room.getZone('process').cards).toEqual(slots)
+    expect(room.cards).toHaveLength(3)
+    expect(room.assertPileIdentityLedgerConsistency('test:show-source-position')).toEqual([])
+    controller.destroyTrackerRoom()
   })
 
   it('揭示身份无匿名槽可物化时告警并从已知牌集合略过', () => {

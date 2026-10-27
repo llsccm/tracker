@@ -39,7 +39,7 @@ import type {
 } from './room/index'
 import type {
   CardID,
-  MoveOptions,
+  RoomMoveRequest,
   NormalizedMoveEvent,
   PatchedMoveCardFields,
   RawMoveCardEvent,
@@ -1047,12 +1047,8 @@ export class Room extends RoomBase {
    * 移动卡牌事件的房间级主流程。只接收只读 ID 数组，单张牌使用 [cardID]。
    * Room 保留阶段编排，具体阶段逻辑委托给 RoomMovement，便于快速查看协议同步的全貌。
    */
-  moveCards(
-    cardIDs: readonly CardID[],
-    toZone: PublicZoneName | 'player',
-    opt: MoveOptions = {}
-  ): boolean {
-    const context = this.movement.createMoveContext(cardIDs, toZone, opt)
+  moveCards(cardIDs: readonly CardID[], request: RoomMoveRequest): boolean {
+    const context = this.movement.createMoveContext(cardIDs, request)
     const pileSnapshot = this.identity.capturePileMoveSnapshot(context)
 
     const anonymization = this.identity.anonymizeMoveSourceCards(

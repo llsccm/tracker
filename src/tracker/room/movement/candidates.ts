@@ -10,6 +10,7 @@ import { getConstraintSlotState } from '@/tracker/constraint/constraintSlots'
 import type {
   PlayerLocationCandidate,
   PublicLocationCandidate,
+  PublicZoneName,
   SeatID,
   SpellID
 } from '@/tracker/types'
@@ -18,7 +19,6 @@ import { getKnownHandCardsBySeat, getPlayerHandCardsBySeat } from './sourceQueri
 import {
   PAIDUI_POSITIONS,
   type StoredToHandCandidatesOptions,
-  type MoveTargetZone,
   type PublicCandidatesToHandOptions,
   type RandomHandToPublicOptions,
   type RandomHandTransferCheckOptions,
@@ -262,7 +262,6 @@ export class RoomMovementCandidates {
    */
   markStoredToHandCandidates({
     fromPopupSpaceID,
-    gainSpellID,
     fromSeat,
     fromSpellID,
     toSeat,
@@ -346,7 +345,6 @@ export class RoomMovementCandidates {
         [...otherCandidates, markCandidate, handCandidate],
         'markStoredToHandCandidates'
       )
-      if (gainSpellID !== undefined) card.recordHandGain(toSeat, gainSpellID)
     })
 
     // 全部参与牌共同竞争空间与历次目标手牌名额。
@@ -385,7 +383,7 @@ export class RoomMovementCandidates {
   shouldMarkRandomHandToPublicCandidates(
     sourceSeat: SeatID | null,
     targetSeat: SeatID | null,
-    toZone: MoveTargetZone,
+    toZone: PublicZoneName,
     unknownCount: number
   ): boolean {
     return sourceSeat !== null && targetSeat === null && toZone === 'pile' && unknownCount > 0
