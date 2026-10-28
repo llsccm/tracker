@@ -456,6 +456,81 @@ describe('tracker protocol projection', () => {
     }
   })
 
+  it('重连消息保存牌堆数量、手牌基线和装备判定身份，忽略未参与追踪的状态字段', () => {
+    const message = {
+      className: 'MsgReconnectGame',
+      CardPileCount: 71,
+      SeatInfos: [
+        {
+          SeatID: 7,
+          HandCardCount: 0,
+          EquipCardCount: 2,
+          EquipCards: [
+            { CardId: 122, SubType: 1 },
+            { CardId: 136, SubType: 2 }
+          ],
+          JudgeCardCount: 1,
+          JudgeCards: [{ CardId: 32, SpellId: 15 }],
+          CharacterID: 638,
+          Figure: 2,
+          HP: 1,
+          States: [{ SpellId: 9000 }]
+        }
+      ]
+    }
+
+    expect(projectTrackerProtocol(message)).toEqual({
+      className: 'MsgReconnectGame',
+      payload: {
+        CardPileCount: 71,
+        SeatInfos: [
+          {
+            SeatID: 7,
+            HandCardCount: 0,
+            EquipCardCount: 2,
+            EquipCards: [{ CardId: 122 }, { CardId: 136 }],
+            JudgeCardCount: 1,
+            JudgeCards: [{ CardId: 32, SpellId: 15 }],
+            CharacterID: 638,
+            Figure: 2
+          }
+        ]
+      }
+    })
+    expect(projectTrackerProtocol({ className: 'MsgReconnectGame' })).toEqual({
+      className: 'MsgReconnectGame',
+      payload: {}
+    })
+  })
+
+  it.each([0, 7])('重连手牌通知即使只有零 ID 也保存主视角座位 %s', (SeatIndex) => {
+    expect(
+      projectTrackerProtocol({
+        className: 'MsgReconnectGameHand',
+        CardIDs: [0],
+        Count: 1,
+        SeatIndex
+      })
+    ).toEqual({
+      className: 'MsgReconnectGameHand',
+      payload: { CardIDs: [0], Count: 1, SeatIndex }
+    })
+  })
+
+  it('重连手牌录制保留完整正零 ID 组和手牌总数', () => {
+    expect(
+      projectTrackerProtocol({
+        className: 'MsgReconnectGameHand',
+        CardIDs: [11, 0, 12],
+        Count: 3,
+        SeatIndex: 7
+      })
+    ).toEqual({
+      className: 'MsgReconnectGameHand',
+      payload: { CardIDs: [11, 0, 12], Count: 3, SeatIndex: 7 }
+    })
+  })
+
   it('只在处理或回放实际使用 isSend 的协议中保留该字段', () => {
     expect(
       projectTrackerProtocol({

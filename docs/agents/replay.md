@@ -90,6 +90,21 @@ PowerShell、编码和文件路径写法按 [`commands.md`](commands.md) 与 Ser
 回放器只能保证“已实现协议集合”内的状态重建。遇到未支持协议会明确失败，不能用“忽略该条消息”来宣称
 完整回放成功。
 
+`MsgReconnectGame` 通过 Controller 将当前 Room 切换为 `degraded`，透传 `CardPileCount` 与 `SeatInfos`
+快照；若牌堆尚未初始化，快照由 Room 暂存并在初始化后恢复。该步骤标为 `partial`，说明重连前的移动
+历史不完整，后续协议仍正常应用。重连之前已收到的明确洗牌 `CardCount` 保留为数量锚点，重连快照的
+`CardPileCount` 和后续 `2 -> 9` 的明确 `CardCount` 也能重新锚定物理数量，不自动恢复 `full` 模式。
+
+`MsgReconnectGameHand` 以 `SeatIndex` 明确设置旁观残局主视角，覆盖此前的兜底推断；录制器保留
+`SeatIndex`、`Count` 与完整 `CardIDs`。回放经相同 Controller 入口恢复绝对手牌总数、正 ID 牌面及
+匿名额度，初始化前收到的手牌快照按 Room 暂存，该步骤标为 `applied`。旧录制仅有 `SeatIndex` 时仍
+恢复视角，并标为 `partial` 说明手牌字段缺失。
+
+Room 快照与报告摘要记录 `trackingMode`、`isPileCountKnown`，玩家快照记录 `handCountDelta`；未锚定时
+公共区 `count` 只是本地物理槽投影，不能视为真实剩余数量。降级回放跳过依赖完整开局历史的牌堆身份
+账本强守恒断言，仍检查实体身份唯一性、公共区槽位、索引与玩家快照。重连快照也参与按档位执行的
+索引核对。
+
 ## 新增或修改回放测试
 
 - 先判断问题是否能由普通 `Room`/Controller 单测复现；能复现时优先放在 `tests/tracker/`，避免让回放

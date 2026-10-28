@@ -51,6 +51,12 @@ export class RoomMovementUnknownPlacement {
     if (toZone === 'player') {
       const movedUnknownCards = this.sources.takeSourceCards(unknownCount, context)
 
+      if (this.room.trackingMode === 'degraded' && movedUnknownCards.length < unknownCount) {
+        movedUnknownCards.push(
+          ...this.room.createExternalCards([], unknownCount - movedUnknownCards.length)
+        )
+      }
+
       context.movedUnknownCards = movedUnknownCards
 
       movedUnknownCards.forEach((card) => {
@@ -102,7 +108,7 @@ export class RoomMovementUnknownPlacement {
     if (takenCount < unknownCount) {
       const fallbackCount = unknownCount - takenCount
       const fallbackCards = this.room.createExternalCards([], fallbackCount)
-      if (fallbackCards.length > 0) {
+      if (fallbackCards.length > 0 && this.room.trackingMode === 'full') {
         trackerLogger.warn('来源实体不足，创建匿名暗占位补足公共区移动', {
           reason: 'moveUnknownCardsForContext:publicFallback',
           requestedCount: unknownCount,

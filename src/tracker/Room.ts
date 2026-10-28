@@ -6,6 +6,7 @@ import { normalizePublicPosition } from './candidate/publicCandidate'
 import type { ConstraintGroup } from './constraint/ConstraintGroup'
 import { GameState } from './Game'
 import { summarizeMoveContext } from './helper/moveSummary'
+import { getMoveZone } from './helper/moveEndpoint'
 import { Card, Player, Zone } from './model'
 import {
   PileIdentityLedger,
@@ -26,7 +27,8 @@ import {
   RoomIdentity,
   RoomMoveEvents,
   RoomMovement,
-  RoomPublicZones
+  RoomPublicZones,
+  RoomReconnect
 } from './room/index'
 import { shouldRevealAsFullHand } from './protocol/protocolRules'
 import type {
@@ -50,7 +52,10 @@ import type {
   SeatInfo,
   SpellID,
   SubZoneCandidate,
-  TrackerLogger
+  TrackerLogger,
+  TrackingMode,
+  ReconnectGameSnapshot,
+  ReconnectGameHandSnapshot
 } from './types'
 import type { PendingSkillMove, SkillProtocolEvent } from './skill/protocolEvents'
 
@@ -77,6 +82,17 @@ const DIRTY_CARD_EVENT_LIMIT = 500
 export class Room extends RoomBase {
   /** 牌堆是否已经通过 MsgGamePlayCardNtf 完成初始化 */
   isDeckReady = false
+  private trackingModeValue: TrackingMode = 'full'
+  private hasProtocolPileCount = false
+
+  get trackingMode(): TrackingMode {
+    return this.trackingModeValue
+  }
+
+  /** 降级局只有明确的洗牌 CardCount 能建立可信物理数量。 */
+  get isPileCountKnown(): boolean {
+    return this.isDeckReady && (this.trackingMode === 'full' || this.hasProtocolPileCount)
+  }
   cards: Card[] = []
   /** 只有范围位置证据的公开身份，不占用或增加物理槽。 */
   readonly detachedKnownCards = new Set<Card>()
@@ -133,6 +149,7 @@ export class Room extends RoomBase {
   private readonly playerSnapshot = new PlayerSnapshot(this)
   private readonly identity = new RoomIdentity(this)
   private readonly moveEvents = new RoomMoveEvents(this)
+  private readonly reconnection = new RoomReconnect(this)
 
   get skillHandlers(): ReadonlyMap<SpellID, SkillHandler> {
     return this.moveEvents.skillHandlers
@@ -185,14 +202,39 @@ export class Room extends RoomBase {
     this.publicZones = new RoomPublicZones(this)
     this.constraints = new RoomConstraints(this)
     this.movement = new RoomMovement(this)
-    this.pileIdentityLedger = new PileIdentityLedger()
+    this.pileIdentityLedger = new PileIdentityLedger(() => this.trackingMode === 'full')
 
     // 8. 绑定当前房间的对局状态；浏览器入口会注入真实 Game，测试可注入纯状态对象。
     this.game.bindRoom(this)
   }
 
+  /** 完整开局历史无法补回；洗牌只能恢复数量，本局模式不自动升级。 */
+  degradeTracking(snapshot?: ReconnectGameSnapshot): void {
+    if (this.trackingMode === 'degraded') {
+      if (snapshot) this.reconnection.restore(snapshot)
+      return
+    }
+    this.trackingModeValue = 'degraded'
+    this.players.forEach((player) => player.invalidateObservedHandCount())
+    this.pileIdentityLedger.reconcilePileCount(this.getZone('pile').cards.length)
+    if (snapshot) this.reconnection.restore(snapshot)
+    if (!snapshot && this.isDeckReady) this.resolveConstraints()
+    this.markViewDirty('tracking-mode:degraded')
+  }
+
+  restoreReconnectHand(snapshot: ReconnectGameHandSnapshot): void {
+    this.reconnection.restoreHand(snapshot)
+  }
+
+  /** 重连快照只校准当前牌堆，不触发弃牌洗回或世代滚动。 */
+  restorePileCount(cardCount: number): void {
+    this.publicZones.restorePileCount(cardCount)
+    this.hasProtocolPileCount = true
+  }
+
   initDeck(cardIDs: CardID[]): void {
     this.isDeckReady = false
+    this.hasProtocolPileCount = false
     if (import.meta.env.DEV) this.diagnostics.reset()
 
     this.cards.length = 0
@@ -233,6 +275,7 @@ export class Room extends RoomBase {
     this.isDeckReady = true
     this.publicZones.assertPublicZoneConsistency('initDeck')
     this.moveEvents.onDeckInitialized()
+    this.reconnection.onDeckInitialized()
   }
 
   applyPileIdentityMove(
@@ -320,7 +363,7 @@ export class Room extends RoomBase {
    * cohort 身份恰好由未定位池或 suspended 展示实体承载，并禁止牌堆继续承载正 ID 暗实体。
    */
   assertPileIdentityLedgerConsistency(context = ''): PileIdentityConsistencyIssue[] {
-    if (!import.meta.env.DEV) return []
+    if (!import.meta.env.DEV || this.trackingMode === 'degraded') return []
     return this.diagnostics.assertPileIdentityLedgerConsistency(context)
   }
 
@@ -674,6 +717,8 @@ export class Room extends RoomBase {
       })
     }
 
+    if (this.trackingMode === 'degraded') return false
+
     const normalizedSeat = Number(seatID)
     const localHandCount = this.refreshPlayerSnapshot().filter(
       (card) => card.subZone === 'hand' && card.seats.has(normalizedSeat)
@@ -798,6 +843,7 @@ export class Room extends RoomBase {
         ? Math.floor(Number(options.cardCount))
         : NaN
     const hasProtocolPileCount = Number.isFinite(normalizedCardCount) && normalizedCardCount >= 0
+    this.hasProtocolPileCount = hasProtocolPileCount
     const remainingPileCards = [...pile.cards]
     const recycledCards = [...discard.cards]
     const projectedPileCount = remainingPileCards.length + recycledCards.length
@@ -1100,6 +1146,15 @@ export class Room extends RoomBase {
     this.movement.createPublicMoveConstraintGroup(context)
     this.getZone('exchange').completeExchangeMove()
 
+    if (this.trackingMode === 'degraded' && this.hasProtocolPileCount) {
+      const expectedPileCount =
+        pileSnapshot.pileCountBefore +
+        (getMoveZone(context.to) === 'pile' ? context.cardCount : 0) -
+        (getMoveZone(context.from) === 'pile' ? context.cardCount : 0)
+      // 来源缺口可以补位以保留移动，但不能继续宣称牌堆物理总数已被可靠覆盖。
+      this.hasProtocolPileCount = this.getZone('pile').cards.length === expectedPileCount
+    }
+
     // 账本投影也可能匿名化实体，必须先提交，再统一同步稳定索引和计数器。
     this.identity.commitPileIdentityForMove(context, pileSnapshot)
     this.resolveConstraints()
@@ -1144,6 +1199,7 @@ export class Room extends RoomBase {
     this.maxResolveRounds = 0
     this.lastResolveRounds = 0
     this.moveEvents.clear()
+    this.reconnection.clear()
     this.ambiguousKnownIndex.items.clear()
     this.ambiguousKnownIndex.containerDependentCards.clear()
     this.ambiguousKnownIndex.lastConsumedSeq = 0
@@ -1161,6 +1217,7 @@ export class Room extends RoomBase {
     this.deckIdentities.clear()
     this.anonymousEntitySeq = -1
     this.isDeckReady = false
+    this.hasProtocolPileCount = false
     this.seatIDs = []
     this.size = 0
     this.firstID = undefined

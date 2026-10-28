@@ -18,6 +18,7 @@ type ProtocolPredicate = (
 
 const ALWAYS_RECORDED_CLASSES = new Set([
   'MsgReconnectGame',
+  'MsgReconnectGameHand',
   'decodeGameRecordInitInfo',
   'decodeGsClientUserSeatFlagNtf',
   'GsCFirstPhaseRole',
@@ -32,7 +33,7 @@ const ALWAYS_RECORDED_CLASSES = new Set([
 ])
 
 // 对局结束只作为生命周期事件回放；结算明细既不参与记牌，也不参与推断。
-const EMPTY_PAYLOAD_CLASSES = new Set(['ClientLeavetableRep', 'MsgGameOver', 'MsgReconnectGame'])
+const EMPTY_PAYLOAD_CLASSES = new Set(['ClientLeavetableRep', 'MsgGameOver'])
 
 // Prettier 会压缩数字列表，但项目 ESLint 要求长数组逐项换行。
 // prettier-ignore
@@ -114,6 +115,8 @@ const ROOT_FIELD_EXCEPTIONS = new Map([
 ])
 
 const ROOT_FIELD_ALLOWLISTS: Record<string, ReadonlySet<string>> = {
+  MsgReconnectGame: new Set(['CardPileCount', 'SeatInfos']),
+  MsgReconnectGameHand: new Set(['CardIDs', 'Count', 'SeatIndex']),
   decodeGameRecordInitInfo: new Set(),
   decodeGsClientUserSeatFlagNtf: new Set(),
   GsCFirstPhaseRole: new Set(['SeatID']),
@@ -166,6 +169,18 @@ const ROOT_FIELD_ALLOWLISTS: Record<string, ReadonlySet<string>> = {
 }
 
 const NESTED_FIELD_ALLOWLISTS: Record<string, ReadonlySet<string>> = {
+  'MsgReconnectGame.SeatInfos': new Set([
+    'SeatID',
+    'HandCardCount',
+    'EquipCardCount',
+    'EquipCards',
+    'JudgeCardCount',
+    'JudgeCards',
+    'CharacterID',
+    'Figure'
+  ]),
+  'MsgReconnectGame.SeatInfos.EquipCards': new Set(['CardId']),
+  'MsgReconnectGame.SeatInfos.JudgeCards': new Set(['CardId', 'SpellId']),
   'GsCGuoZhanSetCharacter.GeneralData': new Set(['cardID', 'index']),
   'SmsgGameSetCharacter.Infos': new Set(['CharacterID', 'SeatID'])
 }
@@ -387,12 +402,31 @@ function collectRootPayload(message: ProtocolObject, className: string): Record<
 
 function applyNestedFieldProjections(className: string, payload: Record<string, unknown>): void {
   for (const [fieldPath, allowedFields] of Object.entries(NESTED_FIELD_ALLOWLISTS)) {
-    const [targetClassName, fieldName] = fieldPath.split('.')
+    const [targetClassName, ...fieldNames] = fieldPath.split('.')
     if (targetClassName !== className) continue
+    projectNestedField(payload, fieldNames, allowedFields)
+  }
+}
 
-    const values = payload[fieldName]
-    if (!Array.isArray(values)) continue
-    payload[fieldName] = values.map((value) => projectNestedRecord(value, allowedFields))
+function projectNestedField(
+  value: unknown,
+  fieldNames: readonly string[],
+  allowedFields: ReadonlySet<string>
+): void {
+  if (Array.isArray(value)) {
+    value.forEach((item) => projectNestedField(item, fieldNames, allowedFields))
+    return
+  }
+  if (!isProtocolObject(value)) return
+
+  const [fieldName, ...remainingFields] = fieldNames
+  const values = value[fieldName]
+  if (remainingFields.length > 0) {
+    projectNestedField(values, remainingFields, allowedFields)
+    return
+  }
+  if (Array.isArray(values)) {
+    value[fieldName] = values.map((item) => projectNestedRecord(item, allowedFields))
   }
 }
 

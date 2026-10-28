@@ -177,6 +177,10 @@ sequenceDiagram
   编号，隐藏玩家的顺位清空。该消息在身份通知之后到达，先手玩家始终显示。手牌容器、武将标签和覆盖层
   同步重排；注册人数、物理座位和玩家牌区状态保留，后续通知可恢复显示。牌堆尚未就绪时也同步。
 - 录像主视角还可由 `GsCUpdateRoleDataNtf`（StateID 58）、斗地主 `SmsgGameSetCharacter`、以及摸牌路径中的明牌首摸等兜底设置（见 `setTrackerMySeatID` / `gameFlowState`）。
+- `MsgReconnectGameHand` 以 `SeatIndex` 明确指定旁观残局的主视角，调用
+  `restoreTrackerReconnectHand(msg)` 覆盖此前的兜底推断，保留座位 `0`；同时进入降级模式，
+  以 `Count` 恢复当前手牌总数，将 `CardIDs` 的正 ID 确认到该角色手牌，零 ID 保持匿名。
+  主视角在牌堆初始化前也生效，手牌快照由 Room 暂存；后续兜底通知不改写已确认的主视角。
 
 ### 4. 牌堆就绪
 
@@ -197,6 +201,10 @@ sequenceDiagram
 
 ### 6. 对局运行
 
+- `MsgReconnectGame`：`tracker.degradeTrackerRoom(msg)` → `Room.degradeTracking()`，保留当前 Room 和视图，
+  继续处理后续协议；`RoomReconnect` 恢复 `CardPileCount`、手牌总数、装备及判定快照。只有重连标记
+  时保留同一 Room 的明确洗牌数量锚点；快照先于牌堆初始化时按局暂存。新 Room 默认恢复 `full`。
+  录制器保留这些快照字段及嵌套的 `CardId` / `SpellId`，重连消息不再统一投影为空载荷。
 - `PubGsCMoveCard`：[`handleMoveCard()`](../../src/handler/PubGsCMoveCard.js) 做预处理、特殊区域（`specialZones`）、局流状态（`gameFlowState`）、技能辅助（`spellEffects` / `skills/*`），再 `tracker.syncTrackerMove()` → `Room.moveCards()` / `shufflePile()`。
 - `MsgGameTurnNtf`：`handleGameTurn` 在首轮先隐藏主视角，再显示已完成定位的 `.sorderContainer`。随后调用纯状态
   `Game.setTurn`，重置轮级战法 Laya 状态，最后 `scheduleTrackerRender`；容器重置与超出人数的容器隐藏在开局注册后完成。

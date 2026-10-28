@@ -6,15 +6,15 @@ import type { CardID, PublicPosition } from './types'
 export type PileIdentityCohortKind = 'all-in-pile' | 'none-in-pile' | 'partial'
 
 /**
- * cohort 只表达集合级基数事实，不把某个 CardID 绑定到某个匿名物理槽。
- * 例如候选集合有 5 张、remainingPileCount 为 4，只能断言其中恰有 4 张仍在牌堆。
+ * 完整追踪时 cohort 表达集合级基数事实，不把 CardID 绑定到某个匿名物理槽。
+ * 降级时只聚合物理暗槽数量，候选身份可能没有覆盖全部槽，不能据此执行全集推断。
  */
 export interface PileIdentityCohort {
   /** 弃牌洗回时递增；同一 generation 的身份来自同一次牌堆世代。 */
   generation: number
   /** 尚未被协议定位、仍参与该集合陈述的真实身份。 */
   candidateIdentityIDs: Set<CardID>
-  /** 候选集合中仍在牌堆暗槽里的身份数量。 */
+  /** 完整追踪为集合在堆基数；降级时为聚合的物理暗槽数量。 */
   remainingPileCount: number
 }
 
@@ -168,8 +168,18 @@ function cloneCohort(cohort: PileIdentityCohort): PileIdentityCohort {
   }
 }
 
+const HISTORY_DEPENDENT_WARNINGS = new Set([
+  'unexplained-pile-consumption',
+  'revealed-pile-identity-without-cohort',
+  'revealed-pile-identity-from-empty-cohort',
+  'outside-reveal-from-all-in-cohort',
+  'pile-reveal-from-empty-cohort',
+  'anonymous-pile-insertion-capacity-shortage',
+  'pile-identity-capacity-shortage'
+])
+
 /**
- * 牌堆身份账本维护“哪些真实身份仍未决”以及“每组中有几张仍在牌堆”。
+ * 牌堆身份账本维护未决身份、明确位置和物理暗槽数量；完整追踪另保留集合在堆基数。
  *
  * Room/Zone 负责匿名实体的数量、顺序和移动；本类不持有 Card 实体，也不尝试建立
  * CardID 与匿名槽的一一映射。协议无法证明批次边界时，账本宁可合并 cohort，也不沿用
@@ -191,6 +201,13 @@ export class PileIdentityLedger {
   private previousDiscardCount = 0
   // 数组顺序为牌底到牌顶；只有边界仍可证明时该顺序才有消费意义。
   private cohorts: PileIdentityCohort[] = []
+
+  constructor(private readonly isFullTracking: () => boolean = () => true) {}
+
+  /** 数量与身份覆盖分开；不完整历史下只聚合物理暗槽，不建立全集守恒陈述。 */
+  reconcilePileCount(pileCountAfter: number): void {
+    this.commit('reconcile:pileCount', () => this.reconcilePileCountInternal(pileCountAfter))
+  }
 
   initialize(cardIDs: readonly CardID[]): void {
     const identities = normalizeIDs(cardIDs)
@@ -489,9 +506,10 @@ export class PileIdentityLedger {
       closesGeneration,
       discardCountBefore,
       // 先冻结旧 cohort，再由同一事务滚动账本；Room 只能消费提交成功后的这份结果。
-      expiringIdentityIDs: closesGeneration
-        ? this.getUnresolvedIdentityIDs().filter((cardID) => !ambiguousIdentityIDs.has(cardID))
-        : [],
+      expiringIdentityIDs:
+        closesGeneration && this.isFullTracking()
+          ? this.getUnresolvedIdentityIDs().filter((cardID) => !ambiguousIdentityIDs.has(cardID))
+          : [],
       recycledIdentityIDs,
       ambiguousDiscardRecycleGroups
     }
@@ -504,6 +522,16 @@ export class PileIdentityLedger {
     const discardCountBefore = transition.discardCountBefore
     const recycledIdentityIDs = transition.recycledIdentityIDs
     const ambiguousDiscardRecycleGroups = transition.ambiguousDiscardRecycleGroups
+    if (!this.isFullTracking()) {
+      if (transition.closesGeneration) this.generation += 1
+      recycledIdentityIDs.forEach((cardID) => this.prepareIdentityForPile(cardID))
+      ambiguousDiscardRecycleGroups.forEach((group) => {
+        group.candidateIdentityIDs.forEach((cardID) => this.prepareIdentityForPile(cardID))
+      })
+      this.knownDiscardIdentityIDs.clear()
+      this.degradeToSingleCohortInternal(pileCountAfter)
+      return
+    }
     const ambiguousRecycledCount = ambiguousDiscardRecycleGroups.reduce(
       (total, group) => total + normalizeCount(group.recycledCount),
       0
@@ -665,7 +693,7 @@ export class PileIdentityLedger {
 
     // partial cohort 中某个身份在牌堆外现身，只能删除该候选，不能断言在堆名额减少。
     // 只有 all-in-pile 陈述被证伪时，才同步修正 remainingPileCount 并发出诊断。
-    if (cohort.candidateIdentityIDs.size <= cohort.remainingPileCount) {
+    if (this.isFullTracking() && cohort.candidateIdentityIDs.size <= cohort.remainingPileCount) {
       cohort.remainingPileCount = Math.max(0, cohort.remainingPileCount - 1)
       this.warn('outside-reveal-from-all-in-cohort', { cardID: cardID })
     }
@@ -734,8 +762,10 @@ export class PileIdentityLedger {
     const merged = this.mergeAllCohortsInternal()
     this.addUnresolvedUniverseToCohort(merged)
     const targetCount = merged.remainingPileCount + normalizedCount
-    merged.remainingPileCount = Math.min(targetCount, merged.candidateIdentityIDs.size)
-    if (targetCount > merged.candidateIdentityIDs.size) {
+    merged.remainingPileCount = this.isFullTracking()
+      ? Math.min(targetCount, merged.candidateIdentityIDs.size)
+      : targetCount
+    if (this.isFullTracking() && targetCount > merged.candidateIdentityIDs.size) {
       this.warn('anonymous-pile-insertion-capacity-shortage', {
         targetCount,
         candidateCount: merged.candidateIdentityIDs.size
@@ -766,6 +796,10 @@ export class PileIdentityLedger {
   }
 
   private reconcilePileCountInternal(pileCountAfter: number): void {
+    if (!this.isFullTracking()) {
+      this.degradeToSingleCohortInternal(pileCountAfter)
+      return
+    }
     const targetPileCount = normalizeCount(pileCountAfter)
     const targetHiddenCount = Math.max(0, targetPileCount - this.knownPileIdentityIDs.size)
     if (targetHiddenCount === this.getHiddenPileSlotCount()) return
@@ -781,8 +815,10 @@ export class PileIdentityLedger {
       0,
       normalizeCount(pileCountAfter) - this.knownPileIdentityIDs.size
     )
-    merged.remainingPileCount = Math.min(targetHiddenCount, merged.candidateIdentityIDs.size)
-    if (targetHiddenCount > merged.candidateIdentityIDs.size) {
+    merged.remainingPileCount = this.isFullTracking()
+      ? Math.min(targetHiddenCount, merged.candidateIdentityIDs.size)
+      : targetHiddenCount
+    if (this.isFullTracking() && targetHiddenCount > merged.candidateIdentityIDs.size) {
       this.warn('pile-identity-capacity-shortage', {
         targetHiddenCount,
         candidateCount: merged.candidateIdentityIDs.size
@@ -818,7 +854,11 @@ export class PileIdentityLedger {
     if (!cohort) return
     // 精确从牌堆取走会减少名额；从牌堆外定位仅在原陈述为 all-in-pile 时修正名额。
     if (wasInPile && cohort.remainingPileCount > 0) cohort.remainingPileCount -= 1
-    if (!wasInPile && cohort.candidateIdentityIDs.size <= cohort.remainingPileCount) {
+    if (
+      this.isFullTracking() &&
+      !wasInPile &&
+      cohort.candidateIdentityIDs.size <= cohort.remainingPileCount
+    ) {
       cohort.remainingPileCount = Math.max(0, cohort.remainingPileCount - 1)
     }
     cohort.candidateIdentityIDs.delete(cardID)
@@ -830,7 +870,11 @@ export class PileIdentityLedger {
   }
 
   private removeEmptyCohorts(): void {
-    this.cohorts = this.cohorts.filter((cohort) => cohort.candidateIdentityIDs.size > 0)
+    this.cohorts = this.cohorts.filter(
+      (cohort) =>
+        cohort.candidateIdentityIDs.size > 0 ||
+        (!this.isFullTracking() && cohort.remainingPileCount > 0)
+    )
   }
 
   private getHiddenPileSlotCount(): number {
@@ -851,8 +895,9 @@ export class PileIdentityLedger {
       const cardIDs = normalizeIDs(Array.from(cohort.candidateIdentityIDs))
       if (cardIDs.length === 0) return
 
-      const kind: PileIdentityCohortKind =
-        cohort.remainingPileCount === 0
+      const kind: PileIdentityCohortKind = !this.isFullTracking()
+        ? 'partial'
+        : cohort.remainingPileCount === 0
           ? 'none-in-pile'
           : cohort.remainingPileCount === cardIDs.length
             ? 'all-in-pile'
@@ -898,7 +943,7 @@ export class PileIdentityLedger {
     this.cohorts.forEach((cohort) => {
       if (
         cohort.remainingPileCount < 0 ||
-        cohort.remainingPileCount > cohort.candidateIdentityIDs.size
+        (this.isFullTracking() && cohort.remainingPileCount > cohort.candidateIdentityIDs.size)
       ) {
         issues.push({
           context,
@@ -1016,6 +1061,7 @@ export class PileIdentityLedger {
   }
 
   private warn(reason: string, detail: Record<string, unknown>): void {
+    if (!this.isFullTracking() && HISTORY_DEPENDENT_WARNINGS.has(reason)) return
     trackerLogger.warn('牌堆身份账本异常', { reason, ...detail })
   }
 }

@@ -41,12 +41,12 @@ export function createCardButton(
 /**
  * 生成暗牌占位按钮（连续暗牌合并为一张）
  */
-export function createUnknownButton(doc: Document, count: number): HTMLButtonElement {
+export function createUnknownButton(doc: Document, count: number | null): HTMLButtonElement {
   const button = doc.createElement('button')
   button.classList.add(CARD_BUTTON_CLASS, UNKNOWN_CARD_CLASS)
   button.disabled = true
-  button.innerHTML = count > 1 ? `${count}` : '暗'
-  button.title = `${count} 张暗牌`
+  button.innerHTML = count === null ? '?' : count > 1 ? `${count}` : '暗'
+  button.title = count === null ? '暗牌数量未知' : `${count} 张暗牌`
   return button
 }
 

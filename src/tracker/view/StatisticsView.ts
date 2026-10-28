@@ -56,6 +56,7 @@ export function buildCardTypeButtons(room: Room, doc: Document, onQuery: QueryCa
  */
 export function renderStatistics(room: Room, doc: Document): void {
   const counter = room.counter
+  const hasFullHistory = room.trackingMode === 'full'
 
   const pileSet = counter.statusIndex[CARD_INSTANCE_STATUS.UNKNOWN]
 
@@ -63,7 +64,7 @@ export function renderStatistics(room: Room, doc: Document): void {
     const n = countInSet(counter.nameIndex[name], pileSet)
     const lb = doc.getElementById(name)
     if (!lb) continue
-    lb.textContent = n > 1 ? n + name : name
+    lb.textContent = hasFullHistory && n > 1 ? n + name : name
     lb.className = n > 0 ? 'cardType active' : 'cardType inactive'
   }
 
@@ -74,7 +75,7 @@ export function renderStatistics(room: Room, doc: Document): void {
     const lb = doc.getElementById('number' + number)
     if (!lb) continue
     const numText = number === 0 ? '电' : String(n2N(number))
-    lb.textContent = n > 1 ? `${numText}*${n}` : numText
+    lb.textContent = hasFullHistory && n > 1 ? `${numText}*${n}` : numText
     lb.className = n > 0 ? 'cardType active' : 'cardType inactive'
   }
 
@@ -84,7 +85,7 @@ export function renderStatistics(room: Room, doc: Document): void {
     const n = countInSet(set, pileSet)
     const lb = doc.getElementById(COLOR_MAP[c])
     if (!lb) continue
-    lb.innerHTML = lb.innerHTML.replace(/-?\d+/, String(n))
+    lb.innerHTML = lb.innerHTML.replace(/-?\d+|\?/, hasFullHistory ? String(n) : '?')
   }
 }
 
