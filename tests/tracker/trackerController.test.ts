@@ -839,6 +839,30 @@ describe('TrackerController', () => {
     expect(view.calls.scheduleRender).toBe(renderCount + 1)
   })
 
+  it.each([0, 7])('明确视角可覆盖兜底推断为座位 %s，后续兜底不改写', (seatID) => {
+    const { controller, gameState } = createTrackerControllerHarness()
+    controller.initTrackerRoom()
+    controller.registerTrackerPlayers(
+      [
+        { SeatID: 0, ClientID: 100 },
+        { SeatID: 7, ClientID: 107 }
+      ],
+      999
+    )
+    const previousSeatID = seatID === 0 ? 7 : 0
+    controller.setTrackerMySeatID(previousSeatID)
+    const room = controller.getTrackerRoom()!
+
+    controller.setTrackerMySeatID(seatID, { overwrite: true })
+    controller.setTrackerMySeatID(previousSeatID)
+
+    expect(controller.getTrackerRoom()).toBe(room)
+    expect(room.mySeatID).toBe(seatID)
+    expect(gameState.myID).toBe(seatID)
+    expect(gameState.isRecord).toBe(true)
+    expect(room.isDeckReady).toBe(false)
+  })
+
   it('通过注入依赖管理房间生命周期', () => {
     const seatReads = []
     const { controller, gameState, view } = createTrackerControllerHarness({
@@ -1545,32 +1569,28 @@ describe('TrackerController', () => {
     ).toBe(true)
   })
 
-  it('断线重连状态下跳过牌堆初始化并冻结牌堆相关同步', () => {
-    const { controller, gameState, view } = createTrackerControllerHarness()
+  it('重连通知先于牌堆初始化时仍挂载并继续同步，牌堆数量等待协议锚定', () => {
+    const { controller, view } = createTrackerControllerHarness()
 
     controller.initTrackerRoom()
     controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
-    gameState.isDuanXian = true
+    controller.degradeTrackerRoom()
     controller.initTrackerDeck([1, 2])
 
-    expect(controller.isTrackerReady()).toBe(false)
-    expect(controller.getTrackerRoom().isDeckReady).toBe(false)
-    expect(view.calls.mount).toBe(1)
-    expect(view.calls.unmount).toBe(1)
-
-    gameState.isDuanXian = false
-    controller.initTrackerDeck([1, 2])
     const room = controller.getTrackerRoom()
-    const initialPile = [...room.zones.get('pile').cards]
     expect(controller.isTrackerReady()).toBe(true)
+    expect(room.trackingMode).toBe('degraded')
+    expect(room.isPileCountKnown).toBe(false)
+    expect(view.calls.mount).toBe(2)
+    expect(view.calls.unmount).toBe(0)
     expect(room.cardIndex.has(1)).toBe(false)
     expect(room.unlocatedIdentities.has(1)).toBe(true)
 
-    gameState.isDuanXian = true
     controller.syncTrackerMove(protocolMove({ CardIDs: [1] }))
 
-    expect(controller.getReadyTrackerRoom()).toBe(null)
-    expect(room.zones.get('pile').cards).toEqual(initialPile)
+    expect(controller.getReadyTrackerRoom()).toBe(room)
+    expect(room.cardIndex.get(1)?.resolvedSeat).toBe(1)
+    expect(room.zones.get('pile').cards).toHaveLength(1)
   })
 
   it.each([

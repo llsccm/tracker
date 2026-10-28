@@ -10,6 +10,7 @@ import { NOOP_REPLAY_METRICS, type ReplayMetricsSink } from './metrics'
 import type {
   TrackerReplayConstraintSnapshot,
   TrackerReplayPlayerSnapshot,
+  TrackerReplayRoomSnapshot,
   TrackerReplaySnapshot,
   TrackerReplayZoneSnapshot
 } from './types'
@@ -23,7 +24,6 @@ export function createTrackerReplaySnapshot(
       isGameStart: gameState.isGameStart,
       isPassed: gameState.isPassed,
       isRecord: gameState.isRecord,
-      isDuanXian: gameState.isDuanXian,
       isGuoZhan: gameState.isGuoZhan,
       isDouDiZhu: gameState.isDouDiZhu,
       isShanHeTu: gameState.isShanHeTu,
@@ -47,18 +47,19 @@ export function assertTrackerReplayConsistency(
 
   const metrics = options.metrics ?? NOOP_REPLAY_METRICS
   const issues: unknown[] = []
-  const pileCount = room.zones.get('pile')?.cards.length ?? 0
-  const suspendedIdentityIDs = new Set(
-    Array.from(room.suspendedKnownCards, (card) => card.id).filter((cardID) => cardID > 0)
-  )
-
-  issues.push(
-    ...room.pileIdentityLedger.assertConsistency(pileCount, context, {
-      deckIdentityIDs: room.deckIdentities,
-      unlocatedIdentityIDs: room.unlocatedIdentities,
-      suspendedIdentityIDs
-    })
-  )
+  if (room.trackingMode === 'full') {
+    const pileCount = room.zones.get('pile')?.cards.length ?? 0
+    const suspendedIdentityIDs = new Set(
+      Array.from(room.suspendedKnownCards, (card) => card.id).filter((cardID) => cardID > 0)
+    )
+    issues.push(
+      ...room.pileIdentityLedger.assertConsistency(pileCount, context, {
+        deckIdentityIDs: room.deckIdentities,
+        unlocatedIdentityIDs: room.unlocatedIdentities,
+        suspendedIdentityIDs
+      })
+    )
+  }
   issues.push(...room.publicZones.getPublicZoneConsistencyIssues())
   collectIdentityIssues(room, issues)
   if (options.checkIndexes !== false) collectIndexIssues(room, issues, metrics)
@@ -69,7 +70,7 @@ export function assertTrackerReplayConsistency(
   throw new Error(`回放一致性检查失败（${context}）：${JSON.stringify(issues)}`)
 }
 
-function createRoomSnapshot(room: Room) {
+function createRoomSnapshot(room: Room): TrackerReplayRoomSnapshot {
   const zones: Record<string, TrackerReplayZoneSnapshot> = {}
   room.zones.forEach((zone, zoneID) => {
     zones[String(zoneID)] = {
@@ -99,6 +100,8 @@ function createRoomSnapshot(room: Room) {
   return {
     active: true as const,
     deckReady: room.isDeckReady,
+    trackingMode: room.trackingMode,
+    isPileCountKnown: room.isPileCountKnown,
     seatIDs: room.seatIDs.slice(),
     mySeatID: room.mySeatID ?? null,
     firstSeatID: room.firstID ?? null,
@@ -126,6 +129,7 @@ function createPlayerSnapshot(player: Player) {
   const snapshot: TrackerReplayPlayerSnapshot = {
     seatID: player.seatID,
     observedHandCount: player.hasObservedHandCount ? player.observedHandCount : null,
+    handCountDelta: player.handCountDelta,
     unknownHandCount: player.unknownCardCount,
     knownHandCardIDs: player.knownHandCards.map((card) => card.id),
     candidateHandCardIDs: player.candidateHandCards.map((card) => card.id),

@@ -3,6 +3,7 @@ import type { GameState } from '@/tracker/Game'
 import type { Room } from '@/tracker/Room'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
+import type { ReconnectGameSnapshot } from '@/tracker/types'
 import {
   FULL_HAND_ROLE_OPT_SPELL_IDS,
   hasMixedTrackerMoveVisibility,
@@ -52,8 +53,12 @@ export function applyTrackerReplayProtocol(
 ): ApplyTrackerProtocolResult {
   switch (record.className) {
     case 'MsgReconnectGame':
-      context.gameState.isDuanXian = true
-      return partial('断线重连只记录状态；当前协议不足以恢复重连前牌堆')
+      requireRoom(context, record, '恢复重连快照')
+      context.controller.degradeTrackerRoom(record.payload as ReconnectGameSnapshot)
+      return partial('断线重连已进入受限追踪；重连前的移动历史无法完整恢复')
+
+    case 'MsgReconnectGameHand':
+      return applyReconnectHand(context, record)
 
     case 'decodeGameRecordInitInfo':
       return applyRecordInit(context, record)
@@ -126,6 +131,24 @@ export function applyTrackerReplayProtocol(
     default:
       throw new Error(`回放器尚未支持协议 ${record.className}，不能保证状态重建准确`)
   }
+}
+
+function applyReconnectHand(
+  context: TrackerProtocolReplayContext,
+  record: RecordedTrackerProtocol
+): ApplyTrackerProtocolResult {
+  requireRoom(context, record, '恢复重连手牌')
+  const SeatIndex = requireInteger(record, 'SeatIndex')
+  if (record.payload.CardIDs === undefined) {
+    context.controller.setTrackerMySeatID(SeatIndex, { overwrite: true })
+    return partial('旧录制缺少重连手牌字段，已恢复主视角')
+  }
+  context.controller.restoreTrackerReconnectHand({
+    SeatIndex,
+    Count: requireInteger(record, 'Count'),
+    CardIDs: requireNumberArray(record.payload.CardIDs, 'CardIDs')
+  })
+  return applied()
 }
 
 function applyRecordInit(
@@ -226,10 +249,6 @@ function applyDeckInit(
   if (room.players.size === 0) {
     throw prerequisiteError(record, '初始化牌堆前缺少玩家注册协议')
   }
-  if (context.gameState.isDuanXian) {
-    throw new Error('录制包含断线重连；浏览器路径会跳过牌堆初始化，无法完整重建本局状态')
-  }
-
   const cardList = requireNumberArray(record.payload.CardList, 'CardList')
   const cardIDs = cardList.filter((cardID) => cardID > 0)
   if (cardIDs.length === 0) throw new Error('MsgGamePlayCardNtf.CardList 为空，无法初始化牌堆')

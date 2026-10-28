@@ -20,6 +20,8 @@ export class Player {
   isShown = true
   declare hasObservedHandCount: boolean
   declare observedHandCount: number
+  /** 无可靠总数时，保存重连后相对参考点的有符号手牌差量。 */
+  handCountDelta = 0
   declare unknownCardCount: number
   declare knownHandCards: Card[]
   declare candidateHandCards: Card[]
@@ -64,13 +66,25 @@ export class Player {
   syncObservedHandCount(count: number): void {
     this.hasObservedHandCount = true
     this.observedHandCount = Math.max(0, Number(count) || 0)
+    this.handCountDelta = 0
     this.refreshUnknownCardCount()
+  }
+
+  invalidateObservedHandCount(): void {
+    this.hasObservedHandCount = false
+    this.observedHandCount = 0
+    this.unknownCardCount = 0
+    this.handCountDelta = 0
   }
 
   /**
    * 应用移动事件推导出的手牌总数变化。
    */
   applyObservedHandCountDelta(delta: number): void {
+    if (this.room.trackingMode === 'degraded' && !this.hasObservedHandCount) {
+      this.handCountDelta += delta
+      return
+    }
     const nextCount = this.observedHandCount + delta
     if (!this.hasObservedHandCount && nextCount < 0) return
 
@@ -132,6 +146,7 @@ export class Player {
     this.hasObservedHandCount = false
     this.observedHandCount = 0
     this.unknownCardCount = 0
+    this.handCountDelta = 0
     this.fixedViewId = undefined
     this.knownHandCards = []
     this.candidateHandCards = []

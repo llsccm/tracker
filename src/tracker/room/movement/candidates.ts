@@ -118,6 +118,36 @@ export class RoomMovementCandidates {
       return []
     }
 
+    if (
+      this.room.trackingMode === 'degraded' &&
+      !(sourceHandTotalObserved || sourcePlayer?.hasObservedHandCount)
+    ) {
+      // 未追踪到的旧手牌也可能被随机获得，不能把本地明牌当作完整 N 选 K 全集。
+      // 只扩大已知身份的去向并约束目标上界，暗牌仍由普通移动管线记录。
+      const knownCards = existingSourceCards.filter((card) => card.isKnown)
+      knownCards.forEach((card) => card.addSeat(targetSeat, 'randomHandTransferCandidates'))
+      this.invalidateHandTransferConstraintsForCards(knownCards, fromSeat, targetSeat)
+      if (knownCards.length > 0) {
+        this.room.createConstraintGroup({
+          cards: knownCards,
+          expectedSlotsByLocation: new Map([
+            [
+              createLocationCandidateKey({
+                type: 'player',
+                seatID: targetSeat,
+                subZone: 'hand',
+                spellID: null
+              }),
+              { min: 0, max: count }
+            ]
+          ]),
+          known: false,
+          sourceEvent: sourceEvent ?? { type: 'randomHandTransferCandidates' }
+        })
+      }
+      return []
+    }
+
     // 唯一归属实体才按 1 实体 = 1 手牌槽计；多座位候选只表示“可能在该手牌”。
     const exclusiveSourceCards = existingSourceCards.filter((card) => card.seats.size === 1)
     const ambiguousSourceCards = existingSourceCards.filter((card) => card.seats.size > 1)

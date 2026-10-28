@@ -50,7 +50,12 @@ const DEFAULT_CONTEXT_AFTER = 2
 const DEFAULT_INDEX_CHECK_INTERVAL = 16
 /** 因果闭包里最多回带多少条协议，超出时在报告中显式说明。 */
 const MAX_CLOSURE_PROTOCOLS = 64
-const INDEX_REBUILD_PROTOCOLS = new Set(['MsgGamePlayCardNtf', 'PubGsCMoveCard'])
+const INDEX_REBUILD_PROTOCOLS = new Set([
+  'MsgGamePlayCardNtf',
+  'MsgReconnectGame',
+  'MsgReconnectGameHand',
+  'PubGsCMoveCard'
+])
 const ROOM_DESTROY_PROTOCOLS = new Set(['MsgGameOver', 'ClientLeavetableRep'])
 
 export class TrackerProtocolReplayer {

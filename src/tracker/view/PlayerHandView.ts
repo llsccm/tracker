@@ -40,6 +40,7 @@ function updateRenderedMainHandCardIDs(cardIDs: number[]): void {
 
 interface CardListOptions {
   ambiguous?: boolean
+  unknownCountKnown?: boolean
 }
 
 type HandCardKind = 'known' | 'candidate'
@@ -289,7 +290,9 @@ function getPlayerHandPanel(doc: Document): HTMLElement | null {
 export function renderPublicZones(room: Room, doc: Document): void {
   const publicByZone = room.locationIndex.publicByZone
   const pileCards = publicByZone.get('pile') ?? room.getZone('pile').cards
-  renderCardList(doc, 'paiduiCards', getPileDisplayCards(pileCards))
+  renderCardList(doc, 'paiduiCards', getPileDisplayCards(pileCards), {
+    unknownCountKnown: room.isPileCountKnown
+  })
 
   const discardCards = (publicByZone.get('discard') ?? room.getZone('discard').cards).filter(
     (card) => card.turn === Game.turn && card.round === Game.round
@@ -322,9 +325,14 @@ function renderCardList(
     } else {
       let run = 1
       while (i + run < cards.length && !cards[i + run].isKnown) run++
-      container.appendChild(createUnknownButton(doc, run))
+      container.appendChild(
+        createUnknownButton(doc, options.unknownCountKnown === false ? null : run)
+      )
       i += run
     }
+  }
+  if (options.unknownCountKnown === false && cards.every((card) => card.isKnown)) {
+    container.appendChild(createUnknownButton(doc, null))
   }
 }
 

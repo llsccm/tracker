@@ -4,6 +4,7 @@ import type { Room } from './Room'
 import type { ConstraintGroupOptions } from './constraint/ConstraintGroup'
 
 export type CardID = number
+export type TrackingMode = 'full' | 'degraded'
 /** 玩家物理座位为 0–7；协议公共端点 FromID/ToID 另按区域解释。 */
 export type SeatID = number
 /** 协议技能 ID 为数字，0 表示与技能无关；内部状态的 null 由各字段单独声明。 */
@@ -194,6 +195,30 @@ export interface RawMoveCardEvent {
   SrcSeatID?: SeatID
   Label?: string
   isSend?: boolean
+}
+
+export interface ReconnectSeatInfo {
+  SeatID: SeatID
+  HandCardCount: number
+  EquipCardCount: number
+  EquipCards: readonly { CardId: CardID; SubType?: number }[]
+  JudgeCardCount: number
+  JudgeCards: readonly { CardId: CardID; SpellId: SpellID }[]
+  CharacterID?: number
+  Figure?: number
+}
+
+/** 旧录制可以只有重连标记；实际重连消息还携带当前局面的数量和玩家区快照。 */
+export interface ReconnectGameSnapshot {
+  CardPileCount?: number
+  SeatInfos?: readonly ReconnectSeatInfo[]
+}
+
+/** 重连主视角的当前手牌；0 表示牌面未知，Count 是完整手牌总数。 */
+export interface ReconnectGameHandSnapshot {
+  SeatIndex: SeatID
+  Count: number
+  CardIDs: readonly CardID[]
 }
 
 /** 最终完整协议的只读视图；不复制对象，也不放宽必填字段。 */
