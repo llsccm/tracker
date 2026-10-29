@@ -3,19 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { getPopupSpaceCards } from '@/tracker/room/movement/popupSpaces'
 import { getUnknownPlayerSourceCards } from '@/tracker/room/movement/sourceQueries'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { protocolMove, createReadyControllerHarness } from './helpers/trackerController'
 
 function setup(ids: number[]) {
-  const { controller } = createTrackerControllerHarness()
-  controller.initTrackerRoom()
-  controller.registerTrackerPlayers(
-    [
-      { SeatID: 6, ClientID: 600 },
-      { SeatID: 3, ClientID: 300 }
-    ],
-    600
-  )
-  controller.initTrackerDeck(ids)
+  const { controller } = createReadyControllerHarness({
+    seatIDs: [6, 3],
+    currentUserID: 600,
+    cardIDs: ids
+  })
   return { controller, room: controller.getTrackerRoom()! }
 }
 

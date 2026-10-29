@@ -5,22 +5,21 @@ import { trackerLogger } from '@/utils/logger'
 import {
   createErrorSpy,
   createTrackerControllerHarness,
-  protocolMove
+  protocolMove,
+  createReadyControllerHarness
 } from './helpers/trackerController'
 
 function createDegradedRoom(cardIDs = [11, 12, 13, 14]) {
   const errorSpy = createErrorSpy()
   const warn = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
-  const harness = createTrackerControllerHarness()
-  harness.controller.initTrackerRoom()
-  harness.controller.registerTrackerPlayers(
-    [
+  const harness = createReadyControllerHarness({
+    players: [
       { SeatID: 0, ClientID: 100 },
       { SeatID: 1, ClientID: 101 }
     ],
-    100
-  )
-  harness.controller.initTrackerDeck(cardIDs)
+    cardIDs: cardIDs
+  })
+
   harness.controller.degradeTrackerRoom()
   return { ...harness, room: harness.controller.getTrackerRoom()!, errorSpy, warn }
 }
@@ -225,10 +224,10 @@ describe('重连残局降级追踪', () => {
 
   it('丢弃旧手牌总数基线，差量不建立绝对总数；明确快照到达后继续按总数更新', () => {
     const errorSpy = createErrorSpy()
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }], 100)
-    controller.initTrackerDeck([11, 12, 13, 14])
+    const { controller } = createReadyControllerHarness({
+      players: [{ SeatID: 0, ClientID: 100 }],
+      cardIDs: [11, 12, 13, 14]
+    })
     controller.syncTrackerMove(protocolMove({ CardIDs: [11, 12], ToID: 0 }))
     const room = controller.getReadyTrackerRoom()!
     room.syncObservedPlayerHandCount(0, 4)

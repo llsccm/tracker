@@ -13,7 +13,12 @@ import {
   type RoomMoveContext
 } from '@/tracker/room/movement/types'
 import { createTestRoom, getCard, takeAnonymousCard } from './helpers/room'
-import { outsideLocation, playerLocation, publicLocation } from './helpers/locationCandidates'
+import {
+  outsideLocation,
+  playerLocation,
+  publicLocation,
+  locationKeys
+} from './helpers/locationCandidates'
 import { getUnknownPlayerSourceCards } from '@/tracker/room/movement/sourceQueries'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import { moveHiddenHandToMark, moveKnownCardsToHand } from './helpers/hiddenMarks'
@@ -271,9 +276,9 @@ describe('隐藏标记区候选', () => {
       max: markCount
     })
     cards.forEach((card) => {
-      expect(
-        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
-      ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
+      expect(locationKeys(card)).toEqual(
+        [createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort()
+      )
     })
   })
 
@@ -303,9 +308,9 @@ describe('隐藏标记区候选', () => {
         .expectedSlotsByLocation.get('player:1:mark:1234')
     ).toEqual({ min: 0, max: 2 })
     cards.forEach((card) => {
-      expect(
-        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
-      ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
+      expect(locationKeys(card)).toEqual(
+        [createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort()
+      )
     })
   })
 
@@ -356,9 +361,7 @@ describe('隐藏标记区候选', () => {
 
     expect(room.constraintGroups.has('hidden_mark_1:1:1234')).toBe(false)
     cards.forEach((card) => {
-      expect(
-        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
-      ).toEqual(
+      expect(locationKeys(card)).toEqual(
         [
           createLocationCandidateKey(sourceHand),
           createLocationCandidateKey(otherHand),
@@ -390,9 +393,7 @@ describe('隐藏标记区候选', () => {
 
     expect(room.constraintGroups.has('hidden_mark_1:1:1234')).toBe(false)
     cards.forEach((card) => {
-      expect(
-        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
-      ).toEqual(
+      expect(locationKeys(card)).toEqual(
         [
           createLocationCandidateKey(sourceHand),
           createLocationCandidateKey(pileTop),

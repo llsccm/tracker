@@ -6,8 +6,8 @@ import { trackerLogger } from '@/utils/logger'
 import { createTestRoom } from './helpers/room'
 import {
   createErrorSpy,
-  createTrackerControllerHarness,
-  protocolMove
+  protocolMove,
+  createReadyControllerHarness
 } from './helpers/trackerController'
 
 const rooms: Room[] = []
@@ -17,16 +17,14 @@ afterEach(() => {
 })
 
 function setup() {
-  const harness = createTrackerControllerHarness()
-  harness.controller.initTrackerRoom()
-  harness.controller.registerTrackerPlayers(
-    [1, 2, 7].map((seat) => ({ SeatID: seat, ClientID: seat })),
-    7
-  )
-  harness.controller.initTrackerDeck([11, 12, 13, 14, 15, 16])
-  const room = harness.controller.getTrackerRoom()!
-  rooms.push(room)
-  return { ...harness, room }
+  const harness = createReadyControllerHarness({
+    players: [1, 2, 7].map((seat) => ({ SeatID: seat, ClientID: seat })),
+    currentUserID: 7,
+    cardIDs: [11, 12, 13, 14, 15, 16]
+  })
+
+  rooms.push(harness.room)
+  return harness
 }
 
 describe('技能生命周期注册表', () => {

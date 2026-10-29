@@ -5,7 +5,7 @@ import { createPublicCandidate } from '@/tracker/candidate/publicCandidate'
 import { MOVE_TYPE } from '@/tracker/protocol/MoveEventNormalizer'
 import { trackerLogger } from '@/utils/logger'
 import { createTestRoom } from './helpers/room'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { protocolMove, createReadyControllerHarness } from './helpers/trackerController'
 
 const topThree = fromPublicCandidate(createPublicCandidate('pile', POSITION_TOP, 3))!
 
@@ -79,11 +79,11 @@ describe('Room 身份事务', () => {
   })
 
   it('Controller 普通移动仅提交一次身份事务', () => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 1 }], 1)
-    controller.initTrackerDeck([1, 2, 3])
-    const room = controller.getTrackerRoom()!
+    const { controller, room } = createReadyControllerHarness({
+      players: [{ SeatID: 1, ClientID: 1 }],
+      currentUserID: 1,
+      cardIDs: [1, 2, 3]
+    })
     const revision = room.pileIdentityLedger.getSnapshot().revision
     controller.syncTrackerMove(protocolMove({ CardIDs: [1], ToID: 1 }))
     expect(room.pileIdentityLedger.getSnapshot().revision).toBe(revision + 1)

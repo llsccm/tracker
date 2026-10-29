@@ -3,30 +3,14 @@ import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candid
 import type { RawMoveCardEvent } from '@/tracker/types'
 import {
   createErrorSpy,
-  createTrackerControllerHarness,
-  protocolMove
+  protocolMove,
+  createReadyControllerHarness
 } from './helpers/trackerController'
 
-function createRoomWithDiscard(discardIDs = [1, 2, 3, 4, 5, 6]) {
-  const errorSpy = createErrorSpy()
-  const { controller } = createTrackerControllerHarness()
-  controller.initTrackerRoom()
-  controller.registerTrackerPlayers(
-    [
-      { SeatID: 1, ClientID: 100 },
-      { SeatID: 3, ClientID: 300 }
-    ],
-    100
-  )
-  controller.initTrackerDeck([1, 2, 3, 4, 5, 6, 7, 8])
-  if (discardIDs.length > 0) {
-    controller.syncTrackerMove(
-      protocolMove({ CardIDs: discardIDs, ToZone: 2, ToID: 255, MoveType: 16 })
-    )
-  }
-
-  const room = controller.getTrackerRoom()!
-  return { controller, room, errorSpy }
+const DISCARD_SETUP = {
+  cardIDs: [1, 2, 3, 4, 5, 6, 7, 8],
+  seatIDs: [1, 3],
+  discardIDs: [1, 2, 3, 4, 5, 6]
 }
 
 function discardGainMove(overrides: Partial<RawMoveCardEvent> = {}) {
@@ -75,7 +59,8 @@ describe('弃牌堆未知获得', () => {
       overrides: { SpellID: 9999, FromPosition: POSITION_BOTTOM }
     }
   ])('$scenario 创建四张负 ID 暗手牌，不按弃牌顺序猜测身份', ({ overrides }) => {
-    const { controller, room, errorSpy } = createRoomWithDiscard()
+    const { controller, room } = createReadyControllerHarness(DISCARD_SETUP)
+    const errorSpy = createErrorSpy()
     const discardBefore = [...room.zones.get('discard')!.cards]
     const pileBefore = [...room.zones.get('pile')!.cards]
     const message = discardGainMove(overrides)
@@ -111,7 +96,8 @@ describe('弃牌堆未知获得', () => {
     { cardIDs: [2, 5, 1, 4], knownIDs: [1, 2, 4, 5], discardIDs: [3, 6], unknownCount: 0 },
     { cardIDs: [2, 0, 5, 0], knownIDs: [2, 5], discardIDs: [1, 3, 4, 6], unknownCount: 2 }
   ])('领域移动给出 $cardIDs 时精确移动已知牌，仅为未知部分补位', (testCase) => {
-    const { room, errorSpy } = createRoomWithDiscard()
+    const { room } = createReadyControllerHarness(DISCARD_SETUP)
+    const errorSpy = createErrorSpy()
 
     room.moveCards(testCase.cardIDs, {
       from: { type: 'public', zone: 'discard', position: POSITION_TOP },
@@ -142,7 +128,7 @@ describe('弃牌堆未知获得', () => {
     { scenario: '重复来源', sourceIDs: [2, 2], cardCount: 3, unknownCount: 2 },
     { scenario: '完整来源', sourceIDs: [2, 5], cardCount: 2, unknownCount: 0 }
   ])('有效 fromSeat 的$scenario 获得保留真实牌并补齐标记区数量', (testCase) => {
-    const { room } = createRoomWithDiscard()
+    const { room } = createReadyControllerHarness(DISCARD_SETUP)
     const sourceCards = testCase.sourceIDs.map((id) => room.cardIndex.get(id)!)
     const entityCountBefore = room.cards.length
 
@@ -196,7 +182,7 @@ describe('弃牌堆未知获得', () => {
       emptySource: true
     }
   ])('弃牌获得不消费 fromSeat 指向的$scenario', (testCase) => {
-    const { room } = createRoomWithDiscard()
+    const { room } = createReadyControllerHarness(DISCARD_SETUP)
     const playerSourceCards = [...room.zones.get('pile')!.cards]
     room.moveCards([], {
       from: { type: 'public', zone: 'pile', position: POSITION_TOP },
@@ -248,7 +234,8 @@ describe('弃牌堆未知获得', () => {
   })
 
   it.each([15, 18])('MoveType=%i 缺少弃牌历史时仍按协议张数创建暗牌', (moveType) => {
-    const { controller, room, errorSpy } = createRoomWithDiscard([])
+    const { controller, room } = createReadyControllerHarness({ ...DISCARD_SETUP, discardIDs: [] })
+    const errorSpy = createErrorSpy()
 
     controller.syncTrackerMove(discardGainMove({ MoveType: moveType }))
 
@@ -262,7 +249,8 @@ describe('弃牌堆未知获得', () => {
   })
 
   it('后续揭示非最新弃牌时正确更新明暗手牌，手牌总数不增加', () => {
-    const { controller, room, errorSpy } = createRoomWithDiscard()
+    const { controller, room } = createReadyControllerHarness(DISCARD_SETUP)
+    const errorSpy = createErrorSpy()
     controller.syncTrackerMove(discardGainMove())
 
     controller.revealTrackerCards({ type: 'player', seatID: 3 }, [2, 5])
@@ -280,7 +268,8 @@ describe('弃牌堆未知获得', () => {
   })
 
   it('MoveType=19 仍按弃牌端点移动已有实体', () => {
-    const { controller, room, errorSpy } = createRoomWithDiscard()
+    const { controller, room } = createReadyControllerHarness(DISCARD_SETUP)
+    const errorSpy = createErrorSpy()
 
     controller.syncTrackerMove(discardGainMove({ MoveType: 19 }))
 
@@ -295,7 +284,8 @@ describe('弃牌堆未知获得', () => {
 
 describe('MoveType=15 弃牌堆明确来源兼容', () => {
   it('剩墨已回填正 ID 时仍精确移动对应实体', () => {
-    const { controller, room, errorSpy } = createRoomWithDiscard()
+    const { controller, room } = createReadyControllerHarness(DISCARD_SETUP)
+    const errorSpy = createErrorSpy()
     const sourceCards = [2, 5].map((id) => room.cardIndex.get(id)!)
 
     controller.syncTrackerMove(
@@ -313,7 +303,7 @@ describe('MoveType=15 弃牌堆明确来源兼容', () => {
   })
 
   it('完整 sourceCards 仍移动指定实体', () => {
-    const { room } = createRoomWithDiscard()
+    const { room } = createReadyControllerHarness(DISCARD_SETUP)
     const sourceCards = [2, 5].map((id) => room.cardIndex.get(id)!)
     const entityCountBefore = room.cards.length
 

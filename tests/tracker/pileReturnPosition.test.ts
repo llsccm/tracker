@@ -3,17 +3,13 @@ import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candid
 import { normalizeTrackerMovePosition } from '@/tracker/protocol/protocolRules'
 import {
   createErrorSpy,
-  createTrackerControllerHarness,
-  protocolMove
+  protocolMove,
+  createReadyControllerHarness
 } from './helpers/trackerController'
 
 function createHarness() {
   const errorSpy = createErrorSpy()
-  const { controller } = createTrackerControllerHarness()
-  controller.initTrackerRoom()
-  controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
-  controller.initTrackerDeck([17, 18, 19])
-  const room = controller.getTrackerRoom()!
+  const { controller, room } = createReadyControllerHarness({ seatIDs: [1], cardIDs: [17, 18, 19] })
   return { controller, room, pile: room.zones.get('pile')!, errorSpy }
 }
 

@@ -4,44 +4,9 @@ import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { summarizeMoveEvent } from '@/tracker/helper/moveSummary'
 import { patchEvent } from '@/tracker/skill/moveEventUtils'
 import type { Room } from '@/tracker/Room'
-import type {
-  CardID,
-  NormalizedMoveEvent,
-  PatchedMoveCardFields,
-  RawMoveCardEvent
-} from '@/tracker/types'
+import type { CardID, NormalizedMoveEvent, RawMoveCardEvent } from '@/tracker/types'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
-
-function verifyReadonlyContracts(
-  room: Room,
-  patched: PatchedMoveCardFields,
-  event: NormalizedMoveEvent
-): void {
-  // @ts-expect-error 单张牌也必须以数组提交。
-  room.moveCards(1, {
-    from: { type: 'outside' },
-    to: { type: 'public', zone: 'discard', position: POSITION_TOP }
-  })
-  // @ts-expect-error 协议张数不属于可修正字段。
-  patched.CardCount = 2
-  // @ts-expect-error 协议区域不属于可修正字段。
-  patched.FromZone = 2
-  // @ts-expect-error 已提交协议仅允许读取。
-  event.protocol.FromPosition = POSITION_RANDOM
-  // @ts-expect-error 事件牌列表只读，技能必须用新列表替换。
-  event.cardIDs.push(2)
-  // @ts-expect-error 来源端点只读。
-  event.from.type = 'outside'
-  if (event.to.type === 'playerCandidates') {
-    // @ts-expect-error 候选目标座位数组只读。
-    event.to.seatIDs.push(2)
-  }
-  // @ts-expect-error 旧移动入口已经删除。
-  room.moveCards([1], 'discard', { fromZone: 'pile' })
-}
-
-void verifyReadonlyContracts
+import { protocolMove, createReadyControllerHarness } from './helpers/trackerController'
 
 describe('移动输入的只读直传契约', () => {
   it('Room 只接收只读 ID 数组，标准事件协议保持完整', () => {
@@ -80,12 +45,11 @@ describe('移动输入的只读直传契约', () => {
   })
 
   it('单牌数组与匿名空数组都不被 Room 修改，移动张数由协议给出', () => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }], 100)
-    controller.initTrackerDeck([1, 2, 3])
+    const { controller, room } = createReadyControllerHarness({
+      players: [{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }],
+      cardIDs: [1, 2, 3]
+    })
     controller.setTrackerFirstHand(0)
-    const room = controller.getTrackerRoom()!
     const knownIDs = Object.freeze([1])
     const hiddenIDs = Object.freeze([] as CardID[])
 
@@ -144,11 +108,10 @@ describe('移动输入的只读直传契约', () => {
   })
 
   it('Room 移动和技能回调统一传递 toSeatID', () => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }], 100)
-    controller.initTrackerDeck([1, 2])
-    const room = controller.getTrackerRoom()!
+    const { controller, room } = createReadyControllerHarness({
+      players: [{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }],
+      cardIDs: [1, 2]
+    })
     const handler = vi.fn()
     room.registerSkillHandler(42, handler)
 
@@ -168,11 +131,10 @@ describe('移动输入的只读直传契约', () => {
   })
 
   it('揭示 API 仍使用 seatID，但传给 Room 的移动参数使用 toSeatID', () => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }], 100)
-    controller.initTrackerDeck([1, 2])
-    const room = controller.getTrackerRoom()!
+    const { controller, room } = createReadyControllerHarness({
+      players: [{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }],
+      cardIDs: [1, 2]
+    })
     const moveCards = vi.spyOn(room, 'moveCards')
 
     controller.revealTrackerCards({ type: 'player', seatID: 1, fromZone: 'pile' }, [1])

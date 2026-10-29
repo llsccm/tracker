@@ -5,7 +5,8 @@ import { summarizeMoveContext, summarizeMoveEvent } from '@/tracker/helper/moveS
 import {
   createErrorSpy,
   createTrackerControllerHarness,
-  protocolMove
+  protocolMove,
+  createReadyControllerHarness
 } from './helpers/trackerController'
 
 const returnMove = protocolMove({
@@ -27,17 +28,10 @@ describe('移动事件技能 ID', () => {
   it.each([{ CardIDs: [] }, { CardIDs: [1] }])(
     'CardIDs=$CardIDs 获得、揭示和转交分别保留本次动作技能',
     ({ CardIDs }) => {
-      const { controller } = createTrackerControllerHarness()
-      controller.initTrackerRoom()
-      controller.registerTrackerPlayers(
-        [
-          { SeatID: 1, ClientID: 100 },
-          { SeatID: 3, ClientID: 300 }
-        ],
-        100
-      )
-      controller.initTrackerDeck([1, 2])
-      const room = controller.getTrackerRoom()!
+      const { controller, room } = createReadyControllerHarness({
+        seatIDs: [1, 3],
+        cardIDs: [1, 2]
+      })
       const placement = vi.spyOn(room.movement, 'moveKnownCardsForContext')
       controller.syncTrackerMove(
         protocolMove({ CardIDs, CardCount: 1, ToID: 3, MoveType: 18, SpellID: 3644 })

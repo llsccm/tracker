@@ -1,3 +1,4 @@
+import { seedDiscardCards } from './helpers/room'
 import { describe, expect, it } from 'vitest'
 
 import { POSITION_BOTTOM, POSITION_RANDOM } from '@/tracker/candidate/cardPositions'
@@ -39,7 +40,7 @@ function createRoomWithDiscard(
   cards.forEach((card, index) => {
     card.color = cardConfigs[index].color
   })
-  room.zones.get('discard')!.add(cards)
+  seedDiscardCards(room, cards)
 
   return { cards, room }
 }

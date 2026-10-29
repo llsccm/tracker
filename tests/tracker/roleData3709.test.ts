@@ -4,7 +4,7 @@ import { GUI_FU_ROLE_DATA_ID } from '@/tracker/protocol/protocolRules'
 import type { Room } from '@/tracker/Room'
 import type { RawMoveCardEvent, TrackerControllerOptions } from '@/tracker/types'
 import { trackerLogger } from '@/utils/logger'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { protocolMove, createReadyControllerHarness } from './helpers/trackerController'
 
 function getHandIDs(room: Room, seatID = 2) {
   return room.cards
@@ -16,18 +16,11 @@ function getHandIDs(room: Room, seatID = 2) {
 }
 
 function createGuiFuHarness(options: TrackerControllerOptions = {}) {
-  const { controller } = createTrackerControllerHarness(options)
-  controller.initTrackerRoom()
-  controller.registerTrackerPlayers(
-    [
-      { SeatID: 1, ClientID: 100 },
-      { SeatID: 2, ClientID: 200 },
-      { SeatID: 3, ClientID: 300 }
-    ],
-    100
-  )
-  controller.initTrackerDeck([10, 20, 30, 40, 50, 60])
-  const room = controller.getTrackerRoom()!
+  const { controller, room } = createReadyControllerHarness({
+    ...options,
+    seatIDs: [1, 2, 3],
+    cardIDs: [10, 20, 30, 40, 50, 60]
+  })
   room.syncObservedPlayerHandCount(2, 0)
   controller.syncTrackerMove(
     protocolMove({

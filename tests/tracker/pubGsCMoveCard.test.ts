@@ -1,4 +1,4 @@
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { protocolMove, createReadyControllerHarness } from './helpers/trackerController'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SkillMoveContext } from '@/handler/skills/types'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
@@ -370,12 +370,11 @@ describe('PubGsCMoveCard', () => {
   })
 
   it('最终事件使用局流与技能补丁，不沿用入口的暗牌和位置', () => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }], 100)
-    controller.initTrackerDeck([96, 113])
+    const { controller, room } = createReadyControllerHarness({
+      players: [{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }],
+      cardIDs: [96, 113]
+    })
     controller.setTrackerFirstHand(0)
-    const room = controller.getTrackerRoom()!
     const decorate = vi.spyOn(room, 'decorateMoveEvent')
     const msg = protocolMove({ CardIDs: [0], FromPosition: POSITION_RANDOM })
     const order: string[] = []

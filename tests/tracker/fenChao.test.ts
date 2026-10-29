@@ -4,7 +4,7 @@ import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import type { RawMoveCardEvent } from '@/tracker/types'
 import { getCard } from './helpers/room'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { protocolMove, createReadyControllerHarness } from './helpers/trackerController'
 
 const CARD_SPELL_IDS: Record<string, number> = {
   杀: 1,
@@ -34,21 +34,12 @@ function createRoomWithDiscard(
   }))
   vi.spyOn(CardConfig.GetInstance(), 'getCard').mockImplementation((id) => cardInfos[id - 1])
 
-  const { controller } = createTrackerControllerHarness()
-  controller.initTrackerRoom()
-  controller.registerTrackerPlayers(
-    [
-      { SeatID: 1, ClientID: 100 },
-      { SeatID: 7, ClientID: 700 }
-    ],
-    100
-  )
-
   const cardIDs = cardNames.map((_, index) => index + 1)
-  controller.initTrackerDeck(cardIDs)
-  controller.syncTrackerMove(protocolMove({ CardIDs: cardIDs, ToZone: 2, ToID: 255, MoveType: 16 }))
-
-  const room = controller.getTrackerRoom()!
+  const { controller, room } = createReadyControllerHarness({
+    seatIDs: [1, 7],
+    cardIDs: cardIDs,
+    discardIDs: cardIDs
+  })
 
   return { controller, room }
 }
