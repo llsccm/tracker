@@ -9,6 +9,10 @@ import { createCardButton, createUnknownButton } from './cardButton'
 import { getPileDisplayCards } from './pileOrder'
 import { getPublicFieldCandidateCards } from './publicFieldCandidates'
 
+// 这些标记仅有数量意义，数量已由游戏展示，记牌面板无需重复渲染。
+// 陷嗣 化木
+const HIDDEN_MARK_SPELL_IDS = new Set([449, 4040, 3114])
+
 let renderedMainHandCardIDs: number[] | null = null
 const renderedMainHandListeners = new Set<() => void>()
 
@@ -152,6 +156,7 @@ export function renderPlayerHand(doc: Document, player: Player): void {
   const markSpell: Partial<Record<number, string>> = SkillsConfig.GetInstance().markSpell
 
   player.markCards.forEach((cards, spellID) => {
+    if (HIDDEN_MARK_SPELL_IDS.has(spellID)) return
     if (!cards || !cards.length) return
     renderedNodes.push(createMarkedCardNode(doc, spellID, cards, markSpell[spellID]))
   })
