@@ -79,6 +79,12 @@ Controller 每次创建 Room 后、注册座位前调用 `Game.beginPlayback()`�
 保留的模式名称重新应用模式默认值。同一录像重新播放也创建新 Room，不能仅凭相同 `gameId`
 跳过播放状态重置。
 
+构造、`initDeck()` 与 `destroy()` 通过私有 `resetMutableRoomState()` 统一清理牌实体集合、
+身份分区、约束、脏事件、游标及派生索引。公共区清理和销毁时的实体重置必须先完成，再调用该方法，
+避免清理回调重新留下旧牌事件。`initDeck()` 保留座位、追踪模式、技能注册和重连暂存，随后重建牌堆、
+计数器及玩家投影；`destroy()` 另行解绑对局、清理玩家和技能注册。视图以事件缓冲引用识别牌堆重建，
+序号归零时重新消费，避免沿用旧牌堆的游标和候选缓存。
+
 ## 第三层：Room 持有什么
 
 ### 权威事实
@@ -295,7 +301,9 @@ Room 继续负责相应的 `PileIdentityLedger` 事务和阶段顺序。
 
 `RoomMoveEvents` 通过唯一 ID 注册 `RoomSkillPlugin`，重复 ID 报错。移动阶段通配插件先执行，
 再按动作技能与端点派生的旧回调技能顺序匹配，同一插件最多执行一次；`registerMoveEventHandler()` 是装饰阶段的
-兼容适配入口。`decorateMove` 只接收完整 `NormalizedMoveEvent`，不补造协议、数量或选项；
+兼容适配入口，只注册插件。`moveEventHandlers` 每次读取时从 `plugins` 按技能投影装饰器，
+不维护第二份注册表；单牌放置回调 `skillHandlers` 仍独立保存并由 `knownPlacement.ts` 消费。
+`decorateMove` 只接收完整 `NormalizedMoveEvent`，不补造协议、数量或选项；
 空返回或异常保留上一事件。`beforeNormalizeMove` 返回 `defer` 立即中止；前置/协议异常向上传递，
 提交后通知逐插件隔离异常。`notifyCardsRevealed()` 广播去重后的正 ID。
 

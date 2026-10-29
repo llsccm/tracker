@@ -199,7 +199,7 @@ function createCard(id: number, title = ''): Card {
     number: 1,
     name: '杀',
     getLocationDescription: () => title,
-    hasSubZoneCandidates: () => false
+    locationCandidates: []
   } as unknown as Card
 }
 

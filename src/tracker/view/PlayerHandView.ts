@@ -198,7 +198,7 @@ function createMarkedCardNode(
 
   cards.forEach((card) => {
     const button = createCardButton(doc, card, {
-      ambiguous: card.hasSubZoneCandidates()
+      ambiguous: card.locationCandidates.some((candidate) => candidate.type === 'player')
     })
     markedCard.appendChild(button)
   })

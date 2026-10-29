@@ -118,6 +118,11 @@ normalizeMoveEndpoints 只在玩家区域创建 player 端点并原样写入协�
 - `0` 仅表示匿名占位、不是稳定身份（见“只有数量、没有 CardID 的暗牌”），
   不要把 `0` 写入 `Card.id`。
 
+内部 `SeatID` / `SpellID` 同样使用数字直接比较；已类型化的调用链不重复执行 `Number()`。
+`src/tracker/helper/seatIDs.ts` 的 `toSeatSet()` 只统一单座位与 `Iterable<SeatID>` 的集合形态并去重，
+保留座位 `0`，顶层 `null` / `undefined` 表示空候选。字符串解码和协议哨兵解释留在对应入口；
+候选交集、身份正负和位置一致性判断仍由领域逻辑处理。
+
 ## 获取某个角色的手牌
 
 先确定你要的是“牌实体”“身份 ID”“候选可能性”还是“数量”。这些入口不能互相替代：

@@ -10,7 +10,7 @@
  * 不提供它在三张中的具体序号。
  */
 import { trackerLogger } from '@/utils/logger'
-import type { Card } from '@/tracker/model/Card'
+import type { Card } from '@/tracker/model'
 import type { SlotCountRange } from '../constraint/ConstraintGroup'
 import { POSITION_RANDOM, POSITION_TOP } from '../candidate/cardPositions'
 import { createLocationCandidateKey } from '../candidate/locationCandidate'
@@ -87,8 +87,7 @@ function getActorHandCards(room: Room, actorSeat: SeatID): Card[] {
       card.subZone === 'hand' &&
       card.seats.size === 1 &&
       card.seats.has(actorSeat) &&
-      !card.hasLocationCandidates() &&
-      !card.hasSubZoneCandidates()
+      !card.hasLocationCandidates()
   )
 }
 

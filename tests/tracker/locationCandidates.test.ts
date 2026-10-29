@@ -99,6 +99,64 @@ describe('完整位置候选回归', () => {
     expect(room.dirtyCardEvents).toHaveLength(settledEvents)
   })
 
+  it('标记、弹窗、手牌与公共区切换清理位置字段，重置时清零时间戳', () => {
+    const { room, gameState } = createTestRoom({ cardIDs: [1], seatIDs: [0, 3] })
+    const card = getCard(room, 1)!
+    gameState.turn = 2
+    gameState.round = 3
+    gameState.phase = 4
+    card.resolveLocationCandidate(playerLocation(0, 'mark', 414))
+    expect(room.getPublicZone('pile').cards).not.toContain(card)
+    expect(card.spellID).toBe(414)
+
+    card.resolveLocationCandidate({ type: 'popup', spaceID: 3544 })
+    expect(card.location).toBe('popup')
+    expect(card.popupSpaceID).toBe(3544)
+    expect(card.subZone).toBeNull()
+    expect(card.spellID).toBeNull()
+    expect(card.owner).toBeNull()
+
+    card.bindCandidates(3, 'hand')
+    expect(card.popupSpaceID).toBeNull()
+    expect(card.owner).toBe(3)
+    card.moveToPublicZone('discard')
+    expect(card.locationCandidates).toEqual([])
+    expect(card.subZone).toBeNull()
+    expect(card.spellID).toBeNull()
+    expect(card.seats.size).toBe(0)
+    expect(card.isKnown).toBe(true)
+    expect([card.turn, card.round, card.phase]).toEqual([2, 3, 4])
+
+    card.resolveLocationCandidate({ type: 'popup', spaceID: 3544 })
+    room.refreshPlayerSnapshot()
+    const eventStart = room.dirtyCardEvents.length
+    card.reset()
+    expect(card.location).toBe('pile')
+    expect(card.popupSpaceID).toBeNull()
+    expect(card.isKnown).toBe(false)
+    expect(card.suspended).toBe(false)
+    expect([card.turn, card.round, card.phase]).toEqual([0, 0, 0])
+    expect(room.dirtyCardEvents.slice(eventStart)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ card, detail: expect.objectContaining({ type: 'card-reset' }) })
+      ])
+    )
+  })
+
+  it('混合公共候选保留公共区关系，收缩为玩家候选后才清理公共引用', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [0, 3] })
+    const card = getCard(room, 1)!
+    const hand = playerLocation(0, 'hand')
+    const mark = playerLocation(3, 'mark', 414)
+    card.setLocationCandidates([hand, publicLocation('pile', 'top', 2)])
+    expect(card.location).toBe('player')
+    expect(room.getPublicZone('pile').cards).toContain(card)
+    card.setLocationCandidates([hand, mark])
+    expect(room.getPublicZone('pile').cards).not.toContain(card)
+    expect(card.hasLocationCandidate(hand)).toBe(true)
+    expect(card.hasLocationCandidate(mark)).toBe(true)
+  })
+
   it('期望槽位解析区分已落定位置与同 owner 下仍未决的多个位置', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0] })
     const card = getCard(room, 1)!

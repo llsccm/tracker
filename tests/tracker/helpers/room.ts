@@ -41,7 +41,6 @@ export function createTestRoom({
     room.dirtyCardEvents = []
     room.dirtyCardSeq = 0
     room.dirtyPublicZones.clear()
-    room.cardChangeEvents = []
     room.viewDirty = false
     room.locationIndex.rebuild(room)
     room.ambiguousKnownIndex.rebuild([])

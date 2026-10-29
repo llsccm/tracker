@@ -54,9 +54,13 @@ describe('隐藏标记区候选', () => {
     expect([...record.cards]).toEqual([first, second])
     expect(record.knownMarkMax).toBe(1)
     expect(context.skipUnknownMovement).toBe(true)
-    expect(first.hasSubZoneCandidate({ seatID: 1, subZone: 'mark', spellID: 414 })).toBe(true)
+    expect(
+      first.hasLocationCandidate({ type: 'player', seatID: 1, subZone: 'mark', spellID: 414 })
+    ).toBe(true)
     expect(first.hasLocationCandidate(pileTop)).toBe(true)
-    expect(second.hasSubZoneCandidate({ seatID: 1, subZone: 'hand', spellID: null })).toBe(true)
+    expect(
+      second.hasLocationCandidate({ type: 'player', seatID: 1, subZone: 'hand', spellID: null })
+    ).toBe(true)
     expect(otherSeat.hasLocationCandidates()).toBe(false)
     expect(filter).not.toHaveBeenCalled()
     expect(stats.sites.get('resolveConstraints:playerSnapshot')).toBeUndefined()

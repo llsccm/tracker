@@ -299,7 +299,8 @@ export class RoomPublicZones {
           card.location === 'player' &&
           card.subZone === 'hand' &&
           // 默认只返回确定手牌，避免技能辅助把 A 手牌/A 标记候选误读成确定手牌。
-          (includeCandidates || !card.hasSubZoneCandidates()) &&
+          (includeCandidates ||
+            !card.locationCandidates.some((candidate) => candidate.type === 'player')) &&
           card.seats.has(normalizedSeat) &&
           (!knownOnly || card.isKnown === true)
       )

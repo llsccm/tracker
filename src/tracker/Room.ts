@@ -7,6 +7,8 @@ import type { ConstraintGroup } from './constraint/ConstraintGroup'
 import { GameState } from './Game'
 import { summarizeMoveContext } from './helper/moveSummary'
 import { getMoveZone } from './helper/moveEndpoint'
+import { toSeatSet } from './helper/seatIDs'
+import { getPositiveIDs } from './helper/cardIDs'
 import { Card, Player, Zone } from './model'
 import {
   PileIdentityLedger,
@@ -81,9 +83,9 @@ const DIRTY_CARD_EVENT_LIMIT = 500
  */
 export class Room extends RoomBase {
   /** 牌堆是否已经通过 MsgGamePlayCardNtf 完成初始化 */
-  isDeckReady = false
+  declare isDeckReady: boolean
   private trackingModeValue: TrackingMode = 'full'
-  private hasProtocolPileCount = false
+  declare private hasProtocolPileCount: boolean
 
   get trackingMode(): TrackingMode {
     return this.trackingModeValue
@@ -96,8 +98,8 @@ export class Room extends RoomBase {
   cards: Card[] = []
   /** 只有范围位置证据的公开身份，不占用或增加物理槽。 */
   readonly detachedKnownCards = new Set<Card>()
-  private detachedIdentitySeq = 0
-  private detachedCardOrder = new WeakMap<Card, number>()
+  declare private detachedIdentitySeq: number
+  declare private detachedCardOrder: WeakMap<Card, number>
   /** 身份推断与投影读面；物理容量继续读取 cards。 */
   get trackedCards(): readonly Card[] {
     return this.detachedKnownCards.size === 0
@@ -115,14 +117,14 @@ export class Room extends RoomBase {
    * 初始来自牌组；游戏外首次出现的新身份也会加入，但不会因物化或移动而移除。
    */
   deckIdentities: Set<CardID> = new Set()
-  anonymousEntitySeq = -1
+  declare anonymousEntitySeq: number
   declare zones: Map<PublicZoneName, Zone>
-  declare constraintGroups: Map<string | number, ConstraintGroup>
+  constraintGroups = new Map<string | number, ConstraintGroup>()
   declare constraintGroupSeq: number
   declare constraintGroupsDirty: boolean
   declare ambiguousKnownIndex: AmbiguousKnownIndex
   declare locationIndex: CardLocationIndex
-  declare suspendedKnownCards: Set<Card>
+  suspendedKnownCards = new Set<Card>()
   /** 收敛轮内被触碰过的座位集合；仅在 resolveConstraints 循环内非空，供约束三跳过未触碰玩家。 */
   declare resolveTouchedSeats: Set<SeatID> | null
   /** 最近一次 resolveConstraints 的收敛轮数；配合 maxResolveRounds 作非终止回归看门狗。 */
@@ -130,14 +132,13 @@ export class Room extends RoomBase {
   /** 本局至今 resolveConstraints 的最大收敛轮数（可查询的 tripwire，正常 ≤2）。 */
   declare maxResolveRounds: number
   declare viewDirty: boolean
-  /** 本局曾发生状态变化的卡牌集合；只在房间销毁时清理，不作为视图消费队列。 */
-  declare dirtyCards: Set<Card>
+  /** 当前牌堆生命周期内曾发生变化的卡牌集合；重建牌堆或销毁时清理，不作为视图消费队列。 */
+  dirtyCards = new Set<Card>()
   /** 供视图按游标增量消费的有序脏牌日志，避免每次渲染扫描完整 dirtyCards。 */
   declare dirtyCardEvents: DirtyCardEvent[]
   declare dirtyCardSeq: number
   /** 本次收敛前累积的受影响公共区集合；供 locationIndex 增量刷新，收敛尾部消费后清空。 */
-  declare dirtyPublicZones: Set<PublicZoneName>
-  declare cardChangeEvents: Record<string, unknown>[]
+  dirtyPublicZones = new Set<PublicZoneName>()
   declare publicZones: RoomPublicZones
   declare constraints: RoomConstraints
   declare movement: RoomMovement
@@ -171,7 +172,7 @@ export class Room extends RoomBase {
     super(gameState)
     if (import.meta.env.DEV) this.diagnostics = new RoomDiagnostics(this)
 
-    // 2. 初始化逻辑分区与公共区域
+    // 初始化公共区域与派生索引，再统一重置牌堆状态。
     this.zones = new Map([
       ['outside', new Zone('outside', this)],
       ['pile', new Zone('pile', this)],
@@ -181,31 +182,49 @@ export class Room extends RoomBase {
       ['exchange', new Zone('exchange', this)]
     ])
 
-    // 6. 局部约束组与明牌反查索引
-    this.constraintGroups = new Map()
-    this.constraintGroupSeq = 0
-    this.constraintGroupsDirty = false
-    this.lastResolveRounds = 0
-    this.maxResolveRounds = 0
     this.ambiguousKnownIndex = new AmbiguousKnownIndex(this)
     this.locationIndex = new CardLocationIndex()
-    this.suspendedKnownCards = new Set()
-    this.resolveTouchedSeats = null
-    this.viewDirty = false
-    this.dirtyCards = new Set()
-    this.dirtyCardEvents = []
-    this.dirtyCardSeq = 0
-    this.dirtyPublicZones = new Set()
-    this.cardChangeEvents = []
+    this.resetMutableRoomState()
 
-    // 7. 挂载 Room 行为模块，保留 Room 作为稳定公开入口
+    // 挂载 Room 行为模块，保留 Room 作为稳定公开入口。
     this.publicZones = new RoomPublicZones(this)
     this.constraints = new RoomConstraints(this)
     this.movement = new RoomMovement(this)
-    this.pileIdentityLedger = new PileIdentityLedger(() => this.trackingMode === 'full')
 
-    // 8. 绑定当前房间的对局状态；浏览器入口会注入真实 Game，测试可注入纯状态对象。
+    // 绑定当前房间的对局状态；浏览器入口会注入真实 Game，测试可注入纯状态对象。
     this.game.bindRoom(this)
+  }
+
+  /** 调用前先清空公共区，并完成必要的实体清理，避免清理回调重新留下旧牌脏事件。 */
+  private resetMutableRoomState(): void {
+    this.isDeckReady = false
+    this.hasProtocolPileCount = false
+    this.cards.length = 0
+    this.detachedKnownCards.clear()
+    this.detachedIdentitySeq = 0
+    this.detachedCardOrder = new WeakMap()
+    this.cardIndex.clear()
+    this.unlocatedIdentities.clear()
+    this.deckIdentities.clear()
+    this.anonymousEntitySeq = -1
+    this.pileIdentityLedger = new PileIdentityLedger(() => this.trackingMode === 'full')
+    this.constraintGroups.clear()
+    this.constraintGroupSeq = 0
+    this.constraintGroupsDirty = false
+    this.suspendedKnownCards.clear()
+    this.resolveTouchedSeats = null
+    this.lastResolveRounds = 0
+    this.maxResolveRounds = 0
+    this.dirtyCards.clear()
+    this.dirtyCardEvents = []
+    this.dirtyCardSeq = 0
+    this.dirtyPublicZones.clear()
+    this.viewDirty = false
+    this.playerSnapshot.reset()
+    // 牌池和公共区已为空；只清理派生缓存，不重复扫描旧牌。
+    this.locationIndex.rebuild(this, { record: false })
+    this.ambiguousKnownIndex.rebuild([], { record: false })
+    if (import.meta.env.DEV) this.diagnostics.reset()
   }
 
   /** 完整开局历史无法补回；洗牌只能恢复数量，本局模式不自动升级。 */
@@ -233,23 +252,13 @@ export class Room extends RoomBase {
   }
 
   initDeck(cardIDs: CardID[]): void {
-    this.isDeckReady = false
-    this.hasProtocolPileCount = false
-    if (import.meta.env.DEV) this.diagnostics.reset()
-
-    this.cards.length = 0
-    this.detachedKnownCards.clear()
-    this.detachedIdentitySeq = 0
-    this.detachedCardOrder = new WeakMap()
-    this.playerSnapshot.reset()
-    this.cardIndex.clear()
+    this.zones.forEach((zone) => zone.clear())
+    this.resetMutableRoomState()
     this.unlocatedIdentities = new Set(cardIDs.filter((id) => id > 0))
     this.deckIdentities = new Set(this.unlocatedIdentities)
-    this.anonymousEntitySeq = -1
 
     // 牌堆只保存匿名物理槽，真实身份在揭示前统一留在 unlocatedIdentities。
     const pile = this.getZone('pile')
-    this.zones.forEach((zone) => zone.clear())
 
     const deckCards: Card[] = []
     for (let i = 0; i < cardIDs.length; i += 1) {
@@ -264,6 +273,7 @@ export class Room extends RoomBase {
 
     this.locationIndex.rebuild(this)
     this.ambiguousKnownIndex.rebuild(Array.from(this.constraintGroups.values()))
+    this.constraints.syncViewGroups()
     // A2：与区域索引一同 seed player 快照，使后续 resolveConstraints 走增量刷新。
     this.rebuildPlayerSnapshot()
     this.constraintGroupsDirty = false
@@ -307,7 +317,7 @@ export class Room extends RoomBase {
    */
   applyPileIdentityReveal(cardIDs: readonly CardID[], location?: PileIdentityRevealLocation): void {
     try {
-      const normalizedCardIDs = cardIDs.map(Number).filter((cardID) => cardID > 0)
+      const knownCardIDs = getPositiveIDs(cardIDs)
       // 保持固定分组顺序，便于每个账本事务独立对账并输出稳定的诊断上下文。
       const revealGroups: [PileIdentityRevealLocation, CardID[]][] = [
         ['pile', []],
@@ -316,7 +326,7 @@ export class Room extends RoomBase {
       ]
       const groupByLocation = new Map(revealGroups)
 
-      normalizedCardIDs.forEach((cardID) => {
+      knownCardIDs.forEach((cardID) => {
         const card = this.cardIndex.get(cardID)
         // 范围身份尚未物化时，展示目标不能覆盖原有候选位置证据。
         if (card && this.detachedKnownCards.has(card)) return
@@ -476,21 +486,6 @@ export class Room extends RoomBase {
   }
 
   /**
-   * 将座位入参标准化为数字数组，过滤空值和非法数字。
-   */
-  normalizeSeats(seatID: SeatID | SeatID[] | undefined): SeatID[] {
-    return (Array.isArray(seatID) ? seatID : [seatID])
-      .map((seat) => Number(seat))
-      .filter(
-        (seat) =>
-          Number.isInteger(seat) &&
-          seat >= 0 &&
-          seat < 8 &&
-          (this.seatIDs.length === 0 || this.seatIDs.includes(seat))
-      )
-  }
-
-  /**
    * 合并候选座位集合；优先取交集，若完全无交集则采用下一组候选。
    * 这样可以在保守收敛和乱序自愈之间保持弹性。
    */
@@ -498,19 +493,12 @@ export class Room extends RoomBase {
     currentSeats: Set<SeatID> | null | undefined,
     nextSeats: SeatID[] = []
   ): Set<SeatID> {
-    const normalizedNextSeats = this.normalizeSeats(nextSeats)
-    if (normalizedNextSeats.length === 0) {
-      return new Set(Array.from(currentSeats ?? []).map((seat) => Number(seat)))
-    }
+    const nextSeatSet = toSeatSet(nextSeats)
+    if (nextSeatSet.size === 0) return toSeatSet(currentSeats)
+    if (!currentSeats || currentSeats.size === 0) return nextSeatSet
 
-    if (!currentSeats || currentSeats.size === 0) return new Set(normalizedNextSeats)
-
-    const nextSeatSet = new Set(normalizedNextSeats)
-    const intersection = Array.from(currentSeats)
-      .map((seat) => Number(seat))
-      .filter((seat) => nextSeatSet.has(seat))
-
-    return new Set(intersection.length > 0 ? intersection : normalizedNextSeats)
+    const intersection = Array.from(currentSeats).filter((seat) => nextSeatSet.has(seat))
+    return intersection.length > 0 ? new Set(intersection) : nextSeatSet
   }
 
   /**
@@ -719,9 +707,8 @@ export class Room extends RoomBase {
 
     if (this.trackingMode === 'degraded') return false
 
-    const normalizedSeat = Number(seatID)
     const localHandCount = this.refreshPlayerSnapshot().filter(
-      (card) => card.subZone === 'hand' && card.seats.has(normalizedSeat)
+      (card) => card.subZone === 'hand' && card.seats.has(seatID)
     ).length
     return shouldRevealAsFullHand({ handCount, localHandCount })
   }
@@ -758,7 +745,7 @@ export class Room extends RoomBase {
     this.markCounterDirty(card)
     this.markViewDirty('card-changed')
     this.dirtyCards.add(card)
-    // dirtyCards 是本局级集合；事件日志用于视图按游标消费本次之后的新变化。
+    // dirtyCards 在重建牌堆或销毁时清空；事件日志用于视图按游标消费之后的新变化。
     this.dirtyCardSeq += 1
     this.dirtyCardEvents.push({
       seq: this.dirtyCardSeq,
@@ -767,15 +754,6 @@ export class Room extends RoomBase {
     })
     if (this.dirtyCardEvents.length > DIRTY_CARD_EVENT_LIMIT) {
       this.dirtyCardEvents.splice(0, this.dirtyCardEvents.length - DIRTY_CARD_EVENT_LIMIT)
-    }
-
-    this.cardChangeEvents.push({
-      cardID: card.id,
-      ...event
-    })
-
-    if (this.cardChangeEvents.length > 100) {
-      this.cardChangeEvents.splice(0, this.cardChangeEvents.length - 100)
     }
   }
 
@@ -840,7 +818,7 @@ export class Room extends RoomBase {
 
     const normalizedCardCount =
       options.cardCount !== null && options.cardCount !== undefined
-        ? Math.floor(Number(options.cardCount))
+        ? Math.floor(options.cardCount)
         : NaN
     const hasProtocolPileCount = Number.isFinite(normalizedCardCount) && normalizedCardCount >= 0
     this.hasProtocolPileCount = hasProtocolPileCount
@@ -1190,34 +1168,9 @@ export class Room extends RoomBase {
     this.players.clear()
     this.zones.forEach((zone) => zone.clear())
     this.trackedCards.forEach((card) => card.reset())
-    this.detachedKnownCards.clear()
-    this.detachedIdentitySeq = 0
-    this.detachedCardOrder = new WeakMap()
-    this.constraintGroups.clear()
-    this.constraintGroupsDirty = false
-    if (import.meta.env.DEV) this.diagnostics.reset()
-    this.maxResolveRounds = 0
-    this.lastResolveRounds = 0
+    this.resetMutableRoomState()
     this.moveEvents.clear()
     this.reconnection.clear()
-    this.ambiguousKnownIndex.items.clear()
-    this.ambiguousKnownIndex.containerDependentCards.clear()
-    this.ambiguousKnownIndex.lastConsumedSeq = 0
-    this.suspendedKnownCards.clear()
-    this.dirtyCards.clear()
-    this.dirtyCardEvents = []
-    this.dirtyCardSeq = 0
-    this.dirtyPublicZones.clear()
-    this.playerSnapshot.reset()
-    this.cardChangeEvents = []
-    this.viewDirty = false
-    this.cards = []
-    this.cardIndex.clear()
-    this.unlocatedIdentities.clear()
-    this.deckIdentities.clear()
-    this.anonymousEntitySeq = -1
-    this.isDeckReady = false
-    this.hasProtocolPileCount = false
     this.seatIDs = []
     this.size = 0
     this.firstID = undefined

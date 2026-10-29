@@ -37,7 +37,7 @@ interface KnownPublicResidue {
   cardSubZone: Card['subZone']
   cardSeats: SeatID[]
   hasLocationCandidates: boolean
-  hasSubZoneCandidates: boolean
+  hasPlayerLocationCandidates: boolean
 }
 
 /** 已知牌来源校正、逐牌落区与旧公共槽回补；批次信息只随本次流水线传递。 */
@@ -218,7 +218,9 @@ export class RoomMovementKnownPlacement {
             suspended: sourceCard.suspended,
             seats: Array.from(sourceCard.seats, Number),
             hasLocationCandidates: sourceCard.hasLocationCandidates(),
-            hasSubZoneCandidates: sourceCard.hasSubZoneCandidates()
+            hasPlayerLocationCandidates: sourceCard.locationCandidates.some(
+              (candidate) => candidate.type === 'player'
+            )
           })),
           sourceEvent
         })
@@ -331,7 +333,9 @@ export class RoomMovementKnownPlacement {
           cardSubZone: card.subZone,
           cardSeats: Array.from(card.seats, Number),
           hasLocationCandidates: card.hasLocationCandidates(),
-          hasSubZoneCandidates: card.hasSubZoneCandidates()
+          hasPlayerLocationCandidates: card.locationCandidates.some(
+            (candidate) => candidate.type === 'player'
+          )
         })
       })
 

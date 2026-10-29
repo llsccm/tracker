@@ -30,6 +30,32 @@ describe('Room 移动事件装饰', () => {
     expectTypeOf<Parameters<Room['decorateMoveEvent']>[0]>().toEqualTypeOf<NormalizedMoveEvent>()
   })
 
+  it('装饰器读面从插件按注册顺序投影，兼容旧注册入口并去重重复技能', () => {
+    const room = createRoom()
+    const wildcard = vi.fn()
+    const shared = vi.fn()
+    const legacy = vi.fn()
+    room.registerSkillPlugin({ id: 'wildcard', decorateMove: wildcard })
+    room.registerSkillPlugin({ id: 'shared', spellIDs: [42, 99, 42], decorateMove: shared })
+    room.registerSkillPlugin({ id: 'lifecycle', spellIDs: [42], onCardsRevealed: vi.fn() })
+    room.registerMoveEventHandler(42, legacy)
+
+    expect(Array.from(room.moveEventHandlers)).toEqual([
+      ['*', [wildcard]],
+      [42, [shared, legacy]],
+      [99, [shared]]
+    ])
+
+    const later = vi.fn()
+    room.registerSkillPlugin({ id: 'later', spellIDs: [42], decorateMove: later })
+    expect(room.moveEventHandlers.get(42)).toEqual([shared, legacy, later])
+    room.decorateMoveEvent(createEvent())
+    expect(wildcard).toHaveBeenCalledOnce()
+    expect(shared).toHaveBeenCalledOnce()
+    expect(legacy).toHaveBeenCalledOnce()
+    expect(later).toHaveBeenCalledOnce()
+  })
+
   it('先执行通配处理器，再按技能顺序执行，同技能入口去重', () => {
     const room = createRoom()
     const calls: string[] = []

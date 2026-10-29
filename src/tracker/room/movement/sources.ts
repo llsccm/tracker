@@ -131,7 +131,7 @@ export class RoomMovementSources {
         card.seats.has(seatID) !== true ||
         card.isKnown !== true ||
         card.suspended === true ||
-        card.hasSubZoneCandidates()
+        card.locationCandidates.some((candidate) => candidate.type === 'player')
       ) {
         continue
       }
@@ -413,7 +413,7 @@ export class RoomMovementSources {
     const replacementCandidate = this.getSourcePlaceholderReplacementCandidate(card, context)
     const oldLocation = card.location
     const oldSubZone = card.subZone
-    const oldSeats = new Set(Array.from(card.seats, Number))
+    const oldSeats = new Set(card.seats)
     const oldSpellID = card.spellID
     const oldPopupSpaceID = card.popupSpaceID
     const oldLocationCandidates = card.locationCandidates
@@ -435,7 +435,7 @@ export class RoomMovementSources {
       card.resolveLocationCandidate({ type: 'popup', spaceID: getPopupSpaceID(context.from) })
       card.confirmKnown()
     } else {
-      card.bindCandidates([fromSeat], fromSubZone, fromSubZone === 'mark' ? sourceSpellID : null, {
+      card.bindCandidates(fromSeat, fromSubZone, fromSubZone === 'mark' ? sourceSpellID : null, {
         known: true
       })
     }

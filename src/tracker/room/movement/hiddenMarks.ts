@@ -5,6 +5,7 @@ import {
   getMoveSeat
 } from '@/tracker/helper/moveEndpoint'
 import { trackerLogger } from '@/utils/logger'
+import { getPositiveIDs } from '@/tracker/helper/cardIDs'
 import {
   createEquipmentContainerLocationCandidate,
   getEquipmentMarkContainerByMarkSpellID
@@ -12,7 +13,6 @@ import {
 import { isHiddenMarkMove } from './hiddenMarkMove'
 import {
   createLocationCandidateKey,
-  toSubZoneCandidate,
   type LocationCandidateInput
 } from '@/tracker/candidate/locationCandidate'
 import type { Card } from '@/tracker/model'
@@ -115,8 +115,7 @@ export class RoomMovementHiddenMarks {
         card.subZone !== 'mark' ||
         card.spellID !== spellID ||
         !card.seats.has(fromSeat) ||
-        card.hasLocationCandidates() ||
-        card.hasSubZoneCandidates()
+        card.hasLocationCandidates()
       ) {
         return
       }
@@ -191,8 +190,10 @@ export class RoomMovementHiddenMarks {
         card.isKnown === true &&
         card.suspended !== true &&
         card.seats.has(sourceSeat) &&
-        ((card.subZone === 'hand' && !card.hasSubZoneCandidates()) ||
-          card.hasSubZoneCandidate({
+        ((card.subZone === 'hand' &&
+          !card.locationCandidates.some((candidate) => candidate.type === 'player')) ||
+          card.hasLocationCandidate({
+            type: 'player',
             seatID: sourceSeat,
             subZone: 'hand',
             spellID: null
@@ -346,7 +347,7 @@ export class RoomMovementHiddenMarks {
    * 否则后续标记区打出或换座时，只剩候选明牌，没有可维护数量的暗实体。
    */
   private moveHiddenMarkPlaceholders(context: RoomMoveContext, record: HiddenMarkRecord): Card[] {
-    const count = Math.max(0, Number(context.unknownCount) || 0)
+    const count = context.unknownCount
     if (count <= 0) return []
 
     const placeholderCards = takeUnknownCardsFromPlayer(this.room, record.sourceSeat, count, 'hand')
@@ -416,9 +417,7 @@ export class RoomMovementHiddenMarks {
       if (observedCards.has(card)) return
 
       const isSameMarkSpace =
-        card.location === 'player' &&
-        card.subZone === 'mark' &&
-        Number(card.spellID) === Number(record.spellID)
+        card.location === 'player' && card.subZone === 'mark' && card.spellID === record.spellID
       if (!isSameMarkSpace) return
 
       // 装备容器已经给出“全明且只有这些牌”的快照时，旧匿名/暗实体只是在维护未知数量，
@@ -447,11 +446,9 @@ export class RoomMovementHiddenMarks {
     reason: string
   ): { cardID: CardID; placeholderEntityID: number }[] {
     const materialized: { cardID: CardID; placeholderEntityID: number }[] = []
-    const pendingIDs = identityIDs
-      .map((id) => Number(id))
-      .filter(
-        (id) => id > 0 && !this.room.cardIndex.has(id) && this.room.unlocatedIdentities.has(id)
-      )
+    const pendingIDs = getPositiveIDs(identityIDs).filter(
+      (id) => !this.room.cardIndex.has(id) && this.room.unlocatedIdentities.has(id)
+    )
     if (pendingIDs.length === 0) return materialized
 
     const placeholders = Array.from(record.placeholderCards ?? []).filter(
@@ -459,14 +456,14 @@ export class RoomMovementHiddenMarks {
         card.isAnonymous &&
         card.location === 'player' &&
         card.subZone === 'mark' &&
-        Number(card.spellID) === Number(record.spellID)
+        card.spellID === record.spellID
     )
 
     pendingIDs.forEach((cardID) => {
       const placeholder = placeholders.shift()
       if (!placeholder) return
 
-      const previousEntityID = Number(placeholder.entityID)
+      const previousEntityID = placeholder.entityID
       const resolved = this.room.materialize(cardID, placeholder)
       if (!resolved) return
 
@@ -513,7 +510,7 @@ export class RoomMovementHiddenMarks {
         changed = card.setLocationCandidates(next, reason) || changed
       }
     } else if (candidate.type === 'player') {
-      if (card.subZone !== 'mark' || Number(card.spellID) !== Number(record.spellID)) {
+      if (card.subZone !== 'mark' || card.spellID !== record.spellID) {
         changed = card.resolveLocationCandidate(candidate, reason) || changed
       }
     }
@@ -534,7 +531,7 @@ export class RoomMovementHiddenMarks {
       card.isAnonymous &&
       card.location === 'player' &&
       card.subZone === 'mark' &&
-      Number(card.spellID) === Number(record.spellID)
+      card.spellID === record.spellID
     )
   }
 
@@ -619,9 +616,7 @@ export class RoomMovementHiddenMarks {
     if (!(card.id > 0)) return false
 
     const inMarkSpace =
-      card.location === 'player' &&
-      card.subZone === 'mark' &&
-      Number(card.spellID) === Number(record.spellID)
+      card.location === 'player' && card.subZone === 'mark' && card.spellID === record.spellID
     if (inMarkSpace) return true
 
     const candidate = this.createHiddenMarkTargetLocationCandidate(record)
@@ -762,27 +757,27 @@ export class RoomMovementHiddenMarks {
       context.cardCount === context.sourceHandTotalBefore
     if (!isFullHandReveal) return false
 
-    const revealedIDs = new Set(context.knownIDs.map((id) => Number(id)))
+    const revealedIDs = new Set(context.knownIDs)
     let changed = false
     const records: HiddenMarkRecord[] = []
     state.records.forEach((record) => records.push(record))
 
     records.forEach((record) => {
       if (state.records.get(record.id) !== record) return
-      if (Number(record.sourceSeat) !== Number(seat)) return
+      if (record.sourceSeat !== seat) return
       if (record.confirmedMarkCards.size >= record.knownMarkMax) return
 
       const strandedCandidates = Array.from(record.cards).filter((card) => {
         if (!(card.id > 0)) return false
-        if (revealedIDs.has(Number(card.id))) return false
+        if (revealedIDs.has(card.id)) return false
         if (record.confirmedMarkCards.has(card)) return false
-        if (card.location !== 'player' || !card.seats.has(Number(seat))) return false
+        if (card.location !== 'player' || !card.seats.has(seat)) return false
         // 仍把 hand 作为可能位置的候选，才需要反向收敛到 mark。
         const handCandidates = getCardPlayerLocationCandidates(card)
         return (
           card.subZone === 'hand' ||
           handCandidates.some(
-            (candidate) => Number(candidate.seatID) === Number(seat) && candidate.subZone === 'hand'
+            (candidate) => candidate.seatID === seat && candidate.subZone === 'hand'
           )
         )
       })
@@ -870,12 +865,6 @@ export class RoomMovementHiddenMarks {
           changed = card.setLocationCandidates([candidate], 'hiddenMark:confirmedMark') || changed
         } else if (card.hasLocationCandidate(candidate)) {
           changed = card.resolveLocationCandidate(candidate, 'hiddenMark:confirmedMark') || changed
-        } else {
-          const subZoneCandidate = toSubZoneCandidate(candidate)
-          if (subZoneCandidate && card.hasSubZoneCandidate(subZoneCandidate)) {
-            changed =
-              card.resolveSubZoneCandidate(subZoneCandidate, 'hiddenMark:confirmedMark') || changed
-          }
         }
         trackerLogger.info('手牌暗置标记区候选确认进标记', {
           spellID: record.spellID,
@@ -905,8 +894,6 @@ export class RoomMovementHiddenMarks {
 
         if (card.hasLocationCandidate(candidate)) {
           changed = card.resolveLocationCandidate(candidate, 'hiddenMark:confirmedHand') || changed
-        } else if (card.hasSubZoneCandidate(candidate)) {
-          changed = card.resolveSubZoneCandidate(candidate, 'hiddenMark:confirmedHand') || changed
         }
         trackerLogger.info('手牌暗置标记区候选确认回手牌', {
           spellID: record.spellID,
@@ -952,14 +939,14 @@ export class RoomMovementHiddenMarks {
 
     let changed = false
     const observedCards = new Set(context.knownCards)
-    const observedCardIDs = new Set(context.knownIDs.map(Number))
+    const observedCardIDs = new Set(context.knownIDs)
     const resolvedHandCardIDs: CardID[] = []
     const clearedPlaceholderIDs: CardID[] = []
     const records = Array.from(state.records.values())
 
     records.forEach((record) => {
       if (state.records.get(record.id) !== record) return
-      if (Number(record.spellID) !== markSpellID) return
+      if (record.spellID !== markSpellID) return
 
       const targetCandidate = this.createHiddenMarkTargetLocationCandidate(record)
       if (targetCandidate.type !== 'container') return
@@ -994,12 +981,9 @@ export class RoomMovementHiddenMarks {
       }
 
       context.knownIDs.forEach((cardID) => {
-        const card = this.room.cardIndex.get(Number(cardID))
+        const card = this.room.cardIndex.get(cardID)
         if (!card) return
-        if (
-          !record.cards.has(card) &&
-          !materialized.some((item) => item.cardID === Number(cardID))
-        ) {
+        if (!record.cards.has(card) && !materialized.some((item) => item.cardID === cardID)) {
           return
         }
         record.cards.add(card)
@@ -1016,7 +1000,7 @@ export class RoomMovementHiddenMarks {
       record.cards.forEach((card) => {
         if (
           observedCards.has(card) ||
-          observedCardIDs.has(Number(card.id)) ||
+          observedCardIDs.has(card.id) ||
           record.confirmedMarkCards.has(card)
         ) {
           return
