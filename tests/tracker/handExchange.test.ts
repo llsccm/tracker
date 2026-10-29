@@ -1,9 +1,10 @@
+import { getCard, getHandCardIDs, bindTestHand } from './helpers/room'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { describe, expect, it } from 'vitest'
 import { HAND_EXCHANGE_STATE_KEY } from '@/tracker/skill/HandExchange'
-import type { Room } from '@/tracker/Room'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+
+import { protocolMove, createReadyControllerHarness } from './helpers/trackerController'
 
 type HandExchangeState = {
   bySpell: Record<string, { batches: Record<string, { batchID: string }[]> }>
@@ -18,54 +19,21 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
   const hiddenFromC = [401, 402, 403]
   const allIDs = [...knownFromB, ...hiddenFromA, ...hiddenFromB, ...hiddenFromC]
 
-  function getCard(room: Room, id: number) {
-    const existing = room.cardIndex.get(id)
-    if (existing) return existing
-    const target = room.zones.get('pile')!.cards.find((card) => card.isAnonymous) ?? null
-    return room.materialize(id, target)!
-  }
-
-  function handCards(room: Room, seatID: number) {
-    return room.cards.filter(
-      (card) => card.location === 'player' && card.subZone === 'hand' && card.seats.has(seatID)
-    )
-  }
-
-  function handIDs(room: Room, seatID: number): number[] {
-    return handCards(room, seatID)
-      .map((card) => card.id)
-      .sort((a, b) => a - b)
-  }
-
-  function bindHiddenHand(room: Room, ids: number[], seatID: number) {
-    const cards = ids.map((id) => getCard(room, id))
-    room.clearCardsFromPublicZones(cards)
-    cards.forEach((card) => {
-      card.bindCandidates([seatID], 'hand', null, { known: false })
-      card.isKnown = false
-      room.notifyCardChanged(card, { type: 'test:hidden-hand' })
-    })
-  }
-
   function setupController() {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
+    const { controller, room } = createReadyControllerHarness({
+      players: [
         { SeatID: seatA, ClientID: 400 },
         { SeatID: seatB, ClientID: 500 },
         { SeatID: 3, ClientID: 300 }
       ],
-      400
-    )
-    controller.initTrackerDeck(allIDs)
+      currentUserID: 400,
+      cardIDs: allIDs
+    })
 
-    const room = controller.getTrackerRoom()!
-
-    bindHiddenHand(room, hiddenFromA, seatA)
+    bindTestHand(room, seatA, { hiddenIDs: hiddenFromA })
     room.getPlayer(seatA).syncObservedHandCount(4)
 
-    bindHiddenHand(room, hiddenFromB, seatB)
+    bindTestHand(room, seatB, { hiddenIDs: hiddenFromB })
     controller.syncTrackerMove(
       protocolMove({
         CardIDs: knownFromB,
@@ -100,26 +68,17 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     hiddenHands: Record<number, number[]>
     observedCounts: Record<number, number>
   }) {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
-        { SeatID: 1, ClientID: 100 },
-        { SeatID: 2, ClientID: 200 },
-        { SeatID: 3, ClientID: 300 }
-      ],
-      100
-    )
-
     const hiddenIDs = Object.values(hiddenHands).flat()
-    controller.initTrackerDeck(Array.from(new Set([...hiddenIDs, ...candidateIDs, ...deckIDs])))
-    const room = controller.getTrackerRoom()!
+    const { controller, room } = createReadyControllerHarness({
+      seatIDs: [1, 2, 3],
+      cardIDs: Array.from(new Set([...hiddenIDs, ...candidateIDs, ...deckIDs]))
+    })
 
     Object.entries(hiddenHands).forEach(([seatID, ids]) => {
-      bindHiddenHand(room, ids, Number(seatID))
+      bindTestHand(room, Number(seatID), { hiddenIDs: ids })
     })
     candidateIDs.forEach((id) => {
-      const card = getCard(room, id)
+      const card = getCard(room, id, { reveal: false })
       room.clearCardsFromPublicZones([card])
       card.bindCandidates(candidateSeats, 'hand', null, { known: true })
       room.notifyCardChanged(card, { type: 'test:hand-exchange-candidate' })
@@ -131,106 +90,43 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     return { controller, room }
   }
 
-  function runTwoSeatExchange(
-    controller: ReturnType<typeof createTrackerControllerHarness>['controller'],
-    firstSeat: number,
-    firstCount: number,
-    secondSeat: number,
-    secondCount: number,
-    spellID = 121
+  function runHandExchange(
+    controller: ReturnType<typeof createReadyControllerHarness>['controller'],
+    [firstSeat, firstCount]: [number, number],
+    [secondSeat, secondCount]: [number, number],
+    {
+      spellID = 121,
+      stepCardIDs = [[], [], [], []]
+    }: {
+      spellID?: number
+      stepCardIDs?: [number[], number[], number[], number[]]
+    } = {}
   ) {
     const steps = [
-      protocolMove({
-        CardIDs: [],
-        CardCount: firstCount,
-        FromID: firstSeat,
-        FromZone: 5,
-        ToID: firstSeat,
-        ToZone: 10,
-        MoveType: 11,
-        SpellID: spellID
-      }),
-      protocolMove({
-        CardIDs: [],
-        CardCount: secondCount,
-        FromID: secondSeat,
-        FromZone: 5,
-        ToID: secondSeat,
-        ToZone: 10,
-        MoveType: 11,
-        SpellID: spellID
-      }),
-      protocolMove({
-        CardIDs: [],
-        CardCount: secondCount,
-        FromID: secondSeat,
-        FromZone: 10,
-        ToID: firstSeat,
-        ToZone: 5,
-        MoveType: 11,
-        SpellID: spellID
-      }),
-      protocolMove({
-        CardIDs: [],
-        CardCount: firstCount,
-        FromID: firstSeat,
-        FromZone: 10,
-        ToID: secondSeat,
-        ToZone: 5,
-        MoveType: 11,
-        SpellID: spellID
-      })
+      [firstSeat, firstSeat, 5, 10, firstCount],
+      [secondSeat, secondSeat, 5, 10, secondCount],
+      [secondSeat, firstSeat, 10, 5, secondCount],
+      [firstSeat, secondSeat, 10, 5, firstCount]
     ]
-    steps.forEach((msg) => controller.syncTrackerMove(msg))
+    steps.forEach(([FromID, ToID, FromZone, ToZone, CardCount], index) => {
+      controller.syncTrackerMove(
+        protocolMove({
+          CardIDs: stepCardIDs[index],
+          CardCount,
+          FromID,
+          ToID,
+          FromZone,
+          ToZone,
+          MoveType: 11,
+          SpellID: spellID
+        })
+      )
+    })
   }
 
   function runWholeHandExchange(spellID: number) {
     const { controller, room } = setupController()
-
-    const steps = [
-      protocolMove({
-        CardIDs: [],
-        CardCount: 4,
-        FromID: seatA,
-        FromZone: 5,
-        ToID: seatA,
-        ToZone: 10,
-        MoveType: 11,
-        SpellID: spellID
-      }),
-      protocolMove({
-        CardIDs: [],
-        CardCount: 8,
-        FromID: seatB,
-        FromZone: 5,
-        ToID: seatB,
-        ToZone: 10,
-        MoveType: 11,
-        SpellID: spellID
-      }),
-      protocolMove({
-        CardIDs: [],
-        CardCount: 8,
-        FromID: seatB,
-        FromZone: 10,
-        ToID: seatA,
-        ToZone: 5,
-        MoveType: 11,
-        SpellID: spellID
-      }),
-      protocolMove({
-        CardIDs: [],
-        CardCount: 4,
-        FromID: seatA,
-        FromZone: 10,
-        ToID: seatB,
-        ToZone: 5,
-        MoveType: 11,
-        SpellID: spellID
-      })
-    ]
-
-    steps.forEach((msg) => controller.syncTrackerMove(msg))
+    runHandExchange(controller, [seatA, 4], [seatB, 8], { spellID })
     return room
   }
 
@@ -267,11 +163,13 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(room.publicZones.getExchangeBatch(batchID).cards).toHaveLength(0)
   })
 
-  it('技能 121：完整协议序列后双方手牌互换，明牌保持公开、暗牌不被误公开', () => {
-    const room = runWholeHandExchange(121)
+  it.each([121, 9999])('技能 %i 完整协议序列后双方手牌互换，明暗状态保持且批次清空', (spellID) => {
+    const room = runWholeHandExchange(spellID)
 
-    expect(handIDs(room, seatA)).toEqual([...knownFromB, ...hiddenFromB].sort((a, b) => a - b))
-    expect(handIDs(room, seatB)).toEqual([...hiddenFromA].sort((a, b) => a - b))
+    expect(getHandCardIDs(room, seatA)).toEqual(
+      [...knownFromB, ...hiddenFromB].sort((a, b) => a - b)
+    )
+    expect(getHandCardIDs(room, seatB)).toEqual([...hiddenFromA].sort((a, b) => a - b))
     expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
 
     knownFromB.forEach((id) => {
@@ -300,15 +198,6 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
 
-  it('任意 SpellID 复用同一整手交换协议模式', () => {
-    const room = runWholeHandExchange(9999)
-
-    expect(handIDs(room, seatA)).toEqual([...knownFromB, ...hiddenFromB].sort((a, b) => a - b))
-    expect(handIDs(room, seatB)).toEqual([...hiddenFromA].sort((a, b) => a - b))
-    expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
-    expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
-  })
-
   it('双方整手全暗时仍按实体批次互换且不会公开身份', () => {
     const firstHandIDs = [551, 552]
     const secondHandIDs = [553, 554, 555]
@@ -325,10 +214,10 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
       }
     })
 
-    runTwoSeatExchange(controller, 1, firstHandIDs.length, 2, secondHandIDs.length)
+    runHandExchange(controller, [1, firstHandIDs.length], [2, secondHandIDs.length])
 
-    expect(handIDs(room, 1)).toEqual([...secondHandIDs].sort((a, b) => a - b))
-    expect(handIDs(room, 2)).toEqual([...firstHandIDs].sort((a, b) => a - b))
+    expect(getHandCardIDs(room, 1)).toEqual([...secondHandIDs].sort((a, b) => a - b))
+    expect(getHandCardIDs(room, 2)).toEqual([...firstHandIDs].sort((a, b) => a - b))
     ;[...firstHandIDs, ...secondHandIDs].forEach((id) => {
       expect(getCard(room, id).isKnown).toBe(false)
     })
@@ -421,57 +310,12 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
       expect(card.isKnown).toBe(false)
     })
 
-    const steps = [
-      // 4 号对侧：协议全暗整手
-      protocolMove({
-        CardIDs: [],
-        CardCount: 4,
-        FromID: seatA,
-        FromZone: 5,
-        ToID: seatA,
-        ToZone: 10,
-        MoveType: 11,
-        SpellID: 121
-      }),
-      // 5 号己方：协议给整手正 ID
-      protocolMove({
-        CardIDs: selfHandIDs,
-        CardCount: 8,
-        FromID: seatB,
-        FromZone: 5,
-        ToID: seatB,
-        ToZone: 10,
-        MoveType: 11,
-        SpellID: 121
-      }),
-      // 原 5 号批次回 4 号：协议也可继续给正 ID
-      protocolMove({
-        CardIDs: selfHandIDs,
-        CardCount: 8,
-        FromID: seatB,
-        FromZone: 10,
-        ToID: seatA,
-        ToZone: 5,
-        MoveType: 11,
-        SpellID: 121
-      }),
-      // 原 4 号批次回 5 号：对侧仍全暗
-      protocolMove({
-        CardIDs: [],
-        CardCount: 4,
-        FromID: seatA,
-        FromZone: 10,
-        ToID: seatB,
-        ToZone: 5,
-        MoveType: 11,
-        SpellID: 121
-      })
-    ]
+    runHandExchange(controller, [seatA, 4], [seatB, 8], {
+      stepCardIDs: [[], selfHandIDs, selfHandIDs, []]
+    })
 
-    steps.forEach((msg) => controller.syncTrackerMove(msg))
-
-    expect(handIDs(room, seatA)).toEqual([...selfHandIDs].sort((a, b) => a - b))
-    expect(handIDs(room, seatB)).toEqual([...hiddenFromA].sort((a, b) => a - b))
+    expect(getHandCardIDs(room, seatA)).toEqual([...selfHandIDs].sort((a, b) => a - b))
+    expect(getHandCardIDs(room, seatB)).toEqual([...hiddenFromA].sort((a, b) => a - b))
     expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
 
     // 协议正 ID 的己方整手在到 4 号后仍保持公开
@@ -495,7 +339,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
 
   it('结算中嵌套空手交换时不消费外层同座位批次', () => {
     const { controller, room } = setupController()
-    bindHiddenHand(room, hiddenFromC, 3)
+    bindTestHand(room, 3, { hiddenIDs: hiddenFromC })
     room.getPlayer(3).syncObservedHandCount(hiddenFromC.length)
 
     const steps = [
@@ -586,11 +430,11 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
 
     steps.forEach((msg) => controller.syncTrackerMove(msg))
 
-    expect(handIDs(room, seatA)).toEqual(
+    expect(getHandCardIDs(room, seatA)).toEqual(
       [...knownFromB, ...hiddenFromB, ...hiddenFromC].sort((a, b) => a - b)
     )
-    expect(handIDs(room, seatB)).toEqual([...hiddenFromA].sort((a, b) => a - b))
-    expect(handIDs(room, 3)).toEqual([])
+    expect(getHandCardIDs(room, seatB)).toEqual([...hiddenFromA].sort((a, b) => a - b))
+    expect(getHandCardIDs(room, 3)).toEqual([])
     expect(room.zones.get('exchange')?.cards.length ?? 0).toBe(0)
     expect(room.hasSkillState(HAND_EXCHANGE_STATE_KEY)).toBe(false)
   })
@@ -610,7 +454,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
       }
     })
 
-    runTwoSeatExchange(controller, 1, 2, 2, 2)
+    runHandExchange(controller, [1, 2], [2, 2])
 
     expect(getCard(room, 501).seats).toEqual(new Set([2]))
     expect(getCard(room, 502).seats).toEqual(new Set([1]))
@@ -645,7 +489,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
       }
     })
 
-    runTwoSeatExchange(controller, 1, 2, 2, 2, otherSpellID)
+    runHandExchange(controller, [1, 2], [2, 2], { spellID: otherSpellID })
 
     expect(getCard(room, 501).seats).toEqual(new Set([2]))
     expect(getCard(room, 502).seats).toEqual(new Set([1]))
@@ -725,21 +569,12 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
   })
 
   it('中断批次回手只移动仍在交换区的成员且不串走其它批次', () => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
-        { SeatID: 1, ClientID: 100 },
-        { SeatID: 2, ClientID: 200 },
-        { SeatID: 3, ClientID: 300 }
-      ],
-      100
-    )
-    controller.initTrackerDeck([701, 702, 801, 802])
-
-    const room = controller.getTrackerRoom()!
-    bindHiddenHand(room, [701, 702], 1)
-    bindHiddenHand(room, [801, 802], 2)
+    const { controller, room } = createReadyControllerHarness({
+      seatIDs: [1, 2, 3],
+      cardIDs: [701, 702, 801, 802]
+    })
+    bindTestHand(room, 1, { hiddenIDs: [701, 702] })
+    bindTestHand(room, 2, { hiddenIDs: [801, 802] })
     room.getPlayer(1).syncObservedHandCount(2)
     room.getPlayer(2).syncObservedHandCount(2)
     ;[1, 2].forEach((seatID) => {
@@ -809,7 +644,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
       }
     })
 
-    runTwoSeatExchange(controller, 1, 2, 2, 1)
+    runHandExchange(controller, [1, 2], [2, 1])
 
     expect(getCard(room, 511).seats).toEqual(new Set([2]))
     expect(getCard(room, 512).seats).toEqual(new Set([1]))
@@ -847,50 +682,9 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     })
     selfHandIDs.forEach((id) => getCard(room, id).confirmKnown())
 
-    const steps = [
-      protocolMove({
-        CardIDs: selfHandIDs,
-        CardCount: 2,
-        FromID: 1,
-        FromZone: 5,
-        ToID: 1,
-        ToZone: 10,
-        MoveType: 11,
-        SpellID: 121
-      }),
-      protocolMove({
-        CardIDs: [],
-        CardCount: 2,
-        FromID: 2,
-        FromZone: 5,
-        ToID: 2,
-        ToZone: 10,
-        MoveType: 11,
-        SpellID: 121
-      }),
-      // 己方收到的整手完全可见：631 属于 2 号原手牌，632 因未出现而只能属于 3 号。
-      protocolMove({
-        CardIDs: [533, 631],
-        CardCount: 2,
-        FromID: 2,
-        FromZone: 10,
-        ToID: 1,
-        ToZone: 5,
-        MoveType: 11,
-        SpellID: 121
-      }),
-      protocolMove({
-        CardIDs: selfHandIDs,
-        CardCount: 2,
-        FromID: 1,
-        FromZone: 10,
-        ToID: 2,
-        ToZone: 5,
-        MoveType: 11,
-        SpellID: 121
-      })
-    ]
-    steps.forEach((msg) => controller.syncTrackerMove(msg))
+    runHandExchange(controller, [1, 2], [2, 2], {
+      stepCardIDs: [selfHandIDs, [], [533, 631], selfHandIDs]
+    })
 
     expect(getCard(room, 531).seats).toEqual(new Set([2]))
     expect(getCard(room, 532).seats).toEqual(new Set([2]))
@@ -929,49 +723,9 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
     placeholder.bindCandidates([2], 'hand', null, { known: false })
     room.notifyCardChanged(placeholder, { type: 'test:hand-exchange-placeholder' })
 
-    const steps = [
-      protocolMove({
-        CardIDs: selfHandIDs,
-        CardCount: 2,
-        FromID: 1,
-        FromZone: 5,
-        ToID: 1,
-        ToZone: 10,
-        MoveType: 11,
-        SpellID: 121
-      }),
-      protocolMove({
-        CardIDs: [],
-        CardCount: 2,
-        FromID: 2,
-        FromZone: 5,
-        ToID: 2,
-        ToZone: 10,
-        MoveType: 11,
-        SpellID: 121
-      }),
-      protocolMove({
-        CardIDs: [revealedPlaceholderID, 641],
-        CardCount: 2,
-        FromID: 2,
-        FromZone: 10,
-        ToID: 1,
-        ToZone: 5,
-        MoveType: 11,
-        SpellID: 121
-      }),
-      protocolMove({
-        CardIDs: selfHandIDs,
-        CardCount: 2,
-        FromID: 1,
-        FromZone: 10,
-        ToID: 2,
-        ToZone: 5,
-        MoveType: 11,
-        SpellID: 121
-      })
-    ]
-    steps.forEach((msg) => controller.syncTrackerMove(msg))
+    runHandExchange(controller, [1, 2], [2, 2], {
+      stepCardIDs: [selfHandIDs, [], [revealedPlaceholderID, 641], selfHandIDs]
+    })
 
     expect(getCard(room, revealedPlaceholderID).seats).toEqual(new Set([1]))
     expect(getCard(room, revealedPlaceholderID).isKnown).toBe(true)

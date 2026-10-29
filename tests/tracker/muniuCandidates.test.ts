@@ -7,7 +7,7 @@ import type { SeatID } from '@/tracker/types'
 import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/room/movement/types'
 import { trackerLogger } from '@/utils/logger'
 import { createTestRoom, getCard, takeAnonymousCard } from './helpers/room'
-import { equipmentContainer, playerLocation } from './helpers/locationCandidates'
+import { equipmentContainer, playerLocation, locationKeys } from './helpers/locationCandidates'
 import {
   moveHiddenHandToMark,
   moveKnownCardsToHand,
@@ -80,11 +80,9 @@ describe('木牛流马候选与收敛', () => {
           .get('hidden_mark_1:muniu:161')!
           .expectedSlotsByLocation.get('container:equipment:161:700')
       ).toEqual({ min: 0, max: 1 })
-      expect(
-        knownCard.locationCandidates
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
-      ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
+      expect(locationKeys(knownCard)).toEqual(
+        [createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort()
+      )
       expect(hiddenCard.isKnown).toBe(false)
       expect(hiddenCard.subZone).toBe('mark')
       expect(hiddenCard.spellID).toBe(700)
@@ -116,9 +114,9 @@ describe('木牛流马候选与收敛', () => {
         max: 1
       })
       cards.forEach((card) => {
-        expect(
-          card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
-        ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
+        expect(locationKeys(card)).toEqual(
+          [createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort()
+        )
       })
 
       room.moveCards([161], {
@@ -228,11 +226,9 @@ describe('木牛流马候选与收敛', () => {
 
       const pileCountBefore = room.zones.get('pile').cards.length
 
-      expect(
-        knownCard.locationCandidates
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
-      ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
+      expect(locationKeys(knownCard)).toEqual(
+        [createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort()
+      )
       expect(placeholderCard.subZone).toBe('mark')
       expect(placeholderCard.spellID).toBe(700)
 
@@ -307,11 +303,9 @@ describe('木牛流马候选与收敛', () => {
         (card) => card.isAnonymous && card.subZone === 'mark'
       )!
 
-      expect(
-        knownCard.locationCandidates
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
-      ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
+      expect(locationKeys(knownCard)).toEqual(
+        [createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort()
+      )
       expect(placeholderCard.seats.has(4)).toBe(true)
       const originalRecord = room
         .readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)!
@@ -344,11 +338,9 @@ describe('木牛流马候选与收敛', () => {
       expect(knownCard.location).toBe('player')
       expect(knownCard.subZone).toBe('hand')
       expect(knownCard.seats.has(4)).toBe(true)
-      expect(
-        knownCard.locationCandidates
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
-      ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
+      expect(locationKeys(knownCard)).toEqual(
+        [createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort()
+      )
       expect(placeholderCard.location).toBe('player')
       expect(placeholderCard.subZone).toBe('mark')
       expect(placeholderCard.spellID).toBe(700)
@@ -363,11 +355,9 @@ describe('木牛流马候选与收敛', () => {
         sourceEvent: { type: 'test:empty-muniu-mark-sync' }
       })
 
-      expect(
-        knownCard.locationCandidates
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
-      ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
+      expect(locationKeys(knownCard)).toEqual(
+        [createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort()
+      )
       expect(room.locationIndex.markBySeatAndSpell.get(5).get(700)).toContain(knownCard)
     })
 
@@ -526,9 +516,9 @@ describe('木牛流马候选与收敛', () => {
       expect(room.cardIndex.has(24)).toBe(false)
       expect(room.cardIndex.has(70)).toBe(false)
       candidateCards.forEach((card) => {
-        expect(
-          card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
-        ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
+        expect(locationKeys(card)).toEqual(
+          [createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort()
+        )
       })
 
       room.moveCards([161], {
@@ -605,11 +595,9 @@ describe('木牛流马候选与收敛', () => {
         spellID: 700
       })
 
-      expect(
-        candidateCard.locationCandidates
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
-      ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
+      expect(locationKeys(candidateCard)).toEqual(
+        [createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort()
+      )
 
       room.syncObservedPlayerHandCount(4, 0)
 
@@ -639,11 +627,9 @@ describe('木牛流马候选与收敛', () => {
       )
       const entityCountBefore = room.cards.length
 
-      expect(
-        candidateCard.locationCandidates
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
-      ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
+      expect(locationKeys(candidateCard)).toEqual(
+        [createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort()
+      )
       expect(placeholders).toHaveLength(2)
       expect(room.cardIndex.has(153)).toBe(false)
 

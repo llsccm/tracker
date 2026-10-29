@@ -2,23 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import {
   createErrorSpy,
-  createTrackerControllerHarness,
-  protocolMove
+  protocolMove,
+  createReadyControllerHarness
 } from './helpers/trackerController'
 
 function setupExchange(bottomIDs: number[] = [1, 2, 3], handIDs: number[] = []) {
   const errorSpy = createErrorSpy()
-  const { controller } = createTrackerControllerHarness()
-  controller.initTrackerRoom()
-  controller.registerTrackerPlayers(
-    [1, 4, 7].map((seat) => ({ SeatID: seat, ClientID: seat })),
-    1
-  )
-  controller.initTrackerDeck(Array.from({ length: 20 }, (_, index) => index + 1))
+  const { controller, room } = createReadyControllerHarness({
+    players: [1, 4, 7].map((seat) => ({ SeatID: seat, ClientID: seat })),
+    currentUserID: 1,
+    cardIDs: Array.from({ length: 20 }, (_, index) => index + 1)
+  })
   controller.syncTrackerMove(protocolMove({ ToID: 4, CardCount: 4, CardIDs: [] }))
   if (handIDs.length) controller.revealTrackerCards({ type: 'player', seatID: 4 }, handIDs)
   controller.revealTrackerCardsInZone({ id: 255, zone: 1, pos: POSITION_BOTTOM }, bottomIDs)
-  const room = controller.getTrackerRoom()!
   return { controller, room, errorSpy }
 }
 

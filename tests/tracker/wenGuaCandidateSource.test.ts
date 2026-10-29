@@ -4,23 +4,21 @@ import { MOVE_TYPE } from '@/tracker/protocol/MoveEventNormalizer'
 import type { RawMoveCardEvent } from '@/tracker/types'
 import {
   createErrorSpy,
-  createTrackerControllerHarness,
-  protocolMove
+  protocolMove,
+  createReadyControllerHarness
 } from './helpers/trackerController'
 
 function createHarness(sourceIDs = [11, 12, 0], targetIDs = [13, 0]) {
   const errorSpy = createErrorSpy()
-  const { controller, gameState } = createTrackerControllerHarness()
-  controller.initTrackerRoom()
-  controller.registerTrackerPlayers(
-    [
+  const { controller, gameState, room } = createReadyControllerHarness({
+    players: [
       { SeatID: 1, ClientID: 10 },
       { SeatID: 4, ClientID: 40 },
       { SeatID: 7, ClientID: 70 }
     ],
-    70
-  )
-  controller.initTrackerDeck([11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
+    currentUserID: 70,
+    cardIDs: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+  })
   for (const [seatID, ids] of [
     [1, sourceIDs],
     [4, targetIDs]
@@ -34,7 +32,6 @@ function createHarness(sourceIDs = [11, 12, 0], targetIDs = [13, 0]) {
         protocolMove({ CardIDs: [], CardCount: unknownCount, ToID: seatID })
       )
   }
-  const room = controller.getTrackerRoom()!
   room.getPlayer(1)!.syncObservedHandCount(sourceIDs.length)
   room.getPlayer(4)!.syncObservedHandCount(targetIDs.length)
   room.resolveConstraints()

@@ -1,3 +1,4 @@
+import { bindTestHand } from './helpers/room'
 import { describe, expect, it, vi } from 'vitest'
 import { trackerLogger } from '@/utils/logger'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
@@ -10,23 +11,14 @@ import {
   recordDuoQiActivation,
   recordDuoQiRoleDataTarget
 } from '@/tracker/skill/DuoQi'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { protocolMove, createReadyControllerHarness } from './helpers/trackerController'
 
-function getCard(room: Room, cardID: number) {
-  const existing = room.cardIndex.get(cardID)
-  if (existing) return existing
-  const target = room.zones.get('pile')!.cards.find((card) => card.isAnonymous) ?? null
-  return room.materialize(cardID, target)!
-}
-
+/** 夺炁的历史暗实体已在牌堆外，初始化前提交对应身份事实。 */
 function bindHand(room: Room, cardIDs: number[], seatID: number, known = true): void {
-  const cards = cardIDs.map((cardID) => getCard(room, cardID))
-  room.clearCardsFromPublicZones(cards)
-  cards.forEach((card) => {
-    card.bindCandidates([seatID], 'hand', null, { known })
-    card.isKnown = known
+  bindTestHand(room, seatID, {
+    ...(known ? { knownIDs: cardIDs } : { hiddenIDs: cardIDs }),
+    observeCount: cardIDs.length
   })
-  room.getPlayer(seatID).syncObservedHandCount(cardIDs.length)
   room.resolveConstraints()
   room.applyPileIdentityReveal(cardIDs, 'outside')
 }
@@ -40,17 +32,11 @@ function dealAnonymousHand(room: Room, seatID: number, count: number): void {
 }
 
 function setup(cardIDs = [1, 2, 3, 4, 5, 6, 7, 8], currentUserID = 100) {
-  const { controller, gameState } = createTrackerControllerHarness()
-  controller.initTrackerRoom()
-  controller.registerTrackerPlayers(
-    [
-      { SeatID: 1, ClientID: 100 },
-      { SeatID: 2, ClientID: 200 },
-      { SeatID: 3, ClientID: 300 }
-    ],
-    currentUserID
-  )
-  controller.initTrackerDeck(cardIDs)
+  const { controller, gameState } = createReadyControllerHarness({
+    seatIDs: [1, 2, 3],
+    currentUserID: currentUserID,
+    cardIDs: cardIDs
+  })
   return { controller, gameState, room: controller.getTrackerRoom()! }
 }
 

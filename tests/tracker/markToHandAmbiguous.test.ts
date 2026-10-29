@@ -5,7 +5,7 @@ import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
 import { getPlayerHandCardsBySeat } from '@/tracker/room/movement/sourceQueries'
 import { createTestRoom, getCard } from './helpers/room'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { protocolMove, createReadyControllerHarness } from './helpers/trackerController'
 import { trackerLogger } from '@/utils/logger'
 
 /** 复现“第三视角观测标记区暗牌进入手牌”的原始协议。 */
@@ -52,12 +52,10 @@ describe('标记区暗牌进入手牌', () => {
   it.each([{ discardIDs: [92, 111, 96] }, { discardIDs: [96, 92, 111] }])(
     '控制器按手牌协议弃置标记候选与匿名手牌，不受揭示顺序影响：$discardIDs',
     ({ discardIDs }) => {
-      const { controller } = createTrackerControllerHarness()
-      controller.initTrackerRoom()
-      controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }, { SeatID: 3 }], 100)
-      // 97 仅作为第二张标记明牌的夹具身份；其余 ID 来自问题协议。
-      controller.initTrackerDeck([92, 111, 96, 97, 31275])
-      const room = controller.getTrackerRoom()!
+      const { controller, room } = createReadyControllerHarness({
+        players: [{ SeatID: 0, ClientID: 100 }, { SeatID: 3 }],
+        cardIDs: [92, 111, 96, 97, 31275]
+      })
       const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
       try {
         controller.syncTrackerMove(

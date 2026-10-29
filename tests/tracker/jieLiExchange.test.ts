@@ -1,3 +1,4 @@
+import { bindTestHand, getHandCardIDs } from './helpers/room'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
@@ -5,34 +6,25 @@ import { MOVE_TYPE } from '@/tracker/protocol/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
 import { JIE_LI_SPELL_ID, recordJieLiContext, recordJieLiSelection } from '@/tracker/skill/JieLi'
 import { locationKeys, playerHand, publicLocation } from './helpers/locationCandidates'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { createReadyControllerHarness, protocolMove } from './helpers/trackerController'
 
 const observerSeat = 2
 const actorSeat = 3
 const targetSeat = 4
 
 function setupView(deckIDs: number[], handIDs: number[], viewSeat = targetSeat) {
-  const { controller } = createTrackerControllerHarness()
-  controller.initTrackerRoom()
-  controller.registerTrackerPlayers(
-    [
+  const { controller, room } = createReadyControllerHarness({
+    players: [
       { SeatID: observerSeat, ClientID: 200 },
       { SeatID: actorSeat, ClientID: 300 },
       { SeatID: targetSeat, ClientID: 400 }
     ],
-    viewSeat * 100
-  )
-  controller.initTrackerDeck(deckIDs)
-
-  const room = controller.getTrackerRoom()!
+    currentUserID: viewSeat * 100,
+    cardIDs: deckIDs
+  })
   const pile = room.zones.get('pile')!
 
-  handIDs.forEach((cardID) => {
-    const card = room.materialize(cardID, pile.cards[0])!
-    room.clearCardsFromPublicZones([card])
-    card.bindCandidates([targetSeat], 'hand', null, { known: true })
-  })
-  room.getPlayer(targetSeat)!.syncObservedHandCount(handIDs.length)
+  bindTestHand(room, targetSeat, { knownIDs: handIDs, observeCount: handIDs.length })
   room.resolveConstraints()
 
   return {
@@ -117,7 +109,7 @@ function createJieLiMoves(
 }
 
 function syncTargetJieLiExchange(
-  controller: ReturnType<typeof createTrackerControllerHarness>['controller'],
+  controller: ReturnType<typeof createReadyControllerHarness>['controller'],
   room: Room,
   pileStageIDs: number[],
   handStageIDs: number[],
@@ -153,14 +145,6 @@ function getPileTopCards(room: Room, count: number) {
   return room.zones.get('pile')!.cards.slice(-count).reverse()
 }
 
-function getTargetHandIDs(room: Room): number[] {
-  return room
-    .refreshPlayerSnapshot()
-    .filter((card) => card.subZone === 'hand' && card.seats.has(targetSeat))
-    .map((card) => card.id)
-    .sort((left, right) => left - right)
-}
-
 describe('族钟繇诫厉视角权限与交换', () => {
   beforeEach(() => {
     vi.stubEnv('DEV', false)
@@ -187,7 +171,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     const pileTop = getPileTopCards(room, 4)
     expect(pileTop[0].id).toBe(48)
     expect(pileTop.slice(1).every((card) => card.id < 0 && card.isKnown !== true)).toBe(true)
-    expect(getTargetHandIDs(room)).toEqual([110])
+    expect(getHandCardIDs(room, targetSeat)).toEqual([110])
     expect(exchange.cards).toHaveLength(0)
     expect(pile.cards).toHaveLength(pileCount)
     expect(room.cards).toHaveLength(entityCount)
@@ -213,7 +197,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     const pileTop = getPileTopCards(room, 4)
     expect(pileTop.slice(0, 2).every((card) => card.id < 0 && card.isKnown !== true)).toBe(true)
     expect(pileTop.slice(2).map((card) => card.id)).toEqual([91, 158])
-    expect(getTargetHandIDs(room)).toEqual([4, 124])
+    expect(getHandCardIDs(room, targetSeat)).toEqual([4, 124])
     expect(exchange.cards).toHaveLength(0)
     expect(pile.cards).toHaveLength(pileCount)
     expect(room.cards).toHaveLength(entityCount)
@@ -231,7 +215,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     syncTargetJieLiExchange(controller, room, [4, 124, 99, 81], [91, 158], [124, 4])
 
     expect(getPileTopCards(room, 4).map((card) => card.id)).toEqual([81, 99, 91, 158])
-    expect(getTargetHandIDs(room)).toEqual([4, 124])
+    expect(getHandCardIDs(room, targetSeat)).toEqual([4, 124])
     expect(exchange.cards).toHaveLength(0)
     expect(pile.cards).toHaveLength(pileCount)
     expect(room.cards).toHaveLength(entityCount)
@@ -259,7 +243,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     moves.slice(3).forEach((move) => controller.syncTrackerMove(move))
 
     expect(getPileTopCards(room, 4).map((card) => card.id)).toEqual([81, 99, 91, 158])
-    expect(getTargetHandIDs(room)).toEqual([4, 124])
+    expect(getHandCardIDs(room, targetSeat)).toEqual([4, 124])
     expect(exchange.cards).toHaveLength(0)
     expect(
       pile.cards
@@ -282,13 +266,13 @@ describe('族钟繇诫厉视角权限与交换', () => {
     const trackedHandCards = [91, 158].map((cardID) => room.cardIndex.get(cardID)!)
     recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })
     const pileBefore = pile.cards.slice()
-    const handBefore = getTargetHandIDs(room)
+    const handBefore = getHandCardIDs(room, targetSeat)
     const moves = createJieLiMoves([4, 124, 99, 81], [91, 158], [124, 4])
 
     moves.forEach((move) => controller.syncTrackerMove(move))
 
     expect(pile.cards).toEqual(pileBefore)
-    expect(getTargetHandIDs(room)).toEqual(handBefore)
+    expect(getHandCardIDs(room, targetSeat)).toEqual(handBefore)
     expect(exchange.cards).toHaveLength(0)
     trackedHandCards.forEach((card) => {
       expect(locationKeys(card)).toEqual(
@@ -343,7 +327,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     )
     const handCard = room.cardIndex.get(91)!
     const pileBefore = pile.cards.slice()
-    const handBefore = getTargetHandIDs(room)
+    const handBefore = getHandCardIDs(room, targetSeat)
     const handCountBefore = room.getPlayer(targetSeat)!.observedHandCount
 
     createJieLiMoves([4, 124, 99, 81], [91], [124]).forEach((move) =>
@@ -351,7 +335,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     )
 
     expect(pile.cards).toEqual(pileBefore)
-    expect(getTargetHandIDs(room)).toEqual(handBefore)
+    expect(getHandCardIDs(room, targetSeat)).toEqual(handBefore)
     expect(room.getPlayer(targetSeat)!.observedHandCount).toBe(handCountBefore)
     expect(exchange.cards).toHaveLength(0)
     expect(handCard.locationCandidates).toEqual([])

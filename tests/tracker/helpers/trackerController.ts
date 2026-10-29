@@ -58,6 +58,36 @@ export function createTrackerControllerHarness(options: TrackerControllerOptions
   }
 }
 
+interface ReadyControllerOptions extends TrackerControllerOptions {
+  cardIDs: number[]
+  players?: unknown[]
+  seatIDs?: number[]
+  currentUserID?: number
+  discardIDs?: number[]
+}
+
+/** 普通协议测试直接从已注册玩家、已初始化牌堆的 Room 开始。 */
+export function createReadyControllerHarness({
+  cardIDs,
+  seatIDs = [1, 2],
+  players = seatIDs.map((SeatID) => ({ SeatID, ClientID: SeatID * 100 })),
+  currentUserID = 100,
+  discardIDs = [],
+  ...options
+}: ReadyControllerOptions) {
+  const harness = createTrackerControllerHarness(options)
+  const { controller } = harness
+  controller.initTrackerRoom()
+  controller.registerTrackerPlayers(players, currentUserID)
+  controller.initTrackerDeck(cardIDs)
+  if (discardIDs.length > 0) {
+    controller.syncTrackerMove(
+      protocolMove({ CardIDs: discardIDs, ToZone: 2, ToID: 255, MoveType: 16 })
+    )
+  }
+  return { ...harness, room: controller.getTrackerRoom()! }
+}
+
 export function protocolMove(overrides: Partial<RawMoveCardEvent> = {}): RawMoveCardEvent {
   const cardIDs = overrides.CardIDs ?? [1]
 

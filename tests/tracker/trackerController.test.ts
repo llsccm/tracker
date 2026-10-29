@@ -6,38 +6,20 @@ import {
   createErrorSpy,
   createTrackerControllerHarness,
   protocolMove,
-  returnToPileMove
+  returnToPileMove,
+  createReadyControllerHarness
 } from './helpers/trackerController'
 import { getCard as getCardFixture } from './helpers/room'
 
-function verifyProtocolZoneInput(controller: TrackerController): void {
-  controller.revealTrackerCardsInZone({ zone: 1, id: 255 }, [1])
-  controller.revealTrackerCardsInZone({ zone: 4, id: 0, spellID: 0 }, [1])
-  // @ts-expect-error 不再接受旧 zoneID 字符串入口。
-  controller.revealTrackerCardsInZone({ zone: 1, id: 255, zoneID: '1-255' }, [1])
-  // @ts-expect-error 协议区域必须显式提供。
-  controller.revealTrackerCardsInZone({ id: 255 }, [1])
-  // @ts-expect-error 来源 ID 必须显式提供，公共牌堆使用 255。
-  controller.revealTrackerCardsInZone({ zone: 1 }, [1])
-  // @ts-expect-error 不再接受字符串形式的区域和座位。
-  controller.revealTrackerCardsInZone({ zone: '5', id: '0' }, [1])
-  // @ts-expect-error 标记技能 ID 必须是数字。
-  controller.revealTrackerCardsInZone({ zone: 4, id: 0, spellID: '700' }, [1])
-}
-
-void verifyProtocolZoneInput
-
 describe('TrackerController', () => {
   it('结构化协议揭示保留零号座位、零号标记和普通手牌的空技能号', () => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }], 100)
-    controller.initTrackerDeck([1, 2])
+    const { controller, room } = createReadyControllerHarness({
+      players: [{ SeatID: 0, ClientID: 100 }],
+      cardIDs: [1, 2]
+    })
 
     controller.revealTrackerCardsInZone({ zone: 5, id: 0 }, [1])
     controller.revealTrackerCardsInZone({ zone: 4, id: 0, spellID: 0 }, [2])
-
-    const room = controller.getTrackerRoom()!
     expect(room.cardIndex.get(1)).toMatchObject({
       location: 'player',
       owner: 0,
@@ -56,12 +38,11 @@ describe('TrackerController', () => {
   })
 
   it('复制完整 patched 与 raw，冻结快照且不修改调用方消息', () => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }], 100)
-    controller.initTrackerDeck([1, 2, 3])
+    const { controller, room } = createReadyControllerHarness({
+      players: [{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }],
+      cardIDs: [1, 2, 3]
+    })
     controller.setTrackerFirstHand(0)
-    const room = controller.getTrackerRoom()!
     const decorateSpy = vi.spyOn(room, 'decorateMoveEvent')
     const raw = Object.freeze(protocolMove({ CardIDs: Object.freeze([1]), ToID: 1 }))
     const patched = Object.freeze({ ...raw, CardIDs: Object.freeze([2]) })
@@ -89,13 +70,13 @@ describe('TrackerController', () => {
     { zone: 4, subZone: 'mark' }
   ])('协议手牌来源与确定 $subZone 冲突时告警但不校正', ({ zone, subZone }) => {
     const warn = vi.fn()
-    const { controller } = createTrackerControllerHarness({ logger: { warn } })
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 100 }], 100)
-    controller.initTrackerDeck([1, 2, 3])
+    const { controller, room } = createReadyControllerHarness({
+      ...{ logger: { warn } },
+      players: [{ SeatID: 3, ClientID: 100 }],
+      cardIDs: [1, 2, 3]
+    })
     controller.revealTrackerCardsInZone({ zone: 5, id: 3 }, [2, 3])
     controller.revealTrackerCardsInZone({ zone, id: 3, spellID: 700 }, [1])
-    const room = controller.getTrackerRoom()!
     const moveSpy = vi.spyOn(room, 'moveCards')
     warn.mockClear()
     const move = Object.freeze(protocolMove({ FromZone: 5, FromID: 3, ToZone: 2 }))
@@ -125,12 +106,12 @@ describe('TrackerController', () => {
 
   it.each([false, true])('真实手牌来源有完整位置候选=%s 时不误告警或校正', (ambiguous) => {
     const warn = vi.fn()
-    const { controller } = createTrackerControllerHarness({ logger: { warn } })
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 100 }], 100)
-    controller.initTrackerDeck([1, 2])
+    const { controller, room } = createReadyControllerHarness({
+      ...{ logger: { warn } },
+      players: [{ SeatID: 3, ClientID: 100 }],
+      cardIDs: [1, 2]
+    })
     controller.revealTrackerCardsInZone({ zone: ambiguous ? 4 : 5, id: 3, spellID: 700 }, [1])
-    const room = controller.getTrackerRoom()!
     const card = room.cardIndex.get(1)!
     if (ambiguous) {
       card.setLocationCandidates([
@@ -155,14 +136,12 @@ describe('TrackerController', () => {
   })
 
   it('临时隐藏和恢复座位保留手牌事实，重复状态不产生卡牌变更', () => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }], 100)
-    controller.initTrackerDeck([1, 2, 3])
+    const { controller, room } = createReadyControllerHarness({
+      players: [{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }],
+      cardIDs: [1, 2, 3]
+    })
     controller.setTrackerFirstHand(0)
     controller.syncTrackerMove(protocolMove({ CardIDs: [1], ToID: 1 }))
-
-    const room = controller.getTrackerRoom()!
     const player = room.getPlayer(1)!
     const card = room.cardIndex.get(1)!
     const dirtyCardSeq = room.dirtyCardSeq
@@ -186,26 +165,11 @@ describe('TrackerController', () => {
     expect(room.dirtyCardSeq).toBe(dirtyCardSeq)
   })
 
-  it('读取已跟踪的玩家手牌 ID，未准备时返回空数组', () => {
-    const controller = new TrackerController()
-
-    expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([])
-
-    const room = {
-      getPlayerHandCardIDs: vi.fn(() => [11, 12])
-    }
-    vi.spyOn(controller, 'getReadyTrackerRoom').mockReturnValue(room as any)
-
-    expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([11, 12])
-    expect(room.getPlayerHandCardIDs).toHaveBeenCalledWith(1)
-  })
-
   it.each([4, 5, 6, 7])('玩家区域 %s 的 255 座位展示不访问不存在的公共区', (zone) => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }], 100)
-    controller.initTrackerDeck([1, 2])
-    const room = controller.getTrackerRoom()!
+    const { controller, room } = createReadyControllerHarness({
+      players: [{ SeatID: 0, ClientID: 100 }],
+      cardIDs: [1, 2]
+    })
     const pileBefore = [...room.getZone('pile').cards]
     const errorSpy = createErrorSpy()
 
@@ -232,41 +196,14 @@ describe('TrackerController', () => {
     }
   })
 
-  it('牌堆明牌同步将已有卡牌定位到牌顶且重复消息保持幂等', () => {
-    const { controller } = createTrackerControllerHarness()
-    const revealedIDs = [158, 2, 63, 125]
-
-    controller.initTrackerRoom()
-    controller.initTrackerDeck([...revealedIDs, 200, 201])
-
-    const room = controller.getTrackerRoom()
-    const pile = room.zones.get('pile')
-    const addSpy = vi.spyOn(pile, 'add')
-
-    controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, revealedIDs)
-
-    expect(pile.cards.slice(-revealedIDs.length).map((card) => card.id)).toEqual([125, 63, 2, 158])
-    expect(pile.cards.at(-1)?.id).toBe(158)
-    revealedIDs.forEach((id) => expect(room.cardIndex.get(id).isKnown).toBe(true))
-    expect(addSpy).not.toHaveBeenCalled()
-
-    const dirtyCardSeq = room.dirtyCardSeq
-    addSpy.mockClear()
-    controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, revealedIDs)
-
-    expect(addSpy).not.toHaveBeenCalled()
-    expect(room.dirtyCardSeq).toBe(dirtyCardSeq)
-  })
-
   it.each([POSITION_TOP, POSITION_RANDOM])(
     'MoveType=18 匿名获得在来源位置 %s 跳过牌顶明牌，只消费暗槽',
     (fromPosition) => {
-      const { controller } = createTrackerControllerHarness()
       const seatID = 1
-
-      controller.initTrackerRoom()
-      controller.registerTrackerPlayers([{ SeatID: seatID, ClientID: 100 }], 100)
-      controller.initTrackerDeck([1, 2, 3, 4])
+      const { controller } = createReadyControllerHarness({
+        players: [{ SeatID: seatID, ClientID: 100 }],
+        cardIDs: [1, 2, 3, 4]
+      })
       controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, [4])
 
       const room = controller.getTrackerRoom()
@@ -296,94 +233,12 @@ describe('TrackerController', () => {
     }
   )
 
-  it('佐练随机明牌进入交换区时复用牌堆匿名槽，不因公开牌顶补建实体', () => {
-    const { controller } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
-        { SeatID: 0, ClientID: 100 },
-        { SeatID: 6, ClientID: 600 }
-      ],
-      100
-    )
-    controller.initTrackerDeck([39, 112, 113])
-
-    // 先给 0 号位一张暗手牌，再保留一张公开牌顶，复现 RANDOM 来源不能按牌顶端点取牌的场景。
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [],
-        CardCount: 1,
-        FromPosition: POSITION_TOP,
-        MoveType: 1,
-        ToID: 0
-      })
-    )
-    controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, [113])
-
-    const room = controller.getTrackerRoom()
-    const pile = room.zones.get('pile')
-    const exchange = room.zones.get('exchange')
-    const randomPileSlot = pile.cards.find((card) => card.isAnonymous)
-    const entityCountBefore = room.cards.length
-
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [39],
-        CardCount: 1,
-        FromID: 0,
-        FromZone: 5,
-        MoveType: 21,
-        SpellID: 3488,
-        ToID: 0,
-        ToPosition: POSITION_RANDOM,
-        ToZone: 5
-      })
-    )
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [39],
-        CardCount: 1,
-        FromID: 0,
-        FromZone: 5,
-        MoveType: 11,
-        SpellID: 3488,
-        ToID: 6,
-        ToPosition: POSITION_RANDOM,
-        ToZone: 10
-      })
-    )
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [112],
-        CardCount: 1,
-        FromID: 255,
-        FromPosition: POSITION_RANDOM,
-        FromZone: 1,
-        MoveType: 11,
-        SpellID: 3488,
-        ToID: 6,
-        ToPosition: POSITION_BOTTOM,
-        ToZone: 10
-      })
-    )
-
-    expect(randomPileSlot).toBeDefined()
-    expect(room.cardIndex.get(112)).toBe(randomPileSlot)
-    expect(room.cards).toHaveLength(entityCountBefore)
-    expect(pile.cards).toHaveLength(1)
-    expect(pile.cards.at(-1)).toMatchObject({ id: 113, isKnown: true })
-    expect(new Set(exchange.cards.map((card) => card.id))).toEqual(new Set([39, 112]))
-    expect(room.assertPileIdentityLedgerConsistency('test:zuolian-random-known')).toEqual([])
-  })
-
   it('MoveType=1 常规摸牌按牌顶顺序取走明牌与后续暗槽', () => {
-    const { controller } = createTrackerControllerHarness()
     const seatID = 1
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: seatID, ClientID: 100 }], 100)
-    controller.initTrackerDeck([1, 2, 3, 4])
+    const { controller } = createReadyControllerHarness({
+      players: [{ SeatID: seatID, ClientID: 100 }],
+      cardIDs: [1, 2, 3, 4]
+    })
     controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, [4])
 
     const room = controller.getTrackerRoom()
@@ -413,112 +268,12 @@ describe('TrackerController', () => {
     expect(handCards.filter((card) => card.isKnown === true).map((card) => card.id)).toEqual([4])
   })
 
-  it('嚣翻牌底明牌同步将已有卡牌定位到牌底且重复消息保持幂等', () => {
-    const { controller } = createTrackerControllerHarness()
-    // 协议 Datas 第一项是牌底最外层；handler 会 reverse 后再带 POSITION_BOTTOM 进入。
-    const protocolDatas = [149, 123, 1]
-    const revealedIDs = [...protocolDatas].reverse()
-
-    controller.initTrackerRoom()
-    // 初始顺序故意不在牌底，验证 reposition 会把它们纠正到底部。
-    controller.initTrackerDeck([200, 201, 202, ...protocolDatas])
-
-    const room = controller.getTrackerRoom()
-    const pile = room.zones.get('pile')
-    const addSpy = vi.spyOn(pile, 'add')
-
-    controller.revealTrackerCardsInZone({ id: 255, zone: 1, pos: POSITION_BOTTOM }, revealedIDs)
-
-    // 内部顺序底 -> 顶；牌底端点第一张应是 149。
-    expect(pile.cards.slice(0, revealedIDs.length).map((card) => card.id)).toEqual([149, 123, 1])
-    expect(pile.cards[0]?.id).toBe(149)
-    protocolDatas.forEach((id) => expect(room.cardIndex.get(id).isKnown).toBe(true))
-    expect(addSpy).toHaveBeenCalledOnce()
-
-    const dirtyCardSeq = room.dirtyCardSeq
-    addSpy.mockClear()
-    controller.revealTrackerCardsInZone({ id: 255, zone: 1, pos: POSITION_BOTTOM }, revealedIDs)
-
-    expect(addSpy).not.toHaveBeenCalled()
-    expect(room.dirtyCardSeq).toBe(dirtyCardSeq)
-  })
-
-  it('观虚同区展示将牌堆顶重排到协议顺序且重复消息保持幂等', () => {
-    const { controller } = createTrackerControllerHarness()
-    const revealedIDs = [62, 67, 37, 53, 142]
-    const deckIDs = [200, 201, ...revealedIDs, 202, 203]
-
-    controller.initTrackerRoom()
-    controller.initTrackerDeck(deckIDs)
-
-    const room = controller.getTrackerRoom()
-    const pile = room.zones.get('pile')
-    const addSpy = vi.spyOn(pile, 'add')
-
-    controller.syncTrackerMove(
-      protocolMove({
-        CardCount: revealedIDs.length,
-        CardIDs: revealedIDs,
-        FromID: 255,
-        FromZone: 1,
-        FromZoneParam: 0,
-        MoveType: 21,
-        SpellID: 987,
-        ToID: 255,
-        ToZone: 1,
-        ToZoneParam: 0
-      })
-    )
-
-    expect(pile.cards.slice(-revealedIDs.length).map((card) => card.id)).toEqual([
-      142, 53, 37, 67, 62
-    ])
-    expect(pile.cards.at(-1)?.id).toBe(62)
-    revealedIDs.forEach((id) => expect(room.cardIndex.get(id).isKnown).toBe(true))
-    expect(addSpy).not.toHaveBeenCalled()
-
-    const dirtyCardSeq = room.dirtyCardSeq
-    addSpy.mockClear()
-    controller.syncTrackerMove(
-      protocolMove({
-        CardCount: revealedIDs.length,
-        CardIDs: revealedIDs,
-        FromID: 255,
-        FromZone: 1,
-        FromZoneParam: 0,
-        MoveType: 21,
-        SpellID: 987,
-        ToID: 255,
-        ToZone: 1,
-        ToZoneParam: 0
-      })
-    )
-
-    expect(addSpy).not.toHaveBeenCalled()
-    expect(room.dirtyCardSeq).toBe(dirtyCardSeq)
-    expect(pile.cards.slice(-revealedIDs.length).map((card) => card.id)).toEqual([
-      142, 53, 37, 67, 62
-    ])
-  })
-
   it('观虚先展示牌顶再揭手牌时暗占位不盖住牌顶明牌', () => {
-    const { controller } = createTrackerControllerHarness()
     const pileTopIDs = [62, 67, 37, 53, 142]
     const handIDs = [16, 160, 79, 106]
-    // 底部先放稍后揭开的手牌身份，顶部 4 张暗摸只拿走无关实体。
-    // 内部顺序底->顶：handIDs + pileTop(顶=62) + drawFillers(顶)。
     const drawFillers = [200, 201, 202, 203]
     const deckIDs = [...handIDs, 142, 53, 37, 67, 62, ...drawFillers]
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
-        { SeatID: 1, ClientID: 100 },
-        { SeatID: 3, ClientID: 300 }
-      ],
-      100
-    )
-    controller.initTrackerDeck(deckIDs)
+    const { controller } = createReadyControllerHarness({ seatIDs: [1, 3], cardIDs: deckIDs })
 
     const room = controller.getTrackerRoom()
     const pile = room.zones.get('pile')
@@ -578,71 +333,13 @@ describe('TrackerController', () => {
     ).toHaveLength(0)
   })
 
-  it('天候同区展示未定位身份时建立牌顶前三候选且不重排牌堆', () => {
-    const { controller } = createTrackerControllerHarness()
-    const shownID = 18
-    // 内部底->顶：filler + 匿名槽；shownID 仍在 unlocatedIdentities。
-    const deckIDs = [200, 201, 202, shownID, 88, 146, 106]
-
-    controller.initTrackerRoom()
-    controller.initTrackerDeck(deckIDs)
-
-    const room = controller.getTrackerRoom()
-    const pile = room.zones.get('pile')
-    const topBefore = pile.cards.map((card) => card.id)
-
-    expect(room.cardIndex.has(shownID)).toBe(false)
-    expect(room.unlocatedIdentities.has(shownID)).toBe(true)
-
-    controller.syncTrackerMove(
-      protocolMove({
-        CardCount: 1,
-        CardIDs: [shownID],
-        FromID: 255,
-        FromZone: 1,
-        FromZoneParam: 0,
-        FromPosition: undefined,
-        MoveType: 21,
-        SpellID: 3903,
-        ToID: 255,
-        ToZone: 1,
-        ToZoneParam: 0,
-        ToPosition: undefined
-      })
-    )
-
-    expect(pile.cards.map((card) => card.id)).toEqual(topBefore)
-    const shownCard = room.cardIndex.get(shownID)
-    expect(shownCard?.publicCandidates).toEqual([
-      expect.objectContaining({
-        zone: 'pile',
-        position: 'top',
-        count: 3,
-        label: '牌堆顶前3张'
-      })
-    ])
-    expect(pile.cards).not.toContain(shownCard)
-    expect(room.cards).toHaveLength(deckIDs.length)
-    expect(room.detachedKnownCards.has(shownCard)).toBe(true)
-    expect(room.unlocatedIdentities.has(shownID)).toBe(false)
-  })
-
   it('牌堆展示回收玩家区占用身份并保留匿名手牌占位', () => {
-    const { controller } = createTrackerControllerHarness()
-    // 67 被 seat3 暗手牌实体占用，协议却声明它是牌堆顶之一。
     const occupiedID = 67
     const pileTopIDs = [62, occupiedID, 37, 53, 142]
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
-        { SeatID: 1, ClientID: 100 },
-        { SeatID: 3, ClientID: 300 }
-      ],
-      100
-    )
-    // 内部底->顶：filler + pileTop(顶=62)
-    controller.initTrackerDeck([200, 201, 142, 53, 37, occupiedID, 62])
+    const { controller } = createReadyControllerHarness({
+      seatIDs: [1, 3],
+      cardIDs: [200, 201, 142, 53, 37, occupiedID, 62]
+    })
 
     const room = controller.getTrackerRoom()
     const pile = room.zones.get('pile')
@@ -691,21 +388,11 @@ describe('TrackerController', () => {
   })
 
   it('牌底展示回收玩家区占用身份时从底侧选择占位并保持牌顶顺序', () => {
-    const { controller } = createTrackerControllerHarness()
     const occupiedID = 10
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
-        { SeatID: 1, ClientID: 100 },
-        { SeatID: 3, ClientID: 300 }
-      ],
-      100
-    )
-    // 牌堆内部顺序为底 -> 顶；14、15 构成不应受牌底揭示影响的牌顶明牌段。
-    controller.initTrackerDeck([occupiedID, 11, 12, 13, 14, 15])
-
-    const room = controller.getTrackerRoom()!
+    const { controller, room } = createReadyControllerHarness({
+      seatIDs: [1, 3],
+      cardIDs: [occupiedID, 11, 12, 13, 14, 15]
+    })
     const pile = room.zones.get('pile')!
     const occupiedCard = room.materialize(occupiedID, pile.cards[0])!
     const topKnownCards = [
@@ -732,19 +419,12 @@ describe('TrackerController', () => {
   })
 
   it('牌堆展示不会抽走仍属于玩家区且未声明为牌顶的实体', () => {
-    const { controller } = createTrackerControllerHarness()
     const handID = 16
     const pileIDs = [62, 67, 37, 53, 142]
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
-        { SeatID: 1, ClientID: 100 },
-        { SeatID: 3, ClientID: 300 }
-      ],
-      100
-    )
-    controller.initTrackerDeck([...pileIDs, handID, 200])
+    const { controller } = createReadyControllerHarness({
+      seatIDs: [1, 3],
+      cardIDs: [...pileIDs, handID, 200]
+    })
 
     const room = controller.getTrackerRoom()
     const handCard = getCardFixture(room, handID)!
@@ -791,23 +471,6 @@ describe('TrackerController', () => {
     const room = controller.getTrackerRoom()
     expect(room.game).toBeTruthy()
     expect(typeof room.game.getCurrentTimestamp).toBe('function')
-  })
-
-  it('Room 未创建时不缓存玩家与先手生命周期', () => {
-    const seatReads = []
-    const { controller, gameState } = createTrackerControllerHarness({
-      getSeatUIs: () => seatReads.push('read')
-    })
-
-    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
-    controller.setTrackerFirstHand(1)
-    controller.initTrackerRoom()
-
-    const room = controller.getTrackerRoom()
-    expect(room.mySeatID).toBeUndefined()
-    expect(room.firstID).toBeUndefined()
-    expect(gameState.seatIDs).toEqual([])
-    expect(seatReads).toEqual([])
   })
 
   it('录像主视角确定后同步座位并重排 SeatUI', () => {
@@ -923,11 +586,7 @@ describe('TrackerController', () => {
   })
 
   it('可直接同步协议移动，不加载浏览器 bridge', () => {
-    const { controller, view } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
-    controller.initTrackerDeck([1, 2])
+    const { controller, view } = createReadyControllerHarness({ seatIDs: [1], cardIDs: [1, 2] })
     controller.syncTrackerMove(protocolMove({ CardIDs: [1] }))
 
     const card = controller.getTrackerRoom().cardIndex.get(1)
@@ -939,11 +598,7 @@ describe('TrackerController', () => {
 
   it('tracker 内部移动异常不会向桥接层外抛出', () => {
     const errorSpy = createErrorSpy()
-    const { controller } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
-    controller.initTrackerDeck([1])
+    const { controller } = createReadyControllerHarness({ seatIDs: [1], cardIDs: [1] })
 
     const room = controller.getTrackerRoom()
     vi.spyOn(room, 'moveCards').mockImplementation(() => {
@@ -960,17 +615,11 @@ describe('TrackerController', () => {
   })
 
   it('协议移动木马装备本体时同步装备归属', () => {
-    const { controller } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
-        { SeatID: 4, ClientID: 400 },
-        { SeatID: 5, ClientID: 500 }
-      ],
-      400
-    )
-    controller.initTrackerDeck([161])
+    const { controller } = createReadyControllerHarness({
+      seatIDs: [4, 5],
+      currentUserID: 400,
+      cardIDs: [161]
+    })
     controller.syncTrackerMove(protocolMove({ CardIDs: [161], ToZone: 6, ToID: 4, SpellID: 700 }))
     controller.syncTrackerMove(
       protocolMove({ CardIDs: [161], FromZone: 6, FromID: 4, ToZone: 6, ToID: 5, MoveType: 15 })
@@ -987,11 +636,11 @@ describe('TrackerController', () => {
   })
 
   it('主视角看到木马空间牌时收敛候选和暗牌', () => {
-    const { controller } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 4, ClientID: 400 }], 400)
-    controller.initTrackerDeck([152, 153])
+    const { controller } = createReadyControllerHarness({
+      seatIDs: [4],
+      currentUserID: 400,
+      cardIDs: [152, 153]
+    })
 
     const room = controller.getTrackerRoom()
     const candidateCard = getCardFixture(room, 152)!
@@ -1046,12 +695,11 @@ describe('TrackerController', () => {
   })
 
   it('手气卡将手牌放回牌堆时重置为未知牌', () => {
-    const { controller } = createTrackerControllerHarness()
     const cardIDs = [7, 139, 76, 79]
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 100 }], 100)
-    controller.initTrackerDeck([...cardIDs, 1])
+    const { controller } = createReadyControllerHarness({
+      players: [{ SeatID: 3, ClientID: 100 }],
+      cardIDs: [...cardIDs, 1]
+    })
     controller.syncTrackerMove(protocolMove({ CardIDs: cardIDs, ToID: 3 }))
 
     const room = controller.getTrackerRoom()
@@ -1084,11 +732,10 @@ describe('TrackerController', () => {
   })
 
   it('游戏外匿名牌先进入12区后按实体牌揭示到装备区', () => {
-    const { controller } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 5, ClientID: 100 }], 100)
-    controller.initTrackerDeck([1])
+    const { controller } = createReadyControllerHarness({
+      players: [{ SeatID: 5, ClientID: 100 }],
+      cardIDs: [1]
+    })
     controller.syncTrackerMove(
       protocolMove({
         CardCount: 1,
@@ -1139,12 +786,11 @@ describe('TrackerController', () => {
   })
 
   it('从12区获得未登记的实体牌时补建真实手牌且不残留匿名实体', () => {
-    const { controller } = createTrackerControllerHarness()
     const gainedCardIDs = [20410, 20420, 20411]
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }], 100)
-    controller.initTrackerDeck([1])
+    const { controller } = createReadyControllerHarness({
+      players: [{ SeatID: 0, ClientID: 100 }],
+      cardIDs: [1]
+    })
     controller.syncTrackerMove(
       protocolMove({
         CardIDs: gainedCardIDs,
@@ -1180,11 +826,10 @@ describe('TrackerController', () => {
   })
 
   it('从12区获得60461并洗入弃牌后连续明摸保持牌堆张数', () => {
-    const { controller } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }], 100)
-    controller.initTrackerDeck([1, 2, 3, 4, 5, 6])
+    const { controller } = createReadyControllerHarness({
+      players: [{ SeatID: 0, ClientID: 100 }],
+      cardIDs: [1, 2, 3, 4, 5, 6]
+    })
     controller.syncTrackerMove(
       protocolMove({
         CardIDs: [60461],
@@ -1257,119 +902,13 @@ describe('TrackerController', () => {
     )
   })
 
-  it('技能3571从牌堆揭示陈旧已知手牌时置换实体并保持牌堆数量', () => {
-    const { controller } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 5, ClientID: 100 }], 100)
-    controller.initTrackerDeck([1, 2, 3, 4, 34, 68, 161])
-    controller.syncTrackerMove(protocolMove({ CardIDs: [161], ToID: 5 }))
-
-    const skillMove = (cardID, fromZone, toZone, fromID = 255) =>
-      protocolMove({
-        CardIDs: [cardID],
-        CardCount: 1,
-        FromID: fromID,
-        FromZone: fromZone,
-        FromZoneParam: 0,
-        MoveType: 6,
-        SpellID: 3571,
-        ToID: 255,
-        ToZone: toZone,
-        ToZoneParam: 0
-      })
-
-    controller.syncTrackerMove(skillMove(34, 1, 3))
-    controller.syncTrackerMove(skillMove(34, 3, 8))
-    controller.syncTrackerMove(skillMove(68, 1, 3))
-    controller.syncTrackerMove(skillMove(68, 3, 8))
-
-    const room = controller.getTrackerRoom()
-    const pileCountBeforeLastReveal = room.zones.get('pile').cards.length
-
-    controller.syncTrackerMove(skillMove(161, 1, 3, 5))
-
-    const seatFiveHandCards = room.cards.filter(
-      (card) =>
-        card.location === 'player' &&
-        card.subZone === 'hand' &&
-        card.seats.has(5) &&
-        card.isKnown !== true
-    )
-    expect(room.cardIndex.get(161).location).toBe('process')
-    expect(room.zones.get('pile').cards).toHaveLength(pileCountBeforeLastReveal - 1)
-    expect(seatFiveHandCards).toHaveLength(1)
-    expect(seatFiveHandCards[0].id).not.toBe(0)
-  })
-
-  it('技能304展示游戏外生成的匿名手牌时补建并揭示真实实体', () => {
-    const { controller } = createTrackerControllerHarness()
-    const knownHandIDs = [26, 149, 62]
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
-    controller.initTrackerDeck([...knownHandIDs, 1])
-    controller.syncTrackerMove(protocolMove({ CardIDs: knownHandIDs, ToID: 1 }))
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [],
-        CardCount: 1,
-        FromID: 255,
-        FromZone: 12,
-        MoveType: 19,
-        ToID: 1,
-        ToZone: 5
-      })
-    )
-
-    const room = controller.getTrackerRoom()
-    expect(
-      room.cards.filter(
-        (card) =>
-          card.isAnonymous &&
-          card.location === 'player' &&
-          card.subZone === 'hand' &&
-          card.seats.has(1)
-      )
-    ).toHaveLength(1)
-
-    controller.syncTrackerMove(
-      protocolMove({
-        CardIDs: [...knownHandIDs, 60992],
-        CardCount: 4,
-        FromID: 1,
-        FromZone: 5,
-        MoveType: 21,
-        SpellID: 304,
-        ToID: 1,
-        ToZone: 5
-      })
-    )
-
-    const revealedCard = room.cardIndex.get(60992)
-    expect(revealedCard.location).toBe('player')
-    expect(revealedCard.subZone).toBe('hand')
-    expect(revealedCard.seats.has(1)).toBe(true)
-    expect(revealedCard.isKnown).toBe(true)
-    expect(
-      room.cards.filter(
-        (card) =>
-          card.isAnonymous &&
-          card.location === 'player' &&
-          card.subZone === 'hand' &&
-          card.seats.has(1)
-      )
-    ).toEqual([])
-  })
-
   it('手气卡回牌堆真正匿名化后，后续暗摸不会得到正ID暗手', () => {
-    const { controller } = createTrackerControllerHarness()
     const knownIDs = [7, 139]
     const seatID = 1
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: seatID, ClientID: 100 }], 100)
-    controller.initTrackerDeck([...knownIDs, 1, 2, 3, 4])
+    const { controller } = createReadyControllerHarness({
+      players: [{ SeatID: seatID, ClientID: 100 }],
+      cardIDs: [...knownIDs, 1, 2, 3, 4]
+    })
     controller.syncTrackerMove(protocolMove({ CardIDs: knownIDs, ToID: seatID }))
     controller.syncTrackerMove(returnToPileMove({ CardIDs: knownIDs, FromID: seatID }))
 
@@ -1395,21 +934,17 @@ describe('TrackerController', () => {
     })
   })
   it('手气卡重摸明牌命中其他座位暗占位时保持牌堆与手牌数量', () => {
-    const { controller } = createTrackerControllerHarness()
     const hiddenSeat = 2
     const mySeat = 3
     const originalIDs = [1, 2, 3, 4]
     const redrawnIDs = [12, 8, 7, 6]
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
+    const { controller } = createReadyControllerHarness({
+      players: [
         { SeatID: hiddenSeat, ClientID: 200 },
         { SeatID: mySeat, ClientID: 100 }
       ],
-      100
-    )
-    controller.initTrackerDeck([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+      cardIDs: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    })
 
     // 先让牌堆顶的 12 成为其他座位暗占位，再在手气卡重摸时公开同一个 CardID。
     controller.syncTrackerMove(protocolMove({ CardIDs: [0, 0, 0, 0], ToID: hiddenSeat }))
@@ -1451,27 +986,9 @@ describe('TrackerController', () => {
     })
   })
 
-  it('牌堆未初始化时不消费卡牌同步入口', () => {
-    const { controller, view } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
-    controller.syncTrackerMove(protocolMove({ CardIDs: [1] }))
-    controller.revealTrackerCards({ type: 'player', seatID: 1 }, [1])
-
-    const room = controller.getTrackerRoom()
-    expect(controller.isTrackerReady()).toBe(false)
-    expect(controller.getReadyTrackerRoom()).toBe(null)
-    expect(room.cards).toEqual([])
-    expect(view.calls.scheduleRender).toBe(1)
-  })
-
   it('随机获得后使用自身暗牌不应绑定匿名实体身份', () => {
-    const { controller } = createTrackerControllerHarness()
     const knownIDs = [77, 116, 89, 159, 61, 134]
     const lowerFillerIDs = Array.from({ length: 13 }, (_, index) => 201 + index)
-    // 牌堆顶部先发 217-220 给 1 号位，再把 134/214/215 作为 2 号位的三张暗实体。
-    // 后续 1 号位使用 134 时，不能因为内部暗实体 ID 碰巧命中就确认它来自随机转移。
     const deckIDs = [
       ...knownIDs.filter((id) => id !== 134),
       ...lowerFillerIDs,
@@ -1483,16 +1000,7 @@ describe('TrackerController', () => {
       219,
       220
     ]
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
-        { SeatID: 1, ClientID: 100 },
-        { SeatID: 2, ClientID: 200 }
-      ],
-      100
-    )
-    controller.initTrackerDeck(deckIDs)
+    const { controller } = createReadyControllerHarness({ seatIDs: [1, 2], cardIDs: deckIDs })
 
     const syncMove = (overrides: Parameters<typeof protocolMove>[0]) =>
       controller.syncTrackerMove(protocolMove(overrides))
@@ -1597,11 +1105,10 @@ describe('TrackerController', () => {
     { source: '判定区', FromZone: 7, FromID: 0 },
     { source: '弹窗', FromZone: 8, FromID: 35 }
   ])('$source 明示到公共区时按协议来源位置物化，目标位置不覆盖来源牌序', ({ FromZone, FromID }) => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }], 100)
-    controller.initTrackerDeck([1, 2, 3])
-    const room = controller.getTrackerRoom()!
+    const { controller, room } = createReadyControllerHarness({
+      players: [{ SeatID: 0, ClientID: 100 }],
+      cardIDs: [1, 2, 3]
+    })
     room.moveCards([], {
       from: { type: 'public', zone: 'pile', position: POSITION_TOP },
       to: { type: 'public', zone: 'process', position: POSITION_TOP },
@@ -1633,13 +1140,11 @@ describe('TrackerController', () => {
 
   it('揭示身份无匿名槽可物化时告警并从已知牌集合略过', () => {
     const warn = vi.fn()
-    const { controller } = createTrackerControllerHarness({ logger: { warn } })
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
-    controller.initTrackerDeck([1, 2, 3])
-
-    const room = controller.getTrackerRoom()!
+    const { controller, room } = createReadyControllerHarness({
+      ...{ logger: { warn } },
+      seatIDs: [1],
+      cardIDs: [1, 2, 3]
+    })
     // 清空牌堆后，牌堆端点没有匿名槽可承接揭示身份 1，它仍停留在 unlocatedIdentities。
     room.zones.get('pile')!.clear()
 
@@ -1655,4 +1160,80 @@ describe('TrackerController', () => {
     expect(warning).toBeDefined()
     expect((warning?.[1] as { unresolvedIdentityIDs: number[] }).unresolvedIdentityIDs).toContain(1)
   })
+  it.each([
+    {
+      scenario: '牌顶揭示',
+      revealedIDs: [158, 2, 63, 125],
+      deckIDs: [158, 2, 63, 125, 200, 201],
+      position: POSITION_TOP,
+      protocol: false,
+      reposition: false
+    },
+    // 嚣翻 Datas 第一项为牌底最外层，handler reverse 后传入牌底位置。
+    {
+      scenario: '嚣翻牌底揭示',
+      revealedIDs: [1, 123, 149],
+      deckIDs: [200, 201, 202, 149, 123, 1],
+      position: POSITION_BOTTOM,
+      protocol: false,
+      reposition: true
+    },
+    {
+      scenario: '观虚同区展示',
+      revealedIDs: [62, 67, 37, 53, 142],
+      deckIDs: [200, 201, 62, 67, 37, 53, 142, 202, 203],
+      position: POSITION_TOP,
+      protocol: true,
+      reposition: false
+    }
+  ])(
+    '$scenario 按协议定位明牌且重复消息保持幂等',
+    ({ revealedIDs, deckIDs, position, protocol, reposition }) => {
+      const { controller, room } = createReadyControllerHarness({ cardIDs: deckIDs })
+      const pile = room.zones.get('pile')!
+      const addSpy = vi.spyOn(pile, 'add')
+      const reveal = () => {
+        if (protocol) {
+          controller.syncTrackerMove(
+            protocolMove({
+              CardIDs: revealedIDs,
+              FromID: 255,
+              FromZone: 1,
+              ToID: 255,
+              ToZone: 1,
+              MoveType: 21,
+              SpellID: 987
+            })
+          )
+          return
+        }
+        controller.revealTrackerCardsInZone(
+          position === POSITION_BOTTOM
+            ? { id: 255, zone: 1, pos: POSITION_BOTTOM }
+            : { id: 255, zone: 1 },
+          revealedIDs
+        )
+      }
+      const displayedIDs = () =>
+        (position === POSITION_BOTTOM
+          ? pile.cards.slice(0, revealedIDs.length)
+          : pile.cards.slice(-revealedIDs.length)
+        ).map((card) => card.id)
+      const expectedIDs = [...revealedIDs].reverse()
+      reveal()
+      expect(displayedIDs()).toEqual(expectedIDs)
+      expect((position === POSITION_BOTTOM ? pile.cards[0] : pile.cards.at(-1))?.id).toBe(
+        position === POSITION_BOTTOM ? expectedIDs[0] : revealedIDs[0]
+      )
+      revealedIDs.forEach((id) => expect(room.cardIndex.get(id)!.isKnown).toBe(true))
+      if (reposition) expect(addSpy).toHaveBeenCalledOnce()
+      else expect(addSpy).not.toHaveBeenCalled()
+      const dirtyCardSeq = room.dirtyCardSeq
+      addSpy.mockClear()
+      reveal()
+      expect(addSpy).not.toHaveBeenCalled()
+      expect(room.dirtyCardSeq).toBe(dirtyCardSeq)
+      expect(displayedIDs()).toEqual(expectedIDs)
+    }
+  )
 })

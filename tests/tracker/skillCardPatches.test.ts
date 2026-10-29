@@ -5,7 +5,7 @@ import type { Room } from '@/tracker/Room'
 import type { PatchedMoveCardFields, RawMoveCardEvent } from '@/tracker/types'
 import { registerDefaultMoveEventHandlers } from '@/tracker/skill/registerHandlers'
 import { createTestRoom } from './helpers/room'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { protocolMove, createReadyControllerHarness } from './helpers/trackerController'
 
 const rooms: Room[] = []
 afterEach(() => rooms.splice(0).forEach((room) => room.destroy()))
@@ -224,11 +224,11 @@ describe('技能插件归一化前补牌', () => {
   it('椒遇从弹窗区 暗取后通过剩余明弃收敛，不按颜色回填 CardIDs', () => {
     const selectedCardIDs = [147, 148, 149, 150, 151]
     const otherCardID = 152
-    const { controller } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 5, ClientID: 500 }], 500)
-    controller.initTrackerDeck([...selectedCardIDs, otherCardID])
+    const { controller } = createReadyControllerHarness({
+      seatIDs: [5],
+      currentUserID: 500,
+      cardIDs: [...selectedCardIDs, otherCardID]
+    })
 
     controller.syncTrackerMove(
       protocolMove({
@@ -333,12 +333,11 @@ describe('技能插件归一化前补牌', () => {
   })
 
   it('清议回填后经 tracker 同步，弃牌堆明牌进入目标手牌', () => {
-    const { controller } = createTrackerControllerHarness()
     const cardIDs = [11, 12]
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 1, ClientID: 100 }], 100)
-    controller.initTrackerDeck([...cardIDs, 100, 101])
+    const { controller } = createReadyControllerHarness({
+      seatIDs: [1],
+      cardIDs: [...cardIDs, 100, 101]
+    })
 
     controller.syncTrackerMove(
       protocolMove({

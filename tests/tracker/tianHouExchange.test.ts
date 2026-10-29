@@ -3,8 +3,8 @@ import type { Card } from '@/tracker/model/Card'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { TIAN_HOU_STATE_KEY } from '@/tracker/skill/TianHou'
 import { locationKeys, playerHand, publicLocation } from './helpers/locationCandidates'
-import { getCard } from './helpers/room'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { bindTestHand } from './helpers/room'
+import { createReadyControllerHarness, protocolMove } from './helpers/trackerController'
 
 describe('周群天候其他视角换牌候选', () => {
   const viewerSeat = 1
@@ -21,41 +21,25 @@ describe('周群天候其他视角换牌候选', () => {
     extraIDs?: number[]
     observeHandCount?: boolean
   }) {
-    const { controller, view } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
+    const { controller, view, room } = createReadyControllerHarness({
+      players: [
         { SeatID: viewerSeat, ClientID: 100 },
         { SeatID: actorSeat, ClientID: 500 }
       ],
-      100
-    )
-    controller.initTrackerDeck([
-      ...knownIDs,
-      ...extraIDs,
-      ...Array.from({ length: 16 }, (_, index) => 300 + index)
-    ])
-
-    const room = controller.getTrackerRoom()!
-    const knownCards = knownIDs.map((id) => getCard(room, id)!)
-    const hiddenCards = room.zones
-      .get('pile')!
-      .cards.filter((card) => card.isAnonymous)
-      .slice(0, hiddenCount)
-
-    room.clearCardsFromPublicZones([...knownCards, ...hiddenCards])
-    knownCards.forEach((card) => card.bindCandidates([actorSeat], 'hand', null, { known: true }))
-    hiddenCards.forEach((card) => card.bindCandidates([actorSeat], 'hand', null, { known: false }))
-    if (observeHandCount) {
-      room.getPlayer(actorSeat)!.syncObservedHandCount(knownCards.length + hiddenCards.length)
-    }
+      cardIDs: [...knownIDs, ...extraIDs, ...Array.from({ length: 16 }, (_, index) => 300 + index)]
+    })
+    const { knownCards, hiddenCards } = bindTestHand(room, actorSeat, {
+      knownIDs,
+      hiddenCount,
+      observeCount: observeHandCount ? knownIDs.length + hiddenCount : undefined
+    })
     room.resolveConstraints()
 
     return { controller, knownCards, hiddenCards, room, view }
   }
 
   function runExchange(
-    controller: ReturnType<typeof createTrackerControllerHarness>['controller'],
+    controller: ReturnType<typeof createReadyControllerHarness>['controller'],
     count: number
   ): void {
     const moves = [
@@ -111,7 +95,7 @@ describe('周群天候其他视角换牌候选', () => {
   }
 
   function showFinalCard(
-    controller: ReturnType<typeof createTrackerControllerHarness>['controller'],
+    controller: ReturnType<typeof createReadyControllerHarness>['controller'],
     cardID: number
   ): void {
     controller.syncTrackerMove(
@@ -283,5 +267,49 @@ describe('周群天候其他视角换牌候选', () => {
     expect(room.zones.get('pile')!.cards).not.toContain(shownCard)
     knownCards.forEach((card) => expectHandOrPileTop(card, 2))
     expect(view.calls.scheduleRender).toBe(renderCountBefore + 1)
+  })
+  it('天候同区展示未定位身份时建立牌顶前三候选且不重排牌堆', () => {
+    const shownID = 18
+    // 内部底->顶：filler + 匿名槽；shownID 仍在 unlocatedIdentities。
+    const deckIDs = [200, 201, 202, shownID, 88, 146, 106]
+
+    const { controller, room } = createReadyControllerHarness({ cardIDs: deckIDs })
+    const pile = room.zones.get('pile')
+    const topBefore = pile.cards.map((card) => card.id)
+
+    expect(room.cardIndex.has(shownID)).toBe(false)
+    expect(room.unlocatedIdentities.has(shownID)).toBe(true)
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardCount: 1,
+        CardIDs: [shownID],
+        FromID: 255,
+        FromZone: 1,
+        FromZoneParam: 0,
+        FromPosition: undefined,
+        MoveType: 21,
+        SpellID: 3903,
+        ToID: 255,
+        ToZone: 1,
+        ToZoneParam: 0,
+        ToPosition: undefined
+      })
+    )
+
+    expect(pile.cards.map((card) => card.id)).toEqual(topBefore)
+    const shownCard = room.cardIndex.get(shownID)
+    expect(shownCard?.publicCandidates).toEqual([
+      expect.objectContaining({
+        zone: 'pile',
+        position: 'top',
+        count: 3,
+        label: '牌堆顶前3张'
+      })
+    ])
+    expect(pile.cards).not.toContain(shownCard)
+    expect(room.cards).toHaveLength(deckIDs.length)
+    expect(room.detachedKnownCards.has(shownCard)).toBe(true)
+    expect(room.unlocatedIdentities.has(shownID)).toBe(false)
   })
 })

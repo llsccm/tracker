@@ -4,7 +4,8 @@ import { trackerLogger } from '@/utils/logger'
 import {
   createErrorSpy,
   createTrackerControllerHarness,
-  protocolMove
+  protocolMove,
+  createReadyControllerHarness
 } from './helpers/trackerController'
 
 function seatInfo(SeatID: number, overrides: Partial<ReconnectSeatInfo> = {}): ReconnectSeatInfo {
@@ -46,14 +47,11 @@ function reconnectSnapshot(): ReconnectGameSnapshot {
 function createReconnectRoom(cardIDs = Array.from({ length: 136 }, (_, index) => index + 1)) {
   const errorSpy = createErrorSpy()
   const warn = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
-  const harness = createTrackerControllerHarness()
-  harness.controller.initTrackerRoom()
-  harness.controller.registerTrackerPlayers(
-    Array.from({ length: 8 }, (_, SeatID) => ({ SeatID, ClientID: 100 + SeatID })),
-    100
-  )
+  const harness = createReadyControllerHarness({
+    players: Array.from({ length: 8 }, (_, SeatID) => ({ SeatID, ClientID: 100 + SeatID })),
+    cardIDs: cardIDs
+  })
   harness.controller.setTrackerFirstHand(0)
-  harness.controller.initTrackerDeck(cardIDs)
   return { ...harness, room: harness.controller.getReadyTrackerRoom()!, errorSpy, warn }
 }
 
