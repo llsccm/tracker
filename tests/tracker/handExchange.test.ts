@@ -78,7 +78,7 @@ describe('整手牌经交换区互易（通用协议模式）', () => {
       bindTestHand(room, Number(seatID), { hiddenIDs: ids })
     })
     candidateIDs.forEach((id) => {
-      const card = getCard(room, id)
+      const card = getCard(room, id, { reveal: false })
       room.clearCardsFromPublicZones([card])
       card.bindCandidates(candidateSeats, 'hand', null, { known: true })
       room.notifyCardChanged(card, { type: 'test:hand-exchange-candidate' })
