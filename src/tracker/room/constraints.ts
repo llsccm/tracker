@@ -169,7 +169,7 @@ export class RoomConstraints {
                 card.location === 'player' &&
                 card.subZone === 'hand' &&
                 // 完整位置候选由 expectedSlotsByLocation 处理，不参与座位级排除。
-                !card.hasSubZoneCandidates() &&
+                !card.locationCandidates.some((candidate) => candidate.type === 'player') &&
                 card.seats.size > 1 &&
                 card.seats.has(seatID)
               ) {
@@ -450,7 +450,7 @@ export class RoomConstraints {
     const targetPlayers =
       seatIDs === undefined
         ? Array.from(this.room.players.values())
-        : Array.from(seatIDs, (seatID) => this.room.getPlayer(Number(seatID))).filter(
+        : Array.from(seatIDs, (seatID) => this.room.getPlayer(seatID)).filter(
             (player): player is Player => Boolean(player)
           )
 
@@ -488,7 +488,7 @@ export class RoomConstraints {
    */
   createConstraintGroup(options: ConstraintGroupOptions = {}): ConstraintGroup {
     const groupID = options.id ?? `group_${++this.room.constraintGroupSeq}`
-    const targetSeats = this.room.normalizeSeats(options.candidateSeats ?? [])
+    const targetSeats = options.candidateSeats ?? []
     const cards = Array.from(new Set(options.cards ?? []))
     let group = this.room.constraintGroups.get(groupID)
     let structureChanged = false

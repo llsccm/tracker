@@ -1,42 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
-import type { Card } from '@/tracker/model/Card'
 import { computeHandSlotAllocation } from '@/tracker/constraint/handSlotUsage'
-import type { Room } from '@/tracker/Room'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from './helpers/room'
 import { equipmentContainer, playerLocation, publicLocation } from './helpers/locationCandidates'
-
-function verifyLocationSlotContract(room: Room, group: ConstraintGroup, card: Card): void {
-  // @ts-expect-error 建组只接受实体数组，不兼容单牌。
-  room.createConstraintGroup({ cards: card })
-  // @ts-expect-error 座位快照只接受数组。
-  room.createConstraintGroup({ candidateSeats: 1 })
-  // @ts-expect-error 查找身份与位置写入不属于建组入口。
-  room.createConstraintGroup({ cardIDs: [1] })
-  // @ts-expect-error 不再保留 candidateSeats 的 seatID 别名。
-  room.createConstraintGroup({ seatID: 1 })
-  // @ts-expect-error 协议 combinationID 由调用方明确传入 id。
-  room.createConstraintGroup({ combinationID: 1 })
-  // @ts-expect-error 已退役座位名额存储和输入，统一使用完整位置。
-  void group.expectedSlotsBySeat
-  // @ts-expect-error 约束组不能再接受座位名额输入糖。
-  new ConstraintGroup({ expectedSlotsBySeat: new Map() })
-  // @ts-expect-error Room 门面同样只接受完整位置名额。
-  room.createConstraintGroup({ expectedSlotsBySeat: new Map() })
-  // @ts-expect-error 已退役子区槽位输入，统一使用完整位置名额。
-  new ConstraintGroup({ expectedSlotsBySubZone: new Map() })
-  // @ts-expect-error Room 门面不能绕过完整位置输入契约。
-  room.createConstraintGroup({ expectedSlotsBySubZone: new Map() })
-  // @ts-expect-error 行为模块同样不接受子区槽位输入。
-  room.constraints.createConstraintGroup({ expectedSlotsBySubZone: new Map() })
-  // @ts-expect-error 约束组不再保留子区槽位镜像。
-  void group.expectedSlotsBySubZone
-  // @ts-expect-error 名额仅接受数字或数字区间，不再接受字符串。
-  new ConstraintGroup({ expectedSlotsByLocation: { 'player:1:hand:none': '1' } })
-}
-
-void verifyLocationSlotContract
 
 describe('区间名额', () => {
   it('建组对实体去重，候选座位快照不移动牌或覆盖已有位置候选', () => {
@@ -53,30 +20,6 @@ describe('区间名额', () => {
     expect(card.locationCandidates).toEqual(locations)
     expect(card.seats).toEqual(new Set([0]))
     expect(room.dirtyCardSeq).toBe(dirtySeq)
-  })
-
-  it.each([
-    NaN,
-    Infinity,
-    -1,
-    0.5,
-    Number.MAX_SAFE_INTEGER + 1,
-    { min: NaN, max: 1 },
-    { min: 0, max: NaN },
-    { min: 0.5, max: 1 },
-    { min: 0, max: 1.5 },
-    { min: 0, max: Infinity },
-    { min: 0, max: Number.MAX_SAFE_INTEGER + 1 },
-    { min: -1, max: 1 },
-    { min: 2, max: 1 }
-  ])('拒绝无效名额 %j，避免无效边界参与消元', (count) => {
-    const group = new ConstraintGroup({
-      expectedSlotsByLocation: { 'player:1:hand:none': 1 }
-    })
-    expect(() => group.normalizeExpectedLocationSlots({ 'player:1:hand:none': count })).toThrow(
-      RangeError
-    )
-    expect(group.expectedSlotsByLocation.get('player:1:hand:none')).toEqual({ min: 1, max: 1 })
   })
 
   it('公共端点的单值候选已占用上界，排除同组其余公共分支', () => {

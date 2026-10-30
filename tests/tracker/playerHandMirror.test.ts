@@ -199,7 +199,7 @@ function createCard(id: number, title = ''): Card {
     number: 1,
     name: '杀',
     getLocationDescription: () => title,
-    hasSubZoneCandidates: () => false
+    locationCandidates: []
   } as unknown as Card
 }
 
@@ -375,30 +375,30 @@ describe('主视角渲染手牌镜像', () => {
     const handCard = createCard(1)
     const firstMark = createCard(2)
     const secondMark = createCard(3)
-    const markCards = new Map([[290, [firstMark]]])
+    const markCards = new Map([[821, [firstMark]]])
     const player = createPlayerFromCards(1, 1, [handCard], [], markCards)
 
     renderPlayerHand(doc, player)
     const mainHand = getNodeByKey(body, 'hand:known:1')
-    const mainMark = getNodeByKey(body, 'mark:290')
+    const mainMark = getNodeByKey(body, 'mark:821')
     const overlayHand = getNodeByKey(overlay, 'hand:known:1')
-    const overlayMark = getNodeByKey(overlay, 'mark:290')
+    const overlayMark = getNodeByKey(overlay, 'mark:821')
 
     overlayMark.setAttribute('style', 'display: none')
     overlayMark.children
       .filter((child) => child.classList.contains('shoupai'))
       .forEach((child) => child.setAttribute('style', 'display: none'))
     renderPlayerHand(doc, player)
-    expect(getNodeByKey(overlay, 'mark:290')).toBe(overlayMark)
+    expect(getNodeByKey(overlay, 'mark:821')).toBe(overlayMark)
 
-    markCards.set(290, [firstMark, secondMark])
+    markCards.set(821, [firstMark, secondMark])
     renderPlayerHand(doc, player)
 
     expect(getNodeByKey(body, 'hand:known:1')).toBe(mainHand)
-    expect(getNodeByKey(body, 'mark:290')).not.toBe(mainMark)
+    expect(getNodeByKey(body, 'mark:821')).not.toBe(mainMark)
     expect(getNodeByKey(overlay, 'hand:known:1')).toBe(overlayHand)
-    expect(getNodeByKey(overlay, 'mark:290')).not.toBe(overlayMark)
+    expect(getNodeByKey(overlay, 'mark:821')).not.toBe(overlayMark)
     expect(getNodeByKey(overlay, 'hand:known:1').id).toBe('')
-    expect(getNodeByKey(overlay, 'mark:290').querySelectorAll('[id]')).toEqual([])
+    expect(getNodeByKey(overlay, 'mark:821').querySelectorAll('[id]')).toEqual([])
   })
 })

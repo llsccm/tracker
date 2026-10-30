@@ -7,7 +7,13 @@ import { getPileDisplayCards } from '@/tracker/view/pileOrder'
 import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/room/movement/types'
 import { getPublicFieldCandidateCards } from '@/tracker/view/publicFieldCandidates'
 import { trackerLogger } from '@/utils/logger'
-import { createTestRoom, getSuspendedIdentityIDs, takeAnonymousCard } from './helpers/room'
+import {
+  createTestRoom,
+  getSuspendedIdentityIDs,
+  takeAnonymousCard,
+  getCard,
+  bindTestHand
+} from './helpers/room'
 
 function getPile(room: Room) {
   return room.zones.get('pile')!
@@ -18,15 +24,7 @@ function getDiscard(room: Room) {
 }
 
 function getCards(room: Room, ids: number[]) {
-  return ids.map((id) => {
-    const existing = room.cardIndex.get(id)
-    if (existing) return existing
-
-    const target = getPile(room).cards.find((card) => card.isAnonymous)
-    const materialized = room.materialize(id, target ?? null)
-    if (!materialized) throw new Error(`无法为测试物化牌堆身份 ${id}`)
-    return materialized
-  })
+  return ids.map((id) => getCard(room, id, { reveal: false })!)
 }
 
 function recycleIdsToDiscard(room: Room, ids: number[]) {
@@ -63,22 +61,6 @@ function recordHandSetup(room: Room, knownIDs: number[], count: number) {
     pileCountBefore: pileCountAfter + count,
     pileCountAfter,
     discardCountAfter: getDiscard(room).cards.length
-  })
-}
-
-function removeIdsFromPile(room: Room, ids: number[]) {
-  const pile = getPile(room)
-  return getCards(room, ids).map((card) => {
-    pile.removeCard(card)
-    return card
-  })
-}
-
-function bindHiddenHands(room: Room, ids: number[], seatID: number, known = false) {
-  return removeIdsFromPile(room, ids).map((card) => {
-    if (!known) card.isKnown = false
-    card.bindCandidates([seatID], 'hand', null, { known })
-    return card
   })
 }
 
@@ -123,6 +105,9 @@ describe('牌堆展示顺序', () => {
     expect(pileCards.every((card) => card.isAnonymous)).toBe(true)
     expect(new Set(pileCards.map((card) => card.entityID)).size).toBe(3)
     expect(pileCards).not.toBe(room.cards)
+    expect(room.cardIndex.size).toBe(0)
+    expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 127]))
+    expect(room.counter.statusIndex[CARD_INSTANCE_STATUS.UNKNOWN]).toEqual(new Set([1, 2, 127]))
   })
 
   it('底部回收的牌在展示顺序末端', () => {
@@ -307,7 +292,7 @@ describe('牌堆展示顺序', () => {
       materializeDeckIdentities: false
     })
     recycleIdsToDiscard(room, [1])
-    const hiddenHandCards = bindHiddenHands(room, [4, 5], 1, false)
+    const { hiddenCards: hiddenHandCards } = bindTestHand(room, 1, { hiddenIDs: [4, 5] })
     room.getPlayer(1).syncObservedHandCount(2)
 
     withWarnSpy((warnSpy) => {
@@ -626,6 +611,16 @@ describe('牌堆展示顺序', () => {
     expect(currentPlaceholder.isKnown).toBe(false)
     expect(currentPlaceholder.seats.has(1)).toBe(true)
     expect(hiddenMarkPlaceholder.suspended).toBe(false)
+    expect(room.counter.cardsByStatus[CARD_INSTANCE_STATUS.APPEARED]).toContain(
+      hiddenMarkPlaceholder
+    )
+    expect(room.cardIndex.get(5)).not.toBe(hiddenMarkPlaceholder)
+    expect(room.cardIndex.get(5)).toMatchObject({
+      location: 'suspended',
+      isKnown: true,
+      suspended: true
+    })
+    expect(getPublicFieldCandidateCards(room)).toContain(room.cardIndex.get(5))
     expect(getPublicFieldCandidateCards(room)).not.toContain(hiddenMarkPlaceholder)
     expect(getSuspendedIdentityIDs(room)).toEqual([2, 3, 5])
     expect(getPile(room).cards.every((card) => card.isAnonymous)).toBe(true)

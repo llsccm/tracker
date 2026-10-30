@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/config', () => ({}))
 vi.mock('@/dom', () => ({ resetSeatUIs: vi.fn() }))
 vi.mock('@/handler', () => ({}))
 vi.mock('@/handler/MsgGameOver', () => ({ cancelGameOverTask: vi.fn() }))
@@ -59,6 +58,69 @@ describe('初始化消息路由', () => {
     expect(Game.turn).toBe(4)
     expect(Game.isRoguelike1v1).toBe(false)
     expect(Game.needShowName).toBe(true)
+  })
+
+  it('重连消息切换当前 Room 模式，重复初始化信息不会恢复完整追踪', () => {
+    tracker.initTrackerRoom()
+    tracker.registerTrackerPlayers([{ SeatID: 0, ClientID: 100 }], 100)
+    const room = tracker.getTrackerRoom()!
+
+    logic({ className: 'decodeGameRecordInitInfo', ProtoObj: { gameId } })
+    logic({ className: 'MsgReconnectGame' })
+    logic({ className: 'decodeGameRecordInitInfo', ProtoObj: { gameId } })
+
+    expect(tracker.getTrackerRoom()).toBe(room)
+    expect(room.trackingMode).toBe('degraded')
+    expect(Game.room).toBe(room)
+    expect(Game.seatIDs).toEqual([0])
+    expect(recordTrackerProtocol).toHaveBeenCalledTimes(3)
+  })
+
+  it.each([0, 7])('旁观重连手牌通知以 SeatIndex=%s 确认主视角', (SeatIndex) => {
+    tracker.initTrackerRoom()
+    tracker.registerTrackerPlayers(
+      [
+        { SeatID: 0, ClientID: 101 },
+        { SeatID: 7, ClientID: 107 }
+      ],
+      100
+    )
+    const room = tracker.getTrackerRoom()!
+    const previousSeatID = SeatIndex === 0 ? 7 : 0
+    logic({ className: 'MsgReconnectGame' })
+    logic({ className: 'GsCUpdateRoleDataNtf', StateID: 58, SeatID: previousSeatID })
+    expect(Game.myID).toBe(previousSeatID)
+
+    logic({ className: 'MsgReconnectGameHand', CardIDs: [0], Count: 1, SeatIndex })
+    logic({ className: 'GsCUpdateRoleDataNtf', StateID: 58, SeatID: previousSeatID })
+
+    expect(tracker.getTrackerRoom()).toBe(room)
+    expect(room.mySeatID).toBe(SeatIndex)
+    expect(Game.myID).toBe(SeatIndex)
+    expect(Game.isRecord).toBe(true)
+    expect(room.trackingMode).toBe('degraded')
+  })
+
+  it.each([0, 7])('重连手牌路由同步座位 %s 的正 ID、暗牌和总数', (SeatIndex) => {
+    tracker.initTrackerRoom()
+    tracker.registerTrackerPlayers(
+      [
+        { SeatID: 0, ClientID: 101 },
+        { SeatID: 7, ClientID: 107 }
+      ],
+      100
+    )
+    tracker.initTrackerDeck([11, 12, 13])
+    const room = tracker.getReadyTrackerRoom()!
+    logic({ className: 'MsgReconnectGame', CardPileCount: 3 })
+
+    logic({ className: 'MsgReconnectGameHand', CardIDs: [11, 0, 12], Count: 3, SeatIndex })
+
+    expect(Game.myID).toBe(SeatIndex)
+    expect(room.getPlayer(SeatIndex)?.knownHandCards.map((card) => card.id)).toEqual([11, 12])
+    expect(room.getPlayer(SeatIndex)?.observedHandCount).toBe(3)
+    expect(room.getPlayer(SeatIndex)?.unknownCardCount).toBe(1)
+    expect(room.getZone('pile').cards).toHaveLength(3)
   })
 
   it('初始化消息之间插入其他协议也不会重置同一局', () => {

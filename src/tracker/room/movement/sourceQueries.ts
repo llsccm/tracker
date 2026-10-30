@@ -4,26 +4,9 @@ import type { Card } from '@/tracker/model'
 import type { Room } from '@/tracker/Room'
 import { getPopupSpaceCards } from './popupSpaces'
 import type { RoomMoveContext } from './types'
-import type {
-  PlayerLocationCandidate,
-  SeatID,
-  SpellID,
-  SubZone,
-  SubZoneCandidate
-} from '@/tracker/types'
+import type { PlayerLocationCandidate, SeatID, SpellID, SubZone } from '@/tracker/types'
 
 // 只读取当前 Room / Card，不保存快照或推断状态；供来源、候选和暗置标记组件共用。
-
-/**
- * 将当前可能玩家位置投影为子区读面，不从 seats 反向拼装候选。
- */
-export function getCardSubZoneCandidates(card: Card): SubZoneCandidate[] {
-  return getCardPlayerLocationCandidates(card).map(({ seatID, subZone, spellID }) => ({
-    seatID,
-    subZone,
-    spellID
-  }))
-}
 
 /**
  * 筛出未决候选或确定事实中的玩家位置，不把容器或公共位置猜成玩家位置。

@@ -42,7 +42,6 @@ export interface RoomSkillPlugin {
 /** 处理器注册与装饰顺序集中管理，不拥有任何卡牌推断状态。 */
 export class RoomMoveEvents {
   private readonly skills = new Map<SpellID, SkillHandler>()
-  private readonly handlers = new Map<SpellID | '*', MoveEventHandler[]>()
   private readonly plugins = new Map<string, RoomSkillPlugin>()
   private legacySequence = 0
 
@@ -53,7 +52,16 @@ export class RoomMoveEvents {
   }
 
   get moveEventHandlers(): ReadonlyMap<SpellID | '*', readonly MoveEventHandler[]> {
-    return this.handlers
+    const handlers = new Map<SpellID | '*', MoveEventHandler[]>()
+    for (const plugin of this.plugins.values()) {
+      if (!plugin.decorateMove) continue
+      for (const spellID of new Set<SpellID | '*'>(plugin.spellIDs ?? ['*'])) {
+        const registered = handlers.get(spellID)
+        if (registered) registered.push(plugin.decorateMove)
+        else handlers.set(spellID, [plugin.decorateMove])
+      }
+    }
+    return handlers
   }
 
   registerSkillHandler(spellID: SpellID, handler: SkillHandler): void {
@@ -61,14 +69,9 @@ export class RoomMoveEvents {
   }
 
   registerMoveEventHandler(spellID: SpellID | '*', handler: MoveEventHandler): void {
-    const key = spellID === '*' ? '*' : Number(spellID)
-    if (key !== '*' && !Number.isFinite(key)) return
-    const handlers = this.handlers.get(key)
-    if (handlers) handlers.push(handler)
-    else this.handlers.set(key, [handler])
     this.registerSkillPlugin({
       id: `legacy:${++this.legacySequence}`,
-      spellIDs: [key],
+      spellIDs: [spellID],
       decorateMove: handler
     })
   }
@@ -172,7 +175,6 @@ export class RoomMoveEvents {
 
   clear(): void {
     this.skills.clear()
-    this.handlers.clear()
     this.plugins.clear()
     this.legacySequence = 0
   }

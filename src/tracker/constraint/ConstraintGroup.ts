@@ -47,7 +47,7 @@ export class ConstraintGroup {
 
     this.id = id
     this.cards = new Set(cards)
-    this.candidateSeats = new Set(candidateSeats.map((seat) => Number(seat)))
+    this.candidateSeats = new Set(candidateSeats)
     this.expectedSlotsByLocation = this.normalizeExpectedLocationSlots(
       options.expectedSlotsByLocation ?? new Map()
     )

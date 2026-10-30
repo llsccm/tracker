@@ -12,15 +12,15 @@
 - 牌堆中的暗牌首先是**物理槽**，使用稳定负 `id/entityID`；它不代表某个具体 CardID。
 - 真实身份由 `Room.deckIdentities`、`Room.unlocatedIdentities`、`Room.cardIndex` 与
   `PileIdentityLedger` 分层维护。
-- `PileIdentityLedger` 是不可关闭的生产牌堆身份权威；cohort 只记录“候选身份集合中仍有几张在
-  牌堆”，不建立 CardID 与匿名槽的一一映射。
+- `PileIdentityLedger` 持续维护生产牌堆身份；完整追踪的 cohort 记录集合在堆基数，降级追踪
+  只保留明确位置与独立的物理暗槽数量，不建立 CardID 与匿名槽的一一映射。
 - 已知身份首次出现时，优先在协议覆盖的匿名端点上物化；不能越过端点范围扫描整副牌堆，也不能
   覆盖另一个正 ID 暗实体。
-- 真实洗牌关闭旧 generation 时，尚未出现的身份转为 detached `suspendedKnownCards` 展示实体；
+- 完整追踪的真实洗牌关闭旧 generation 时，尚未出现的身份转为 detached `suspendedKnownCards` 展示实体；
   它们不占牌堆、手牌或 mark 物理槽。
 - 公共范围揭示使用 `detachedKnownCards` 承载身份，不增加 `Room.cards`，不设置 suspended；
   精确揭示或移动在原匿名槽上物化身份并回收载体。
-- 协议张数大于本地可枚举实体时只告警，不凭空补建牌堆槽。
+- 普通移动不因身份候选不足而增删物理牌堆槽；明确洗牌或重连数量快照按协议校准物理数量。
 
 ## 按问题定位
 
@@ -33,6 +33,7 @@
 | 洗牌如何关闭旧世代 | `Room.shufflePile()`、`PileIdentityLedger.createShuffleTransition()` | `pileIdentityLedgerIntegration.test.ts` |
 | suspended 身份如何恢复 | `Room.suspendUnresolvedPileIdentitiesForShuffle()`、`Room.resumeSuspendedKnownCard()` | `pileIdentityLedgerIntegration.test.ts` |
 | 账本与 Room 为什么不一致 | `Room.assertPileIdentityLedgerConsistency()`、`PileIdentityLedger.getSnapshot()` | `pileIdentityLedger.test.ts`、`traversalBaseline.test.ts` |
+| 重连如何保留有限追踪并恢复数量 | `Room.degradeTracking()`、`RoomReconnect.restore()`、`Room.isPileCountKnown` | `degradedTracking.test.ts`、`reconnectSnapshot.test.ts` |
 
 ## 三层模型
 
@@ -247,6 +248,20 @@ accountedPileCount
 - 有效回收张数等于整副身份全集。
 
 只有后续部分弃牌真实洗回才视为 generation 滚动，并创建旧世代 suspended 身份。
+
+## 重连降级与数量锚定
+
+`Room.trackingMode === 'degraded'` 表示缺少完整开局历史；模式由 Room 独占，ledger 通过注入的只读
+判断读取当前能力，不另存一套开关。跨 Room/ledger 强守恒断言、身份容量告警及全集在堆/离堆推断关闭；
+真实身份的唯一性、已观测位置、明牌移动与匿名物理槽仍持续维护。
+
+降级 cohort 的 `remainingPileCount` 只表达聚合物理暗槽数，可以超过当前候选身份数；投影保持
+`partial`，不从开始牌表补造“全部在堆”或“全部离堆”。洗牌也不按缺失历史暂停整个旧身份全集。
+
+重连 `CardPileCount` 与洗牌 `CardCount` 都能锚定物理槽；重连数量恢复不随机牌序、不洗回弃牌，
+也不推进 generation。两类消息的数量属于各自 Room，不能跨局复用。重连缺少数量时保留同一 Room
+已收到的明确洗牌锚点，支持洗牌通知先于重连标记的顺序。无明确计数的洗牌或移动来源缺口会使
+降级局的数量重新变为未知；下一次明确计数可恢复数量，模式仍保持 `degraded`。
 
 ## Controller、Room 与 Ledger 的职责边界
 

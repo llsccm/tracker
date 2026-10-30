@@ -5,6 +5,7 @@ const retainedLogicMessages = new Set([
   'SmsgUpdateTaskListToClient',
   'ClientGuildMemberChangeNtf',
   'MsgReconnectGame',
+  'MsgReconnectGameHand',
   'MsgHeartAliveRep',
   'decodeGameRecordInitInfo',
   'ClientBindKeyRep',

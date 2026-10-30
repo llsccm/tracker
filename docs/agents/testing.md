@@ -49,7 +49,7 @@
 - 日志：`moveEventLogging.test.ts`
 
 木牛专属的候选与收敛场景集中在 `muniuCandidates.test.ts`。洗牌及洗牌后揭示仍由
-`anonymousPileSpike.test.ts`、`pileDisplayOrder.test.ts` 覆盖；通用标记占位守恒、普通出牌的来源隔离和
+`pileIdentityLedgerIntegration.test.ts`、`pileDisplayOrder.test.ts` 覆盖；通用标记占位守恒、普通出牌的来源隔离和
 Controller 入口分别保留在 `markSpaceReconcile.test.ts`、`knownDiscardConfirm.test.ts`、
 `trackerController.test.ts`。重复的手牌准备与暗置操作复用 `tests/tracker/helpers/hiddenMarks.ts`，
 协议关键字段和业务断言保留在各自用例中。

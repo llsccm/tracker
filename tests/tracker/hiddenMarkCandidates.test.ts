@@ -13,7 +13,12 @@ import {
   type RoomMoveContext
 } from '@/tracker/room/movement/types'
 import { createTestRoom, getCard, takeAnonymousCard } from './helpers/room'
-import { outsideLocation, playerLocation, publicLocation } from './helpers/locationCandidates'
+import {
+  outsideLocation,
+  playerLocation,
+  publicLocation,
+  locationKeys
+} from './helpers/locationCandidates'
 import { getUnknownPlayerSourceCards } from '@/tracker/room/movement/sourceQueries'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import { moveHiddenHandToMark, moveKnownCardsToHand } from './helpers/hiddenMarks'
@@ -21,7 +26,7 @@ import { moveHiddenHandToMark, moveKnownCardsToHand } from './helpers/hiddenMark
 afterEach(() => vi.restoreAllMocks())
 
 describe('隐藏标记区候选', () => {
-  it('暗置查询纳入刚入手明牌和仍在公共区的手牌候选，不全量过滤牌池', () => {
+  it('暗置查询纳入刚入手明牌和含公共候选的手牌候选，不全量过滤牌池', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4] })
     const first = getCard(room, 1)!
     const second = getCard(room, 2)!
@@ -32,9 +37,9 @@ describe('隐藏标记区候选', () => {
     first.confirmKnown()
     first.setLocationCandidates([playerLocation(1, 'hand'), pileTop])
     otherSeat.bindCandidates([2], 'hand', null, { known: true })
-    // 玩家候选会把 location 归一为 player；公共区引用和候选仍可同时保留。
+    // 玩家候选会清理公共区实体引用，但仍保留逻辑公共候选。
     expect(first.location).toBe('player')
-    expect(room.zones.get('pile')!.cards).toContain(first)
+    expect(room.zones.get('pile')!.cards).not.toContain(first)
     const context = room.movement.createMoveContext([], {
       from: { type: 'player', seatID: 1, subZone: 'hand' },
       to: { type: 'player', seatID: 1, subZone: 'mark', markSpellID: 414 },
@@ -54,9 +59,13 @@ describe('隐藏标记区候选', () => {
     expect([...record.cards]).toEqual([first, second])
     expect(record.knownMarkMax).toBe(1)
     expect(context.skipUnknownMovement).toBe(true)
-    expect(first.hasSubZoneCandidate({ seatID: 1, subZone: 'mark', spellID: 414 })).toBe(true)
+    expect(
+      first.hasLocationCandidate({ type: 'player', seatID: 1, subZone: 'mark', spellID: 414 })
+    ).toBe(true)
     expect(first.hasLocationCandidate(pileTop)).toBe(true)
-    expect(second.hasSubZoneCandidate({ seatID: 1, subZone: 'hand', spellID: null })).toBe(true)
+    expect(
+      second.hasLocationCandidate({ type: 'player', seatID: 1, subZone: 'hand', spellID: null })
+    ).toBe(true)
     expect(otherSeat.hasLocationCandidates()).toBe(false)
     expect(filter).not.toHaveBeenCalled()
     expect(stats.sites.get('resolveConstraints:playerSnapshot')).toBeUndefined()
@@ -267,9 +276,9 @@ describe('隐藏标记区候选', () => {
       max: markCount
     })
     cards.forEach((card) => {
-      expect(
-        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
-      ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
+      expect(locationKeys(card)).toEqual(
+        [createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort()
+      )
     })
   })
 
@@ -299,9 +308,9 @@ describe('隐藏标记区候选', () => {
         .expectedSlotsByLocation.get('player:1:mark:1234')
     ).toEqual({ min: 0, max: 2 })
     cards.forEach((card) => {
-      expect(
-        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
-      ).toEqual([createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort())
+      expect(locationKeys(card)).toEqual(
+        [createLocationCandidateKey(hand), createLocationCandidateKey(mark)].sort()
+      )
     })
   })
 
@@ -352,9 +361,7 @@ describe('隐藏标记区候选', () => {
 
     expect(room.constraintGroups.has('hidden_mark_1:1:1234')).toBe(false)
     cards.forEach((card) => {
-      expect(
-        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
-      ).toEqual(
+      expect(locationKeys(card)).toEqual(
         [
           createLocationCandidateKey(sourceHand),
           createLocationCandidateKey(otherHand),
@@ -386,9 +393,7 @@ describe('隐藏标记区候选', () => {
 
     expect(room.constraintGroups.has('hidden_mark_1:1:1234')).toBe(false)
     cards.forEach((card) => {
-      expect(
-        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
-      ).toEqual(
+      expect(locationKeys(card)).toEqual(
         [
           createLocationCandidateKey(sourceHand),
           createLocationCandidateKey(pileTop),

@@ -4,6 +4,7 @@ export { RoomDiagnostics } from './diagnostics'
 export { RoomIdentity } from './identity'
 export { RoomMoveEvents } from './moveEvents'
 export { RoomPublicZones } from './publicZones'
+export { RoomReconnect } from './reconnect'
 export { RoomMovement } from './movement/RoomMovement'
 
 export type { AnonymizeLocatedIdentityOptions } from './identity'

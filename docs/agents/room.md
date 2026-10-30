@@ -30,6 +30,7 @@
 
 - 浏览器运行时由 `TrackerController` 创建并持有当前 Room；业务代码通常通过
   `tracker.getReadyTrackerRoom()` 获取已完成牌堆初始化的实例。
+- `Room.trackingMode` 为 `full` 或 `degraded`，只属于当前 Room；降级不会关闭 Controller 同步或卸载视图。
 - 测试优先使用 `tests/tracker/helpers/room.ts` 的 `createTestRoom()`，避免重复手写初始化步骤。
 - `Room` 持有单局事实、身份分区、约束与派生索引；状态写入统一经 Controller 或 Room 公开入口。
 - `src/tracker/room/index.ts` 显式导出行为类及对外类型，供目录外调用方统一导入；接口与类型别名使用
@@ -65,10 +66,11 @@ flowchart LR
 | 注册座位   | `registerPlayers(infos, currentUserID)`           | 重建 `players`、`seatIDs`、`size`，识别 `mySeatID`，同步录像状态与固定视角前置数据                                                              |
 | 初始化牌堆 | `initDeck(cardIDs)`                               | 清空旧牌池，创建等量匿名物理槽，登记真实身份，初始化 generation 0、索引、快照与 `CardCounter`，最后置 `isDeckReady = true`                      |
 | 对局运行   | `moveCards()` / `shufflePile()` / reveal 相关入口 | 更新物理实体、身份账本、候选与手牌数事实，再执行收敛和派生同步                                                                                  |
+| 断线重连   | `degradeTracking(snapshot)` / `RoomReconnect.restore()` | 切换 `degraded`，恢复重连快照中的牌堆数量、手牌总数和装备/判定区；视图与后续同步继续运行 |
 | 销毁       | `destroy()`                                       | 与 `GameState` 解绑并触发统一临时状态清理，再清空玩家、Zone、牌实体、约束、身份分区、脏状态和座位信息；整个实例随即失效，不再被 Controller 复用 |
 
 浏览器侧可能在玩家注册后进行一次早期 View 挂载，但只有 `initDeck()` 完成后 Room 才能通过
-`getReadyTrackerRoom()` 对外提供完整记牌能力。具体挂载时序不要在 Room 内推断，见
+`getReadyTrackerRoom()` 对外提供当前模式的记牌能力。具体挂载时序不要在 Room 内推断，见
 [`lifecycle.md`](lifecycle.md)。
 
 Room 解绑只清理 Room 关联状态与统一临时状态仓库，不清理 Game 持有的对局 ID、模式和
@@ -77,6 +79,12 @@ Controller 每次创建 Room 后、注册座位前调用 `Game.beginPlayback()`�
 保留的模式名称重新应用模式默认值。同一录像重新播放也创建新 Room，不能仅凭相同 `gameId`
 跳过播放状态重置。
 
+构造、`initDeck()` 与 `destroy()` 通过私有 `resetMutableRoomState()` 统一清理牌实体集合、
+身份分区、约束、脏事件、游标及派生索引。公共区清理和销毁时的实体重置必须先完成，再调用该方法，
+避免清理回调重新留下旧牌事件。`initDeck()` 保留座位、追踪模式、技能注册和重连暂存，随后重建牌堆、
+计数器及玩家投影；`destroy()` 另行解绑对局、清理玩家和技能注册。视图以事件缓冲引用识别牌堆重建，
+序号归零时重新消费，避免沿用旧牌堆的游标和候选缓存。
+
 ## 第三层：Room 持有什么
 
 ### 权威事实
@@ -84,6 +92,7 @@ Controller 每次创建 Room 后、注册座位前调用 `Game.beginPlayback()`�
 | 分区         | 代表字段                                                                             | 语义                                                                                |
 | ------------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
 | 座位与视角   | `players`、`seatIDs`、`size`、`mySeatID`、`firstID`                                  | 本局玩家集合、主视角与固定显示顺位前置事实                                          |
+| 追踪能力与数量 | `trackingMode`、`isPileCountKnown` | 完整开局历史是否可用，以及牌堆物理数量是否已获得可靠锚点 |
 | 物理牌实体   | `cards`、`zones`、`cardIndex`                                                        | 物理实体、公共区有序关系与正 ID 索引；历史 suspended 展示实体仍登记于 `cards`       |
 | 范围身份载体 | `detachedKnownCards`、`trackedCards`                                                 | 公共范围揭示不增加 `cards`；`trackedCards` 合并物理实体与范围身份，供推断和投影读取 |
 | 身份分区     | `deckIdentities`、`unlocatedIdentities`、`suspendedKnownCards`、`pileIdentityLedger` | 暗牌堆真实身份集合、未定位身份、暂停展示实体与 cohort/generation 权威账本           |
@@ -199,6 +208,28 @@ Room 仍持有权威状态、`resolveTouchedSeats`、收敛轮数与脏事件，
 终止性、触碰座位缓存、脏事件游标和 `changed` 幂等契约统一见
 [`card_tracker_convergence.md`](card_tracker_convergence.md)。
 
+### 重连残局
+
+`MsgReconnectGame` 经 `TrackerController.degradeTrackerRoom()` 进入 `Room.degradeTracking()`。
+新 Room 默认为 `full`；重连后本局保持 `degraded`，洗牌恢复数量也不自动恢复完整开局历史。
+降级关闭跨 Room/ledger 的强守恒断言和身份容量告警，但继续执行有协议事实的局部收敛、
+索引同步、实体唯一性与公共区结构检查。
+
+`RoomReconnect` 位于 `src/tracker/room/reconnect.ts`，恢复 `CardPileCount` 及 `SeatInfos` 的
+`HandCardCount`、装备和判定身份。旧手牌身份及快照中缺失的装备/判定位置暂停追踪，不能当作弃置或销毁；
+明确的零手牌同样建立数量基线。重连快照先于牌堆初始化时仅在当前 Room 内暂存，`initDeck()` 后恢复。
+未收到手牌总数时只记录 `Player.handCountDelta`，不把正向差量或本地牌数当作完整手牌总数。
+
+`MsgReconnectGameHand` 经 `TrackerController.restoreTrackerReconnectHand()` 同步主视角，再由
+`Room.restoreReconnectHand()` 委托 `RoomReconnect.restoreHand()` 恢复当前手牌：`Count` 为绝对总数，
+`CardIDs` 中正 ID 物化并确认到普通手牌，零 ID 由匿名槽覆盖。快照中缺失的旧确定手牌位置暂停追踪，
+装备、判定和标记区保留。重复通知复用身份，手牌恢复沿用当前牌堆数量锚点，不作为新增摸牌。
+初始化前的手牌快照按座位暂存，先恢复座位快照，再恢复具体手牌；Room 销毁时一起清理。
+
+`Room.restorePileCount()` 委托 `RoomPublicZones` 校准物理槽，不清空弃牌堆，也不触发洗牌世代滚动。
+有明确 `CardPileCount` 时使用当前局的重连快照；缺省时保留当前 Room 已收到的洗牌数量锚点。
+未锚定时牌堆数量显示未知，后续明确洗牌 `CardCount` 可重新锚定；来源缺口造成数量无法覆盖时再次退回未知。
+
 ### 洗牌
 
 `shufflePile()` 不是普通 `moveCards()` 的简单组合。真实弃牌洗回时必须先让
@@ -241,7 +272,8 @@ cohort 身份到匿名实体的投影，并协调洗回身份匿名化和物理�
 | 归一化移动同步、Room 创建/销毁与运行时同步               | `src/tracker/runtime/bridge.ts`、`trackerController.ts` | 连接 handler、Room 与生命周期                                                 |
 | `moveCards()` 某个低频阶段或来源取牌规则                 | `room/movement/RoomMovement.ts` / `room/movement/*`     | 保持 Room 中的高频主流程短而稳定                                              |
 | 不动点收敛、手牌槽缓存、匿名手牌对账、约束组与稳定态同步 | `room/constraints.ts`                                   | 集中维护求解和稳定投影规则；Room 保留公开收敛入口与状态所有权                 |
-| 公共区查询、牌序读面、一致性诊断                         | `room/publicZones.ts`                                   | 避免在 Room 重复实现 Zone 遍历                                                |
+| 公共区查询、牌序读面、物理槽校准和一致性诊断             | `room/publicZones.ts`                                   | 避免在 Room 重复实现 Zone 遍历                                                |
+| 重连残局快照恢复与初始化前暂存                         | `room/reconnect.ts`                                     | 不补造移动协议，不把重连计数当作洗牌 |
 | 座位/视角字段与查询、GameState 上下文、技能状态访问      | `room/RoomBase.ts`                                      | 单层基础类，不依赖完整 Room；不创建独立技能状态仓库                           |
 | 玩家区快照、事件游标、实体创建顺序                       | `projection/playerSnapshot.ts`                          | 唯一派生缓存，Room 保留查询和刷新入口                                         |
 | 插件注册、阶段分发及输入类型                             | `room/moveEvents.ts`、`skill/protocolEvents.ts`         | 注册表按局隔离，移动与非移动事实使用各自的类型契约                            |
@@ -269,7 +301,9 @@ Room 继续负责相应的 `PileIdentityLedger` 事务和阶段顺序。
 
 `RoomMoveEvents` 通过唯一 ID 注册 `RoomSkillPlugin`，重复 ID 报错。移动阶段通配插件先执行，
 再按动作技能与端点派生的旧回调技能顺序匹配，同一插件最多执行一次；`registerMoveEventHandler()` 是装饰阶段的
-兼容适配入口。`decorateMove` 只接收完整 `NormalizedMoveEvent`，不补造协议、数量或选项；
+兼容适配入口，只注册插件。`moveEventHandlers` 每次读取时从 `plugins` 按技能投影装饰器，
+不维护第二份注册表；单牌放置回调 `skillHandlers` 仍独立保存并由 `knownPlacement.ts` 消费。
+`decorateMove` 只接收完整 `NormalizedMoveEvent`，不补造协议、数量或选项；
 空返回或异常保留上一事件。`beforeNormalizeMove` 返回 `defer` 立即中止；前置/协议异常向上传递，
 提交后通知逐插件隔离异常。`notifyCardsRevealed()` 广播去重后的正 ID。
 
@@ -289,7 +323,7 @@ Controller 负责沿普通移动管线提交。`onDeckInitialized` 广播给插�
 - 低层候选或实体写入后，在读取稳定索引/玩家视图组前调用 `resolveConstraints()`。
 - 不要直接向 `room.cards`、玩家投影数组或索引桶 `push`；不要用 `Zone.add()` 代替协议移动。
 - 物化已有身份优先使用 `materialize()`；不要为同一真实 ID 另建一张 `Card`。
-- 洗牌必须保持身份账本事务先于物理区重建，不能绕过 generation 与 Room/ledger 一致性检查。
+- 洗牌必须保持身份账本事务先于物理区重建；完整模式执行 generation 与 Room/ledger 一致性检查，降级模式仅保留可证明的事实。
 
 ## 第七层：按症状诊断
 
@@ -309,6 +343,7 @@ Controller 负责沿普通移动管线提交。`onDeckInitialized` 广播给插�
 - `src/tracker/room/movement/RoomMovement.ts`、`src/tracker/room/movement/`：移动阶段实现。
 - `src/tracker/room/constraints.ts`：约束、暂停追踪与玩家视图组同步。
 - `src/tracker/room/publicZones.ts`：公共区查询与一致性诊断。
+- `src/tracker/room/reconnect.ts`：重连快照恢复与按局暂存。
 - `src/tracker/room/diagnostics.ts`：DEV 断言、影子索引抽样与收敛轮数告警。
 - `src/tracker/projection/playerSnapshot.ts`：玩家区增量快照及顺序缓存。
 - `src/tracker/room/moveEvents.ts`：处理器注册、装饰顺序与事件类型契约。

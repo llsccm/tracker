@@ -1,3 +1,4 @@
+import { createReadyControllerHarness, protocolMove } from './helpers/trackerController'
 import { moveContext } from './helpers/moveContext'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -77,5 +78,63 @@ describe('技能副作用注册表', () => {
 
     expect(game.getSpellState(SpellID)).toEqual(CardIDs)
     expect(drawChengXiang).not.toHaveBeenCalled()
+  })
+  it('技能304展示游戏外生成的匿名手牌时补建并揭示真实实体', () => {
+    const knownHandIDs = [26, 149, 62]
+    const { controller } = createReadyControllerHarness({
+      seatIDs: [1],
+      cardIDs: [...knownHandIDs, 1]
+    })
+    controller.syncTrackerMove(protocolMove({ CardIDs: knownHandIDs, ToID: 1 }))
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [],
+        CardCount: 1,
+        FromID: 255,
+        FromZone: 12,
+        MoveType: 19,
+        ToID: 1,
+        ToZone: 5
+      })
+    )
+
+    const room = controller.getTrackerRoom()
+    expect(
+      room.cards.filter(
+        (card) =>
+          card.isAnonymous &&
+          card.location === 'player' &&
+          card.subZone === 'hand' &&
+          card.seats.has(1)
+      )
+    ).toHaveLength(1)
+
+    controller.syncTrackerMove(
+      protocolMove({
+        CardIDs: [...knownHandIDs, 60992],
+        CardCount: 4,
+        FromID: 1,
+        FromZone: 5,
+        MoveType: 21,
+        SpellID: 304,
+        ToID: 1,
+        ToZone: 5
+      })
+    )
+
+    const revealedCard = room.cardIndex.get(60992)
+    expect(revealedCard.location).toBe('player')
+    expect(revealedCard.subZone).toBe('hand')
+    expect(revealedCard.seats.has(1)).toBe(true)
+    expect(revealedCard.isKnown).toBe(true)
+    expect(
+      room.cards.filter(
+        (card) =>
+          card.isAnonymous &&
+          card.location === 'player' &&
+          card.subZone === 'hand' &&
+          card.seats.has(1)
+      )
+    ).toEqual([])
   })
 })

@@ -5,25 +5,22 @@ import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions
 import type { RawMoveCardEvent } from '@/tracker/types'
 import {
   createErrorSpy,
-  createTrackerControllerHarness,
-  protocolMove
+  protocolMove,
+  createReadyControllerHarness
 } from './helpers/trackerController'
 
 function setupYanXi(topIDs: number[] = [1, 2, 3], isGuoZhan = false) {
   const errorSpy = createErrorSpy()
-  const { controller, gameState } = createTrackerControllerHarness()
-  controller.initTrackerRoom()
-  controller.registerTrackerPlayers(
-    [1, 4, 7].map((seat) => ({ SeatID: seat, ClientID: seat })),
-    1
-  )
-  controller.initTrackerDeck(Array.from({ length: 20 }, (_, index) => index + 1))
+  const { controller, gameState, room } = createReadyControllerHarness({
+    players: [1, 4, 7].map((seat) => ({ SeatID: seat, ClientID: seat })),
+    currentUserID: 1,
+    cardIDs: Array.from({ length: 20 }, (_, index) => index + 1)
+  })
   controller.syncTrackerMove(protocolMove({ ToID: 4, CardIDs: [19] }))
   if (topIDs.length > 0) {
     controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, topIDs)
   }
   gameState.isGuoZhan = isGuoZhan
-  const room = controller.getTrackerRoom()!
   return { controller, room, gameState, errorSpy }
 }
 

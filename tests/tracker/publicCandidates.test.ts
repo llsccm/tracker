@@ -3,7 +3,7 @@ import { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from './helpers/room'
-import { playerHand, publicLocation } from './helpers/locationCandidates'
+import { playerHand, publicLocation, locationKeys } from './helpers/locationCandidates'
 
 describe('公共候选传播', () => {
   it('公共候选进入新座位不需要扩写历史组的座位快照', () => {
@@ -68,6 +68,7 @@ describe('公共候选传播', () => {
     second.confirmKnown()
     first.setLocationCandidates([pileTop])
     second.setLocationCandidates([pileTop])
+    expect(room.getPublicZone('pile').cards).toEqual(expect.arrayContaining([first, second]))
 
     const affectedCards = room.movement.candidates.propagatePublicCandidatesToHand({
       fromZone: 'pile',
@@ -80,7 +81,10 @@ describe('公共候选传播', () => {
     })
 
     expect(affectedCards).toEqual([first, second])
+    expect(room.publicZones.getPublicZoneConsistencyIssues()).toEqual([])
     ;[first, second].forEach((card) => {
+      expect(card.location).toBe('player')
+      expect(room.getPublicZone('pile').cards).not.toContain(card)
       expect(card.publicCandidates).toEqual([
         expect.objectContaining({
           zone: 'pile',
@@ -88,9 +92,7 @@ describe('公共候选传播', () => {
           count: 1
         })
       ])
-      expect(
-        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
-      ).toEqual(
+      expect(locationKeys(card)).toEqual(
         [
           createLocationCandidateKey(publicLocation('pile', 'top', 1)),
           createLocationCandidateKey(targetHand)
@@ -129,9 +131,7 @@ describe('公共候选传播', () => {
         count: 1
       })
     ])
-    expect(
-      card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
-    ).toEqual(
+    expect(locationKeys(card)).toEqual(
       [pileBottom, hand1, hand2, hand3]
         .map((candidate) => createLocationCandidateKey(candidate))
         .sort()
@@ -166,9 +166,9 @@ describe('公共候选传播', () => {
         count: null
       })
     ])
-    expect(
-      card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
-    ).toEqual([createLocationCandidateKey(pileTop), createLocationCandidateKey(targetHand)].sort())
+    expect(locationKeys(card)).toEqual(
+      [createLocationCandidateKey(pileTop), createLocationCandidateKey(targetHand)].sort()
+    )
   })
 
   it('删除手牌候选后只剩公共候选时仍保持候选态', () => {
@@ -238,9 +238,7 @@ describe('公共候选传播', () => {
 
     group.resolve()
 
-    expect(
-      card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort()
-    ).toEqual(
+    expect(locationKeys(card)).toEqual(
       [
         createLocationCandidateKey(pileTop),
         createLocationCandidateKey(pileBottom),
@@ -306,10 +304,8 @@ describe('公共候选传播', () => {
         count: 1
       })
     ])
-    expect(
-      candidateCard.locationCandidates
-        .map((candidate) => createLocationCandidateKey(candidate))
-        .sort()
-    ).toEqual([createLocationCandidateKey(pileTop), createLocationCandidateKey(targetHand)].sort())
+    expect(locationKeys(candidateCard)).toEqual(
+      [createLocationCandidateKey(pileTop), createLocationCandidateKey(targetHand)].sort()
+    )
   })
 })

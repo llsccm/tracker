@@ -84,15 +84,4 @@ describe('MsgGameTurnNtf', () => {
     expect(zhanfaReset).toHaveBeenCalledOnce()
     expect(scheduleTrackerRender).toHaveBeenCalledOnce()
   })
-
-  it('忽略字符串或非有限轮次，避免污染状态', () => {
-    handleGameTurn({ TurnCnt: '1' })
-    handleGameTurn({ TurnCnt: Number.NaN })
-
-    expect(zhanfaRegister).not.toHaveBeenCalled()
-    expect(zhanfaReset).not.toHaveBeenCalled()
-    expect(hideSelfOrderContainer).not.toHaveBeenCalled()
-    expect(Game.setTurn).not.toHaveBeenCalled()
-    expect(scheduleTrackerRender).not.toHaveBeenCalled()
-  })
 })

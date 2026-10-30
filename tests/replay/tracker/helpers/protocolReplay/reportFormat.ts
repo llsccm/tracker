@@ -191,6 +191,8 @@ export function compactSnapshot(snapshot: TrackerReplaySnapshot): unknown {
     game: snapshot.game,
     room: {
       deckReady: snapshot.room.deckReady,
+      trackingMode: snapshot.room.trackingMode,
+      isPileCountKnown: snapshot.room.isPileCountKnown,
       seatIDs: snapshot.room.seatIDs,
       mySeatID: snapshot.room.mySeatID,
       firstSeatID: snapshot.room.firstSeatID,
@@ -203,6 +205,7 @@ export function compactSnapshot(snapshot: TrackerReplaySnapshot): unknown {
       players: snapshot.room.players.map((player) => ({
         seatID: player.seatID,
         observedHandCount: player.observedHandCount,
+        handCountDelta: player.handCountDelta,
         unknownHandCount: player.unknownHandCount,
         knownHandCardIDs: player.knownHandCardIDs,
         candidateHandCardIDs: player.candidateHandCardIDs,

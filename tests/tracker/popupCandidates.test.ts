@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { protocolMove, createReadyControllerHarness } from './helpers/trackerController'
 import { getPopupSpaceCards } from '@/tracker/room/movement/popupSpaces'
 import {
   createLocationCandidateKey,
@@ -7,16 +7,7 @@ import {
 } from '@/tracker/candidate/locationCandidate'
 
 function setup(cardIDs: number[]) {
-  const { controller } = createTrackerControllerHarness()
-  controller.initTrackerRoom()
-  controller.registerTrackerPlayers(
-    [
-      { SeatID: 1, ClientID: 100 },
-      { SeatID: 2, ClientID: 200 }
-    ],
-    100
-  )
-  controller.initTrackerDeck(cardIDs)
+  const { controller } = createReadyControllerHarness({ seatIDs: [1, 2], cardIDs: cardIDs })
   const move = (
     spell: number,
     from: number,

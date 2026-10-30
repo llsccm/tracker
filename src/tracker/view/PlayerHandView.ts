@@ -9,6 +9,10 @@ import { createCardButton, createUnknownButton } from './cardButton'
 import { getPileDisplayCards } from './pileOrder'
 import { getPublicFieldCandidateCards } from './publicFieldCandidates'
 
+// 这些标记仅有数量意义，数量已由游戏展示，记牌面板无需重复渲染。
+// 陷嗣 化木
+const HIDDEN_MARK_SPELL_IDS = new Set([449, 4040, 3114])
+
 let renderedMainHandCardIDs: number[] | null = null
 const renderedMainHandListeners = new Set<() => void>()
 
@@ -40,6 +44,7 @@ function updateRenderedMainHandCardIDs(cardIDs: number[]): void {
 
 interface CardListOptions {
   ambiguous?: boolean
+  unknownCountKnown?: boolean
 }
 
 type HandCardKind = 'known' | 'candidate'
@@ -151,6 +156,7 @@ export function renderPlayerHand(doc: Document, player: Player): void {
   const markSpell: Partial<Record<number, string>> = SkillsConfig.GetInstance().markSpell
 
   player.markCards.forEach((cards, spellID) => {
+    if (HIDDEN_MARK_SPELL_IDS.has(spellID)) return
     if (!cards || !cards.length) return
     renderedNodes.push(createMarkedCardNode(doc, spellID, cards, markSpell[spellID]))
   })
@@ -192,7 +198,7 @@ function createMarkedCardNode(
 
   cards.forEach((card) => {
     const button = createCardButton(doc, card, {
-      ambiguous: card.hasSubZoneCandidates()
+      ambiguous: card.locationCandidates.some((candidate) => candidate.type === 'player')
     })
     markedCard.appendChild(button)
   })
@@ -289,7 +295,9 @@ function getPlayerHandPanel(doc: Document): HTMLElement | null {
 export function renderPublicZones(room: Room, doc: Document): void {
   const publicByZone = room.locationIndex.publicByZone
   const pileCards = publicByZone.get('pile') ?? room.getZone('pile').cards
-  renderCardList(doc, 'paiduiCards', getPileDisplayCards(pileCards))
+  renderCardList(doc, 'paiduiCards', getPileDisplayCards(pileCards), {
+    unknownCountKnown: room.isPileCountKnown
+  })
 
   const discardCards = (publicByZone.get('discard') ?? room.getZone('discard').cards).filter(
     (card) => card.turn === Game.turn && card.round === Game.round
@@ -322,9 +330,14 @@ function renderCardList(
     } else {
       let run = 1
       while (i + run < cards.length && !cards[i + run].isKnown) run++
-      container.appendChild(createUnknownButton(doc, run))
+      container.appendChild(
+        createUnknownButton(doc, options.unknownCountKnown === false ? null : run)
+      )
       i += run
     }
+  }
+  if (options.unknownCountKnown === false && cards.every((card) => card.isKnown)) {
+    container.appendChild(createUnknownButton(doc, null))
   }
 }
 

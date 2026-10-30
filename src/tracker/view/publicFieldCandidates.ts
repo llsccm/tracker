@@ -1,9 +1,9 @@
 import { isAmbiguousKnownCard } from '../projection/AmbiguousKnownIndex'
 import type { Card } from '@/tracker/model'
-import type { Room } from '../Room'
+import type { DirtyCardEvent, Room } from '../Room'
 
 // 视图私有消费状态：不清理 Room.dirtyCards，只记录本视图处理到哪一次卡牌变更。
-const dirtyCardCursors = new WeakMap<Room, number>()
+const dirtyCardCursors = new WeakMap<Room, { events: DirtyCardEvent[]; seq: number }>()
 const supplementalCandidateCards = new WeakMap<Room, Set<Card>>()
 
 export function getPublicFieldCandidateCards(room: Room): Card[] {
@@ -66,21 +66,23 @@ function getSupplementalCandidateSet(room: Room): Set<Card> {
 }
 
 function consumeDirtyCardsSinceLastRender(room: Room): { cards: Card[]; overflowed: boolean } {
-  const lastSeq = dirtyCardCursors.get(room) ?? 0
+  const cursor = dirtyCardCursors.get(room)
+  const lastSeq = cursor?.seq ?? 0
+  const bufferChanged = cursor !== undefined && cursor.events !== room.dirtyCardEvents
   const latestSeq = room.dirtyCardSeq
 
-  if (latestSeq <= lastSeq) {
+  if (!bufferChanged && latestSeq <= lastSeq) {
     return { cards: [], overflowed: false }
   }
 
-  dirtyCardCursors.set(room, latestSeq)
+  dirtyCardCursors.set(room, { events: room.dirtyCardEvents, seq: latestSeq })
 
   const events = room.dirtyCardEvents
   const firstEventSeq = events[0]?.seq
-  const hasLostEvents = events.length === 0 || firstEventSeq > lastSeq + 1
+  const hasLostEvents = bufferChanged || events.length === 0 || firstEventSeq > lastSeq + 1
 
   if (hasLostEvents) {
-    // 事件日志被裁剪时保守兜底一次；常规路径只消费本视图上次渲染后的事件。
+    // 牌堆重建或事件日志被裁剪时重建缓存；常规路径只消费上次渲染后的事件。
     return { cards: Array.from(room.dirtyCards), overflowed: true }
   }
 

@@ -60,7 +60,6 @@ export class GameState {
   declare isSWJG: boolean
   /** 房间人数 由 Room 同步 */
   declare size: number | undefined
-  declare isDuanXian: boolean
 
   /** 排位赛斗地主展示名字 */
   needShowName = false
@@ -129,7 +128,6 @@ export class GameState {
     this.myGenerals.length = 0
 
     this.size = undefined
-    this.isDuanXian = false
 
     this.zhanfaSet.clear()
   }

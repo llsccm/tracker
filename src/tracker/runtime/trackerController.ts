@@ -27,6 +27,8 @@ import type {
   PublicPosition,
   PublicZoneName,
   RawMoveCardEvent,
+  ReconnectGameHandSnapshot,
+  ReconnectGameSnapshot,
   SeatID,
   SeatInfo,
   SpellID,
@@ -133,11 +135,27 @@ export class TrackerController {
   }
 
   isTrackerReady(): boolean {
-    return Boolean(this.trackerRoom?.isDeckReady && !this.gameState.isDuanXian)
+    return Boolean(this.trackerRoom?.isDeckReady)
   }
 
   getReadyTrackerRoom(): Room | null {
     return this.isTrackerReady() ? this.trackerRoom : null
+  }
+
+  /** 重连只降低本局推断能力，继续保留视图和后续协议同步。 */
+  degradeTrackerRoom(snapshot?: ReconnectGameSnapshot): void {
+    if (!this.trackerRoom) return
+    this.trackerRoom.degradeTracking(snapshot)
+    this.controllerView.scheduleRender()
+  }
+
+  /** 重连手牌通知同时确认主视角和当前手牌快照。 */
+  restoreTrackerReconnectHand(snapshot: ReconnectGameHandSnapshot): void {
+    if (!this.trackerRoom) return
+    this.setTrackerMySeatID(snapshot.SeatIndex, { overwrite: true })
+    this.trackerRoom.degradeTracking()
+    this.trackerRoom.restoreReconnectHand(snapshot)
+    this.controllerView.scheduleRender()
   }
 
   /** 读取当前已跟踪且已知的指定玩家手牌 ID。 */
@@ -171,16 +189,10 @@ export class TrackerController {
 
   /**
    * 牌堆协议到达后初始化物理牌池，并在牌池可用后挂载视图。
-   * 断线重连局面暂不重建牌堆，因为宿主只给局部状态，强行初始化会制造错误确定性。
+   * 降级局的初始牌表只提供身份候选，物理数量由后续洗牌协议锚定。
    */
   initTrackerDeck(cardIDs: CardID[]): void {
     if (!this.trackerRoom) return
-
-    if (this.gameState.isDuanXian) {
-      this.controllerLogger.warn('断线重连状态，跳过 Room 牌堆初始化')
-      this.controllerView.unmount()
-      return
-    }
 
     this.trackerRoom.initDeck(cardIDs)
     this.controllerView.mount(this.trackerRoom)
@@ -204,12 +216,16 @@ export class TrackerController {
    * 主视角和先手协议到达后补齐固定视角座位顺序。
    * Seat UI 依赖固定视角；setTrackerFirstHand() 调用 getSeatUIs() 后，
    * 由 drawSeatUIs() 提交实际 DOM 布局，首轮回合只显示已经布局的容器。
+   * 重连手牌协议明确给出视角时，可覆盖此前的兜底推断。
    */
-  setTrackerMySeatID(seatID: SeatID): void {
-    if (!this.trackerRoom || this.trackerRoom.mySeatID !== undefined) return
+  setTrackerMySeatID(seatID: SeatID, options: { overwrite?: boolean } = {}): void {
+    if (!this.trackerRoom) return
+    const mySeatID = this.trackerRoom.mySeatID
+    if (mySeatID !== undefined && !options.overwrite) return
 
     const normalizedSeatID = Number(seatID)
     if (!this.trackerRoom.players.has(normalizedSeatID)) return
+    if (mySeatID === normalizedSeatID) return
 
     this.trackerRoom.setMySeatID(normalizedSeatID)
     this.trackerRoom.updateFixedViewIds()

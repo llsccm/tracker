@@ -2,7 +2,7 @@ import type { GameState } from '@/tracker/Game'
 import type { SlotCountRange } from '@/tracker/constraint/ConstraintGroup'
 import type { RecordedTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
 import type { TrackerController } from '@/tracker/runtime/trackerController'
-import type { TrackerControllerOptions } from '@/tracker/types'
+import type { TrackerControllerOptions, TrackingMode } from '@/tracker/types'
 import type { ReplayAssertion, ReplayAssertionViolation } from './assertions'
 import type { ReplayMetricsSnapshot } from './metrics'
 import type { ReplayCardChange, ReplayConstraintProvenance } from './watch'
@@ -50,6 +50,7 @@ export interface TrackerReplayZoneSnapshot {
 export interface TrackerReplayPlayerSnapshot {
   seatID: number
   observedHandCount: number | null
+  handCountDelta: number
   unknownHandCount: number
   knownHandCardIDs: number[]
   candidateHandCardIDs: number[]
@@ -70,6 +71,8 @@ export interface TrackerReplayConstraintSnapshot {
 export interface TrackerReplayRoomSnapshot {
   active: true
   deckReady: boolean
+  trackingMode: TrackingMode
+  isPileCountKnown: boolean
   seatIDs: number[]
   mySeatID: number | null
   firstSeatID: number | null
@@ -95,7 +98,6 @@ export interface TrackerReplaySnapshot {
     isGameStart: boolean | null
     isPassed: boolean | null
     isRecord: boolean
-    isDuanXian: boolean
     isGuoZhan: boolean
     isDouDiZhu: boolean
     isShanHeTu: boolean

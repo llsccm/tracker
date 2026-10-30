@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { getPopupSpaceCards } from '@/tracker/room/movement/popupSpaces'
 
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { protocolMove, createReadyControllerHarness } from './helpers/trackerController'
 
 describe('巧织默认协议管线', () => {
   it('明弃未选牌后由通用数量约束确认暗取牌身份', () => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 300 }], 300)
-    controller.initTrackerDeck([37, 92])
+    const { controller } = createReadyControllerHarness({
+      seatIDs: [3],
+      currentUserID: 300,
+      cardIDs: [37, 92]
+    })
 
     controller.syncTrackerMove(
       protocolMove({
@@ -87,10 +88,11 @@ describe('巧织默认协议管线', () => {
   })
 
   it('主视角暗取协议已带正 CardIDs 时直接确认手牌', () => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 300 }], 300)
-    controller.initTrackerDeck([52, 77])
+    const { controller } = createReadyControllerHarness({
+      seatIDs: [3],
+      currentUserID: 300,
+      cardIDs: [52, 77]
+    })
 
     controller.syncTrackerMove(
       protocolMove({
@@ -127,10 +129,11 @@ describe('巧织默认协议管线', () => {
   })
 
   it('确认入手后的牌再暗置木马时不应残留巧织标记描述', () => {
-    const { controller } = createTrackerControllerHarness()
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 300 }], 300)
-    controller.initTrackerDeck([141, 75, 161])
+    const { controller } = createReadyControllerHarness({
+      seatIDs: [3],
+      currentUserID: 300,
+      cardIDs: [141, 75, 161]
+    })
 
     // 木马装备
     controller.syncTrackerMove(
@@ -214,10 +217,11 @@ describe('巧织默认协议管线', () => {
   it.each(['before-discard', 'after-discard', 'visible-move'])(
     '角色数据通知 %s 不改变移动协议与通用约束推导的身份',
     (timing) => {
-      const { controller } = createTrackerControllerHarness()
-      controller.initTrackerRoom()
-      controller.registerTrackerPlayers([{ SeatID: 3, ClientID: 300 }], 300)
-      controller.initTrackerDeck([37, 92])
+      const { controller, room } = createReadyControllerHarness({
+        seatIDs: [3],
+        currentUserID: 300,
+        cardIDs: [37, 92]
+      })
       controller.syncTrackerMove(
         protocolMove({
           CardCount: 2,
@@ -241,7 +245,6 @@ describe('巧织默认协议管线', () => {
           SpellID: 3544
         })
       )
-      const room = controller.getTrackerRoom()!
       const notifyRoleData = () =>
         controller.dispatchSkillProtocolEvent({
           type: 'roleData',

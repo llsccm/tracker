@@ -11,7 +11,7 @@ interface DirtyRenderState {
   latestSeq: number
 }
 
-const dirtyCardCursors = new WeakMap<Room, number>()
+const dirtyCardCursors = new WeakMap<Room, { events: DirtyCardEvent[]; seq: number }>()
 const forceFullPlayerRenderRooms = new WeakSet<Room>()
 
 export function markFullPlayerRender(room: Room): void {
@@ -19,14 +19,16 @@ export function markFullPlayerRender(room: Room): void {
 }
 
 export function collectDirtyRenderState(room: Room): DirtyRenderState {
-  const lastSeq = dirtyCardCursors.get(room) ?? 0
+  const cursor = dirtyCardCursors.get(room)
+  const lastSeq = cursor?.seq ?? 0
+  const bufferChanged = cursor !== undefined && cursor.events !== room.dirtyCardEvents
   const latestSeq = room.dirtyCardSeq
   const forcedFullRender = forceFullPlayerRenderRooms.has(room)
 
   let events: DirtyCardEvent[] = []
-  let overflowed = false
+  let overflowed = bufferChanged
 
-  if (latestSeq > lastSeq) {
+  if (!bufferChanged && latestSeq > lastSeq) {
     const firstEventSeq = room.dirtyCardEvents[0]?.seq
     const hasLostEvents = room.dirtyCardEvents.length === 0 || firstEventSeq > lastSeq + 1
 
@@ -43,7 +45,7 @@ export function collectDirtyRenderState(room: Room): DirtyRenderState {
     collectAffectedSeatsFromCard(event.card, affectedSeatIDs)
   })
 
-  const hasCardChanges = latestSeq > lastSeq
+  const hasCardChanges = bufferChanged || latestSeq > lastSeq
   const shouldRenderPanels = room.viewDirty || hasCardChanges
   const shouldRenderAllPlayers = forcedFullRender || overflowed
 
@@ -61,7 +63,10 @@ export function finishDirtyRender(
   room: Room,
   renderState?: Pick<DirtyRenderState, 'latestSeq'>
 ): void {
-  dirtyCardCursors.set(room, renderState?.latestSeq ?? room.dirtyCardSeq)
+  dirtyCardCursors.set(room, {
+    events: room.dirtyCardEvents,
+    seq: renderState?.latestSeq ?? room.dirtyCardSeq
+  })
   forceFullPlayerRenderRooms.delete(room)
   room.viewDirty = false
 }

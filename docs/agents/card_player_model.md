@@ -86,6 +86,13 @@
   `exile` / `outside` 时重置 `isKnown`。
 - `reset()`：恢复初始牌堆状态并清空时间戳与候选。
 
+位置写入统一经私有 `assignLocationState()` 设置位置字段、时间戳与计数器脏状态；候选提交、
+owner 同步和变更事件仍由各入口控制顺序。候选协调含玩家候选时将 `location` 设为 `player` 并清理
+公共区实体引用，公共候选仍保留在 `locationCandidates` 中；无玩家候选的容器分支仍仅在不含公共候选时清理引用。
+公共 `Zone.cards` 中的实体须满足 `card.location === zoneID`，公共候选本身不构成保留实体槽的依据。
+`reset()` 清零时间戳，其它迁移同步当前时间。玩家子区判断直接筛选 `locationCandidates` 中的
+`type: 'player'`，候选匹配和落定使用 `hasLocationCandidate()` / `resolveLocationCandidate()`。
+
 ## Player：座位视图
 
 `Player` 由 `Room` 按座位持有，记录固定视图位序、手牌数事实和供渲染读取的视图分组。
@@ -99,6 +106,7 @@
 | `seatID` / `fixedViewId`                     | 物理座位号和牌局显示顺位；显隐变化时按显示座位从 1 连续重排，隐藏座位无显示顺位 |
 | `isShown`                                    | 座位当前是否显示；临时隐藏保留玩家和牌区数据，新局默认显示                      |
 | `hasObservedHandCount` / `observedHandCount` | 协议或移动事件给出的手牌总数事实                                                |
+| `handCountDelta`                             | 降级且无可靠总数时的有符号差量；明确总数到达后清零，不能用作绝对手牌额度 |
 | `unknownCardCount`                           | 观测总数扣除确定明牌及候选明牌容量上界后的未知额度，可能已由暗实体覆盖          |
 | `knownHandCards`                             | 确定普通手牌明牌，由 `Room.syncViewGroups()` 同步                               |
 | `candidateHandCards`                         | 仍属于手牌候选的已知牌，由视图同步写入                                          |
@@ -117,6 +125,11 @@ card.seats.has(seatID))`，包含匿名暗牌，适合一次性归组而不是�
   `constraint/constraintSlots.ts` / `constraint/handSlotUsage.ts`。
 - `computeHandSlotAllocation(room)` 同时给出确定明暗占用、候选明牌容量上界、暗实体覆盖和匿名补缺；
   Player 与收敛器共用该结果。未观测手牌总数、未决名额不足或覆盖无法完整匹配时不执行匿名补位。
+- 重连先使旧手牌总数基线失效，再由 `SeatInfos.HandCardCount`（包括 `0`）恢复。缺少快照时，
+  摸牌和出牌只更新 `handCountDelta`；不能从累计摸牌数或本地已知实体数推断整手揭示。
+  装备和判定快照使用 `CardId` 恢复身份与区域，判定同时保留 `SpellId`；不直接写入玩家投影数组。
+- `MsgReconnectGameHand.Count` 同样提供当前手牌总数；`CardIDs` 中正 ID 确认普通手牌，零 ID
+  保留匿名额度。该快照恢复总数后清零 `handCountDelta`，后续移动继续更新绝对总数。
 
 ## Zone：公共区有序关系
 

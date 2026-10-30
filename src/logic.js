@@ -32,7 +32,6 @@ import { laya } from './runtime/gameAdapter'
 import { Game, globalConfig, UI, user } from './tracker'
 import { tracker } from './tracker/runtime/browser'
 import { recordTrackerProtocol } from './tracker/runtime/protocolRecorder'
-import { addTooltip } from './utils/notification'
 import { handleBroadMsg } from './handler/chat'
 
 // const DOUDIZHU_MSGS = new Set([
@@ -86,8 +85,11 @@ export function logic(msg) {
 
       // 断线重连
       case 'MsgReconnectGame':
-        Game.isDuanXian = true
-        addTooltip('断线重连，本局游戏中小抄记录可能不准')
+        tracker.degradeTrackerRoom(msg)
+        break
+
+      case 'MsgReconnectGameHand':
+        tracker.restoreTrackerReconnectHand(msg)
         break
 
       case 'decodeSSCChatmsgNtf':

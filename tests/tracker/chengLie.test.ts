@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import {
   createErrorSpy,
-  createTrackerControllerHarness,
-  protocolMove
+  protocolMove,
+  createReadyControllerHarness
 } from './helpers/trackerController'
 
 describe('骋烈：其他视角的牌顶展示与暗取', () => {
@@ -11,13 +11,11 @@ describe('骋烈：其他视角的牌顶展示与暗取', () => {
     '牌顶已展示 $revealedIDs 时按实际端点取牌并保持身份账本一致',
     ({ revealedIDs }) => {
       const errorSpy = createErrorSpy()
-      const { controller } = createTrackerControllerHarness()
-      controller.initTrackerRoom()
-      controller.registerTrackerPlayers(
-        [0, 1, 6, 7].map((seat) => ({ SeatID: seat, ClientID: seat })),
-        7
-      )
-      controller.initTrackerDeck([99, 36, 109, 10, 11, 12, 13, 14])
+      const { controller, room } = createReadyControllerHarness({
+        players: [0, 1, 6, 7].map((seat) => ({ SeatID: seat, ClientID: seat })),
+        currentUserID: 7,
+        cardIDs: [99, 36, 109, 10, 11, 12, 13, 14]
+      })
       controller.syncTrackerMove(protocolMove({ ToID: 0, CardIDs: [], CardCount: 1 }))
       if (revealedIDs.length > 0) {
         controller.syncTrackerMove(
@@ -31,8 +29,6 @@ describe('骋烈：其他视角的牌顶展示与暗取', () => {
           })
         )
       }
-
-      const room = controller.getTrackerRoom()!
       const pile = room.zones.get('pile')!
       const takenCards = pile.cards.slice(-3)
       const remainingCards = pile.cards.slice(0, -3)

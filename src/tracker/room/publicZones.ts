@@ -148,7 +148,23 @@ export class RoomPublicZones {
     room.resolveConstraints()
   }
 
-  resizeShuffledPile(cards: Card[], cardCount: number): Card[] {
+  restorePileCount(cardCount: number): void {
+    const pile = this.room.getZone('pile')
+    const knownCards = pile.cards.filter((card) => card.id > 0 && card.isKnown)
+    // 数量快照不能证明旧牌顶/牌底身份仍在原处，先释放这些过时的位置事实。
+    this.room.pileIdentityLedger.registerAmbiguousOutsideGroup(knownCards.map((card) => card.id))
+    knownCards.forEach((card) => {
+      this.room.anonymizeLocatedIdentity(card, 'reconnect:pileCount')
+    })
+    pile.replaceAll(this.resizeShuffledPile([...pile.cards], cardCount, 'reconnect:pileCount'))
+    this.room.pileIdentityLedger.reconcilePileCount(cardCount)
+  }
+
+  resizeShuffledPile(
+    cards: Card[],
+    cardCount: number,
+    reason = 'shufflePile:protocolCount'
+  ): Card[] {
     const missingCount = cardCount - cards.length
     if (missingCount >= 0) {
       return missingCount === 0
@@ -167,7 +183,7 @@ export class RoomPublicZones {
     })
     this.clearCardsFromPublicZones(retiredCards)
     retiredCards.forEach((card) => {
-      this.room.releaseUnknownPlaceholderToOutside(card, 'shufflePile:protocolCount')
+      this.room.releaseUnknownPlaceholderToOutside(card, reason)
     })
     return retainedCards
   }
@@ -283,7 +299,8 @@ export class RoomPublicZones {
           card.location === 'player' &&
           card.subZone === 'hand' &&
           // 默认只返回确定手牌，避免技能辅助把 A 手牌/A 标记候选误读成确定手牌。
-          (includeCandidates || !card.hasSubZoneCandidates()) &&
+          (includeCandidates ||
+            !card.locationCandidates.some((candidate) => candidate.type === 'player')) &&
           card.seats.has(normalizedSeat) &&
           (!knownOnly || card.isKnown === true)
       )

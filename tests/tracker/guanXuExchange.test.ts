@@ -4,7 +4,7 @@ import { POSITION_RANDOM } from '@/tracker/candidate/cardPositions'
 import { MOVE_TYPE, normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
 import decorateGuanXu, { GUAN_XU_STATE_KEY } from '@/tracker/skill/GuanXu'
-import { createTrackerControllerHarness, protocolMove } from './helpers/trackerController'
+import { protocolMove, createReadyControllerHarness } from './helpers/trackerController'
 
 type RawMoveOverrides = NonNullable<Parameters<typeof protocolMove>[0]>
 
@@ -54,19 +54,13 @@ describe('黄承彦观虚目标视角交换', () => {
     const returnedHandCardID = 16
     const gainedPileCardID = 142
     const deckIDs = [returnedHandCardID, gainedPileCardID, 201, 202, 203, 204, 205, 206, 207, 208]
-    const { controller } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
+    const { controller, room } = createReadyControllerHarness({
+      players: [
         { SeatID: targetSeat, ClientID: 100 },
         { SeatID: actorSeat, ClientID: 600 }
       ],
-      100
-    )
-    controller.initTrackerDeck(deckIDs)
-
-    const room = controller.getTrackerRoom()!
+      cardIDs: deckIDs
+    })
     const pile = room.zones.get('pile')!
     const exchange = room.zones.get('exchange')!
     const returnedHandCard = room.materialize(returnedHandCardID, pile.cards[0])!
@@ -187,30 +181,13 @@ describe('黄承彦观虚目标视角交换', () => {
     const actorSeat = 6
     const returnedHandCardID = 16
     const gainedPileCardID = 142
-    const { controller } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
+    const { controller, room } = createReadyControllerHarness({
+      players: [
         { SeatID: targetSeat, ClientID: 100 },
         { SeatID: actorSeat, ClientID: 600 }
       ],
-      100
-    )
-    controller.initTrackerDeck([
-      returnedHandCardID,
-      gainedPileCardID,
-      201,
-      202,
-      203,
-      204,
-      205,
-      206,
-      207,
-      208
-    ])
-
-    const room = controller.getTrackerRoom()!
+      cardIDs: [returnedHandCardID, gainedPileCardID, 201, 202, 203, 204, 205, 206, 207, 208]
+    })
     const pile = room.zones.get('pile')!
     const returnedHandCard = room.materialize(returnedHandCardID, pile.cards[0])!
     room.clearCardsFromPublicZones([returnedHandCard])
@@ -286,19 +263,13 @@ describe('黄承彦观虚目标视角交换', () => {
     const gainedPileCardID = 142
     const observedPileTopIDs = [62, 67, 37, 53, gainedPileCardID]
     const deckIDs = [returnedHandCardID, ...observedPileTopIDs, 201, 202, 203, 204, 205, 206]
-    const { controller } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
+    const { controller, room } = createReadyControllerHarness({
+      players: [
         { SeatID: targetSeat, ClientID: 100 },
         { SeatID: actorSeat, ClientID: 600 }
       ],
-      100
-    )
-    controller.initTrackerDeck(deckIDs)
-
-    const room = controller.getTrackerRoom()!
+      cardIDs: deckIDs
+    })
     const pile = room.zones.get('pile')!
     const returnedHandCard = room.materialize(returnedHandCardID, pile.cards[0])!
     room.clearCardsFromPublicZones([returnedHandCard])
@@ -388,19 +359,13 @@ describe('黄承彦观虚目标视角交换', () => {
   it('牌堆分桶校验失败不会确认暗身份或物化部分 CardID', () => {
     const actorSeat = 6
     const deckIDs = Array.from({ length: 10 }, (_, index) => index + 1)
-    const { controller } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
+    const { room } = createReadyControllerHarness({
+      players: [
         { SeatID: 1, ClientID: 100 },
         { SeatID: actorSeat, ClientID: 600 }
       ],
-      100
-    )
-    controller.initTrackerDeck(deckIDs)
-
-    const room = controller.getTrackerRoom()!
+      cardIDs: deckIDs
+    })
     const pile = room.zones.get('pile')!
     const pileTopFive = pile.cards.slice(-5).reverse()
     const hiddenIdentity = room.materialize(deckIDs[0], pileTopFive[0])!
@@ -424,17 +389,13 @@ describe('黄承彦观虚目标视角交换', () => {
     const targetSeat = 1
     const actorSeat = 6
     const deckIDs = Array.from({ length: 12 }, (_, index) => index + 1)
-    const { controller } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
+    const { controller, room } = createReadyControllerHarness({
+      players: [
         { SeatID: targetSeat, ClientID: 100 },
         { SeatID: actorSeat, ClientID: 600 }
       ],
-      100
-    )
-    controller.initTrackerDeck(deckIDs)
+      cardIDs: deckIDs
+    })
 
     controller.syncTrackerMove(
       protocolMove({ CardCount: 1, CardIDs: [], ToID: targetSeat, ToZone: 5 })
@@ -449,8 +410,6 @@ describe('黄承彦观虚目标视角交换', () => {
         ToZone: 10
       })
     )
-
-    const room = controller.getTrackerRoom()!
     const handCards = room
       .refreshPlayerSnapshot()
       .filter((card) => card.subZone === 'hand' && card.seats.has(targetSeat))
@@ -475,17 +434,13 @@ describe('黄承彦观虚目标视角交换', () => {
     const targetSeat = 1
     const actorSeat = 6
     const deckIDs = Array.from({ length: 12 }, (_, index) => index + 1)
-    const { controller } = createTrackerControllerHarness()
-
-    controller.initTrackerRoom()
-    controller.registerTrackerPlayers(
-      [
+    const { controller, room } = createReadyControllerHarness({
+      players: [
         { SeatID: targetSeat, ClientID: 100 },
         { SeatID: actorSeat, ClientID: 600 }
       ],
-      100
-    )
-    controller.initTrackerDeck(deckIDs)
+      cardIDs: deckIDs
+    })
 
     controller.syncTrackerMove(
       protocolMove({ CardCount: 1, CardIDs: [], ToID: targetSeat, ToZone: 5 })
@@ -510,8 +465,6 @@ describe('黄承彦观虚目标视角交换', () => {
         ToZone: 10
       })
     )
-
-    const room = controller.getTrackerRoom()!
     const exchangeCards = [...room.zones.get('exchange')!.cards]
     expect(exchangeCards).toHaveLength(6)
     expect(exchangeCards.every((card) => card.isAnonymous)).toBe(true)
