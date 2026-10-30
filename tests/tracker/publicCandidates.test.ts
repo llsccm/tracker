@@ -68,6 +68,7 @@ describe('公共候选传播', () => {
     second.confirmKnown()
     first.setLocationCandidates([pileTop])
     second.setLocationCandidates([pileTop])
+    expect(room.getPublicZone('pile').cards).toEqual(expect.arrayContaining([first, second]))
 
     const affectedCards = room.movement.candidates.propagatePublicCandidatesToHand({
       fromZone: 'pile',
@@ -80,7 +81,10 @@ describe('公共候选传播', () => {
     })
 
     expect(affectedCards).toEqual([first, second])
+    expect(room.publicZones.getPublicZoneConsistencyIssues()).toEqual([])
     ;[first, second].forEach((card) => {
+      expect(card.location).toBe('player')
+      expect(room.getPublicZone('pile').cards).not.toContain(card)
       expect(card.publicCandidates).toEqual([
         expect.objectContaining({
           zone: 'pile',

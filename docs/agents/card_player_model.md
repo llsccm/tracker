@@ -87,7 +87,9 @@
 - `reset()`：恢复初始牌堆状态并清空时间戳与候选。
 
 位置写入统一经私有 `assignLocationState()` 设置位置字段、时间戳与计数器脏状态；候选提交、
-owner 同步和变更事件仍由各入口控制顺序。候选协调仅在不含公共候选时清理公共区引用，
+owner 同步和变更事件仍由各入口控制顺序。候选协调含玩家候选时将 `location` 设为 `player` 并清理
+公共区实体引用，公共候选仍保留在 `locationCandidates` 中；无玩家候选的容器分支仍仅在不含公共候选时清理引用。
+公共 `Zone.cards` 中的实体须满足 `card.location === zoneID`，公共候选本身不构成保留实体槽的依据。
 `reset()` 清零时间戳，其它迁移同步当前时间。玩家子区判断直接筛选 `locationCandidates` 中的
 `type: 'player'`，候选匹配和落定使用 `hasLocationCandidate()` / `resolveLocationCandidate()`。
 

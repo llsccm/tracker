@@ -143,18 +143,37 @@ describe('完整位置候选回归', () => {
     )
   })
 
-  it('混合公共候选保留公共区关系，收缩为玩家候选后才清理公共引用', () => {
+  it('玩家与公共候选共存时保留候选并清理公共区引用', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [0, 3] })
     const card = getCard(room, 1)!
     const hand = playerLocation(0, 'hand')
     const mark = playerLocation(3, 'mark', 414)
-    card.setLocationCandidates([hand, publicLocation('pile', 'top', 2)])
+    const pileTop = publicLocation('pile', 'top', 2)
+    card.setLocationCandidates([hand, pileTop])
     expect(card.location).toBe('player')
-    expect(room.getPublicZone('pile').cards).toContain(card)
+    expect(room.getPublicZone('pile').cards).not.toContain(card)
+    expect(card.hasLocationCandidate(pileTop)).toBe(true)
+    expect(room.publicZones.getPublicZoneConsistencyIssues()).toEqual([])
     card.setLocationCandidates([hand, mark])
     expect(room.getPublicZone('pile').cards).not.toContain(card)
     expect(card.hasLocationCandidate(hand)).toBe(true)
     expect(card.hasLocationCandidate(mark)).toBe(true)
+  })
+
+  it('无玩家候选时容器与公共候选共存仍保留公共区引用', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 161], seatIDs: [0] })
+    const card = getCard(room, 1)!
+    const container = equipmentContainer(161, 700)
+    const pileTop = publicLocation('pile', 'top', 2)
+
+    card.setLocationCandidates([container, pileTop])
+    expect(room.getPublicZone('pile').cards).toContain(card)
+    expect(card.hasLocationCandidate(container)).toBe(true)
+    expect(card.hasLocationCandidate(pileTop)).toBe(true)
+
+    card.setLocationCandidates([container])
+    expect(room.getPublicZone('pile').cards).not.toContain(card)
+    expect(card.hasLocationCandidate(container)).toBe(true)
   })
 
   it('期望槽位解析区分已落定位置与同 owner 下仍未决的多个位置', () => {

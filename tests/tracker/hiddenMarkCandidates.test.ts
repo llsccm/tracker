@@ -26,7 +26,7 @@ import { moveHiddenHandToMark, moveKnownCardsToHand } from './helpers/hiddenMark
 afterEach(() => vi.restoreAllMocks())
 
 describe('隐藏标记区候选', () => {
-  it('暗置查询纳入刚入手明牌和仍在公共区的手牌候选，不全量过滤牌池', () => {
+  it('暗置查询纳入刚入手明牌和含公共候选的手牌候选，不全量过滤牌池', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4] })
     const first = getCard(room, 1)!
     const second = getCard(room, 2)!
@@ -37,9 +37,9 @@ describe('隐藏标记区候选', () => {
     first.confirmKnown()
     first.setLocationCandidates([playerLocation(1, 'hand'), pileTop])
     otherSeat.bindCandidates([2], 'hand', null, { known: true })
-    // 玩家候选会把 location 归一为 player；公共区引用和候选仍可同时保留。
+    // 玩家候选会清理公共区实体引用，但仍保留逻辑公共候选。
     expect(first.location).toBe('player')
-    expect(room.zones.get('pile')!.cards).toContain(first)
+    expect(room.zones.get('pile')!.cards).not.toContain(first)
     const context = room.movement.createMoveContext([], {
       from: { type: 'player', seatID: 1, subZone: 'hand' },
       to: { type: 'player', seatID: 1, subZone: 'mark', markSpellID: 414 },

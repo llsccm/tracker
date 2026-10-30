@@ -37,8 +37,8 @@ function expectConsistentPile(room: Room, count: number) {
 
 describe('洗牌使用协议张数并保留身份候选', () => {
   it('暗取五张后只洗回五个物理槽，十个身份仍作为候选保留', () => {
-    const { controller, room } = createReadyControllerHarness(DISCARD_SETUP)
     const errorSpy = createErrorSpy()
+    const { controller, room } = createReadyControllerHarness(DISCARD_SETUP)
     controller.syncTrackerMove(anonymousDiscardGain(5))
     const handBefore = [...room.players.get(3)!.cards]
     expect(handBefore).toHaveLength(5)
@@ -61,8 +61,8 @@ describe('洗牌使用协议张数并保留身份候选', () => {
   it.each(['hand', 'exchange'] as const)(
     '暗取后已确认位于 %s 的五个身份不再进入洗回候选',
     (destination) => {
-      const { controller, room } = createReadyControllerHarness(DISCARD_SETUP)
       const errorSpy = createErrorSpy()
+      const { controller, room } = createReadyControllerHarness(DISCARD_SETUP)
       const knownIDs = CARD_IDS.slice(0, 5)
       controller.syncTrackerMove(anonymousDiscardGain(5))
       if (destination === 'hand') {
@@ -97,11 +97,11 @@ describe('洗牌使用协议张数并保留身份候选', () => {
   )
 
   it('缩减洗回数量时保留原有公开牌顶顺序与身份', () => {
+    const errorSpy = createErrorSpy()
     const { controller, room } = createReadyControllerHarness({
       ...DISCARD_SETUP,
       discardIDs: CARD_IDS.slice(0, 8)
     })
-    const errorSpy = createErrorSpy()
     controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, CARD_IDS.slice(8))
     const remainingPileCards = [...room.zones.get('pile')!.cards]
     controller.syncTrackerMove(anonymousDiscardGain(5))
@@ -122,8 +122,8 @@ describe('洗牌使用协议张数并保留身份候选', () => {
   })
 
   it('全部暗取后协议零张清空物理牌堆，保留仍未确定的身份', () => {
-    const { controller, room } = createReadyControllerHarness(DISCARD_SETUP)
     const errorSpy = createErrorSpy()
+    const { controller, room } = createReadyControllerHarness(DISCARD_SETUP)
     controller.syncTrackerMove(anonymousDiscardGain(10))
 
     controller.syncTrackerMove(shuffleMove(0))
@@ -139,11 +139,11 @@ describe('洗牌使用协议张数并保留身份候选', () => {
   })
 
   it('协议张数无法容纳旧明牌时降级其位置，身份仍保留在候选池', () => {
+    const errorSpy = createErrorSpy()
     const { controller, room } = createReadyControllerHarness({
       ...DISCARD_SETUP,
       discardIDs: CARD_IDS.slice(0, 8)
     })
-    const errorSpy = createErrorSpy()
     controller.revealTrackerCardsInZone({ id: 255, zone: 1 }, CARD_IDS.slice(8))
 
     controller.syncTrackerMove(shuffleMove(1))
@@ -158,8 +158,8 @@ describe('洗牌使用协议张数并保留身份候选', () => {
   })
 
   it('洗牌后继续暗摸、亮牌弃置并再次洗牌，数量与身份仍一致', () => {
-    const { controller, room } = createReadyControllerHarness(DISCARD_SETUP)
     const errorSpy = createErrorSpy()
+    const { controller, room } = createReadyControllerHarness(DISCARD_SETUP)
     controller.syncTrackerMove(anonymousDiscardGain(5))
     controller.syncTrackerMove(shuffleMove(5))
     expectConsistentPile(room, 5)

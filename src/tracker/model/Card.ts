@@ -449,14 +449,14 @@ export class Card extends BaseCard {
     const previousLocation = this.location
     let changed = false
 
-    // 没有公共候选时移除真实公共区引用；仍含公共候选时保留公共区关系。
+    // 玩家候选不占公共区实体槽；仅容器候选仍沿用公共候选决定是否保留引用。
     if (playerCandidates.length > 0 || hasContainerCandidate) {
       this.assignLocationState({
         location: 'player',
         subZone: this.subZone,
         spellID: this.spellID,
         suspended: this.suspended,
-        clearPublicZones: !hasPublicCandidate
+        clearPublicZones: playerCandidates.length > 0 || !hasPublicCandidate
       })
       changed = previousLocation !== this.location
     } else if (popupCandidate) {
