@@ -669,11 +669,14 @@ export class RoomMovementSources {
   takeSourceCards(count: number, options: TakeSourceCardsOptions): Card[] {
     const { from, to, sourceCards, sourceEvent } = options
     const moveType = sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType ?? options.moveType
+    // 从弃牌堆移动 类型: 剩墨15 谏直8和15
+    const isPlayerTransfer =
+      (moveType === MOVE_TYPE.MARK_GAIN || moveType === MOVE_TYPE.MOVE) &&
+      (to.type === 'player' || to.type === 'playerCandidates')
     const isDiscardGain =
       from.type === 'public' &&
       from.zone === 'discard' &&
-      (moveType === MOVE_TYPE.GAIN ||
-        (moveType === MOVE_TYPE.MOVE && (to.type === 'player' || to.type === 'playerCandidates')))
+      (moveType === MOVE_TYPE.GAIN || isPlayerTransfer)
 
     if (sourceCards?.length) {
       if (from.type === 'player') {
