@@ -11,7 +11,11 @@ import { getPublicFieldCandidateCards } from './publicFieldCandidates'
 
 // 这些标记仅有数量意义，数量已由游戏展示，记牌面板无需重复渲染。
 // 陷嗣 化木
-const HIDDEN_MARK_SPELL_IDS = new Set([449, 4040, 3114])
+// const HIDDEN_MARK_SPELL_IDS = new Set([449, 4040, 3114])
+
+// 这些标记牌在记牌面板中有实际意义，需渲染
+// 箜声821 婉嫕3040 集运3657 卸尾3685 义舍259 金烬 3818
+const MARK_SPELL_IDS = new Set([700, 821, 3040, 3657, 3685, 259, 3818])
 
 let renderedMainHandCardIDs: number[] | null = null
 const renderedMainHandListeners = new Set<() => void>()
@@ -156,7 +160,7 @@ export function renderPlayerHand(doc: Document, player: Player): void {
   const markSpell: Partial<Record<number, string>> = SkillsConfig.GetInstance().markSpell
 
   player.markCards.forEach((cards, spellID) => {
-    if (HIDDEN_MARK_SPELL_IDS.has(spellID)) return
+    if (!MARK_SPELL_IDS.has(spellID)) return
     if (!cards || !cards.length) return
     renderedNodes.push(createMarkedCardNode(doc, spellID, cards, markSpell[spellID]))
   })
