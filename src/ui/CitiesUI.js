@@ -270,7 +270,8 @@ const spellList = [
   '夺炁',
   '恩怨',
   '鸡肋',
-  '反击'
+  '反击',
+  '动荡'
 ]
 
 function highlightedSkill(generalInfo, difficulty) {
@@ -292,7 +293,7 @@ function highlightedSkill(generalInfo, difficulty) {
     .flatMap((spell) => String(spell || '').split(';'))
     .filter(Boolean)
     .map((spell) => SkillsConfig.GetInstance().getSpellName(spell))
-    .filter((spell) => spellList.includes(spell))
+    .filter((name) => spellList.includes(name))
 
   return [skills, skills.length > 0]
 }
