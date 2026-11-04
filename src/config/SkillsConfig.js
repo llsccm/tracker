@@ -3,7 +3,7 @@ import { shortName } from './shortName'
 
 export class SkillsConfig extends ConfigBase {
   spellDict = new Map()
-  markSpell = { 290: '推锋', 766: '匡弼', 432: '醇醪' }
+  markSpell = {}
 
   constructor() {
     super('ChaSpell_json')

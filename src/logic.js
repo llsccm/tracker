@@ -300,8 +300,12 @@ export function logic(msg) {
         handleTriggerSpellNew(msg)
         break
 
+      // 7014昭然
+      case 'decodeClientGetCardInfoResp':
+        break
+
       case 'ClientHappyGetFriendHandcardRep':
-        // 昭然 769 我不知道干嘛
+        // 昭然 769极奢 我不知道干嘛
         break
 
       // 转化卡牌
