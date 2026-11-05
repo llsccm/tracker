@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         三国杀小抄 Lite
 // @namespace    https://greasyfork.org/scripts/448004
-// @version      0.20.0
+// @version      0.20.1
 // @author       三国杀小抄
 // @description  三国杀记牌器
 // @license      GPL-3.0-or-later
@@ -339,11 +339,7 @@
 	};
 	var SkillsConfig = class SkillsConfig extends ConfigBase {
 		spellDict = new Map();
-		markSpell = {
-			290: "推锋",
-			766: "匡弼",
-			432: "醇醪"
-		};
+		markSpell = {};
 		constructor() {
 			super("ChaSpell_json");
 			this.FileName = "cha_spell";
@@ -1239,6 +1235,7 @@
 		"SmsgUpdateTaskListToClient",
 		"ClientGuildMemberChangeNtf",
 		"MsgReconnectGame",
+		"MsgReconnectGameHand",
 		"MsgHeartAliveRep",
 		"decodeGameRecordInitInfo",
 		"ClientBindKeyRep",
@@ -1761,7 +1758,6 @@
 			this.orderIDs = [];
 			this.myGenerals.length = 0;
 			this.size = void 0;
-			this.isDuanXian = false;
 			this.zhanfaSet.clear();
 		}
 		resetGameInfo() {
@@ -2023,15 +2019,6 @@
 			spellID: normalizeCandidateSpellID(candidate.spellID)
 		};
 	}
-	function createSubZoneCandidateKey(candidate = {}) {
-		const normalized = normalizeSubZoneCandidate(candidate);
-		if (!normalized) return "";
-		return [
-			normalized.seatID,
-			normalized.subZone,
-			normalized.spellID === null ? "" : normalized.spellID
-		].join(":");
-	}
 	function getSubZoneName(subZone) {
 		if (subZone === "equip") return "装备";
 		if (subZone === "judge") return "判定区";
@@ -2187,15 +2174,6 @@
 			...candidate,
 			type: "player"
 		});
-	}
-	function toSubZoneCandidate(candidate = {}) {
-		const normalized = normalizeLocationCandidate(candidate);
-		if (normalized?.type !== "player") return null;
-		return {
-			seatID: normalized.seatID,
-			subZone: normalized.subZone,
-			spellID: normalizeCandidateSpellID(normalized.spellID)
-		};
 	}
 	function fromPublicCandidate(candidate = {}) {
 		return normalizeLocationCandidate({
@@ -2574,6 +2552,13 @@
 		for (const spaceID of state.spaces.keys()) getPopupSpaceCards(room, spaceID);
 		if (state.spaces.size === 0) room.deleteSkillState(POPUP_SPACE_STATE_KEY);
 	}
+	function toSeatSet(seats) {
+		if (seats === null || seats === void 0) return new Set();
+		return new Set(typeof seats === "number" ? [seats] : seats);
+	}
+	function getPositiveIDs(cardIDs = []) {
+		return Array.from(new Set(cardIDs.filter((id) => id > 0)));
+	}
 	var BaseCard = class {
 		constructor(id) {
 			this.setCardInfo(id);
@@ -2646,10 +2631,6 @@
 		get publicCandidates() {
 			return getPublicLocationCandidates(this.locationCandidates).map((candidate) => toPublicCandidate(candidate, (zone, position, count) => getPublicCandidateLabel(zone, position, count) ?? null)).filter((candidate) => Boolean(candidate));
 		}
-		normalizeSeats(seats) {
-			const rawSeats = seats instanceof Set || Array.isArray(seats) ? Array.from(seats) : [seats];
-			return new Set(rawSeats.filter((seat) => seat !== null && seat !== void 0).map((seat) => Number(seat)).filter((seat) => !Number.isNaN(seat)));
-		}
 		hasSameSeats(nextSeats) {
 			const seats = this.seats;
 			if (seats.size !== nextSeats.size) return false;
@@ -2698,7 +2679,7 @@
 			return false;
 		}
 		setSeats(nextSeats, reason = "setSeats") {
-			const normalizedSeats = this.normalizeSeats(nextSeats);
+			const normalizedSeats = toSeatSet(nextSeats);
 			const previousSeats = this.seats;
 			const seatsChanged = previousSeats.size !== normalizedSeats.size || Array.from(normalizedSeats).some((seat) => !previousSeats.has(seat));
 			if (getPlayerLocationCandidates(this.locationCandidates).length > 0) {
@@ -2723,7 +2704,7 @@
 			});
 		}
 		addSeat(seat, reason = "addSeat") {
-			const normalizedSeats = this.normalizeSeats(seat);
+			const normalizedSeats = toSeatSet(seat);
 			if (normalizedSeats.size === 0) return false;
 			if (this.hasLocationCandidates()) {
 				const templates = this.getSeatExpansionTemplates(getPlayerLocationCandidates(this.locationCandidates));
@@ -2772,7 +2753,7 @@
 			return Array.from(templates.values());
 		}
 		deleteSeat(seat, reason = "deleteSeat") {
-			const normalizedSeats = this.normalizeSeats(seat);
+			const normalizedSeats = toSeatSet(seat);
 			if (normalizedSeats.size === 0) return false;
 			const nextSeats = new Set(this.seats);
 			normalizedSeats.forEach((seatID) => nextSeats.delete(seatID));
@@ -2789,6 +2770,20 @@
 			if (!key) return false;
 			return this.locationCandidates.some((item) => createLocationCandidateKey(item) === key);
 		}
+		assignLocationState({ location, popupSpaceID = null, subZone = null, spellID = null, suspended = false, clearPublicZones = false, timestamp = "current" }) {
+			if (clearPublicZones) this.room.clearCardsFromPublicZones([this]);
+			this.location = location;
+			this.popupSpaceID = popupSpaceID;
+			this.subZone = subZone;
+			this.spellID = spellID;
+			this.suspended = suspended;
+			if (timestamp === "reset") {
+				this.turn = 0;
+				this.round = 0;
+				this.phase = 0;
+			} else this.syncTimestamp();
+			this.room.markCounterDirty(this);
+		}
 		reconcileLocationStateFromCandidates(reason, previousSeats) {
 			const playerCandidates = getPlayerLocationCandidates(this.locationCandidates);
 			const hasPublicCandidate = this.locationCandidates.some((candidate) => candidate.type === "public");
@@ -2797,26 +2792,30 @@
 			const hasExchangeBatchCandidate = this.locationCandidates.some((candidate) => candidate.type === "outside" && candidate.zone === "exchange" && Boolean(candidate.batchID));
 			const previousLocation = this.location;
 			let changed = false;
-			if ((playerCandidates.length > 0 || hasContainerCandidate || hasExchangeBatchCandidate || popupCandidate) && !hasPublicCandidate) this.room.clearCardsFromPublicZones([this]);
 			if (playerCandidates.length > 0 || hasContainerCandidate) {
-				this.location = "player";
-				this.popupSpaceID = null;
+				this.assignLocationState({
+					location: "player",
+					subZone: this.subZone,
+					spellID: this.spellID,
+					suspended: this.suspended,
+					clearPublicZones: playerCandidates.length > 0 || !hasPublicCandidate
+				});
 				changed = previousLocation !== this.location;
-				this.syncTimestamp();
 			} else if (popupCandidate) {
-				this.location = "popup";
-				this.popupSpaceID = popupCandidate.spaceID;
-				this.subZone = null;
-				this.spellID = null;
+				this.assignLocationState({
+					location: "popup",
+					popupSpaceID: popupCandidate.spaceID,
+					suspended: this.suspended,
+					clearPublicZones: !hasPublicCandidate
+				});
 				changed = previousLocation !== this.location;
-				this.syncTimestamp();
 			} else if (hasExchangeBatchCandidate) {
-				this.location = "exchange";
-				this.popupSpaceID = null;
-				this.subZone = null;
-				this.spellID = null;
+				this.assignLocationState({
+					location: "exchange",
+					suspended: this.suspended,
+					clearPublicZones: !hasPublicCandidate
+				});
 				changed = previousLocation !== this.location;
-				this.syncTimestamp();
 			}
 			const nextSeats = projectSeatsFromLocationCandidates(this.locationCandidates);
 			changed = this.syncOwnerFromSeats(reason, {
@@ -2825,7 +2824,6 @@
 				nextResolvedSeat: this.location === "player" && nextSeats.size === 1 ? nextSeats.values().next().value ?? null : null,
 				seatsChanged: previousSeats.size !== nextSeats.size || Array.from(previousSeats).some((seat) => !nextSeats.has(seat))
 			}) || changed;
-			if (changed) this.room.markCounterDirty(this);
 			return changed;
 		}
 		getPossibleLocations() {
@@ -2894,14 +2892,14 @@
 			const hadCandidates = this.hasLocationCandidates();
 			const previousPopupSpaceID = this.popupSpaceID;
 			const previousSeats = this.seats;
-			this.room.clearCardsFromPublicZones([this]);
-			this.location = normalized.type === "popup" ? "popup" : "player";
-			this.popupSpaceID = normalized.type === "popup" ? normalized.spaceID : null;
-			this.subZone = normalized.type === "popup" ? null : normalized.subZone;
-			this.spellID = normalized.type === "popup" ? null : normalized.spellID;
+			this.assignLocationState({
+				location: normalized.type === "popup" ? "popup" : "player",
+				popupSpaceID: normalized.type === "popup" ? normalized.spaceID : null,
+				subZone: normalized.type === "popup" ? null : normalized.subZone,
+				spellID: normalized.type === "popup" ? null : normalized.spellID,
+				clearPublicZones: true
+			});
 			this.storeLocationCandidates([]);
-			this.suspended = false;
-			this.syncTimestamp();
 			const nextSeats = new Set(normalized.type === "player" ? [normalized.seatID] : []);
 			const seatsChanged = this.syncOwnerFromSeats(`${reason}:seat`, {
 				previousSeats,
@@ -2909,7 +2907,6 @@
 				nextResolvedSeat: normalized.type === "player" ? normalized.seatID : null,
 				seatsChanged: previousSeats.size !== nextSeats.size || Array.from(previousSeats).some((seat) => !nextSeats.has(seat))
 			});
-			this.room.markCounterDirty(this);
 			const changed = hadCandidates || previousLocation !== this.location || previousSubZone !== this.subZone || previousSpellID !== this.spellID || previousPopupSpaceID !== this.popupSpaceID || seatsChanged;
 			if (changed) this.room.notifyCardChanged(this, {
 				type: "card-location-resolved",
@@ -2919,36 +2916,17 @@
 			});
 			return changed;
 		}
-		hasSubZoneCandidates() {
-			return this.locationCandidates.some((candidate) => candidate.type === "player");
-		}
-		hasSubZoneCandidate(candidate) {
-			const key = typeof candidate === "string" ? candidate : createSubZoneCandidateKey(candidate);
-			if (!key) return false;
-			return this.locationCandidates.some((item) => item.type === "player" && createSubZoneCandidateKey(item) === key);
-		}
-		clearSubZoneCandidates(reason = "clearSubZoneCandidates") {
-			const nextCandidates = this.locationCandidates.filter((candidate) => candidate.type !== "player");
-			if (nextCandidates.length === this.locationCandidates.length) return false;
-			return this.setLocationCandidates(nextCandidates, reason);
-		}
-		resolveSubZoneCandidate(candidate, reason = "resolveSubZoneCandidate") {
-			const normalized = fromSubZoneCandidate(candidate);
-			return normalized ? this.resolveLocationCandidate(normalized, reason) : false;
-		}
 		bindCandidates(seats, subZone = "hand", spellID = null, options = {}) {
 			const { known = false } = options;
 			const previousSeats = this.seats;
-			this.location = "player";
-			this.subZone = subZone;
-			this.popupSpaceID = null;
-			this.spellID = spellID;
-			this.syncTimestamp();
+			this.assignLocationState({
+				location: "player",
+				subZone,
+				spellID
+			});
 			this.storeLocationCandidates([]);
-			this.suspended = false;
 			if (known) this.confirmKnown();
 			this.setSeats(seats, "bindCandidates");
-			this.room.markCounterDirty(this);
 			this.room.notifyCardChanged(this, {
 				type: "card-bound",
 				subZone,
@@ -2965,17 +2943,10 @@
 		moveToPublicZone(destination) {
 			const previous = this.capturePublicMigrationSnapshot();
 			const seatsChanged = this.clearSeats(`moveToPublicZone:${destination}`);
-			this.location = destination;
-			this.popupSpaceID = null;
-			this.subZone = null;
-			this.spellID = null;
-			const candidatesChanged = this.clearSubZoneCandidates(`moveToPublicZone:${destination}`);
+			this.assignLocationState({ location: destination });
 			this.storeLocationCandidates([]);
-			this.suspended = false;
-			this.syncTimestamp();
 			if (destination === "exile" || destination === "outside") this.isKnown = false;
-			this.room.markCounterDirty(this);
-			this.notifyLeftPlayerZoneIfSilent(!seatsChanged && !candidatesChanged, previous, {
+			this.notifyLeftPlayerZoneIfSilent(!seatsChanged, previous, {
 				type: "card-moved-to-public-zone",
 				destination
 			});
@@ -2993,8 +2964,9 @@
 			if (this.location === "process") return "处理区";
 			if (this.location === "player") {
 				const parts = [];
-				if (this.hasSubZoneCandidates()) {
-					this.subZoneCandidates.forEach((candidate) => {
+				const playerCandidates = getPlayerLocationCandidates(this.locationCandidates);
+				if (playerCandidates.length > 0) {
+					playerCandidates.forEach((candidate) => {
 						const prefix = this.room.formatSeatPrefix(candidate.seatID);
 						parts.push(`${prefix}${getSubZoneName(candidate.subZone)}`);
 					});
@@ -3033,17 +3005,12 @@
 		reset() {
 			const previous = this.capturePublicMigrationSnapshot();
 			const seatsChanged = this.clearSeats("reset");
-			this.location = "pile";
-			this.subZone = null;
-			this.popupSpaceID = null;
+			this.assignLocationState({
+				location: "pile",
+				timestamp: "reset"
+			});
 			this.isKnown = false;
-			this.spellID = null;
 			this.storeLocationCandidates([]);
-			this.suspended = false;
-			this.turn = 0;
-			this.round = 0;
-			this.phase = 0;
-			this.room.markCounterDirty(this);
 			this.notifyLeftPlayerZoneIfSilent(!seatsChanged, previous, { type: "card-reset" });
 		}
 		capturePublicMigrationSnapshot() {
@@ -3381,6 +3348,7 @@
 	}
 	var Player = class {
 		isShown = true;
+		handCountDelta = 0;
 		generals = [];
 		figure = 0;
 		constructor(seatID, room) {
@@ -3399,9 +3367,20 @@
 		syncObservedHandCount(count) {
 			this.hasObservedHandCount = true;
 			this.observedHandCount = Math.max(0, Number(count) || 0);
+			this.handCountDelta = 0;
 			this.refreshUnknownCardCount();
 		}
+		invalidateObservedHandCount() {
+			this.hasObservedHandCount = false;
+			this.observedHandCount = 0;
+			this.unknownCardCount = 0;
+			this.handCountDelta = 0;
+		}
 		applyObservedHandCountDelta(delta) {
+			if (this.room.trackingMode === "degraded" && !this.hasObservedHandCount) {
+				this.handCountDelta += delta;
+				return;
+			}
 			const nextCount = this.observedHandCount + delta;
 			if (!this.hasObservedHandCount && nextCount < 0) return;
 			this.syncObservedHandCount(nextCount);
@@ -3433,6 +3412,7 @@
 			this.hasObservedHandCount = false;
 			this.observedHandCount = 0;
 			this.unknownCardCount = 0;
+			this.handCountDelta = 0;
 			this.fixedViewId = void 0;
 			this.knownHandCards = [];
 			this.candidateHandCards = [];
@@ -3590,9 +3570,6 @@
 			if (hadCards) this.room.markPublicZoneDirty(this.zoneID);
 		}
 	};
-	function getPositiveIDs(cardIDs = []) {
-		return Array.from(new Set(cardIDs.filter((id) => id > 0)));
-	}
 	function normalizeIDs(cardIDs) {
 		return getPositiveIDs(cardIDs).sort((left, right) => left - right);
 	}
@@ -3612,7 +3589,17 @@
 			remainingPileCount: cohort.remainingPileCount
 		};
 	}
+	var HISTORY_DEPENDENT_WARNINGS = new Set([
+		"unexplained-pile-consumption",
+		"revealed-pile-identity-without-cohort",
+		"revealed-pile-identity-from-empty-cohort",
+		"outside-reveal-from-all-in-cohort",
+		"pile-reveal-from-empty-cohort",
+		"anonymous-pile-insertion-capacity-shortage",
+		"pile-identity-capacity-shortage"
+	]);
 	var PileIdentityLedger = class {
+		isFullTracking;
 		revision = 0;
 		generation = 0;
 		identityUniverse = new Set();
@@ -3621,6 +3608,12 @@
 		knownDiscardIdentityIDs = new Set();
 		previousDiscardCount = 0;
 		cohorts = [];
+		constructor(isFullTracking = () => true) {
+			this.isFullTracking = isFullTracking;
+		}
+		reconcilePileCount(pileCountAfter) {
+			this.commit("reconcile:pileCount", () => this.reconcilePileCountInternal(pileCountAfter));
+		}
 		initialize(cardIDs) {
 			const identities = normalizeIDs(cardIDs);
 			this.revision += 1;
@@ -3792,7 +3785,7 @@
 			return {
 				closesGeneration,
 				discardCountBefore,
-				expiringIdentityIDs: closesGeneration ? this.getUnresolvedIdentityIDs().filter((cardID) => !ambiguousIdentityIDs.has(cardID)) : [],
+				expiringIdentityIDs: closesGeneration && this.isFullTracking() ? this.getUnresolvedIdentityIDs().filter((cardID) => !ambiguousIdentityIDs.has(cardID)) : [],
 				recycledIdentityIDs,
 				ambiguousDiscardRecycleGroups
 			};
@@ -3801,6 +3794,16 @@
 			const discardCountBefore = transition.discardCountBefore;
 			const recycledIdentityIDs = transition.recycledIdentityIDs;
 			const ambiguousDiscardRecycleGroups = transition.ambiguousDiscardRecycleGroups;
+			if (!this.isFullTracking()) {
+				if (transition.closesGeneration) this.generation += 1;
+				recycledIdentityIDs.forEach((cardID) => this.prepareIdentityForPile(cardID));
+				ambiguousDiscardRecycleGroups.forEach((group) => {
+					group.candidateIdentityIDs.forEach((cardID) => this.prepareIdentityForPile(cardID));
+				});
+				this.knownDiscardIdentityIDs.clear();
+				this.degradeToSingleCohortInternal(pileCountAfter);
+				return;
+			}
 			const ambiguousRecycledCount = ambiguousDiscardRecycleGroups.reduce((total, group) => total + normalizeCount(group.recycledCount), 0);
 			const anonymousDiscardCount = Math.max(0, discardCountBefore - recycledIdentityIDs.length - ambiguousRecycledCount);
 			if (!transition.closesGeneration) {
@@ -3904,7 +3907,7 @@
 			if (this.knownPileIdentityIDs.delete(cardID)) return;
 			const cohort = this.findIdentityCohort(cardID);
 			if (!cohort) return;
-			if (cohort.candidateIdentityIDs.size <= cohort.remainingPileCount) {
+			if (this.isFullTracking() && cohort.candidateIdentityIDs.size <= cohort.remainingPileCount) {
 				cohort.remainingPileCount = Math.max(0, cohort.remainingPileCount - 1);
 				this.warn("outside-reveal-from-all-in-cohort", { cardID });
 			}
@@ -3951,8 +3954,8 @@
 			const merged = this.mergeAllCohortsInternal();
 			this.addUnresolvedUniverseToCohort(merged);
 			const targetCount = merged.remainingPileCount + normalizedCount;
-			merged.remainingPileCount = Math.min(targetCount, merged.candidateIdentityIDs.size);
-			if (targetCount > merged.candidateIdentityIDs.size) this.warn("anonymous-pile-insertion-capacity-shortage", {
+			merged.remainingPileCount = this.isFullTracking() ? Math.min(targetCount, merged.candidateIdentityIDs.size) : targetCount;
+			if (this.isFullTracking() && targetCount > merged.candidateIdentityIDs.size) this.warn("anonymous-pile-insertion-capacity-shortage", {
 				targetCount,
 				candidateCount: merged.candidateIdentityIDs.size
 			});
@@ -3975,6 +3978,10 @@
 			});
 		}
 		reconcilePileCountInternal(pileCountAfter) {
+			if (!this.isFullTracking()) {
+				this.degradeToSingleCohortInternal(pileCountAfter);
+				return;
+			}
 			const targetPileCount = normalizeCount(pileCountAfter);
 			if (Math.max(0, targetPileCount - this.knownPileIdentityIDs.size) === this.getHiddenPileSlotCount()) return;
 			this.degradeToSingleCohortInternal(targetPileCount);
@@ -3983,8 +3990,8 @@
 			const merged = this.mergeAllCohortsInternal();
 			this.addUnresolvedUniverseToCohort(merged);
 			const targetHiddenCount = Math.max(0, normalizeCount(pileCountAfter) - this.knownPileIdentityIDs.size);
-			merged.remainingPileCount = Math.min(targetHiddenCount, merged.candidateIdentityIDs.size);
-			if (targetHiddenCount > merged.candidateIdentityIDs.size) this.warn("pile-identity-capacity-shortage", {
+			merged.remainingPileCount = this.isFullTracking() ? Math.min(targetHiddenCount, merged.candidateIdentityIDs.size) : targetHiddenCount;
+			if (this.isFullTracking() && targetHiddenCount > merged.candidateIdentityIDs.size) this.warn("pile-identity-capacity-shortage", {
 				targetHiddenCount,
 				candidateCount: merged.candidateIdentityIDs.size
 			});
@@ -4012,7 +4019,7 @@
 			const cohort = this.findIdentityCohort(cardID);
 			if (!cohort) return;
 			if (wasInPile && cohort.remainingPileCount > 0) cohort.remainingPileCount -= 1;
-			if (!wasInPile && cohort.candidateIdentityIDs.size <= cohort.remainingPileCount) cohort.remainingPileCount = Math.max(0, cohort.remainingPileCount - 1);
+			if (this.isFullTracking() && !wasInPile && cohort.candidateIdentityIDs.size <= cohort.remainingPileCount) cohort.remainingPileCount = Math.max(0, cohort.remainingPileCount - 1);
 			cohort.candidateIdentityIDs.delete(cardID);
 			this.removeEmptyCohorts();
 		}
@@ -4020,7 +4027,7 @@
 			return this.cohorts.find((cohort) => cohort.candidateIdentityIDs.has(cardID));
 		}
 		removeEmptyCohorts() {
-			this.cohorts = this.cohorts.filter((cohort) => cohort.candidateIdentityIDs.size > 0);
+			this.cohorts = this.cohorts.filter((cohort) => cohort.candidateIdentityIDs.size > 0 || !this.isFullTracking() && cohort.remainingPileCount > 0);
 		}
 		getHiddenPileSlotCount() {
 			return this.cohorts.reduce((sum, cohort) => sum + cohort.remainingPileCount, 0);
@@ -4036,7 +4043,7 @@
 			this.cohorts.forEach((cohort) => {
 				const cardIDs = normalizeIDs(Array.from(cohort.candidateIdentityIDs));
 				if (cardIDs.length === 0) return;
-				const kind = cohort.remainingPileCount === 0 ? "none-in-pile" : cohort.remainingPileCount === cardIDs.length ? "all-in-pile" : "partial";
+				const kind = !this.isFullTracking() ? "partial" : cohort.remainingPileCount === 0 ? "none-in-pile" : cohort.remainingPileCount === cardIDs.length ? "all-in-pile" : "partial";
 				groups.push({
 					generation: cohort.generation,
 					kind,
@@ -4065,7 +4072,7 @@
 			const issues = [];
 			const seen = new Set();
 			this.cohorts.forEach((cohort) => {
-				if (cohort.remainingPileCount < 0 || cohort.remainingPileCount > cohort.candidateIdentityIDs.size) issues.push({
+				if (cohort.remainingPileCount < 0 || this.isFullTracking() && cohort.remainingPileCount > cohort.candidateIdentityIDs.size) issues.push({
 					context,
 					reason: "cohort-cardinality-out-of-range",
 					expected: cohort.candidateIdentityIDs.size,
@@ -4178,6 +4185,7 @@
 			issues.forEach((issue) => this.warn(issue.reason, { ...issue }));
 		}
 		warn(reason, detail) {
+			if (!this.isFullTracking() && HISTORY_DEPENDENT_WARNINGS.has(reason)) return;
 			trackerLogger.warn("牌堆身份账本异常", {
 				reason,
 				...detail
@@ -4845,7 +4853,7 @@
 			const { id, cards = [], candidateSeats = [], known = false, sourceEvent = null } = options;
 			this.id = id;
 			this.cards = new Set(cards);
-			this.candidateSeats = new Set(candidateSeats.map((seat) => Number(seat)));
+			this.candidateSeats = new Set(candidateSeats);
 			this.expectedSlotsByLocation = this.normalizeExpectedLocationSlots(options.expectedSlotsByLocation ?? new Map());
 			this.known = known;
 			this.sourceEvent = sourceEvent;
@@ -4979,7 +4987,7 @@
 									});
 									continue;
 								}
-								if (card.location === "player" && card.subZone === "hand" && !card.hasSubZoneCandidates() && card.seats.size > 1 && card.seats.has(seatID)) changed = card.deleteSeat(seatID, "room:unknownQuotaExclusion") || changed;
+								if (card.location === "player" && card.subZone === "hand" && !card.locationCandidates.some((candidate) => candidate.type === "player") && card.seats.size > 1 && card.seats.has(seatID)) changed = card.deleteSeat(seatID, "room:unknownQuotaExclusion") || changed;
 							}
 						}
 					}
@@ -5150,7 +5158,7 @@
 		}
 		syncViewGroups(seatIDs) {
 			const idx = this.room.locationIndex;
-			(seatIDs === void 0 ? Array.from(this.room.players.values()) : Array.from(seatIDs, (seatID) => this.room.getPlayer(Number(seatID))).filter((player) => Boolean(player))).forEach((player) => {
+			(seatIDs === void 0 ? Array.from(this.room.players.values()) : Array.from(seatIDs, (seatID) => this.room.getPlayer(seatID)).filter((player) => Boolean(player))).forEach((player) => {
 				const seat = player.seatID;
 				const knownHand = idx.knownHandBySeat.get(seat) ?? [];
 				const candidateHand = idx.candidateHandBySeat.get(seat) ?? [];
@@ -5169,7 +5177,7 @@
 		}
 		createConstraintGroup(options = {}) {
 			const groupID = options.id ?? `group_${++this.room.constraintGroupSeq}`;
-			const targetSeats = this.room.normalizeSeats(options.candidateSeats ?? []);
+			const targetSeats = options.candidateSeats ?? [];
 			const cards = Array.from(new Set(options.cards ?? []));
 			let group = this.room.constraintGroups.get(groupID);
 			let structureChanged = false;
@@ -5686,7 +5694,6 @@
 	var RoomMoveEvents = class {
 		room;
 		skills = new Map();
-		handlers = new Map();
 		plugins = new Map();
 		legacySequence = 0;
 		constructor(room) {
@@ -5696,20 +5703,24 @@
 			return this.skills;
 		}
 		get moveEventHandlers() {
-			return this.handlers;
+			const handlers = new Map();
+			for (const plugin of this.plugins.values()) {
+				if (!plugin.decorateMove) continue;
+				for (const spellID of new Set(plugin.spellIDs ?? ["*"])) {
+					const registered = handlers.get(spellID);
+					if (registered) registered.push(plugin.decorateMove);
+					else handlers.set(spellID, [plugin.decorateMove]);
+				}
+			}
+			return handlers;
 		}
 		registerSkillHandler(spellID, handler) {
 			this.skills.set(spellID, handler);
 		}
 		registerMoveEventHandler(spellID, handler) {
-			const key = spellID === "*" ? "*" : Number(spellID);
-			if (key !== "*" && !Number.isFinite(key)) return;
-			const handlers = this.handlers.get(key);
-			if (handlers) handlers.push(handler);
-			else this.handlers.set(key, [handler]);
 			this.registerSkillPlugin({
 				id: `legacy:${++this.legacySequence}`,
-				spellIDs: [key],
+				spellIDs: [spellID],
 				decorateMove: handler
 			});
 		}
@@ -5776,7 +5787,6 @@
 		}
 		clear() {
 			this.skills.clear();
-			this.handlers.clear();
 			this.plugins.clear();
 			this.legacySequence = 0;
 		}
@@ -5850,7 +5860,17 @@
 			if (cardsToPlace.length > 0) targetZone?.add(cardsToPlace, position);
 			room.resolveConstraints();
 		}
-		resizeShuffledPile(cards, cardCount) {
+		restorePileCount(cardCount) {
+			const pile = this.room.getZone("pile");
+			const knownCards = pile.cards.filter((card) => card.id > 0 && card.isKnown);
+			this.room.pileIdentityLedger.registerAmbiguousOutsideGroup(knownCards.map((card) => card.id));
+			knownCards.forEach((card) => {
+				this.room.anonymizeLocatedIdentity(card, "reconnect:pileCount");
+			});
+			pile.replaceAll(this.resizeShuffledPile([...pile.cards], cardCount, "reconnect:pileCount"));
+			this.room.pileIdentityLedger.reconcilePileCount(cardCount);
+		}
+		resizeShuffledPile(cards, cardCount, reason = "shufflePile:protocolCount") {
 			const missingCount = cardCount - cards.length;
 			if (missingCount >= 0) return missingCount === 0 ? cards : [...this.room.createExternalCards([], missingCount), ...cards];
 			const retiredCards = [];
@@ -5863,7 +5883,7 @@
 			});
 			this.clearCardsFromPublicZones(retiredCards);
 			retiredCards.forEach((card) => {
-				this.room.releaseUnknownPlaceholderToOutside(card, "shufflePile:protocolCount");
+				this.room.releaseUnknownPlaceholderToOutside(card, reason);
 			});
 			return retainedCards;
 		}
@@ -5928,7 +5948,118 @@
 			const normalizedSeat = Number(seatID);
 			const cardsByStatus = this.room.counter?.cardsByStatus;
 			const appearedCards = cardsByStatus?.[CARD_INSTANCE_STATUS.APPEARED];
-			return (knownOnly ? appearedCards ? Array.from(appearedCards) : this.room.cards : cardsByStatus ? PLAYER_HAND_CARD_STATUSES.flatMap((status) => Array.from(cardsByStatus[status] ?? [])) : this.room.cards).filter((card) => card.location === "player" && card.subZone === "hand" && (includeCandidates || !card.hasSubZoneCandidates()) && card.seats.has(normalizedSeat) && (!knownOnly || card.isKnown === true)).map((card) => card.id).filter((id) => id > 0);
+			return (knownOnly ? appearedCards ? Array.from(appearedCards) : this.room.cards : cardsByStatus ? PLAYER_HAND_CARD_STATUSES.flatMap((status) => Array.from(cardsByStatus[status] ?? [])) : this.room.cards).filter((card) => card.location === "player" && card.subZone === "hand" && (includeCandidates || !card.locationCandidates.some((candidate) => candidate.type === "player")) && card.seats.has(normalizedSeat) && (!knownOnly || card.isKnown === true)).map((card) => card.id).filter((id) => id > 0);
+		}
+	};
+	var RoomReconnect = class {
+		room;
+		pendingSnapshot = null;
+		pendingHandSnapshots = new Map();
+		constructor(room) {
+			this.room = room;
+		}
+		restore(snapshot) {
+			if (!this.room.isDeckReady) {
+				this.pendingSnapshot = snapshot;
+				return;
+			}
+			const revealedIDs = [];
+			for (const info of snapshot.SeatInfos ?? []) {
+				const player = this.room.getPlayer(info.SeatID);
+				if (!player) continue;
+				this.retireStalePlayerCards(info);
+				revealedIDs.push(...this.restorePlayerZone(info, "equip"));
+				revealedIDs.push(...this.restorePlayerZone(info, "judge"));
+				this.room.syncObservedPlayerHandCount(info.SeatID, info.HandCardCount, { resolve: false });
+				if (info.CharacterID !== void 0) this.room.game.setGeneral(info.SeatID, info.CharacterID);
+				if (info.Figure !== void 0) player.figure = info.Figure;
+			}
+			this.room.applyPileIdentityReveal(revealedIDs);
+			if (snapshot.CardPileCount !== void 0) this.room.restorePileCount(snapshot.CardPileCount);
+			this.room.resolveConstraints();
+			this.room.notifyCardsRevealed(revealedIDs);
+			this.room.markViewDirty("reconnect:snapshot");
+		}
+		restoreHand(snapshot) {
+			if (!this.room.isDeckReady) {
+				this.pendingHandSnapshots.set(snapshot.SeatIndex, snapshot);
+				return;
+			}
+			if (!this.room.getPlayer(snapshot.SeatIndex)) return;
+			const knownIDs = snapshot.CardIDs.filter((cardID) => cardID > 0);
+			this.retireStaleHandCards(snapshot.SeatIndex, new Set(knownIDs));
+			for (const cardID of knownIDs) {
+				const card = this.resolveKnownCard(cardID);
+				if (!card) continue;
+				this.room.clearCardsFromPublicZones([card]);
+				this.room.removeCardsFromConstraintGroups([card]);
+				card.bindCandidates([snapshot.SeatIndex], "hand", null, { known: true });
+			}
+			this.room.syncObservedPlayerHandCount(snapshot.SeatIndex, snapshot.Count, { resolve: false });
+			this.room.applyPileIdentityReveal(knownIDs);
+			this.room.resolveConstraints();
+			this.room.notifyCardsRevealed(knownIDs);
+			this.room.markViewDirty("reconnect:hand-snapshot");
+		}
+		onDeckInitialized() {
+			if (this.pendingSnapshot) {
+				const snapshot = this.pendingSnapshot;
+				this.pendingSnapshot = null;
+				this.restore(snapshot);
+			}
+			for (const snapshot of this.pendingHandSnapshots.values()) this.restoreHand(snapshot);
+			this.pendingHandSnapshots.clear();
+		}
+		clear() {
+			this.pendingSnapshot = null;
+			this.pendingHandSnapshots.clear();
+		}
+		retireStaleHandCards(seatID, knownIDs) {
+			const knownHandCards = this.room.getPlayer(seatID)?.knownHandCards ?? [];
+			for (const card of knownHandCards) {
+				if (knownIDs.has(card.id)) continue;
+				this.room.constraints.suspendKnownCard(card, "reconnect:staleHand");
+			}
+		}
+		retireStalePlayerCards(info) {
+			const equipIDs = new Set(info.EquipCards.map((card) => card.CardId));
+			const judgeIDs = new Set(info.JudgeCards.map((card) => card.CardId));
+			const cards = this.room.trackedCards.filter((card) => card.location === "player" && card.seats.has(info.SeatID));
+			for (const card of cards) {
+				const staleZone = card.subZone === "equip" && !equipIDs.has(card.id) || card.subZone === "judge" && !judgeIDs.has(card.id);
+				const staleHand = card.subZone === "hand" && card.isKnown && card.seats.size === 1 && !card.hasLocationCandidates();
+				if (!staleZone && !staleHand) continue;
+				if (card.id > 0 && card.isKnown) {
+					this.room.constraints.suspendKnownCard(card, "reconnect:stalePlayerZone");
+					continue;
+				}
+				this.room.removeCardsFromConstraintGroups([card]);
+				const releasedID = this.room.releaseUnknownPlaceholderToOutside(card, "reconnect:stalePlayerZone");
+				if (releasedID !== null) this.room.pileIdentityLedger.registerAmbiguousOutsideGroup([releasedID]);
+			}
+		}
+		restorePlayerZone(info, subZone) {
+			const cards = subZone === "equip" ? info.EquipCards : info.JudgeCards;
+			const count = subZone === "equip" ? info.EquipCardCount : info.JudgeCardCount;
+			const knownIDs = [];
+			for (const data of cards) {
+				if (!(data.CardId > 0)) continue;
+				const card = this.resolveKnownCard(data.CardId);
+				if (!card) continue;
+				this.room.clearCardsFromPublicZones([card]);
+				this.room.removeCardsFromConstraintGroups([card]);
+				card.bindCandidates([info.SeatID], subZone, "SpellId" in data ? data.SpellId : null, { known: true });
+				knownIDs.push(data.CardId);
+			}
+			this.room.createExternalCards([], Math.max(0, count - knownIDs.length)).forEach((card) => {
+				card.bindCandidates([info.SeatID], subZone);
+			});
+			return knownIDs;
+		}
+		resolveKnownCard(cardID) {
+			const existing = this.room.cardIndex.get(cardID);
+			const target = !existing || this.room.detachedKnownCards.has(existing) ? this.room.createExternalCards([], 1)[0] : null;
+			return this.room.materialize(cardID, target);
 		}
 	};
 	function getCardPlayerLocationCandidates(card) {
@@ -5988,6 +6119,26 @@
 			if (!force && (sourceHandTotalObserved || sourcePlayer?.hasObservedHandCount) && typeof observedSourceTotal === "number" && typeof observedUnknownCount === "number" && observedSourceTotal <= observedUnknownCount) return [];
 			const existingSourceCards = getPlayerHandCardsBySeat(this.room, fromSeat);
 			if (!force && !(sourceHandTotalObserved || sourcePlayer?.hasObservedHandCount) && !existingSourceCards.some((card) => card.isKnown === true)) return [];
+			if (this.room.trackingMode === "degraded" && !(sourceHandTotalObserved || sourcePlayer?.hasObservedHandCount)) {
+				const knownCards = existingSourceCards.filter((card) => card.isKnown);
+				knownCards.forEach((card) => card.addSeat(targetSeat, "randomHandTransferCandidates"));
+				this.invalidateHandTransferConstraintsForCards(knownCards, fromSeat, targetSeat);
+				if (knownCards.length > 0) this.room.createConstraintGroup({
+					cards: knownCards,
+					expectedSlotsByLocation: new Map([[createLocationCandidateKey({
+						type: "player",
+						seatID: targetSeat,
+						subZone: "hand",
+						spellID: null
+					}), {
+						min: 0,
+						max: count
+					}]]),
+					known: false,
+					sourceEvent: sourceEvent ?? { type: "randomHandTransferCandidates" }
+				});
+				return [];
+			}
 			const exclusiveSourceCards = existingSourceCards.filter((card) => card.seats.size === 1);
 			const ambiguousSourceCards = existingSourceCards.filter((card) => card.seats.size > 1);
 			const sourceTotal = sourceTotalBefore ?? (sourcePlayer?.hasObservedHandCount ? sourcePlayer.observedHandCount : exclusiveSourceCards.length > 0 ? exclusiveSourceCards.length : existingSourceCards.length);
@@ -6369,7 +6520,7 @@
 			records.forEach((record) => this.retargetMuniuRecord(record, targetSeat));
 			const movedMarkCardIDs = [];
 			this.room.refreshPlayerSnapshot().forEach((card) => {
-				if (card.subZone !== "mark" || card.spellID !== spellID || !card.seats.has(fromSeat) || card.hasLocationCandidates() || card.hasSubZoneCandidates()) return;
+				if (card.subZone !== "mark" || card.spellID !== spellID || !card.seats.has(fromSeat) || card.hasLocationCandidates()) return;
 				card.setSeats([targetSeat], "moveMuniuMarkSpace");
 				movedMarkCardIDs.push(card.id);
 			});
@@ -6410,7 +6561,8 @@
 			});
 		}
 		getKnownHandCandidatesForHiddenMark(sourceSeat) {
-			return this.room.refreshPlayerSnapshot().filter((card) => card.isKnown === true && card.suspended !== true && card.seats.has(sourceSeat) && (card.subZone === "hand" && !card.hasSubZoneCandidates() || card.hasSubZoneCandidate({
+			return this.room.refreshPlayerSnapshot().filter((card) => card.isKnown === true && card.suspended !== true && card.seats.has(sourceSeat) && (card.subZone === "hand" && !card.locationCandidates.some((candidate) => candidate.type === "player") || card.hasLocationCandidate({
+				type: "player",
 				seatID: sourceSeat,
 				subZone: "hand",
 				spellID: null
@@ -6494,7 +6646,7 @@
 			return true;
 		}
 		moveHiddenMarkPlaceholders(context, record) {
-			const count = Math.max(0, Number(context.unknownCount) || 0);
+			const count = context.unknownCount;
 			if (count <= 0) return [];
 			const placeholderCards = takeUnknownCardsFromPlayer(this.room, record.sourceSeat, count, "hand");
 			if (placeholderCards.length === 0) return [];
@@ -6538,7 +6690,7 @@
 				record.placeholderCards.delete(card);
 				this.removeHiddenMarkPlaceholder(card);
 				if (observedCards.has(card)) return;
-				if (!(card.location === "player" && card.subZone === "mark" && Number(card.spellID) === Number(record.spellID))) return;
+				if (!(card.location === "player" && card.subZone === "mark" && card.spellID === record.spellID)) return;
 				this.room.removeCardsFromConstraintGroups([card]);
 				const placeholderCardID = card.id;
 				this.room.releaseUnknownPlaceholderToOutside(card, "clearHiddenMarkPlaceholdersForObservedSnapshot");
@@ -6548,13 +6700,13 @@
 		}
 		materializeUnlocatedIdentitiesOntoMarkPlaceholders(record, identityIDs, reason) {
 			const materialized = [];
-			const pendingIDs = identityIDs.map((id) => Number(id)).filter((id) => id > 0 && !this.room.cardIndex.has(id) && this.room.unlocatedIdentities.has(id));
+			const pendingIDs = getPositiveIDs(identityIDs).filter((id) => !this.room.cardIndex.has(id) && this.room.unlocatedIdentities.has(id));
 			if (pendingIDs.length === 0) return materialized;
-			const placeholders = Array.from(record.placeholderCards ?? []).filter((card) => card.isAnonymous && card.location === "player" && card.subZone === "mark" && Number(card.spellID) === Number(record.spellID));
+			const placeholders = Array.from(record.placeholderCards ?? []).filter((card) => card.isAnonymous && card.location === "player" && card.subZone === "mark" && card.spellID === record.spellID);
 			pendingIDs.forEach((cardID) => {
 				const placeholder = placeholders.shift();
 				if (!placeholder) return;
-				const previousEntityID = Number(placeholder.entityID);
+				const previousEntityID = placeholder.entityID;
 				const resolved = this.room.materialize(cardID, placeholder);
 				if (!resolved) return;
 				record.placeholderCards.delete(placeholder);
@@ -6588,13 +6740,13 @@
 					changed = card.setLocationCandidates(next, reason) || changed;
 				}
 			} else if (candidate.type === "player") {
-				if (card.subZone !== "mark" || Number(card.spellID) !== Number(record.spellID)) changed = card.resolveLocationCandidate(candidate, reason) || changed;
+				if (card.subZone !== "mark" || card.spellID !== record.spellID) changed = card.resolveLocationCandidate(candidate, reason) || changed;
 			}
 			changed = this.reconcileMarkSpace(record, reason) || changed;
 			return changed;
 		}
 		isLiveHiddenMarkPlaceholder(card, record) {
-			return card.isAnonymous && card.location === "player" && card.subZone === "mark" && Number(card.spellID) === Number(record.spellID);
+			return card.isAnonymous && card.location === "player" && card.subZone === "mark" && card.spellID === record.spellID;
 		}
 		reconcileMarkSpace(record, reason) {
 			const livePlaceholders = Array.from(record.placeholderCards ?? []).filter((card) => this.isLiveHiddenMarkPlaceholder(card, record));
@@ -6638,7 +6790,7 @@
 		}
 		occupiesHiddenMarkSlot(card, record) {
 			if (!(card.id > 0)) return false;
-			if (card.location === "player" && card.subZone === "mark" && Number(card.spellID) === Number(record.spellID)) return true;
+			if (card.location === "player" && card.subZone === "mark" && card.spellID === record.spellID) return true;
 			const candidate = this.createHiddenMarkTargetLocationCandidate(record);
 			return candidate.type === "container" && card.hasLocationCandidate(candidate);
 		}
@@ -6700,21 +6852,21 @@
 			const seat = context.sourceHandSeat;
 			if (seat === null || getMoveSubZone(context.from) !== "hand") return false;
 			if (!(context.sourceHandTotalObserved && context.unknownCount === 0 && context.knownIDs.length > 0 && context.knownIDs.length === context.cardCount && context.cardCount === context.sourceHandTotalBefore)) return false;
-			const revealedIDs = new Set(context.knownIDs.map((id) => Number(id)));
+			const revealedIDs = new Set(context.knownIDs);
 			let changed = false;
 			const records = [];
 			state.records.forEach((record) => records.push(record));
 			records.forEach((record) => {
 				if (state.records.get(record.id) !== record) return;
-				if (Number(record.sourceSeat) !== Number(seat)) return;
+				if (record.sourceSeat !== seat) return;
 				if (record.confirmedMarkCards.size >= record.knownMarkMax) return;
 				const strandedCandidates = Array.from(record.cards).filter((card) => {
 					if (!(card.id > 0)) return false;
-					if (revealedIDs.has(Number(card.id))) return false;
+					if (revealedIDs.has(card.id)) return false;
 					if (record.confirmedMarkCards.has(card)) return false;
-					if (card.location !== "player" || !card.seats.has(Number(seat))) return false;
+					if (card.location !== "player" || !card.seats.has(seat)) return false;
 					const handCandidates = getCardPlayerLocationCandidates(card);
-					return card.subZone === "hand" || handCandidates.some((candidate) => Number(candidate.seatID) === Number(seat) && candidate.subZone === "hand");
+					return card.subZone === "hand" || handCandidates.some((candidate) => candidate.seatID === seat && candidate.subZone === "hand");
 				});
 				strandedCandidates.forEach((card) => {
 					if (record.confirmedMarkCards.size >= record.knownMarkMax) return;
@@ -6763,10 +6915,6 @@
 					changed = this.bindConfirmedMarkCardToMarkSpace(record, card, "hiddenMark:confirmedMark") || changed;
 					if (candidate.type === "container" && card.hasLocationCandidate(candidate)) changed = card.setLocationCandidates([candidate], "hiddenMark:confirmedMark") || changed;
 					else if (card.hasLocationCandidate(candidate)) changed = card.resolveLocationCandidate(candidate, "hiddenMark:confirmedMark") || changed;
-					else {
-						const subZoneCandidate = toSubZoneCandidate(candidate);
-						if (subZoneCandidate && card.hasSubZoneCandidate(subZoneCandidate)) changed = card.resolveSubZoneCandidate(subZoneCandidate, "hiddenMark:confirmedMark") || changed;
-					}
 					trackerLogger.info("手牌暗置标记区候选确认进标记", {
 						spellID: record.spellID,
 						sourceSeat: record.sourceSeat,
@@ -6789,7 +6937,6 @@
 					};
 					this.setHiddenMarkConfirmation(record, card, "hand");
 					if (card.hasLocationCandidate(candidate)) changed = card.resolveLocationCandidate(candidate, "hiddenMark:confirmedHand") || changed;
-					else if (card.hasSubZoneCandidate(candidate)) changed = card.resolveSubZoneCandidate(candidate, "hiddenMark:confirmedHand") || changed;
 					trackerLogger.info("手牌暗置标记区候选确认回手牌", {
 						spellID: record.spellID,
 						sourceSeat: record.sourceSeat,
@@ -6816,12 +6963,12 @@
 			const { markSpellID, observedSeat } = snapshot;
 			let changed = false;
 			const observedCards = new Set(context.knownCards);
-			const observedCardIDs = new Set(context.knownIDs.map(Number));
+			const observedCardIDs = new Set(context.knownIDs);
 			const resolvedHandCardIDs = [];
 			const clearedPlaceholderIDs = [];
 			Array.from(state.records.values()).forEach((record) => {
 				if (state.records.get(record.id) !== record) return;
-				if (Number(record.spellID) !== markSpellID) return;
+				if (record.spellID !== markSpellID) return;
 				const targetCandidate = this.createHiddenMarkTargetLocationCandidate(record);
 				if (targetCandidate.type !== "container") return;
 				if (record.targetSeat !== observedSeat) changed = this.retargetMuniuRecord(record, observedSeat) || changed;
@@ -6842,16 +6989,16 @@
 					changed = true;
 				}
 				context.knownIDs.forEach((cardID) => {
-					const card = this.room.cardIndex.get(Number(cardID));
+					const card = this.room.cardIndex.get(cardID);
 					if (!card) return;
-					if (!record.cards.has(card) && !materialized.some((item) => item.cardID === Number(cardID))) return;
+					if (!record.cards.has(card) && !materialized.some((item) => item.cardID === cardID)) return;
 					record.cards.add(card);
 					if (record.confirmedMarkCards.has(card)) return;
 					this.setHiddenMarkConfirmation(record, card, "mark");
 					changed = this.bindConfirmedMarkCardToMarkSpace(record, card, "hiddenMark:observedContainerSnapshot:mark") || changed;
 				});
 				record.cards.forEach((card) => {
-					if (observedCards.has(card) || observedCardIDs.has(Number(card.id)) || record.confirmedMarkCards.has(card)) return;
+					if (observedCards.has(card) || observedCardIDs.has(card.id) || record.confirmedMarkCards.has(card)) return;
 					this.setHiddenMarkConfirmation(record, card, "hand");
 					if (card.hasLocationCandidate(targetCandidate)) {
 						changed = card.removeLocationCandidate(targetCandidate, "hiddenMark:observedContainerSnapshot") || changed;
@@ -6926,7 +7073,7 @@
 			if (!(count > 0)) return playerCards;
 			const markSpellIDs = subZone === "mark" && spellID != null ? [spellID] : [];
 			for (const card of this.room.refreshPlayerSnapshot()) {
-				if (card.subZone !== subZone || card.seats.has(seatID) !== true || card.isKnown !== true || card.suspended === true || card.hasSubZoneCandidates()) continue;
+				if (card.subZone !== subZone || card.seats.has(seatID) !== true || card.isKnown !== true || card.suspended === true || card.locationCandidates.some((candidate) => candidate.type === "player")) continue;
 				if (subZone === "mark" && markSpellIDs.length > 0) {
 					if (card.spellID === null || !markSpellIDs.includes(card.spellID)) continue;
 				}
@@ -7058,7 +7205,7 @@
 			const replacementCandidate = this.getSourcePlaceholderReplacementCandidate(card, context);
 			const oldLocation = card.location;
 			const oldSubZone = card.subZone;
-			const oldSeats = new Set(Array.from(card.seats, Number));
+			const oldSeats = new Set(card.seats);
 			const oldSpellID = card.spellID;
 			const oldPopupSpaceID = card.popupSpaceID;
 			const oldLocationCandidates = card.locationCandidates;
@@ -7073,7 +7220,7 @@
 					spaceID: getPopupSpaceID(context.from)
 				});
 				card.confirmKnown();
-			} else card.bindCandidates([fromSeat], fromSubZone, fromSubZone === "mark" ? sourceSpellID : null, { known: true });
+			} else card.bindCandidates(fromSeat, fromSubZone, fromSubZone === "mark" ? sourceSpellID : null, { known: true });
 			if (preserveAmbiguousIdentity) {
 				placeholder.bindCandidates(oldSeats, oldSubZone, oldSpellID);
 				placeholder.setLocationCandidates(oldLocationCandidates, "swapKnownCardWithPlayerSourcePlaceholder:preserveAmbiguousIdentity");
@@ -7208,7 +7355,8 @@
 		takeSourceCards(count, options) {
 			const { from, to, sourceCards, sourceEvent } = options;
 			const moveType = sourceEvent?.moveType ?? sourceEvent?.raw?.MoveType ?? options.moveType;
-			const isDiscardGain = from.type === "public" && from.zone === "discard" && (moveType === MOVE_TYPE.GAIN || moveType === MOVE_TYPE.MOVE && (to.type === "player" || to.type === "playerCandidates"));
+			const isPlayerTransfer = (moveType === MOVE_TYPE.MARK_GAIN || moveType === MOVE_TYPE.MOVE) && (to.type === "player" || to.type === "playerCandidates");
+			const isDiscardGain = from.type === "public" && from.zone === "discard" && (moveType === MOVE_TYPE.GAIN || isPlayerTransfer);
 			if (sourceCards?.length) {
 				if (from.type === "player") {
 					const explicitCards = [...new Set(sourceCards)].slice(0, count);
@@ -7617,7 +7765,7 @@
 						suspended: sourceCard.suspended,
 						seats: Array.from(sourceCard.seats, Number),
 						hasLocationCandidates: sourceCard.hasLocationCandidates(),
-						hasSubZoneCandidates: sourceCard.hasSubZoneCandidates()
+						hasPlayerLocationCandidates: sourceCard.locationCandidates.some((candidate) => candidate.type === "player")
 					})),
 					sourceEvent
 				});
@@ -7711,7 +7859,7 @@
 						cardSubZone: card.subZone,
 						cardSeats: Array.from(card.seats, Number),
 						hasLocationCandidates: card.hasLocationCandidates(),
-						hasSubZoneCandidates: card.hasSubZoneCandidates()
+						hasPlayerLocationCandidates: card.locationCandidates.some((candidate) => candidate.type === "player")
 					});
 				});
 				return residues;
@@ -7879,6 +8027,7 @@
 			}
 			if (toZone === "player") {
 				const movedUnknownCards = this.sources.takeSourceCards(unknownCount, context);
+				if (this.room.trackingMode === "degraded" && movedUnknownCards.length < unknownCount) movedUnknownCards.push(...this.room.createExternalCards([], unknownCount - movedUnknownCards.length));
 				context.movedUnknownCards = movedUnknownCards;
 				movedUnknownCards.forEach((card) => {
 					this.sources.resolveStoredSourceCandidate(card, context);
@@ -7914,7 +8063,7 @@
 			if (takenCount < unknownCount) {
 				const fallbackCount = unknownCount - takenCount;
 				const fallbackCards = this.room.createExternalCards([], fallbackCount);
-				if (fallbackCards.length > 0) trackerLogger.warn("来源实体不足，创建匿名暗占位补足公共区移动", {
+				if (fallbackCards.length > 0 && this.room.trackingMode === "full") trackerLogger.warn("来源实体不足，创建匿名暗占位补足公共区移动", {
 					reason: "moveUnknownCardsForContext:publicFallback",
 					requestedCount: unknownCount,
 					takenCount,
@@ -8115,21 +8264,29 @@
 	}
 	var DIRTY_CARD_EVENT_LIMIT = 500;
 	var Room = class extends RoomBase {
-		isDeckReady = false;
+		trackingModeValue = "full";
+		get trackingMode() {
+			return this.trackingModeValue;
+		}
+		get isPileCountKnown() {
+			return this.isDeckReady && (this.trackingMode === "full" || this.hasProtocolPileCount);
+		}
 		cards = [];
 		detachedKnownCards = new Set();
-		detachedIdentitySeq = 0;
-		detachedCardOrder = new WeakMap();
 		get trackedCards() {
 			return this.detachedKnownCards.size === 0 ? this.cards : [...this.cards, ...this.detachedKnownCards];
 		}
 		cardIndex = new Map();
 		unlocatedIdentities = new Set();
 		deckIdentities = new Set();
-		anonymousEntitySeq = -1;
+		constraintGroups = new Map();
+		suspendedKnownCards = new Set();
+		dirtyCards = new Set();
+		dirtyPublicZones = new Set();
 		playerSnapshot = new PlayerSnapshot(this);
 		identity = new RoomIdentity(this);
 		moveEvents = new RoomMoveEvents(this);
+		reconnection = new RoomReconnect(this);
 		get skillHandlers() {
 			return this.moveEvents.skillHandlers;
 		}
@@ -8149,40 +8306,67 @@
 				["process", new Zone("process", this)],
 				["exchange", new Zone("exchange", this)]
 			]);
-			this.constraintGroups = new Map();
-			this.constraintGroupSeq = 0;
-			this.constraintGroupsDirty = false;
-			this.lastResolveRounds = 0;
-			this.maxResolveRounds = 0;
 			this.ambiguousKnownIndex = new AmbiguousKnownIndex(this);
 			this.locationIndex = new CardLocationIndex();
-			this.suspendedKnownCards = new Set();
-			this.resolveTouchedSeats = null;
-			this.viewDirty = false;
-			this.dirtyCards = new Set();
-			this.dirtyCardEvents = [];
-			this.dirtyCardSeq = 0;
-			this.dirtyPublicZones = new Set();
-			this.cardChangeEvents = [];
+			this.resetMutableRoomState();
 			this.publicZones = new RoomPublicZones(this);
 			this.constraints = new RoomConstraints(this);
 			this.movement = new RoomMovement(this);
-			this.pileIdentityLedger = new PileIdentityLedger();
 			this.game.bindRoom(this);
 		}
-		initDeck(cardIDs) {
+		resetMutableRoomState() {
 			this.isDeckReady = false;
+			this.hasProtocolPileCount = false;
 			this.cards.length = 0;
 			this.detachedKnownCards.clear();
 			this.detachedIdentitySeq = 0;
 			this.detachedCardOrder = new WeakMap();
-			this.playerSnapshot.reset();
 			this.cardIndex.clear();
+			this.unlocatedIdentities.clear();
+			this.deckIdentities.clear();
+			this.anonymousEntitySeq = -1;
+			this.pileIdentityLedger = new PileIdentityLedger(() => this.trackingMode === "full");
+			this.constraintGroups.clear();
+			this.constraintGroupSeq = 0;
+			this.constraintGroupsDirty = false;
+			this.suspendedKnownCards.clear();
+			this.resolveTouchedSeats = null;
+			this.lastResolveRounds = 0;
+			this.maxResolveRounds = 0;
+			this.dirtyCards.clear();
+			this.dirtyCardEvents = [];
+			this.dirtyCardSeq = 0;
+			this.dirtyPublicZones.clear();
+			this.viewDirty = false;
+			this.playerSnapshot.reset();
+			this.locationIndex.rebuild(this, { record: false });
+			this.ambiguousKnownIndex.rebuild([], { record: false });
+		}
+		degradeTracking(snapshot) {
+			if (this.trackingMode === "degraded") {
+				if (snapshot) this.reconnection.restore(snapshot);
+				return;
+			}
+			this.trackingModeValue = "degraded";
+			this.players.forEach((player) => player.invalidateObservedHandCount());
+			this.pileIdentityLedger.reconcilePileCount(this.getZone("pile").cards.length);
+			if (snapshot) this.reconnection.restore(snapshot);
+			if (!snapshot && this.isDeckReady) this.resolveConstraints();
+			this.markViewDirty("tracking-mode:degraded");
+		}
+		restoreReconnectHand(snapshot) {
+			this.reconnection.restoreHand(snapshot);
+		}
+		restorePileCount(cardCount) {
+			this.publicZones.restorePileCount(cardCount);
+			this.hasProtocolPileCount = true;
+		}
+		initDeck(cardIDs) {
+			this.zones.forEach((zone) => zone.clear());
+			this.resetMutableRoomState();
 			this.unlocatedIdentities = new Set(cardIDs.filter((id) => id > 0));
 			this.deckIdentities = new Set(this.unlocatedIdentities);
-			this.anonymousEntitySeq = -1;
 			const pile = this.getZone("pile");
-			this.zones.forEach((zone) => zone.clear());
 			const deckCards = [];
 			for (let i = 0; i < cardIDs.length; i += 1) {
 				const card = new Card(0, this);
@@ -8194,6 +8378,7 @@
 			this.assertPileIdentityLedgerConsistency("initDeck");
 			this.locationIndex.rebuild(this);
 			this.ambiguousKnownIndex.rebuild(Array.from(this.constraintGroups.values()));
+			this.constraints.syncViewGroups();
 			this.rebuildPlayerSnapshot();
 			this.constraintGroupsDirty = false;
 			this.dirtyPublicZones.clear();
@@ -8201,6 +8386,7 @@
 			this.isDeckReady = true;
 			this.publicZones.assertPublicZoneConsistency("initDeck");
 			this.moveEvents.onDeckInitialized();
+			this.reconnection.onDeckInitialized();
 		}
 		applyPileIdentityMove(move) {
 			try {
@@ -8221,14 +8407,14 @@
 		}
 		applyPileIdentityReveal(cardIDs, location) {
 			try {
-				const normalizedCardIDs = cardIDs.map(Number).filter((cardID) => cardID > 0);
+				const knownCardIDs = getPositiveIDs(cardIDs);
 				const revealGroups = [
 					["pile", []],
 					["discard", []],
 					["outside", []]
 				];
 				const groupByLocation = new Map(revealGroups);
-				normalizedCardIDs.forEach((cardID) => {
+				knownCardIDs.forEach((cardID) => {
 					const card = this.cardIndex.get(cardID);
 					if (card && this.detachedKnownCards.has(card)) return;
 					const actualLocation = card?.location;
@@ -8317,16 +8503,12 @@
 		decorateMoveEvent(event) {
 			return this.moveEvents.decorateMoveEvent(event);
 		}
-		normalizeSeats(seatID) {
-			return (Array.isArray(seatID) ? seatID : [seatID]).map((seat) => Number(seat)).filter((seat) => Number.isInteger(seat) && seat >= 0 && seat < 8 && (this.seatIDs.length === 0 || this.seatIDs.includes(seat)));
-		}
 		mergeCandidateSeats(currentSeats, nextSeats = []) {
-			const normalizedNextSeats = this.normalizeSeats(nextSeats);
-			if (normalizedNextSeats.length === 0) return new Set(Array.from(currentSeats ?? []).map((seat) => Number(seat)));
-			if (!currentSeats || currentSeats.size === 0) return new Set(normalizedNextSeats);
-			const nextSeatSet = new Set(normalizedNextSeats);
-			const intersection = Array.from(currentSeats).map((seat) => Number(seat)).filter((seat) => nextSeatSet.has(seat));
-			return new Set(intersection.length > 0 ? intersection : normalizedNextSeats);
+			const nextSeatSet = toSeatSet(nextSeats);
+			if (nextSeatSet.size === 0) return toSeatSet(currentSeats);
+			if (!currentSeats || currentSeats.size === 0) return nextSeatSet;
+			const intersection = Array.from(currentSeats).filter((seat) => nextSeatSet.has(seat));
+			return intersection.length > 0 ? new Set(intersection) : nextSeatSet;
 		}
 		findCardsByIDs(cardIDs = []) {
 			return cardIDs.filter((id) => id > 0).map((id) => this.cardIndex.get(id)).filter((card) => card !== void 0);
@@ -8403,8 +8585,8 @@
 				handCount,
 				observedHandCount: player.observedHandCount
 			});
-			const normalizedSeat = Number(seatID);
-			const localHandCount = this.refreshPlayerSnapshot().filter((card) => card.subZone === "hand" && card.seats.has(normalizedSeat)).length;
+			if (this.trackingMode === "degraded") return false;
+			const localHandCount = this.refreshPlayerSnapshot().filter((card) => card.subZone === "hand" && card.seats.has(seatID)).length;
 			return shouldRevealAsFullHand({
 				handCount,
 				localHandCount
@@ -8441,11 +8623,6 @@
 				detail: event
 			});
 			if (this.dirtyCardEvents.length > DIRTY_CARD_EVENT_LIMIT) this.dirtyCardEvents.splice(0, this.dirtyCardEvents.length - DIRTY_CARD_EVENT_LIMIT);
-			this.cardChangeEvents.push({
-				cardID: card.id,
-				...event
-			});
-			if (this.cardChangeEvents.length > 100) this.cardChangeEvents.splice(0, this.cardChangeEvents.length - 100);
 		}
 		markCounterDirty(card) {
 			this.counter?.markDirty(card);
@@ -8483,8 +8660,9 @@
 		shufflePile(options = {}) {
 			const pile = this.getZone("pile");
 			const discard = this.getZone("discard");
-			const normalizedCardCount = options.cardCount !== null && options.cardCount !== void 0 ? Math.floor(Number(options.cardCount)) : NaN;
+			const normalizedCardCount = options.cardCount !== null && options.cardCount !== void 0 ? Math.floor(options.cardCount) : NaN;
 			const hasProtocolPileCount = Number.isFinite(normalizedCardCount) && normalizedCardCount >= 0;
+			this.hasProtocolPileCount = hasProtocolPileCount;
 			const remainingPileCards = [...pile.cards];
 			const recycledCards = [...discard.cards];
 			const projectedPileCount = remainingPileCards.length + recycledCards.length;
@@ -8628,6 +8806,10 @@
 			});
 			this.movement.createPublicMoveConstraintGroup(context);
 			this.getZone("exchange").completeExchangeMove();
+			if (this.trackingMode === "degraded" && this.hasProtocolPileCount) {
+				const expectedPileCount = pileSnapshot.pileCountBefore + (getMoveZone(context.to) === "pile" ? context.cardCount : 0) - (getMoveZone(context.from) === "pile" ? context.cardCount : 0);
+				this.hasProtocolPileCount = this.getZone("pile").cards.length === expectedPileCount;
+			}
 			this.identity.commitPileIdentityForMove(context, pileSnapshot);
 			this.resolveConstraints();
 			this.assertPileIdentityLedgerConsistency("moveCards");
@@ -8652,31 +8834,9 @@
 			this.players.clear();
 			this.zones.forEach((zone) => zone.clear());
 			this.trackedCards.forEach((card) => card.reset());
-			this.detachedKnownCards.clear();
-			this.detachedIdentitySeq = 0;
-			this.detachedCardOrder = new WeakMap();
-			this.constraintGroups.clear();
-			this.constraintGroupsDirty = false;
-			this.maxResolveRounds = 0;
-			this.lastResolveRounds = 0;
+			this.resetMutableRoomState();
 			this.moveEvents.clear();
-			this.ambiguousKnownIndex.items.clear();
-			this.ambiguousKnownIndex.containerDependentCards.clear();
-			this.ambiguousKnownIndex.lastConsumedSeq = 0;
-			this.suspendedKnownCards.clear();
-			this.dirtyCards.clear();
-			this.dirtyCardEvents = [];
-			this.dirtyCardSeq = 0;
-			this.dirtyPublicZones.clear();
-			this.playerSnapshot.reset();
-			this.cardChangeEvents = [];
-			this.viewDirty = false;
-			this.cards = [];
-			this.cardIndex.clear();
-			this.unlocatedIdentities.clear();
-			this.deckIdentities.clear();
-			this.anonymousEntitySeq = -1;
-			this.isDeckReady = false;
+			this.reconnection.clear();
 			this.seatIDs = [];
 			this.size = 0;
 			this.firstID = void 0;
@@ -9742,7 +9902,7 @@
 	function getActorHandCards(room, actorSeat) {
 		const playerCards = room.refreshPlayerSnapshot();
 		recordTraversal("tianHou:playerHand", playerCards.length);
-		return playerCards.filter((card) => card.location === "player" && card.subZone === "hand" && card.seats.size === 1 && card.seats.has(actorSeat) && !card.hasLocationCandidates() && !card.hasSubZoneCandidates());
+		return playerCards.filter((card) => card.location === "player" && card.subZone === "hand" && card.seats.size === 1 && card.seats.has(actorSeat) && !card.hasLocationCandidates());
 	}
 	function createKnownOutConstraint(room, batch, cards, knownOut, label) {
 		if (cards.length === 0) return null;
@@ -10697,10 +10857,22 @@
 			return this.trackerRoom;
 		}
 		isTrackerReady() {
-			return Boolean(this.trackerRoom?.isDeckReady && !this.gameState.isDuanXian);
+			return Boolean(this.trackerRoom?.isDeckReady);
 		}
 		getReadyTrackerRoom() {
 			return this.isTrackerReady() ? this.trackerRoom : null;
+		}
+		degradeTrackerRoom(snapshot) {
+			if (!this.trackerRoom) return;
+			this.trackerRoom.degradeTracking(snapshot);
+			this.controllerView.scheduleRender();
+		}
+		restoreTrackerReconnectHand(snapshot) {
+			if (!this.trackerRoom) return;
+			this.setTrackerMySeatID(snapshot.SeatIndex, { overwrite: true });
+			this.trackerRoom.degradeTracking();
+			this.trackerRoom.restoreReconnectHand(snapshot);
+			this.controllerView.scheduleRender();
 		}
 		getTrackedPlayerHandCardIDs(seatID) {
 			return this.getReadyTrackerRoom()?.getPlayerHandCardIDs(seatID) ?? [];
@@ -10724,11 +10896,6 @@
 		}
 		initTrackerDeck(cardIDs) {
 			if (!this.trackerRoom) return;
-			if (this.gameState.isDuanXian) {
-				this.controllerLogger.warn("断线重连状态，跳过 Room 牌堆初始化");
-				this.controllerView.unmount();
-				return;
-			}
 			this.trackerRoom.initDeck(cardIDs);
 			this.controllerView.mount(this.trackerRoom);
 			this.controllerLogger.info("Room 牌堆初始化完成", { cardIDs });
@@ -10739,10 +10906,13 @@
 			this.controllerView.mount(this.trackerRoom);
 			this.controllerView.scheduleRender();
 		}
-		setTrackerMySeatID(seatID) {
-			if (!this.trackerRoom || this.trackerRoom.mySeatID !== void 0) return;
+		setTrackerMySeatID(seatID, options = {}) {
+			if (!this.trackerRoom) return;
+			const mySeatID = this.trackerRoom.mySeatID;
+			if (mySeatID !== void 0 && !options.overwrite) return;
 			const normalizedSeatID = Number(seatID);
 			if (!this.trackerRoom.players.has(normalizedSeatID)) return;
+			if (mySeatID === normalizedSeatID) return;
 			this.trackerRoom.setMySeatID(normalizedSeatID);
 			this.trackerRoom.updateFixedViewIds();
 			this.getSeatUIs();
@@ -11430,12 +11600,13 @@
 	}
 	function renderStatistics(room, doc) {
 		const counter = room.counter;
+		const hasFullHistory = room.trackingMode === "full";
 		const pileSet = counter.statusIndex[CARD_INSTANCE_STATUS.UNKNOWN];
 		for (const name of Object.keys(counter.nameIndex)) {
 			const n = countInSet(counter.nameIndex[name], pileSet);
 			const lb = doc.getElementById(name);
 			if (!lb) continue;
-			lb.textContent = n > 1 ? n + name : name;
+			lb.textContent = hasFullHistory && n > 1 ? n + name : name;
 			lb.className = n > 0 ? "cardType active" : "cardType inactive";
 		}
 		for (let number = 0; number < counter.numberIndex.length; number++) {
@@ -11445,7 +11616,7 @@
 			const lb = doc.getElementById("number" + number);
 			if (!lb) continue;
 			const numText = number === 0 ? "电" : String(n2N(number));
-			lb.textContent = n > 1 ? `${numText}*${n}` : numText;
+			lb.textContent = hasFullHistory && n > 1 ? `${numText}*${n}` : numText;
 			lb.className = n > 0 ? "cardType active" : "cardType inactive";
 		}
 		for (let c = 1; c <= 6; c++) {
@@ -11454,7 +11625,7 @@
 			const n = countInSet(set, pileSet);
 			const lb = doc.getElementById(COLOR_MAP[c]);
 			if (!lb) continue;
-			lb.innerHTML = lb.innerHTML.replace(/-?\d+/, String(n));
+			lb.innerHTML = lb.innerHTML.replace(/-?\d+|\?/, hasFullHistory ? String(n) : "?");
 		}
 	}
 	function countInSet(set, target) {
@@ -11494,8 +11665,8 @@
 		const button = doc.createElement("button");
 		button.classList.add(CARD_BUTTON_CLASS, UNKNOWN_CARD_CLASS);
 		button.disabled = true;
-		button.innerHTML = count > 1 ? `${count}` : "暗";
-		button.title = `${count} 张暗牌`;
+		button.innerHTML = count === null ? "?" : count > 1 ? `${count}` : "暗";
+		button.title = count === null ? "暗牌数量未知" : `${count} 张暗牌`;
 		return button;
 	}
 	function createQueryButton(doc, inst, key, room) {
@@ -11599,16 +11770,21 @@
 		return cards;
 	}
 	function consumeDirtyCardsSinceLastRender(room) {
-		const lastSeq = dirtyCardCursors$1.get(room) ?? 0;
+		const cursor = dirtyCardCursors$1.get(room);
+		const lastSeq = cursor?.seq ?? 0;
+		const bufferChanged = cursor !== void 0 && cursor.events !== room.dirtyCardEvents;
 		const latestSeq = room.dirtyCardSeq;
-		if (latestSeq <= lastSeq) return {
+		if (!bufferChanged && latestSeq <= lastSeq) return {
 			cards: [],
 			overflowed: false
 		};
-		dirtyCardCursors$1.set(room, latestSeq);
+		dirtyCardCursors$1.set(room, {
+			events: room.dirtyCardEvents,
+			seq: latestSeq
+		});
 		const events = room.dirtyCardEvents;
 		const firstEventSeq = events[0]?.seq;
-		if (events.length === 0 || firstEventSeq > lastSeq + 1) return {
+		if (bufferChanged || events.length === 0 || firstEventSeq > lastSeq + 1) return {
 			cards: Array.from(room.dirtyCards),
 			overflowed: true
 		};
@@ -11623,6 +11799,15 @@
 	function isPublicFieldCandidateCard(card) {
 		return card.location === "player" && card.subZone === "hand" && card.isKnown && card.seats.size > 1;
 	}
+	var MARK_SPELL_IDS = new Set([
+		700,
+		821,
+		3040,
+		3657,
+		3685,
+		259,
+		3818
+	]);
 	var renderedMainHandCardIDs = null;
 	var renderedMainHandListeners = new Set();
 	function getRenderedMainHandCardIDs() {
@@ -11701,6 +11886,7 @@
 		for (const card of player.candidateHandCards) renderedNodes.push(createHandCardNode(doc, card, "candidate", true));
 		const markSpell = SkillsConfig.GetInstance().markSpell;
 		player.markCards.forEach((cards, spellID) => {
+			if (!MARK_SPELL_IDS.has(spellID)) return;
 			if (!cards || !cards.length) return;
 			renderedNodes.push(createMarkedCardNode(doc, spellID, cards, markSpell[spellID]));
 		});
@@ -11720,7 +11906,7 @@
 		mark.textContent = label;
 		markedCard.appendChild(mark);
 		cards.forEach((card) => {
-			const button = createCardButton(doc, card, { ambiguous: card.hasSubZoneCandidates() });
+			const button = createCardButton(doc, card, { ambiguous: card.locationCandidates.some((candidate) => candidate.type === "player") });
 			markedCard.appendChild(button);
 		});
 		return setRenderedNodeKey(markedCard, `mark:${spellID}`);
@@ -11787,7 +11973,7 @@
 	}
 	function renderPublicZones(room, doc) {
 		const publicByZone = room.locationIndex.publicByZone;
-		renderCardList(doc, "paiduiCards", getPileDisplayCards(publicByZone.get("pile") ?? room.getZone("pile").cards));
+		renderCardList(doc, "paiduiCards", getPileDisplayCards(publicByZone.get("pile") ?? room.getZone("pile").cards), { unknownCountKnown: room.isPileCountKnown });
 		renderCardList(doc, "qipaiCards", (publicByZone.get("discard") ?? room.getZone("discard").cards).filter((card) => card.turn === Game.turn && card.round === Game.round));
 		renderCardList(doc, "knownCards", getPublicFieldCandidateCards(room), { ambiguous: true });
 	}
@@ -11804,10 +11990,11 @@
 			} else {
 				let run = 1;
 				while (i + run < cards.length && !cards[i + run].isKnown) run++;
-				container.appendChild(createUnknownButton(doc, run));
+				container.appendChild(createUnknownButton(doc, options.unknownCountKnown === false ? null : run));
 				i += run;
 			}
 		}
+		if (options.unknownCountKnown === false && cards.every((card) => card.isKnown)) container.appendChild(createUnknownButton(doc, null));
 	}
 	function syncSeatOverlayHand(doc, displayID, body) {
 		const target = doc.querySelector("#seatUI #s" + displayID);
@@ -11834,12 +12021,14 @@
 		forceFullPlayerRenderRooms.add(room);
 	}
 	function collectDirtyRenderState(room) {
-		const lastSeq = dirtyCardCursors.get(room) ?? 0;
+		const cursor = dirtyCardCursors.get(room);
+		const lastSeq = cursor?.seq ?? 0;
+		const bufferChanged = cursor !== void 0 && cursor.events !== room.dirtyCardEvents;
 		const latestSeq = room.dirtyCardSeq;
 		const forcedFullRender = forceFullPlayerRenderRooms.has(room);
 		let events = [];
-		let overflowed = false;
-		if (latestSeq > lastSeq) {
+		let overflowed = bufferChanged;
+		if (!bufferChanged && latestSeq > lastSeq) {
 			const firstEventSeq = room.dirtyCardEvents[0]?.seq;
 			if (room.dirtyCardEvents.length === 0 || firstEventSeq > lastSeq + 1) overflowed = true;
 			else events = room.dirtyCardEvents.filter((event) => event.seq > lastSeq);
@@ -11849,7 +12038,7 @@
 			collectAffectedSeatsFromDetail(event.detail, affectedSeatIDs);
 			collectAffectedSeatsFromCard(event.card, affectedSeatIDs);
 		});
-		const hasCardChanges = latestSeq > lastSeq;
+		const hasCardChanges = bufferChanged || latestSeq > lastSeq;
 		return {
 			shouldRenderPanels: room.viewDirty || hasCardChanges,
 			shouldRenderAllPlayers: forcedFullRender || overflowed,
@@ -11860,7 +12049,10 @@
 		};
 	}
 	function finishDirtyRender(room, renderState) {
-		dirtyCardCursors.set(room, renderState?.latestSeq ?? room.dirtyCardSeq);
+		dirtyCardCursors.set(room, {
+			events: room.dirtyCardEvents,
+			seq: renderState?.latestSeq ?? room.dirtyCardSeq
+		});
 		forceFullPlayerRenderRooms.delete(room);
 		room.viewDirty = false;
 	}
@@ -14287,7 +14479,8 @@
 		"夺炁",
 		"恩怨",
 		"鸡肋",
-		"反击"
+		"反击",
+		"动荡"
 	];
 	function highlightedSkill(generalInfo, difficulty) {
 		const difficultySpells = [
@@ -14300,7 +14493,7 @@
 		const difficultyInfo = RoguelikeConfig.GetInstance().difficultDict.get(String(difficulty));
 		const difficultyLevel = Number(difficultyInfo?.bdif) || 1;
 		const currentLevelIndex = Math.min(Math.max(difficultyLevel - 1, 0), difficultySpells.length - 1);
-		const skills = difficultySpells.slice(0, currentLevelIndex + 1).flatMap((spell) => String(spell || "").split(";")).filter(Boolean).map((spell) => SkillsConfig.GetInstance().getSpellName(spell)).filter((spell) => spellList.includes(spell));
+		const skills = difficultySpells.slice(0, currentLevelIndex + 1).flatMap((spell) => String(spell || "").split(";")).filter(Boolean).map((spell) => SkillsConfig.GetInstance().getSpellName(spell)).filter((name) => spellList.includes(name));
 		return [skills, skills.length > 0];
 	}
 	function drawStore(filteredPairs) {
@@ -14438,6 +14631,7 @@
 	};
 	var ALWAYS_RECORDED_CLASSES = new Set([
 		"MsgReconnectGame",
+		"MsgReconnectGameHand",
 		"decodeGameRecordInitInfo",
 		"decodeGsClientUserSeatFlagNtf",
 		"GsCFirstPhaseRole",
@@ -14450,11 +14644,7 @@
 		"MsgGameOver",
 		"ClientLeavetableRep"
 	]);
-	var EMPTY_PAYLOAD_CLASSES = new Set([
-		"ClientLeavetableRep",
-		"MsgGameOver",
-		"MsgReconnectGame"
-	]);
+	var EMPTY_PAYLOAD_CLASSES = new Set(["ClientLeavetableRep", "MsgGameOver"]);
 	var ROLE_OPT_TARGET_SPELL_IDS = new Set([
 		4,
 		5,
@@ -14542,6 +14732,12 @@
 		["PubGsCMoveCard", new Set(["isSend"])]
 	]);
 	var ROOT_FIELD_ALLOWLISTS = {
+		MsgReconnectGame: new Set(["CardPileCount", "SeatInfos"]),
+		MsgReconnectGameHand: new Set([
+			"CardIDs",
+			"Count",
+			"SeatIndex"
+		]),
 		decodeGameRecordInitInfo: new Set(),
 		decodeGsClientUserSeatFlagNtf: new Set(),
 		GsCFirstPhaseRole: new Set(["SeatID"]),
@@ -14613,6 +14809,18 @@
 		])
 	};
 	var NESTED_FIELD_ALLOWLISTS = {
+		"MsgReconnectGame.SeatInfos": new Set([
+			"SeatID",
+			"HandCardCount",
+			"EquipCardCount",
+			"EquipCards",
+			"JudgeCardCount",
+			"JudgeCards",
+			"CharacterID",
+			"Figure"
+		]),
+		"MsgReconnectGame.SeatInfos.EquipCards": new Set(["CardId"]),
+		"MsgReconnectGame.SeatInfos.JudgeCards": new Set(["CardId", "SpellId"]),
 		"GsCGuoZhanSetCharacter.GeneralData": new Set(["cardID", "index"]),
 		"SmsgGameSetCharacter.Infos": new Set(["CharacterID", "SeatID"])
 	};
@@ -14748,12 +14956,24 @@
 	}
 	function applyNestedFieldProjections(className, payload) {
 		for (const [fieldPath, allowedFields] of Object.entries(NESTED_FIELD_ALLOWLISTS)) {
-			const [targetClassName, fieldName] = fieldPath.split(".");
+			const [targetClassName, ...fieldNames] = fieldPath.split(".");
 			if (targetClassName !== className) continue;
-			const values = payload[fieldName];
-			if (!Array.isArray(values)) continue;
-			payload[fieldName] = values.map((value) => projectNestedRecord(value, allowedFields));
+			projectNestedField(payload, fieldNames, allowedFields);
 		}
+	}
+	function projectNestedField(value, fieldNames, allowedFields) {
+		if (Array.isArray(value)) {
+			value.forEach((item) => projectNestedField(item, fieldNames, allowedFields));
+			return;
+		}
+		if (!isProtocolObject(value)) return;
+		const [fieldName, ...remainingFields] = fieldNames;
+		const values = value[fieldName];
+		if (remainingFields.length > 0) {
+			projectNestedField(values, remainingFields, allowedFields);
+			return;
+		}
+		if (Array.isArray(values)) value[fieldName] = values.map((item) => projectNestedRecord(item, allowedFields));
 	}
 	function projectNestedRecord(value, allowedFields) {
 		if (!isProtocolObject(value)) return value;
@@ -15255,6 +15475,14 @@
 	function bindInitialResize(globalConfig, resize) {
 		window.WDVerSion = "1.0.0";
 		window.padding = globalConfig.padding || 0;
+		Object.defineProperty(window, "innerWidth", {
+			configurable: true,
+			enumerable: true,
+			get() {
+				const padding = Math.max(0, Number(window.padding) || 0);
+				return document.documentElement.clientWidth - padding;
+			}
+		});
 		window.addEventListener("resize", resize, true);
 	}
 	function removeInjectedDom(globalState) {
@@ -15569,7 +15797,7 @@
 		return response.text();
 	}
 	var iframe = null;
-	var version = "0.20.0";
+	var version = "0.20.1";
 	function getTrackedHandNumbers(seatID) {
 		const config = CardConfig.GetInstance();
 		return tracker.getTrackedPlayerHandCardIDs(seatID).map((id) => config.getCardNumber(id)).filter((number) => number > 0);
@@ -15582,7 +15810,6 @@
 	function Exit() {
 		unbindProtocolRecorderControls();
 		stopProtocolRecording();
-		Reflect.deleteProperty(window, "innerWidth");
 		return cleanupLifecycle({
 			resize,
 			scheduleSetGameSize,
@@ -15591,9 +15818,6 @@
 		});
 	}
 	function resize() {
-		const padding = Number(window.padding) || 0;
-		if (padding > 0) window.innerWidth = document.documentElement.clientWidth - padding;
-		else Reflect.deleteProperty(window, "innerWidth");
 		document.documentElement.style.setProperty("--sgs-center-x", `${window.innerWidth / 2}px`);
 	}
 	function refreshSidebarViewport() {
@@ -15900,7 +16124,7 @@
 			} else {
 				container.classList.remove("collapsed");
 				toggle.innerText = "-";
-				document.getElementById("title").innerText = "三国杀小抄0.20.0";
+				document.getElementById("title").innerText = "三国杀小抄0.20.1";
 				expandJiePanel({ defer: true });
 			}
 		};
@@ -16507,8 +16731,10 @@
 					handleAdWindow();
 					break;
 				case "MsgReconnectGame":
-					Game.isDuanXian = true;
-					addTooltip("断线重连，本局游戏中小抄记录可能不准");
+					tracker.degradeTrackerRoom(msg);
+					break;
+				case "MsgReconnectGameHand":
+					tracker.restoreTrackerReconnectHand(msg);
 					break;
 				case "decodeSSCChatmsgNtf":
 					handleChatMessage(msg, ProtoObj);
@@ -16597,6 +16823,7 @@
 				case "GsCTriggerSpellNew":
 					handleTriggerSpellNew(msg);
 					break;
+				case "decodeClientGetCardInfoResp": break;
 				case "ClientHappyGetFriendHandcardRep": break;
 				case "MsgNtfUseCardType":
 					handleUseCard(msg);
