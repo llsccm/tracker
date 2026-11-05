@@ -5,7 +5,16 @@ import { unbindPeiXiuHandSuitColorRefresh } from './PeiXiuHandMirror'
 export function bindInitialResize(globalConfig, resize) {
   window.WDVerSion = '1.0.0'
   window.padding = globalConfig.padding || 0
-  // Electron 中脚本晚于 Laya 注入，捕获阶段可确保先更新可用宽度。
+  // 每次读取都按当前视口扣除侧栏，避免 Electron 最大化/还原时读到旧宽度。
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    enumerable: true,
+    get() {
+      const padding = Math.max(0, Number(window.padding) || 0)
+      return document.documentElement.clientWidth - padding
+    }
+  })
+  // 捕获阶段先同步覆盖层中心位置。
   window.addEventListener('resize', resize, true)
 }
 

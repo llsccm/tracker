@@ -33,6 +33,11 @@ describe('弃牌堆未知获得', () => {
   it.each([
     { scenario: '4023 空 CardIDs', overrides: {} },
     { scenario: '零 ID 占位', overrides: { CardIDs: [0, 0, 0, 0] } },
+    { scenario: '3653 MoveType=8 空 CardIDs', overrides: { SpellID: 3653, MoveType: 8 } },
+    {
+      scenario: 'MoveType=8 零 ID 占位',
+      overrides: { MoveType: 8, CardIDs: [0, 0, 0, 0] }
+    },
     { scenario: '3434 MoveType=15 空 CardIDs', overrides: { SpellID: 3434, MoveType: 15 } },
     {
       scenario: '3434 MoveType=15 零 ID 占位',
@@ -92,10 +97,63 @@ describe('弃牌堆未知获得', () => {
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
+  it('3653 连续以 MoveType=15/8 暗取弃牌时保持匿名，不把弃牌顶 129 交给 0 号', () => {
+    const errorSpy = createErrorSpy()
+    const { controller, room } = createReadyControllerHarness({
+      cardIDs: [127, 128, 129, 130],
+      seatIDs: [0, 7],
+      currentUserID: 0,
+      discardIDs: [127, 128, 129]
+    })
+    const discardBefore = [...room.zones.get('discard')!.cards]
+    expect(discardBefore.at(-1)?.id).toBe(129)
+
+    controller.syncTrackerMove(
+      discardGainMove({ SpellID: 3653, MoveType: 15, CardCount: 1, ToID: 7 })
+    )
+    controller.syncTrackerMove(
+      discardGainMove({ SpellID: 3653, MoveType: 8, CardCount: 1, ToID: 0 })
+    )
+
+    for (const seatID of [7, 0]) {
+      const player = room.players.get(seatID)!
+      const handCards = player.cards.filter((card) => card.subZone === 'hand')
+      expect(handCards).toHaveLength(1)
+      expect(handCards[0].id).toBeLessThan(0)
+      expect(handCards[0].isKnown).toBe(false)
+      expect(player.knownHandCards).toEqual([])
+      expect(player.observedHandCount).toBe(1)
+      expect(player.unknownCardCount).toBe(1)
+    }
+    expect(room.zones.get('discard')!.cards).toEqual(discardBefore)
+    expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([127, 128, 129])
+    expect(room.assertPileIdentityLedgerConsistency('test:3653-discard-gain')).toEqual([])
+    expect(errorSpy).not.toHaveBeenCalled()
+  })
+
   it.each([
-    { cardIDs: [2, 5, 1, 4], knownIDs: [1, 2, 4, 5], discardIDs: [3, 6], unknownCount: 0 },
-    { cardIDs: [2, 0, 5, 0], knownIDs: [2, 5], discardIDs: [1, 3, 4, 6], unknownCount: 2 }
-  ])('领域移动给出 $cardIDs 时精确移动已知牌，仅为未知部分补位', (testCase) => {
+    {
+      cardIDs: [2, 5, 1, 4],
+      knownIDs: [1, 2, 4, 5],
+      discardIDs: [3, 6],
+      unknownCount: 0,
+      moveType: 18
+    },
+    {
+      cardIDs: [2, 0, 5, 0],
+      knownIDs: [2, 5],
+      discardIDs: [1, 3, 4, 6],
+      unknownCount: 2,
+      moveType: 18
+    },
+    {
+      cardIDs: [2, 0, 5, 0],
+      knownIDs: [2, 5],
+      discardIDs: [1, 3, 4, 6],
+      unknownCount: 2,
+      moveType: 8
+    }
+  ])('领域 MoveType=$moveType 给出 $cardIDs 时精确移动已知牌，仅为未知部分补位', (testCase) => {
     const errorSpy = createErrorSpy()
     const { room } = createReadyControllerHarness(DISCARD_SETUP)
 
@@ -103,7 +161,7 @@ describe('弃牌堆未知获得', () => {
       from: { type: 'public', zone: 'discard', position: POSITION_TOP },
       to: { type: 'player', seatID: 3, subZone: 'hand' },
       cardCount: 4,
-      moveType: 18
+      moveType: testCase.moveType
     })
 
     const player = room.players.get(3)!
@@ -124,9 +182,10 @@ describe('弃牌堆未知获得', () => {
   })
 
   it.each([
-    { scenario: '部分来源', sourceIDs: [2], cardCount: 3, unknownCount: 2 },
-    { scenario: '重复来源', sourceIDs: [2, 2], cardCount: 3, unknownCount: 2 },
-    { scenario: '完整来源', sourceIDs: [2, 5], cardCount: 2, unknownCount: 0 }
+    { scenario: '部分来源', sourceIDs: [2], cardCount: 3, unknownCount: 2, moveType: 18 },
+    { scenario: '重复来源', sourceIDs: [2, 2], cardCount: 3, unknownCount: 2, moveType: 18 },
+    { scenario: '完整来源', sourceIDs: [2, 5], cardCount: 2, unknownCount: 0, moveType: 18 },
+    { scenario: 'MoveType=8 部分来源', sourceIDs: [2], cardCount: 3, unknownCount: 2, moveType: 8 }
   ])('有效 fromSeat 的$scenario 获得保留真实牌并补齐标记区数量', (testCase) => {
     const { room } = createReadyControllerHarness(DISCARD_SETUP)
     const sourceCards = testCase.sourceIDs.map((id) => room.cardIndex.get(id)!)
@@ -136,7 +195,7 @@ describe('弃牌堆未知获得', () => {
       from: { type: 'public', zone: 'discard', position: POSITION_TOP },
       to: { type: 'player', seatID: 3, subZone: 'mark', markSpellID: 4023 },
       triggerSpellID: 4023,
-      moveType: 18,
+      moveType: testCase.moveType,
       cardCount: testCase.cardCount,
       sourceCards
     })
@@ -233,7 +292,7 @@ describe('弃牌堆未知获得', () => {
     expect(room.cards).toHaveLength(entityCountBefore + 2)
   })
 
-  it.each([15, 18])('MoveType=%i 缺少弃牌历史时仍按协议张数创建暗牌', (moveType) => {
+  it.each([8, 15, 18])('MoveType=%i 缺少弃牌历史时仍按协议张数创建暗牌', (moveType) => {
     const errorSpy = createErrorSpy()
     const { controller, room } = createReadyControllerHarness({ ...DISCARD_SETUP, discardIDs: [] })
 
@@ -282,14 +341,14 @@ describe('弃牌堆未知获得', () => {
   })
 })
 
-describe('MoveType=15 弃牌堆明确来源兼容', () => {
-  it('剩墨已回填正 ID 时仍精确移动对应实体', () => {
+describe.each([8, 15])('MoveType=%i 弃牌堆明确来源兼容', (moveType) => {
+  it('已回填正 ID 时仍精确移动对应实体', () => {
     const errorSpy = createErrorSpy()
     const { controller, room } = createReadyControllerHarness(DISCARD_SETUP)
     const sourceCards = [2, 5].map((id) => room.cardIndex.get(id)!)
 
     controller.syncTrackerMove(
-      discardGainMove({ SpellID: 3434, MoveType: 15, CardIDs: [2, 5], CardCount: 2 })
+      discardGainMove({ SpellID: 3434, MoveType: moveType, CardIDs: [2, 5], CardCount: 2 })
     )
 
     const player = room.players.get(3)!
@@ -298,7 +357,7 @@ describe('MoveType=15 弃牌堆明确来源兼容', () => {
     expect(player.observedHandCount).toBe(2)
     expect(player.unknownCardCount).toBe(0)
     expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual([1, 3, 4, 6])
-    expect(room.assertPileIdentityLedgerConsistency('test:move15-known-discard')).toEqual([])
+    expect(room.assertPileIdentityLedgerConsistency('test:known-discard-gain')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -310,7 +369,7 @@ describe('MoveType=15 弃牌堆明确来源兼容', () => {
     room.moveCards([], {
       from: { type: 'public', zone: 'discard', position: POSITION_TOP },
       to: { type: 'player', seatID: 3, subZone: 'hand' },
-      moveType: 15,
+      moveType,
       cardCount: 2,
       sourceCards
     })

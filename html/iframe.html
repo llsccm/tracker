@@ -7,7 +7,6 @@
     .tooltip,
     #sidebarHint,
     .particle {
-      --my-background-image: url('https://web.sanguosha.com/220/h5_2/res/assets/bigPng/propGet.png');
       --bg-primary: rgb(35, 32, 29);
       --bg-secondary: rgb(30, 26, 23);
       --bg-hover: rgb(55, 40, 32);
@@ -113,16 +112,7 @@
       color: var(--text-red);
     }
 
-    .nav1 {
-      font-weight: normal;
-      color: var(--text-gold-light);
-      background: transparent;
-      margin: 0;
-      display: block;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
+    .nav1,
     .sha {
       font-weight: normal;
       color: var(--text-gold-light);
@@ -131,32 +121,9 @@
       display: block;
     }
 
-    #nav1:empty {
-      display: none;
-    }
-
-    .nav2 {
-      height: 20px;
-      width: 49%;
-      float: right;
-      text-align: center;
-      color: var(--text-gold);
-      background: var(--bg-primary);
-      margin-left: 3px;
-      border: 1px solid var(--text-gold);
-      display: block;
-      border-radius: 5px;
-    }
-
-    .nav2:hover {
-      color: var(--text-gold);
-      background: var(--bg-hover);
-      border: 1px solid var(--text-gold);
-    }
-
-    .nav2:focus {
-      background: var(--bg-hover);
-      box-shadow: 1px 1px 3px var(--text-gold);
+    .nav1 {
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .content {
@@ -168,74 +135,10 @@
       margin: 1px;
     }
 
-    .AC-head {
-      font-weight: bolder;
-      height: 66px;
-      width: 13%;
-      float: right;
-      text-align: center;
-      color: var(--text-gold);
-      background: var(--bg-primary);
-      margin: 1px;
-      border-radius: 5px;
-      border: 1px var(--bg-primary) solid;
-      box-shadow: 1px 0px 3px;
-      overflow: hidden;
-      font-size: 15px;
-    }
-
-    .AC-head:hover {
-      background: var(--bg-hover);
-      border: 1px var(--bg-primary) solid;
-      animation: blink 2s;
-      animation-iteration-count: infinite;
-    }
-
-    .AC-body {
-      height: 60px;
-      width: 79%;
-      float: left;
-      box-shadow: 1px 0px 3px;
-      border: 1px var(--bg-primary) solid;
-      color: var(--text-gold);
-      margin: 1px;
-      overflow: hidden;
-      border-radius: 5px;
-      background: var(--bg-primary);
-      resize: none;
-      font-size: 13px;
-    }
-
-    .invite-body {
-      height: 40px;
-      width: 92%;
-      float: left;
-      display: flex;
-      box-shadow: 1px 0px 3px;
-      border: 1px var(--bg-primary) solid;
-      color: var(--text-gold);
-      margin: 5px;
-      overflow: hidden;
-      border-radius: 5px;
-      background: var(--bg-primary);
-      resize: none;
-      font-size: 13px;
-    }
-
     .orderContainer,
     #orderAndShouPai {
       text-align: right;
       vertical-align: bottom;
-    }
-
-    .order-head {
-      font-weight: bolder;
-      width: 10%;
-      height: 25px;
-      float: left;
-      text-align: center;
-      color: var(--text-gold);
-      margin-left: 3px;
     }
 
     .order-body:empty {
@@ -257,9 +160,9 @@
       border-radius: 5px;
     }
 
-    .order-body:after {
+    .order-body:after,
+    .cardTypeDetail:after {
       text-align: center;
-      content: var(--No-content, '座位号丨武将');
       position: absolute;
       bottom: 0;
       right: 5px;
@@ -267,18 +170,8 @@
       font: 800 20px 'Arial Black';
     }
 
-    .knownShouPai {
-      border: 1px var(--bg-primary) solid;
-      animation: blink 2s;
-      animation-iteration-count: infinite;
-    }
-
-    .knownCardsInHand {
-      text-align: center;
-      position: relative;
-      overflow: hidden;
-      display: none;
-      height: auto;
+    .order-body:after {
+      content: var(--No-content, '座位号丨武将');
     }
 
     .knownCards:empty {
@@ -289,7 +182,6 @@
     }
 
     .knownCards {
-      width: 94%;
       text-align: center;
       position: relative;
       overflow: hidden;
@@ -303,13 +195,7 @@
     }
 
     .paiduiCards:after {
-      text-align: center;
       content: '牌堆';
-      position: absolute;
-      bottom: 0;
-      right: 5px;
-      z-index: -1;
-      font: 800 20px 'Arial Black';
     }
 
     #deckEdgeUI .paiduiCards:after {
@@ -317,103 +203,15 @@
     }
 
     .qipaiCards:after {
-      text-align: center;
       content: '本回合弃牌堆';
-      position: absolute;
-      bottom: 0;
-      right: 5px;
-      z-index: -1;
-      font: 800 20px 'Arial Black';
     }
 
     .knownCards:after {
-      text-align: center;
       content: '场上手牌';
-      position: absolute;
-      bottom: 0;
-      right: 5px;
-      z-index: -1;
-      font: 800 20px 'Arial Black';
-    }
-
-    #quanBian:after {
-      text-align: center;
-      content: '权变牌';
-      position: absolute;
-      bottom: 0;
-      right: 5px;
-      z-index: -1;
-      font: 800 20px 'Arial Black';
-    }
-
-    #yanXi:after {
-      text-align: center;
-      content: '宴戏牌';
-      position: absolute;
-      bottom: 0;
-      right: 5px;
-      z-index: -1;
-      font: 800 20px 'Arial Black';
     }
 
     .cardTypeDetail:after {
-      text-align: center;
       content: '牌堆类型详情';
-      position: absolute;
-      bottom: 0;
-      right: 5px;
-      z-index: -1;
-      font: 800 20px 'Arial Black';
-    }
-
-    .ding {
-      text-align: center;
-      width: 100%;
-      position: relative;
-      height: auto;
-      display: none;
-    }
-
-    .dingCards {
-      text-align: center;
-      position: relative;
-      height: auto;
-      min-height: 60px;
-      display: none;
-    }
-
-    .dingCards:after {
-      content: '第一张为牌堆顶';
-      position: absolute;
-      bottom: 0;
-      right: 5px;
-      z-index: -1;
-      font: 800 20px 'Arial Black';
-    }
-
-    .di {
-      text-align: center;
-      width: 100%;
-      position: relative;
-      height: auto;
-      display: none;
-    }
-
-    .diCards {
-      text-align: center;
-      position: relative;
-      height: auto;
-      min-height: 60px;
-      display: none;
-    }
-
-    .diCards:after {
-      content: '第一张为牌堆底';
-      position: absolute;
-      bottom: 0;
-      right: 5px;
-      z-index: -1;
-      font: 800 20px 'Arial Black';
     }
 
     .cardDetail {
@@ -425,42 +223,25 @@
       overflow: hidden;
     }
 
-    .type {
-      width: 100%;
-    }
-
-    .cardTypeContainer {
-      width: 100%;
-      overflow: hidden;
-      display: block;
-    }
-
-    .type-head {
-      width: 10%;
-      float: left;
-      text-align: center;
-      color: var(--text-gold);
-      margin-left: 3px;
-      display: block;
-      overflow: hidden;
-      cursor: pointer;
-    }
-
     .type-body {
-      padding: 5px;
-      width: 94%;
-      display: block;
-      box-shadow: 1px 1px 3px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      padding: 2px;
+      box-shadow: inset 0px 0px 2px 0px;
       margin: 1px;
       overflow: hidden;
       border-radius: 5px;
     }
 
-    .cardType {
+    #storeDetail {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .cardType,
+    .storeDetail {
       font-size: 12px;
-      width: 25%;
       height: 22px;
-      float: left;
       text-align: center;
       border: 1px;
       margin: 0;
@@ -474,29 +255,6 @@
 
     .cardType.inactive {
       color: gray;
-    }
-
-    .cardType:hover {
-      color: var(--text-gold);
-      background: var(--bg-hover);
-      border: 1px var(--bg-primary) solid;
-      animation: blink 2s;
-      animation-iteration-count: infinite;
-    }
-
-    #storeDetail {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-    }
-
-    .storeDetail {
-      font-size: 12px;
-      height: 22px;
-      text-align: center;
-      border: 1px;
-      margin: 0;
-      background: rgb(210, 200, 160);
-      box-shadow: inset 1px 1px 1px #000;
     }
 
     fieldset {
@@ -543,7 +301,6 @@
       color: var(--text-gold);
       padding: 3px;
       text-align: left;
-      border: none;
       width: 100%;
       cursor: pointer;
       display: flex;
@@ -599,18 +356,6 @@
       background: var(--bg-hover);
     }
 
-    .panel-header:hover {
-      color: var(--text-gold);
-      background: var(--bg-hover);
-      border: 1px var(--bg-primary) solid;
-      animation: blink 2s;
-      animation-iteration-count: infinite;
-    }
-
-    .r {
-      color: rgb(240, 65, 85);
-    }
-
     .suits-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -648,73 +393,33 @@
       margin-right: 1px;
     }
 
-    .phrase {
-      float: left;
-    }
-
-    .face {
-      width: 12.5%;
-      display: block;
-      float: left;
-    }
-
-    .face:hover {
-      width: 12.5%;
-      display: block;
-      float: left;
-      background: var(--text-gold);
-    }
-
-    .yanjiaospan {
-      border: 1px solid #0000;
-      box-sizing: border-box;
-    }
-
-    .yanjiaospan:hover {
+    .calRes,
+    .mizhuBTN,
+    .protocol-recorder-button {
+      text-align: center;
+      color: var(--text-gold);
+      background: var(--bg-primary);
       border: 1px solid var(--text-gold);
+      border-radius: 5px;
       cursor: pointer;
     }
 
     .calRes {
       width: 98%;
       height: 20px;
-      text-align: center;
-      color: var(--text-gold);
-      background: var(--bg-primary);
-      border: 1px solid var(--text-gold);
       display: block;
-      border-radius: 5px;
       font-size: 13px;
       margin: 1px;
-      cursor: pointer;
     }
 
     /* 仅在按钮未被禁用时应用的 hover 效果 */
     .calRes:not(:disabled):hover {
       font-size: 12px;
-      color: var(--text-gold);
-      background: var(--bg-hover);
-      border: 1px var(--bg-primary) solid;
-      animation: blink 2s;
-      animation-iteration-count: infinite;
     }
 
     .mizhuBTN {
       margin-top: 2px;
       width: 50%;
-      text-align: center;
-      color: var(--text-gold);
-      background: var(--bg-primary);
-      border: 1px solid var(--text-gold);
-      border-radius: 5px;
-    }
-
-    .mizhuBTN:hover {
-      color: var(--text-gold);
-      background: var(--bg-hover);
-      border: 1px var(--bg-primary) solid;
-      animation: blink 2s;
-      animation-iteration-count: infinite;
     }
 
     #quanDao {
@@ -731,42 +436,6 @@
       gap: 2px;
     }
 
-    /* 超链接*/
-    a:link,
-    a:visited {
-      color: inherit;
-      /* or the specific color you want */
-      text-decoration: none;
-      /* Remove underline if desired */
-      display: inline-flex;
-      /* Use flexbox for centering */
-      text-decoration: underline;
-      /* 添加下划线 */
-      border-radius: 5px;
-      /* Rounded corners */
-      cursor: pointer;
-      /* Pointer cursor on hover */
-      align-items: center;
-      /* Vertically center */
-      justify-content: center;
-      /* Horizontally center */
-    }
-
-    a:hover {
-      color: var(--text-gold);
-      background: var(--bg-hover);
-      border: 1px var(--bg-primary) solid;
-      animation: blink 2s;
-      animation-iteration-count: infinite;
-    }
-
-    #donate {
-      position: relative;
-      color: var(--text-gold);
-      display: block;
-      text-align: center;
-    }
-
     .uuid {
       position: relative;
       color: var(--text-gold);
@@ -776,21 +445,19 @@
       cursor: pointer;
     }
 
+    .cardType:hover,
+    .panel-header:hover,
+    .calRes:not(:disabled):hover,
+    .mizhuBTN:hover,
     .uuid:hover {
       color: var(--text-gold);
       background: var(--bg-hover);
       border: 1px var(--bg-primary) solid;
-      animation: blink 2s;
-      animation-iteration-count: infinite;
+      animation: blink 2s infinite;
     }
 
     .uuid:active {
       background: var(--bg-hover);
-    }
-
-    .width {
-      width: 100%;
-      height: 5px;
     }
 
     .switch-container-row {
@@ -799,7 +466,7 @@
 
     .protocol-recorder-controls {
       width: 100%;
-      margin-top: 14px;
+      margin-top: 4px;
     }
 
     .protocol-recorder-actions {
@@ -811,11 +478,6 @@
     .protocol-recorder-button {
       flex: 1;
       height: 24px;
-      color: var(--text-gold);
-      background: var(--bg-primary);
-      border: 1px solid var(--text-gold);
-      border-radius: 5px;
-      cursor: pointer;
     }
 
     .protocol-recorder-button:disabled {
@@ -932,8 +594,6 @@
 
     .mark {
       writing-mode: vertical-rl;
-      margin-right: 0px;
-      /* 按需调整间距 */
       color: var(--text-gold);
     }
 
@@ -943,7 +603,6 @@
 
     .shoupai {
       color: black;
-      --shoupai-width: 33px;
       padding: 0;
       position: relative;
       font-weight: bolder;
@@ -970,9 +629,9 @@
       background: 0;
     }
 
-    .shoupai .card-cn {
+    .shoupai .card-cn,
+    .shoupai .card-cn .rank-glyph {
       display: inline-block;
-      /* line-height: 1; */
     }
 
     .shoupai .card-name {
@@ -983,25 +642,15 @@
       overflow: hidden;
       text-overflow: ellipsis;
       font-size: 14px;
-      text-shadow:
-        1px 1px 1px #F6F1E6,
-        -1px -1px 1px #F6F1E6,
-        1px -1px 1px #F6F1E6,
-        -1px 1px 1px #F6F1E6;
     }
 
     .shoupai .card-cn .suit-glyph {
       min-width: 0.56em;
-      /* font-size: 1.45em; */
       margin-right: 0;
       transform: none;
     }
 
-    .shoupai .card-cn .rank-glyph {
-      display: inline-block;
-      /* margin-left: 1px; */
-    }
-
+    .shoupai .card-name,
     .shoupai .suit-heart,
     .shoupai .suit-diamond {
       text-shadow:
@@ -1011,13 +660,13 @@
         -1px 1px 1px #F6F1E6;
     }
 
-    .suit-heart {
+    .r,
+    .suit-heart,
+    .suit-diamond {
       color: rgb(240, 65, 85);
-      filter: none;
     }
 
     .suit-diamond {
-      color: rgb(240, 65, 85);
       filter: hue-rotate(110deg) brightness(1.1);
     }
 
@@ -1054,22 +703,12 @@
       pointer-events: none;
     }
 
-    .order-body:not(.paiduiCards) .shoupai:disabled {
+    :is(.order-body, .sorder-body):not(.paiduiCards) .shoupai:disabled {
       display: none;
     }
 
-    .order-body:not(.paiduiCards) .shoupai.unknown-card {
+    :is(.order-body, .sorder-body):not(.paiduiCards) .shoupai.unknown-card {
       width: auto;
-    }
-
-    .left {
-      width: 30%;
-      float: left;
-    }
-
-    .right {
-      width: 70%;
-      float: left;
     }
 
     input[type='checkbox']:disabled+.slider {
@@ -1077,27 +716,6 @@
       background-color: gray;
       /* 禁用时鼠标变为不可用状态 */
       cursor: not-allowed;
-    }
-
-    .question-mark {
-      display: inline-block;
-      position: relative;
-      width: 15px;
-      height: 15px;
-      /* 垂直居中 */
-      line-height: 15px;
-      text-align: center;
-      border: 1px solid var(--text-gold);
-      border-radius: 50%;
-      margin-left: 2px;
-      transition: background-color 0.3s;
-    }
-
-    .question-mark:hover {
-      /* Hover效果，可以调整颜色 */
-      background-color: var(--bg-hover);
-      /* 鼠标划过时显示手型光标 */
-      cursor: pointer;
     }
 
     .tooltip {
@@ -1171,21 +789,6 @@
       transform-origin: 0 0;
     }
 
-    .sorder-head {
-      /* 使用Flexbox */
-      display: flex;
-      /* 垂直居中 */
-      align-items: center;
-      /* 水平居中 */
-      justify-content: center;
-      font-weight: bolder;
-      width: 10%;
-      height: 25px;
-      text-align: center;
-      color: var(--text-gold);
-      margin-left: 3px;
-    }
-
     .sorder-body {
       /* 子元素可以接收鼠标事件 */
       pointer-events: auto;
@@ -1226,14 +829,6 @@
       display: none;
     }
 
-    .sorder-body:not(.paiduiCards) .shoupai:disabled {
-      display: none;
-    }
-
-    .sorder-body:not(.paiduiCards) .shoupai.unknown-card {
-      width: auto;
-    }
-
     @keyframes fadeInLeftToRight {
       0% {
         clip-path: inset(0 100% 0 0);
@@ -1256,11 +851,6 @@
         clip-path: inset(0 100% 0 0);
         opacity: 0;
       }
-    }
-
-    hr {
-      width: 100%;
-      margin: 0;
     }
 
     .show {
@@ -1288,38 +878,6 @@
 
     .mouse-pressed .sorder-body {
       pointer-events: none;
-    }
-
-    .mouse-pressed .sorder-body:hover {
-      pointer-events: none;
-    }
-
-    .jie-group-title {
-      color: var(--text-gold);
-      font-weight: bold;
-      margin: 0 0 10px 0;
-      padding: 8px 0 8px 0;
-      text-align: center;
-      position: relative;
-      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-    }
-
-    .jie-group-title::after {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 60%;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, var(--text-gold), transparent);
-      box-shadow: 0 0 10px rgba(242, 222, 156, 0.5);
-    }
-
-    /* 修复支持链接居中问题 */
-    a.jie-group-title {
-      display: block !important;
-      width: 100%;
     }
 
     /* 屏蔽设置 Dialog 及扩展开关样式 */
@@ -1411,17 +969,9 @@
 
     .dialog-content {
       padding: 15px;
-    }
-
-    .cardback-title {
-      font-size: 13px;
-      line-height: 1.4;
-      margin: 0 10px 10px 10px;
-      padding: 6px 10px;
-      color: #efd89f;
-      border: 1px solid rgba(242, 222, 156, 0.24);
-      border-radius: 8px;
-      background: linear-gradient(135deg, rgba(45, 36, 24, 0.72), rgba(24, 20, 16, 0.6));
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
 
     /* Tab 栏与 Tab 面板 */
@@ -1476,6 +1026,10 @@
     .tab-panel.active {
       display: flex;
       flex-direction: column;
+    }
+
+    #tab-settings {
+      gap: 4px;
     }
   </style>
   <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"
@@ -1639,23 +1193,11 @@
 
     <!-- Tab 2: 统计器 -->
     <div class="tab-panel" id="tab-stats">
-      <div class="type">
-        <div class="cardTypeContainer">
-          <div class="type-body type1" id="type1"></div>
-        </div>
-        <div class="cardTypeContainer">
-          <div class="type-body type2" id="type2"></div>
-        </div>
-        <div class="cardTypeContainer">
-          <div class="type-body type3" id="type3"></div>
-        </div>
-        <div class="cardTypeContainer">
-          <div class="type-body type4 typeNumber" id="type4"></div>
-        </div>
-        <div class="orderContainer">
-          <div class="knownCards cardTypeDetail" id="cardTypeDetail"></div>
-        </div>
-      </div>
+      <div class="type-body type1" id="type1"></div>
+      <div class="type-body type2" id="type2"></div>
+      <div class="type-body type3" id="type3"></div>
+      <div class="type-body type4 typeNumber" id="type4"></div>
+      <div class="knownCards cardTypeDetail" id="cardTypeDetail"></div>
     </div>
 
     <!-- Tab 3: 山河图 -->
@@ -1790,15 +1332,8 @@
       </div>
       <!-- 按钮 -->
       <button class="calRes" id="openWelfareBtn" type="button">打开福利窗口</button>
-      <!-- 按钮 -->
-      <div class="width"></div>
-      <div style="text-align: center">
-        <div class="width"></div>
-        <div class="uuid id" id="uuid" role="button" tabindex="0" data-tooltip="点击复制">id：</div>
-        <div class="width"></div>
-        <div class="uuid nickName" id="nickName" role="button" tabindex="0" data-tooltip="点击复制">昵称：</div>
-        <div class="width"></div>
-      </div>
+      <div class="uuid" id="uuid" role="button" tabindex="0" data-tooltip="点击复制">id：</div>
+      <div class="uuid" id="nickName" role="button" tabindex="0" data-tooltip="点击复制">昵称：</div>
     </div>
   </div>
 
@@ -1818,7 +1353,7 @@
           </label>
         </div>
       </div>
-      <div class="switch-container-row" style="margin-top: 8px">
+      <div class="switch-container-row">
         <div class="switch-container" data-tooltip="屏蔽他人动态皮肤">
           <span class="explanation">屏蔽动态</span>
           <label class="switch">
@@ -1827,7 +1362,7 @@
           </label>
         </div>
       </div>
-      <div class="switch-container-row" style="margin-top: 8px">
+      <div class="switch-container-row">
         <div class="switch-container" data-tooltip="自动关闭广告窗口">
           <span class="explanation">屏蔽广告</span>
           <label class="switch">
@@ -1836,7 +1371,7 @@
           </label>
         </div>
       </div>
-      <div class="switch-container-row" style="margin-top: 8px">
+      <div class="switch-container-row">
         <div class="switch-container" data-tooltip="自动关闭武将包开启结果">
           <span class="explanation">屏蔽开包动画</span>
           <label class="switch">
@@ -1845,7 +1380,7 @@
           </label>
         </div>
       </div>
-      <div class="switch-container-row" style="margin-top: 8px">
+      <div class="switch-container-row">
         <div class="switch-container" data-tooltip="自动关闭牌局结算与MVP窗口">
           <span class="explanation">屏蔽MVP结算</span>
           <label class="switch">
