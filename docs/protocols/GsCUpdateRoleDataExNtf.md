@@ -159,7 +159,7 @@ Datas: [cardID, 0]
 - 消息路由：`src/logic.js`
 - 角色数据通知分发：`src/handler/GsCUpdateRoleDataExNtf.js`
 - 3544 移动与约束：`src/handler/PubGsCMoveCard.js` → `src/tracker/runtime/trackerController.ts` → `Room.moveCards()` / `Room.resolveConstraints()`
-- 3544 回归测试：`tests/tracker/qiaoZhi.test.ts`
+- 3544 回归测试：`tests/tracker/skills/qiaoZhi.test.ts`
 - 3709 处理：`src/handler/skills/GuiFu.ts`、`src/tracker/skill/GuiFu.ts`
 - 协议解析与路线求解：`src/utils/peixiuRouteFeature.js`
 - 地图浮窗：`src/ui/PeiXiuMapWindow.js`

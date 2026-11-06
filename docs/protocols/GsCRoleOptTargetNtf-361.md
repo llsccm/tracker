@@ -83,5 +83,5 @@ className: "CGsRoleSpellOptRep"
 - 展示与移动状态：`src/handler/skills/XiaShu.ts`
 - 移动前后副作用：`src/handler/PubGsCMoveCard.js`、`src/handler/spellEffects.js`
 - 选择回复：`src/handler/CGsRoleSpellOptRep.js`
-- 回归：`tests/tracker/xiaShu.test.ts`
+- 回归：`tests/tracker/skills/xiaShu.test.ts`
 - 录像回放：`tests/replay/tracker/helpers/protocolReplay/handlers.ts`、`tests/replay/tracker/protocolReplay.test.ts`

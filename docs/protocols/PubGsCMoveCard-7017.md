@@ -92,7 +92,7 @@ ToZoneParam: 0
 - 该降级不删除身份、不额外改变牌数，也不向更深处寻找第二张明牌；原第三张及更深明牌不因此被匿名化。
 - 成功批次消费完即删除；新的成功标志替换旧批次，其他移动（含洗牌、不同获得者或不匹配的移动类型）打断旧批次；Room 生命周期统一清空状态。不用定时器拼接两次单张获得。
 - 当前仅接入 `7017`，不自动把旧 `7016` 规则视为相同协议。
-- 回归：`tests/tracker/yanXi.test.ts`、`tests/tracker/pileIdentityLedger.test.ts`。
+- 回归：`tests/tracker/skills/yanXi.test.ts`、`tests/tracker/identity/pileIdentityLedger.test.ts`。
 
 ## 相关入口
 

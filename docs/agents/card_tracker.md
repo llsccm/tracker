@@ -197,7 +197,7 @@
 - 装备容器候选不应写入 `seats` 或 `owner`；新增同类容器时，需要同步补充 `src/tracker/candidate/equipmentMarkContainer.ts` 的注册表、`resolveEquipmentContainerLocationCandidates()`、`CardLocationIndex` 投影和回归测试。
 - 完整位置数量约束、`previousSeats` / `changed` 事件契约、触碰座位缓存与收敛循环扫描护栏统一见 [`card_tracker_convergence.md`](card_tracker_convergence.md)；违反其中任一边界都可能造成过度收敛、欠收敛、非终止或遍历量回归。
 - `CardLocationIndex` 默认按脏牌事件和脏公共区增量维护，事件游标断档时回退全量重建；新增卡牌区域、玩家子区或变更事件时必须同步更新索引投影、脏事件捕获与视图组同步逻辑。
-- [`tests/tracker/traversalBaseline.test.ts`](../../tests/tracker/traversalBaseline.test.ts) 的内联快照是遍历量回归护栏：结构性优化使数字下降属预期（`vitest run -u` 刷新），无关改动使数字上升需要先解释原因再更新快照。
+- [`tests/tracker/runtime/traversalBaseline.test.ts`](../../tests/tracker/runtime/traversalBaseline.test.ts) 的内联快照是遍历量回归护栏：结构性优化使数字下降属预期（`vitest run -u` 刷新），无关改动使数字上升需要先解释原因再更新快照。
 - 生产 `Room.initDeck()` 只创建匿名牌堆槽；测试 helper 的 `materializeDeckIdentities: true` 是
   历史正 ID 暗槽对照，不代表生产。真实洗牌关闭 cohort 时仍会为过期未决身份创建 suspended
   展示实体，但未物化身份按终态直接注册，不应进入位置索引或玩家快照的通用脏事件流；遍历

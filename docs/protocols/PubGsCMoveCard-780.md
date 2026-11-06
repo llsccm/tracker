@@ -115,5 +115,5 @@ ToZoneParam: 0
 - `src/tracker/skill/registerHandlers.ts`：仅为 `780` 注册候选来源筛选器。
 - `src/tracker/room/movement/RoomMovement.ts`：通用移动、候选传播与随机入堆边界。
 - `src/tracker/room/movement/candidates.ts`：通用手牌转移和回堆候选传播。
-- `tests/tracker/wenGuaCandidateSource.test.ts`：明暗来源、B 原有明牌、旧约束、配对失效与生命周期回归。
+- `tests/tracker/skills/wenGuaCandidateSource.test.ts`：明暗来源、B 原有明牌、旧约束、配对失效与生命周期回归。
 - [技能与协议特例](../agents/card_tracker_skills.md)、[临时状态清单](../agents/skill_state.md)。
