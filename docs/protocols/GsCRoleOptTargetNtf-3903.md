@@ -184,6 +184,6 @@ ToZoneParam: 0
 - 公共区范围揭示：`src/tracker/runtime/trackerController.ts` 的
   `revealPublicCandidateCards`
 - 位置归一化：`src/handler/PubGsCMoveCard.js`（`3903` 不进 RANDOM-as-top 白名单）
-- 回归测试：`tests/tracker/roleOptTargetNtf.test.ts`、`tests/tracker/pubGsCMoveCard.test.ts`、
-  `tests/tracker/moveEventNormalizer.test.ts`、`tests/tracker/trackerController.test.ts`、
-  `tests/tracker/tianHouExchange.test.ts`
+- 回归测试：`tests/tracker/messages/roleOptTargetNtf.test.ts`、`tests/tracker/messages/pubGsCMoveCard.test.ts`、
+  `tests/tracker/messages/moveEventNormalizer.test.ts`、`tests/tracker/messages/trackerController.test.ts`、
+  `tests/tracker/skills/tianHouExchange.test.ts`

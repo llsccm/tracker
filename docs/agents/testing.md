@@ -26,32 +26,50 @@
 
 | 路径                     | 覆盖重点                                              |
 | ------------------------ | ----------------------------------------------------- |
-| `tests/tracker/`         | Room 移动、候选、收敛、Controller、脏渲染、遍历基线等 |
+| `tests/tracker/`         | 分类入口见 `tests/tracker/README.md`；测试文件均放入下列主题目录 |
+| `tests/tracker/convergence/` | 通用候选传播、位置与手牌槽位约束、收敛终止及增量一致性 |
+| `tests/tracker/skills/` | 具体技能、装备技能、技能插件生命周期与补牌规则 |
+| `tests/tracker/messages/` | 游戏消息解析、路由、移动输入契约、局流与重连 |
+| `tests/tracker/identity/` | 匿名身份、身份守恒、牌堆账本及事务、弃牌获得与回堆身份 |
+| `tests/tracker/movement/` | Room 移动路线、来源查询、已知牌确认、公共端点与交换批次 |
+| `tests/tracker/projection/` | 位置索引、玩家快照、计数器与增量投影 |
+| `tests/tracker/runtime/` | 导入边界、状态重置、日志、协议录制、开发断言与遍历护栏 |
+| `tests/tracker/view/` | 既有视图、手牌镜像、牌堆展示顺序、公共候选与标签测试 |
 | `tests/tracker/helpers/` | 测试夹具与 noop runtime/view                          |
 | `tests/replay/tracker/`  | 按需加载的协议 JSONL 重建、诊断与真实录制回放入口（见 `replay.md`） |
 | `tests/contracts/pile-identity/` | 牌堆身份纯模型、真实牌序 oracle 与长期语义契约 |
 | `tests/runtime/`         | 宿主运行时适配、窗口关闭与对局结束 UI 生命周期        |
 | `tests/utils/`           | 非 tracker 工具逻辑，如裴秀路线                       |
 
-### 现有 tracker 回归主题（按文件名归类）
+### 现有 tracker 回归主题
 
-- 导入边界：`room.import.test.ts`、`state-user.import.test.ts`
-- 控制器与协议路由：`trackerController.test.ts`、`moveCardRoutes.test.ts`、`moveEventNormalizer.test.ts`
-- 候选与位置：`locationCandidates.test.ts`、`publicCandidates.test.ts`、`publicFieldCandidates.test.ts`、`locationIndex.test.ts`、`cardLocationIndexIncremental.test.ts`
-- 约束与收敛：`convergenceTermination.test.ts`、`resolveConstraintsIncrementalIndex.test.ts`、`ambiguousKnownIndexIncremental.test.ts`
-- 暗牌 / 标记 / 随机转移：`hiddenMarkCandidates.test.ts`、`randomTransferLifecycle.test.ts`、`handCountObservation.test.ts`、`playerHandMirror.test.ts`
-- 木牛流马：`muniuCandidates.test.ts`（暗置候选、迁座投影、完整快照与整手揭示）、`muniuMarkTransfer.test.ts`（原始协议链路）、`equipmentMarks.test.ts`（容器只读规则）
-- 局流与技能副作用：`gameFlowState.test.ts`、`spellEffects.test.ts`、`roleOptTargetNtf.test.ts`
-- 牌堆身份模型：`tests/contracts/pile-identity/pileGenerationPool.test.ts`、`pileIdentityLedger.test.ts`、`pileIdentityLedgerIntegration.test.ts`
-- 视图与展示：`viewDirtyRender.test.ts`、`pileDisplayOrder.test.ts`、`suitGlyph.test.ts`
-- 性能护栏：`traversalBaseline.test.ts`
-- 计数器：`cardCounter.test.ts`
-- 日志：`moveEventLogging.test.ts`
+以下测试路径相对 `tests/tracker/`；按主要测试目标归档，完整规则见
+[`tests/tracker/README.md`](../../tests/tracker/README.md)。
 
-木牛专属的候选与收敛场景集中在 `muniuCandidates.test.ts`。洗牌及洗牌后揭示仍由
-`pileIdentityLedgerIntegration.test.ts`、`pileDisplayOrder.test.ts` 覆盖；通用标记占位守恒、普通出牌的来源隔离和
-Controller 入口分别保留在 `markSpaceReconcile.test.ts`、`knownDiscardConfirm.test.ts`、
-`trackerController.test.ts`。重复的手牌准备与暗置操作复用 `tests/tracker/helpers/hiddenMarks.ts`，
+- 收敛与槽位：`convergence/convergenceTermination.test.ts`、`convergence/constraintLocationSlots.test.ts`、`convergence/handCountObservation.test.ts`
+- 候选传播：`convergence/locationCandidates.test.ts`、`convergence/publicCandidates.test.ts`、`convergence/popupCandidates.test.ts`
+- 暗标记与随机转移：`convergence/hiddenMarkCandidates.test.ts`、`convergence/markSpaceReconcile.test.ts`、`convergence/markToHandAmbiguous.test.ts`、`convergence/randomTransferLifecycle.test.ts`、`convergence/secondaryRandomHandTransfer.test.ts`
+- 收敛增量一致性：`convergence/resolveConstraintsIncrementalIndex.test.ts`、`convergence/ambiguousKnownIndexIncremental.test.ts`
+- 技能插件：`skills/skillLifecycle.test.ts`、`skills/skillCardPatches.test.ts`、`skills/roomMoveEvents.test.ts`、`skills/spellEffects.test.ts`
+- 具体技能：如 `skills/chengLie.test.ts`、`skills/guanXuExchange.test.ts`、`skills/jieLiExchange.test.ts`、`skills/tianHouExchange.test.ts`、`skills/roleData3709.test.ts`（诡伏）；通用整手交换插件见 `skills/handExchange.test.ts`
+- 木牛流马：`skills/muniuCandidates.test.ts`（候选与收敛）、`skills/muniuMarkTransfer.test.ts`（原始协议链路）、`skills/equipmentMarks.test.ts`（容器只读规则）
+- 消息入口与路由：`messages/trackerController.test.ts`、`messages/moveEventNormalizer.test.ts`、`messages/moveInputContracts.test.ts`、`messages/pubGsCMoveCard.test.ts`、`messages/pubGsCUseCard.test.ts`、`messages/popupProtocol.test.ts`
+- 局流与初始化：`messages/startGame.test.ts`、`messages/gameFlowState.test.ts`、`messages/gamePhase.test.ts`、`messages/gameTurn.test.ts`、`messages/gameRecordInit.test.ts`、`messages/gameRecordInitRoutes.test.ts`
+- 重连与协议数量：`messages/reconnectSnapshot.test.ts`、`messages/degradedTracking.test.ts`、`messages/shuffleProtocolCount.test.ts`
+- 跨技能消息分发：`messages/roleOptTargetNtf.test.ts`、`messages/roleSpellOptRep.test.ts`
+- 移动与区域：`movement/moveCardRoutes.test.ts`、`movement/knownDiscardConfirm.test.ts`、`movement/knownMoveStages.test.ts`、`movement/roomMovementSourceQueries.test.ts`、`movement/publicEndpointCards.test.ts`、`movement/exchangeBatches.test.ts`、`movement/moveEventUtils.test.ts`
+- 模型与投影：`projection/locationIndex.test.ts`、`projection/cardLocationIndexIncremental.test.ts`、`projection/playerSnapshot.test.ts`、`projection/cardCounter.test.ts`
+- 运行时与诊断：`runtime/roomStateReset.test.ts`、`runtime/moveEventLogging.test.ts`、`runtime/protocolRecorder.test.ts`、`runtime/shadowIndexAssertions.test.ts`
+- 导入边界：`runtime/room.import.test.ts`、`runtime/state-user.import.test.ts`
+- 牌堆身份模型：`tests/contracts/pile-identity/pileGenerationPool.test.ts`（仓库相对路径）、`identity/pileIdentityLedger.test.ts`、`identity/pileIdentityLedgerIntegration.test.ts`
+- 身份守恒与移动：`identity/anonymousIdentity.test.ts`、`identity/identityConservation.test.ts`、`identity/roomIdentityTransactions.test.ts`、`identity/discardGain.test.ts`、`identity/pileReturnPosition.test.ts`
+- 视图与展示：`view/viewDirtyRender.test.ts`、`view/pileDisplayOrder.test.ts`、`view/publicFieldCandidates.test.ts`、`view/playerHandMirror.test.ts`、`view/suitGlyph.test.ts`
+- 性能护栏：`runtime/traversalBaseline.test.ts`
+
+木牛专属的候选与收敛场景集中在 `skills/muniuCandidates.test.ts`。洗牌及洗牌后揭示仍由
+`identity/pileIdentityLedgerIntegration.test.ts`、`view/pileDisplayOrder.test.ts` 覆盖；通用标记占位守恒、普通出牌的来源隔离和
+Controller 入口分别保留在 `convergence/markSpaceReconcile.test.ts`、`movement/knownDiscardConfirm.test.ts`、
+`messages/trackerController.test.ts`。重复的手牌准备与暗置操作复用 `tests/tracker/helpers/hiddenMarks.ts`，
 协议关键字段和业务断言保留在各自用例中。
 
 ---
@@ -77,17 +95,30 @@ pnpm build:prod
 pnpm exec vitest run
 ```
 
+- 按分类运行：
+
+```sh
+pnpm exec vitest run tests/tracker/convergence
+pnpm exec vitest run tests/tracker/skills
+pnpm exec vitest run tests/tracker/messages
+pnpm exec vitest run tests/tracker/identity
+pnpm exec vitest run tests/tracker/movement
+pnpm exec vitest run tests/tracker/projection
+pnpm exec vitest run tests/tracker/runtime
+pnpm exec vitest run tests/tracker/view
+```
+
 - 单文件 / 关键字：
 
 ```sh
-pnpm exec vitest run tests/tracker/locationCandidates.test.ts
+pnpm exec vitest run tests/tracker/convergence/locationCandidates.test.ts
 pnpm exec vitest run -t "shuffle"
 ```
 
 - 更新遍历基线快照（仅在解释清楚数字变化后）：
 
 ```sh
-pnpm exec vitest run tests/tracker/traversalBaseline.test.ts -u
+pnpm exec vitest run tests/tracker/runtime/traversalBaseline.test.ts -u
 ```
 
 - 覆盖率（可选，关注 tracker 核心）：
@@ -167,7 +198,7 @@ CI（`.github/workflows/ci.yml`）在 `dev` / `main` 的 PR 与 push 上会跑�
 
 匿名槽阶段 0/1 的 G0、G1 回放采集与 NO-GO / 收缩结论属于回放历史，不是普通 tracker 测试的前置知识。
 需要查看历史证据时阅读 [`replay.md`](replay.md) 中的决策摘要及其本地归档链接；通用性能变更仍必须使用
-`recordTraversal(...)` 和 `tests/tracker/traversalBaseline.test.ts` 维护自动化遍历护栏。
+`recordTraversal(...)` 和 `tests/tracker/runtime/traversalBaseline.test.ts` 维护自动化遍历护栏。
 
 ### 牌堆身份纯模型
 
@@ -211,14 +242,14 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
 
 当前必须保持的自动化契约：
 
-- `pileIdentityLedger.test.ts` 覆盖 cohort 基数、批次消费、已知/匿名回堆、初洗与一致性。
-- `pileIdentityLedgerIntegration.test.ts` 覆盖 Controller 入口事务、常规摸牌、匿名获得、连续洗牌、
+- `identity/pileIdentityLedger.test.ts` 覆盖 cohort 基数、批次消费、已知/匿名回堆、初洗与一致性。
+- `identity/pileIdentityLedgerIntegration.test.ts` 覆盖 Controller 入口事务、常规摸牌、匿名获得、连续洗牌、
   suspended 身份恢复，以及两种开局初洗协议。
-- `roomIdentityTransactions.test.ts` 覆盖 Room 直调事务、预检取消与 Controller 单次提交，以及公共范围
+- `identity/roomIdentityTransactions.test.ts` 覆盖 Room 直调事务、预检取消与 Controller 单次提交，以及公共范围
   身份的重复揭示、后续物化、匿名手牌容量与索引重建；范围揭示不得增加 `Room.cards`。
 - 开局 `2 -> 9` 在有效回收张数为 `0`，或等于整副卡池身份数时，都不得滚动 generation 或
   创建 suspended；有效回收张数由协议最终牌堆张数减去原剩余牌堆张数确定。
-- `shuffleProtocolCount.test.ts` 覆盖暗取后的洗牌数量校正：物理槽按协议张数补足或退出，
+- `messages/shuffleProtocolCount.test.ts` 覆盖暗取后的洗牌数量校正：物理槽按协议张数补足或退出，
   回堆候选身份独立保留；同时验证已亮牌身份排除、零张、旧明牌位置失效及连续洗牌。
 - 真实的部分弃牌洗回必须暂停旧 cohort 尚未出现身份；suspended 只承担展示，原暗实体继续
   承担玩家/mark 等物理槽位。
@@ -241,7 +272,8 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
 
 ## 编写测试的约定
 
-- 新测试放在与主题接近的现有文件；新主题再开 `tests/<area>/*.test.ts`
+- 新测试放在与主题接近的现有文件；tracker 新主题按上方分类目录放置，不在根目录新增测试文件。
+  `view/` 仅归档既有测试，仍遵守 UI 自动化测试禁令。
 - 优先复用 `tests/tracker/helpers/`，避免每个用例重复搭 Room / Controller
 - **不新增或扩展 Room 就绪状态相关回归测试**：实际协议处理链路保证 Room 已就绪，不会遇到 Room 未就绪。不要专门构造 Room 缺失、尚未就绪或 `getReadyTrackerRoom()` 返回空值的场景；测试应聚焦已就绪 Room 下的真实协议与领域行为。
 - 测试名写清场景与期望，例如“洗牌 cardCount 大于本地枚举时保持匿名占位账本”
@@ -253,7 +285,7 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
 
 ### 遍历基线特别规则
 
-- `tests/tracker/traversalBaseline.test.ts` 是性能回归护栏，不是普通业务断言
+- `tests/tracker/runtime/traversalBaseline.test.ts` 是性能回归护栏，不是普通业务断言
 - 结构性优化导致数字下降：可更新快照，并在 PR 说明收益场景
 - 无关改动导致数字上升：先解释原因；不能无说明地 `-u`
 - 新增必要全量扫描：先问能否改增量；若必须全量，插桩 + 基线场景同步落地

@@ -49,4 +49,4 @@ className: "GsCRoleOptTargetNtf"
 - 消息路由：`src/logic.js`
 - 消息白名单：`src/featureFlags.js`
 - 明牌同步：`src/tracker/runtime/trackerController.ts`
-- 回归测试：`tests/tracker/roleOptTargetNtf.test.ts`
+- 回归测试：`tests/tracker/messages/roleOptTargetNtf.test.ts`

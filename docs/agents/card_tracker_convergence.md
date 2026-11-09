@@ -159,7 +159,7 @@ URL 参数 `debugAssert=1` 会恢复逐次检查，`debugAssert=0` 会关闭收�
 
 - 不要在玩家循环、约束组循环或收敛轮循环内新增未复用的全牌池扫描。
 - 优先使用玩家区快照、位置索引、局部分组、脏事件集合或入口一次性归组结果。
-- 确认必须新增全量扫描时，使用 `recordTraversal(...)` 插桩，并在 [`tests/tracker/traversalBaseline.test.ts`](../../tests/tracker/traversalBaseline.test.ts) 中记录场景与内联快照。
+- 确认必须新增全量扫描时，使用 `recordTraversal(...)` 插桩，并在 [`tests/tracker/runtime/traversalBaseline.test.ts`](../../tests/tracker/runtime/traversalBaseline.test.ts) 中记录场景与内联快照。
 - 遍历数字因结构性优化下降可以更新快照；无关改动导致数字上升时，应先解释新增成本和无法复用现有索引的原因。
 
 ## 扩展检查清单
@@ -193,11 +193,11 @@ URL 参数 `debugAssert=1` 会恢复逐次检查，`debugAssert=0` 会关闭收�
 
 收敛核心变更至少关注以下回归：
 
-- [`tests/tracker/convergenceTermination.test.ts`](../../tests/tracker/convergenceTermination.test.ts)：幂等与终止轮数、E1/E2 懒重算与缓存作用域、异常后的触碰座位清理。
-- [`tests/tracker/locationCandidates.test.ts`](../../tests/tracker/locationCandidates.test.ts)：owner 与完整位置候选边界。
-- [`tests/tracker/handCountObservation.test.ts`](../../tests/tracker/handCountObservation.test.ts)：观测手牌数、匿名实体与排他逻辑。
-- [`tests/tracker/resolveConstraintsIncrementalIndex.test.ts`](../../tests/tracker/resolveConstraintsIncrementalIndex.test.ts)：收敛尾部增量索引一致性。
-- [`tests/tracker/ambiguousKnownIndexIncremental.test.ts`](../../tests/tracker/ambiguousKnownIndexIncremental.test.ts)：模糊明牌索引增量一致性。
-- [`tests/tracker/traversalBaseline.test.ts`](../../tests/tracker/traversalBaseline.test.ts)：遍历量护栏。
+- [`tests/tracker/convergence/convergenceTermination.test.ts`](../../tests/tracker/convergence/convergenceTermination.test.ts)：幂等与终止轮数、E1/E2 懒重算与缓存作用域、异常后的触碰座位清理。
+- [`tests/tracker/convergence/locationCandidates.test.ts`](../../tests/tracker/convergence/locationCandidates.test.ts)：owner 与完整位置候选边界。
+- [`tests/tracker/convergence/handCountObservation.test.ts`](../../tests/tracker/convergence/handCountObservation.test.ts)：观测手牌数、匿名实体与排他逻辑。
+- [`tests/tracker/convergence/resolveConstraintsIncrementalIndex.test.ts`](../../tests/tracker/convergence/resolveConstraintsIncrementalIndex.test.ts)：收敛尾部增量索引一致性。
+- [`tests/tracker/convergence/ambiguousKnownIndexIncremental.test.ts`](../../tests/tracker/convergence/ambiguousKnownIndexIncremental.test.ts)：模糊明牌索引增量一致性。
+- [`tests/tracker/runtime/traversalBaseline.test.ts`](../../tests/tracker/runtime/traversalBaseline.test.ts)：遍历量护栏。
 
 涉及暗置标记、公共候选、随机手牌转移或具体技能时，再补读对应测试与 [`card_tracker_skills.md`](card_tracker_skills.md)。完整命令和补测规则以 [`testing.md`](testing.md) 为准，不在本文重复维护测试数量或历史里程碑。

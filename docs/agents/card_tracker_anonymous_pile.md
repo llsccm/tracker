@@ -26,13 +26,13 @@
 
 | 问题 | 首选符号 / 文件 | 回归入口 |
 | --- | --- | --- |
-| 初始化为什么只有负 ID 暗槽 | `Room.initDeck()`、`Card` | `pileIdentityLedgerIntegration.test.ts` |
-| 匿名移动从哪里取实体 | `RoomMovement.moveUnknownCardsForContext()`、`RoomMovementSources.takeSourceCards()` | `trackerController.test.ts`、`pileDisplayOrder.test.ts` |
-| 正 ID 如何绑定到匿名槽 | `Room.materialize()`、`RoomMovement.resolveKnownMoveCards()` | `publicEndpointCards.test.ts`、`knownDiscardConfirm.test.ts` |
-| cohort 如何消费、合并和降级 | `PileIdentityLedger.applyMove()` | `pileIdentityLedger.test.ts` |
-| 洗牌如何关闭旧世代 | `Room.shufflePile()`、`PileIdentityLedger.createShuffleTransition()` | `pileIdentityLedgerIntegration.test.ts` |
-| suspended 身份如何恢复 | `Room.suspendUnresolvedPileIdentitiesForShuffle()`、`Room.resumeSuspendedKnownCard()` | `pileIdentityLedgerIntegration.test.ts` |
-| 账本与 Room 为什么不一致 | `Room.assertPileIdentityLedgerConsistency()`、`PileIdentityLedger.getSnapshot()` | `pileIdentityLedger.test.ts`、`traversalBaseline.test.ts` |
+| 初始化为什么只有负 ID 暗槽 | `Room.initDeck()`、`Card` | `tests/tracker/identity/pileIdentityLedgerIntegration.test.ts` |
+| 匿名移动从哪里取实体 | `RoomMovement.moveUnknownCardsForContext()`、`RoomMovementSources.takeSourceCards()` | `trackerController.test.ts`、`tests/tracker/view/pileDisplayOrder.test.ts` |
+| 正 ID 如何绑定到匿名槽 | `Room.materialize()`、`RoomMovement.resolveKnownMoveCards()` | `tests/tracker/movement/publicEndpointCards.test.ts`、`tests/tracker/movement/knownDiscardConfirm.test.ts` |
+| cohort 如何消费、合并和降级 | `PileIdentityLedger.applyMove()` | `tests/tracker/identity/pileIdentityLedger.test.ts` |
+| 洗牌如何关闭旧世代 | `Room.shufflePile()`、`PileIdentityLedger.createShuffleTransition()` | `tests/tracker/identity/pileIdentityLedgerIntegration.test.ts` |
+| suspended 身份如何恢复 | `Room.suspendUnresolvedPileIdentitiesForShuffle()`、`Room.resumeSuspendedKnownCard()` | `tests/tracker/identity/pileIdentityLedgerIntegration.test.ts` |
+| 账本与 Room 为什么不一致 | `Room.assertPileIdentityLedgerConsistency()`、`PileIdentityLedger.getSnapshot()` | `tests/tracker/identity/pileIdentityLedger.test.ts`、`tests/tracker/runtime/traversalBaseline.test.ts` |
 | 重连如何保留有限追踪并恢复数量 | `Room.degradeTracking()`、`RoomReconnect.restore()`、`Room.isPileCountKnown` | `degradedTracking.test.ts`、`reconnectSnapshot.test.ts` |
 
 ## 三层模型
@@ -321,15 +321,15 @@ accountedPileCount
 
 主要回归文件：
 
-- `tests/tracker/pileIdentityLedger.test.ts`：纯账本事件、cohort 基数、降级、守恒与快照。
-- `tests/tracker/pileIdentityLedgerIntegration.test.ts`：Controller/Room/ledger 事务、洗牌与 suspended。
-- `tests/tracker/roomIdentityTransactions.test.ts`：Room 直调事务、取消预检、单次提交、范围身份重复揭示、匿名槽物化与容量守恒。
-- `tests/tracker/shuffleProtocolCount.test.ts`：匿名弃牌获得后的协议张数校正、候选保留、已知身份排除、零张及连续洗牌。
-- `tests/tracker/trackerController.test.ts`：协议端到端移动、游戏外实体、两阶段匿名揭示。
-- `tests/tracker/knownDiscardConfirm.test.ts`：known 缺口、正 ID 暗实体确认与诊断。
-- `tests/tracker/knownMoveStages.test.ts`：三路来源整批确认、协议身份顺序及逐牌技能/落区时序。
-- `tests/tracker/publicEndpointCards.test.ts`、`pileDisplayOrder.test.ts`：端点选择、物化与物理顺序。
-- `tests/tracker/traversalBaseline.test.ts`：匿名生产路径与历史已物化对照的遍历护栏。
+- `tests/tracker/identity/pileIdentityLedger.test.ts`：纯账本事件、cohort 基数、降级、守恒与快照。
+- `tests/tracker/identity/pileIdentityLedgerIntegration.test.ts`：Controller/Room/ledger 事务、洗牌与 suspended。
+- `tests/tracker/identity/roomIdentityTransactions.test.ts`：Room 直调事务、取消预检、单次提交、范围身份重复揭示、匿名槽物化与容量守恒。
+- `tests/tracker/messages/shuffleProtocolCount.test.ts`：匿名弃牌获得后的协议张数校正、候选保留、已知身份排除、零张及连续洗牌。
+- `tests/tracker/messages/trackerController.test.ts`：协议端到端移动、游戏外实体、两阶段匿名揭示。
+- `tests/tracker/movement/knownDiscardConfirm.test.ts`：known 缺口、正 ID 暗实体确认与诊断。
+- `tests/tracker/movement/knownMoveStages.test.ts`：三路来源整批确认、协议身份顺序及逐牌技能/落区时序。
+- `tests/tracker/movement/publicEndpointCards.test.ts`、`tests/tracker/view/pileDisplayOrder.test.ts`：端点选择、物化与物理顺序。
+- `tests/tracker/runtime/traversalBaseline.test.ts`：匿名生产路径与历史已物化对照的遍历护栏。
 - `tests/contracts/pile-identity/`：长期纯模型与真实牌序 oracle。
 
 涉及本模型的代码修改至少运行：

@@ -20,24 +20,24 @@
 - 默认插件集中注册于 `src/tracker/skill/registerHandlers.ts`；清议/联句、迁附、生墨、择行和
   佐练使用归一化前补牌，下书使用成功提交钩子。状态统一在 `tracker` scope；称象 UI 暂存仍在 Handler。
 - 插件顺序、异常处理、defer、成功通知与销毁边界见 [`room.md`](room.md)；相关集成回归为
-  `tests/tracker/skillLifecycle.test.ts` 和 `tests/tracker/skillCardPatches.test.ts`。
+  `tests/tracker/skills/skillLifecycle.test.ts` 和 `tests/tracker/skills/skillCardPatches.test.ts`。
 
 ## 快速索引
 
 | 场景                         | 协议或识别条件                                 | 主要实现 / 回归入口                                                          |
 | ---------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- |
-| 诡伏相邻获得消息补全         | `SpellID=3709` + `DataID=3709`                 | `src/tracker/skill/GuiFu.ts`、`tests/tracker/roleData3709.test.ts`           |
-| 下书明暗选择                 | `SpellID=361`                                  | `src/tracker/skill/XiaShu.ts`、`tests/tracker/xiaShu.test.ts`                |
+| 诡伏相邻获得消息补全         | `SpellID=3709` + `DataID=3709`                 | `src/tracker/skill/GuiFu.ts`、`tests/tracker/skills/roleData3709.test.ts`           |
+| 下书明暗选择                 | `SpellID=361`                                  | `src/tracker/skill/XiaShu.ts`、`tests/tracker/skills/xiaShu.test.ts`                |
 | 反间展示与手牌移交           | `SpellID=713`、`MoveType=27`                   | `docs/protocols/PubGsCMoveCard-713.md`；现有列表解码条件不匹配该样例         |
-| 问卦候选来源筛选             | `SpellID=780`、暗交牌 `MoveType=27` 后紧邻回堆 | `src/tracker/skill/WenGua.ts`；`tests/tracker/wenGuaCandidateSource.test.ts` |
+| 问卦候选来源筛选             | `SpellID=780`、暗交牌 `MoveType=27` 后紧邻回堆 | `src/tracker/skill/WenGua.ts`；`tests/tracker/skills/wenGuaCandidateSource.test.ts` |
 | 权变牌堆顶观看与获得         | `SpellID=7011`、`MoveType=21/18`               | `docs/protocols/GsCRoleOptTargetNtf-7011.md`                                 |
 | 暗置标记区候选               | `FromZone=5`、`ToZone=4`、全暗 `CardIDs`       | `RoomMovementHiddenMarks.handleHiddenMarkMove()`、`hiddenMarkCandidates`     |
-| 观虚目标视角交换             | `SpellID=987/988`                              | `src/tracker/skill/GuanXu.ts`、`tests/tracker/guanXuExchange.test.ts`        |
+| 观虚目标视角交换             | `SpellID=987/988`                              | `src/tracker/skill/GuanXu.ts`、`tests/tracker/skills/guanXuExchange.test.ts`        |
 | 整手牌交换                   | `MoveType=11` + `5<->10` + 整手张数            | `src/tracker/skill/HandExchange.ts`                                          |
-| 骋烈其他视角的暗中交换与弃置 | `SpellID=3208`                                 | `src/tracker/skill/ChengLie.ts`、`tests/tracker/chengLie.test.ts`            |
-| 诫厉观看与暂存               | `SpellID=3483`                                 | `handleRoleOptTargetNtf`、`tests/tracker/roleOptTargetNtf.test.ts`           |
-| 天候私有观看与展示           | `SpellID=3903`                                 | `src/tracker/skill/TianHou.ts`、`tests/tracker/tianHouExchange.test.ts`      |
-| 兴作牌底与手牌交换           | `SpellID=3776`                                 | `src/tracker/skill/XingZuo.ts`、`tests/tracker/xingZuo.test.ts`              |
+| 骋烈其他视角的暗中交换与弃置 | `SpellID=3208`                                 | `src/tracker/skill/ChengLie.ts`、`tests/tracker/skills/chengLie.test.ts`            |
+| 诫厉观看与暂存               | `SpellID=3483`                                 | `handleRoleOptTargetNtf`、`tests/tracker/messages/roleOptTargetNtf.test.ts`           |
+| 天候私有观看与展示           | `SpellID=3903`                                 | `src/tracker/skill/TianHou.ts`、`tests/tracker/skills/tianHouExchange.test.ts`      |
+| 兴作牌底与手牌交换           | `SpellID=3776`                                 | `src/tracker/skill/XingZuo.ts`、`tests/tracker/skills/xingZuo.test.ts`              |
 
 ## 诡伏相邻获得消息补全（SpellID=3709）
 
@@ -136,7 +136,7 @@
 - 协议区域 `8` 独立映射为 `popup`，不属于玩家 `mark`。进入时按 `SpellID` 定位空间；移出时按 `FromID` 定位（`255` 时使用 `SpellID`）。领域移动使用 `toPopupSpaceID` / `fromPopupSpaceID`，不使用伪座位。实体登记在 `popupSpaces`；完整位置为 `{ type: 'popup', spaceID }`，
   key 为 `popup:<spaceID>`，不把技能 ID 或 255 投影成玩家座位。
 - 确定弹窗牌的 `Card.location='popup'`、`popupSpaceID` 表达空间，`subZone/spellID/owner` 为空；含手牌分支的未决身份继续保留完整候选。空间引用在收敛尾部清理，空空间释放；新 Room 不复用旧成员。
-- 技能 `35` 的匿名五张暂存、四张回顶、一张回底复用原实体，回堆位置遵循 `ToPosition`，不能从随机来源或本地数组次序猜出身份。协议回归见 `tests/tracker/popupProtocol.test.ts`。
+- 技能 `35` 的匿名五张暂存、四张回顶、一张回底复用原实体，回堆位置遵循 `ToPosition`，不能从随机来源或本地数组次序猜出身份。协议回归见 `tests/tracker/messages/popupProtocol.test.ts`。
 - 全明 N 张暗取 K 张时建立原空间 N-K、目标手牌 K 的精确名额；默认管线保留候选，剩余明弃或
   已知手牌来源使候选自动收敛。不同空间隔离，明暗混合及旧批未决时不套用全明分配。
 - 巧织不消费 `DataID=3544` 角色数据通知；暗取身份由通用数量约束在剩余牌明弃后确认，主视角移动自带正 ID 时直接确认，无需专用插件或私有差集状态。
@@ -165,7 +165,7 @@
 - 牌堆逻辑桶与公共 `Zone` 都按 bottom-first 保存；空或不完整 `CardIDs` 回堆时可直接作为
   `sourceCards`，避免技能层再次反转而破坏协议顺序。
 - `987/988` 显式绕过 `HandExchange`；即使目标恰好只有一张手牌，也不能把这条技能路径误判为
-  双方整手互换。回归见 `tests/tracker/guanXuExchange.test.ts`。
+  双方整手互换。回归见 `tests/tracker/skills/guanXuExchange.test.ts`。
 
 ## 宴戏（7017）
 
@@ -173,7 +173,7 @@
 - `src/tracker/skill/YanXi.ts` 用先获得对方手牌识别成功批次；非国战随后连续取两次当前牌顶，国战成功保留随机来源。
 - 无成功批次时，公开 ID 走普通已知移动；没有真实 ID 则只匿名化移动前牌顶两槽中的明牌，放弃范围候选精度，不影响更深处明牌。
 - Room 的 `anonymizeCards` 流水线同步释放实体定位与 `PileIdentityLedger` 已定位牌堆身份，保留数量和身份全集；不要仅修改 `isKnown`。
-- 状态使用 `tracker` scope 的 `7017`，见 [`skill_state.md`](skill_state.md)；测试见 `tests/tracker/yanXi.test.ts`。
+- 状态使用 `tracker` scope 的 `7017`，见 [`skill_state.md`](skill_state.md)；测试见 `tests/tracker/skills/yanXi.test.ts`。
 
 ## 整手牌交换（通用协议模式）
 
@@ -197,7 +197,7 @@
   目标身份。`chengLieDiscardQueue` 在标记弃置时按张数近似回填展示身份，不表示协议证明了
   具体标记或弃牌的真实身份。
 - `3208` 显式绕过 `HandExchange`，即使参与交换的一张手牌恰好是发动者整手也不例外。
-- 当前入口为 `decorateChengLieMove`；已有回归见 `tests/tracker/chengLie.test.ts`。
+- 当前入口为 `decorateChengLieMove`；已有回归见 `tests/tracker/skills/chengLie.test.ts`。
 
 ## 诫厉观看与交换区暂存（SpellID=3483）
 
@@ -234,9 +234,9 @@
   命中原手牌候选时收紧到牌顶前 `x` 张，否则建立牌顶前三候选；`x=1` 时即确定牌顶。
   范围揭示不绑定具体匿名牌堆槽，也不重排牌堆。不要把 `3903` 并入
   `PILE_SAME_ZONE_SHOW_SPELL_IDS` 或 `PILE_RANDOM_AS_TOP_SPELL_IDS`。
-- 回归：`tests/tracker/roleOptTargetNtf.test.ts`、`tests/tracker/pubGsCMoveCard.test.ts`、
-  `tests/tracker/moveEventNormalizer.test.ts`、`tests/tracker/trackerController.test.ts`、
-  `tests/tracker/tianHouExchange.test.ts`。
+- 回归：`tests/tracker/messages/roleOptTargetNtf.test.ts`、`tests/tracker/messages/pubGsCMoveCard.test.ts`、
+  `tests/tracker/messages/moveEventNormalizer.test.ts`、`tests/tracker/messages/trackerController.test.ts`、
+  `tests/tracker/skills/tianHouExchange.test.ts`。
 
 ## 兴作牌底与手牌交换（SpellID=3776）
 

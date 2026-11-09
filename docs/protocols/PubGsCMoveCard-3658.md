@@ -71,4 +71,4 @@ ToZoneParam: 0
 
 实现入口为 `TrackerController.syncTrackerMove()`、`RoomMovementSources.isCardInStoredSource()`
 和 `RoomMovementCandidates.markStoredToHandCandidates()`；连续协议回归位于
-`tests/tracker/markToHandAmbiguous.test.ts`。
+`tests/tracker/convergence/markToHandAmbiguous.test.ts`。

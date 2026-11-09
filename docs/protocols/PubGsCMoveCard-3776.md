@@ -31,7 +31,7 @@
 
 - `src/tracker/skill/XingZuo.ts`：以 Room 的 `tracker:3776` 状态保存两批实体；正常结算后删除。
 - `src/tracker/skill/registerHandlers.ts`：注册兴作装饰器，并绕过通用双方整手交换账本。
-- `tests/tracker/xingZuo.test.ts`：六步完整序列、全明/混合/全暗牌底、原手牌明牌回底、连续发动、
+- `tests/tracker/skills/xingZuo.test.ts`：六步完整序列、全明/混合/全暗牌底、原手牌明牌回底、连续发动、
   相同张数、其它交换批次与后续正 ID 揭示；同时核对手牌数和牌堆身份守恒。
 
 公共位置约定见 [`move-position.md`](move-position.md)，临时状态生命周期见

@@ -172,7 +172,7 @@ patched:
 - 配对状态与补全：`src/tracker/skill/GuiFu.ts` 的 `deferGuiFuMove()`、`completeGuiFuMove()`。
 - 运行时连接：`src/tracker/runtime/trackerController.ts` 的 `syncTrackerMove()`、
   `dispatchSkillProtocolEvent()`；`Room` 和通用移动模块不包含诡伏专属分支。
-- 回归：`tests/tracker/roleData3709.test.ts`，覆盖相邻配对、累计列表乱序、数量与身份守恒、
+- 回归：`tests/tracker/skills/roleData3709.test.ts`，覆盖相邻配对、累计列表乱序、数量与身份守恒、
   乱序获得后失牌与终局匿名槽物化、
   用牌后及获得技能时的独立状态更新、重复及失配通知、生命周期，以及 `raw` / `patched` 日志和输入不被改写。
 - 相关入口：[协议索引](README.md)、[角色扩展数据](GsCUpdateRoleDataExNtf.md)、

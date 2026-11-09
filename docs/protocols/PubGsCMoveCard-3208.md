@@ -253,7 +253,7 @@ ToZoneParam: 0
   `noop` 和跨区移动分类。
 - `src/tracker/protocol/protocolRules.ts` 的 `PILE_RANDOM_AS_TOP_SPELL_IDS`：骋烈牌堆来源的
   RANDOM 按牌顶解释。
-- `tests/tracker/chengLie.test.ts`：已有全明、部分明牌、全暗牌顶的完整链路，以及后续身份
+- `tests/tracker/skills/chengLie.test.ts`：已有全明、部分明牌、全暗牌顶的完整链路，以及后续身份
   再次出现、洗牌和身份账本一致性验证。
 
 临时状态的所有权与清理见 [`../agents/skill_state.md`](../agents/skill_state.md)。

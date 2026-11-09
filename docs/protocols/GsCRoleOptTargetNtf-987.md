@@ -171,7 +171,7 @@ ToZone: 10
 - 公共区展示与玩家占用身份回收：`src/tracker/runtime/trackerController.ts`
 - 目标视角交换桶：`src/tracker/skill/GuanXu.ts`
 - 回归测试：
-  - `tests/tracker/roleOptTargetNtf.test.ts`
-  - `tests/tracker/pubGsCMoveCard.test.ts`
-  - `tests/tracker/trackerController.test.ts`
-  - `tests/tracker/guanXuExchange.test.ts`
+  - `tests/tracker/messages/roleOptTargetNtf.test.ts`
+  - `tests/tracker/messages/pubGsCMoveCard.test.ts`
+  - `tests/tracker/messages/trackerController.test.ts`
+  - `tests/tracker/skills/guanXuExchange.test.ts`
