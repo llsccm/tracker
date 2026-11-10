@@ -227,17 +227,21 @@ function findLostItemByName(descText) {
 
 // 处理武将信息显示
 function createGeneralRow(general, difficulty, eventData) {
+  return createTextRow(getGeneralDisplay(general, difficulty, eventData))
+}
+
+function getGeneralDisplay(general, difficulty, eventData) {
   const [skills, red] = highlightedSkill(general, difficulty)
   const canStart = String(eventData.CanStart || '')
     .split(';')
     .includes(String(difficulty))
   const start = general.start && canStart ? '[先行]' : ''
 
-  return createTextRow({
+  return {
     text: `${general.generalname}${start}${red ? ' ' + skills.join(' ') : ''}`,
     color: red ? STYLES.GENERAL.warning : STYLES.GENERAL.normal,
     fontSize: STYLES.GENERAL.fontSize
-  })
+  }
 }
 
 const spellList = [
@@ -296,6 +300,33 @@ function highlightedSkill(generalInfo, difficulty) {
     .filter((name) => spellList.includes(name))
 
   return [skills, skills.length > 0]
+}
+
+export function drawRogueBossInfo(boss) {
+  const chapter = document.getElementById('rogueBossChapter')
+  const detail = document.getElementById('rogueBossDetail')
+  const attributes = document.getElementById('rogueBossAttributes')
+  if (!chapter || !detail || !attributes) return
+
+  chapter.textContent = boss?.chapter.cityName ?? '--'
+
+  if (!boss || boss.fight.generals.length === 0) {
+    detail.textContent = '暂无 Boss 数据'
+    attributes.textContent = '--'
+    return
+  }
+
+  const generals = boss.fight.generals
+  detail.textContent = generals
+    .map((general) => getGeneralDisplay(general, rogueMap.difficulty, boss.fight).text)
+    .join('、')
+  attributes.textContent = generals
+    .map((general) => {
+      const { hp, maxhp, card, draw, sha, armor } = general.info
+      const name = generals.length > 1 ? `${general.generalname}：` : ''
+      return `${name}血量 ${hp}/${maxhp}，初始牌 ${card}，摸牌 ${draw}，出杀 ${sha}，护甲 ${armor}`
+    })
+    .join('；')
 }
 
 export function drawStore(filteredPairs) {
