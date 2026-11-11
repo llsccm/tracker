@@ -83,7 +83,12 @@ export function logic(msg) {
         handleAdWindow()
         break
 
-      // 断线重连
+      // 首次登录也会收到；只有已有 Room 时才提前开始重连初始化。
+      case 'SsClientVersionNtf':
+        tracker.beginTrackerReconnect()
+        break
+
+      // 重连快照（也兼容直接进入旁观残局的路径）
       case 'MsgReconnectGame':
         tracker.degradeTrackerRoom(msg)
         break

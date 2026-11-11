@@ -210,7 +210,11 @@ Room 仍持有权威状态、`resolveTouchedSeats`、收敛轮数与脏事件，
 
 ### 重连残局
 
-`MsgReconnectGame` 经 `TrackerController.degradeTrackerRoom()` 进入 `Room.degradeTracking()`。
+已有 Room 时，`SsClientVersionNtf` 经 `TrackerController.beginTrackerReconnect()` 提前重建
+有限模式 Room；首次登录没有 Room 时忽略。后续座位通知复用该 Room，保留先到的先手、轮次、
+牌堆初始化及公共区移动；`registerPlayers()` 在牌堆已就绪时补建玩家区索引。
+`MsgReconnectGame` 经 `TrackerController.degradeTrackerRoom()` 进入 `Room.degradeTracking()`，
+恢复当前快照，并兼容没有先行版本通知的旁观残局。
 新 Room 默认为 `full`；重连后本局保持 `degraded`，洗牌恢复数量也不自动恢复完整开局历史。
 降级关闭跨 Room/ledger 的强守恒断言和身份容量告警，但继续执行有协议事实的局部收敛、
 索引同步、实体唯一性与公共区结构检查。

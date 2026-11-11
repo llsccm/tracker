@@ -17,6 +17,7 @@ type ProtocolPredicate = (
 ) => boolean
 
 const ALWAYS_RECORDED_CLASSES = new Set([
+  'SsClientVersionNtf',
   'MsgReconnectGame',
   'MsgReconnectGameHand',
   'decodeGameRecordInitInfo',
@@ -115,6 +116,7 @@ const ROOT_FIELD_EXCEPTIONS = new Map([
 ])
 
 const ROOT_FIELD_ALLOWLISTS: Record<string, ReadonlySet<string>> = {
+  SsClientVersionNtf: new Set(),
   MsgReconnectGame: new Set(['CardPileCount', 'SeatInfos']),
   MsgReconnectGameHand: new Set(['CardIDs', 'Count', 'SeatIndex']),
   decodeGameRecordInitInfo: new Set(),
