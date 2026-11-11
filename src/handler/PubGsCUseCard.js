@@ -11,7 +11,7 @@ export function handleUseCard(msg) {
   // spellType 0: 无属性 6: 火 7: 雷 11: 冰
   const spell = spellID || msg.spellId
   const cardIDs = CardID ? [CardID] : msg.cardIds || []
-  const SeatID = msg.SeatID || msg.castSeatId
+  const SeatID = msg.SeatID ?? msg.castSeatId
 
   // 渐营
   // if (

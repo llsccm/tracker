@@ -358,18 +358,18 @@ export class GameState {
   }
 
   shaCounter(): void {
-    const count = Number(this.getSpellState('三板斧')) || 0
+    const count = this.getSpellState<number>('三板斧') || 0
     this.setSpellState('三板斧', count + 1)
   }
 
   useCounter(): void {
-    const count = Number(this.getSpellState('手到擒来')) || 0
+    const count = this.getSpellState<number>('手到擒来') || 0
     this.setSpellState('手到擒来', count + 1)
   }
 
   drawCounter(count: number): void {
-    const drawCount = Number(this.getSpellState('神龙摆尾')) || 0
-    const drawTimes = Number(this.getSpellState('多多益善')) || 0
+    const drawCount = this.getSpellState<number>('神龙摆尾') || 0
+    const drawTimes = this.getSpellState<number>('多多益善') || 0
     this.setSpellState('神龙摆尾', drawCount + count)
     this.setSpellState('多多益善', drawTimes + 1)
   }
