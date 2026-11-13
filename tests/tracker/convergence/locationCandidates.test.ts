@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
+import { collectTraversalStats } from '@/tracker/traversalStats'
 import {
   createLocationCandidateKey,
   parseLocationCandidateKey
@@ -354,6 +355,44 @@ describe('完整位置候选回归', () => {
       [createLocationCandidateKey(seatTwoHand), createLocationCandidateKey(seatTwoMark)].sort()
     )
   })
+
+  it.each([{ seatIDs: [1, 2, 3] }, { seatIDs: [2, 1, 3] }])(
+    '连续座位排他保留其余手牌和同座位标记位置：座位顺序 $seatIDs',
+    ({ seatIDs }) => {
+      const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs })
+      const handCard = getCard(room, 1)
+      const markCard = getCard(room, 2)
+      const seatOneHand = playerLocation(1, 'hand')
+      const seatTwoHand = playerLocation(2, 'hand')
+      const seatThreeHand = playerLocation(3, 'hand')
+      const seatTwoMark = playerLocation(2, 'mark', 700)
+
+      handCard.setLocationCandidates([seatOneHand, seatTwoHand, seatThreeHand])
+      markCard.setLocationCandidates([seatOneHand, seatTwoHand, seatTwoMark])
+      room.getPlayer(1).syncObservedHandCount(0)
+      room.getPlayer(2).syncObservedHandCount(0)
+      room.getPlayer(3).syncObservedHandCount(1)
+
+      const { stats } = collectTraversalStats(() => room.resolveConstraints())
+
+      expect(handCard.owner).toBe(3)
+      expect(handCard.subZone).toBe('hand')
+      expect(handCard.locationCandidates).toEqual([])
+      expect(markCard.owner).toBe(2)
+      expect(markCard.subZone).toBe('mark')
+      expect(markCard.spellID).toBe(700)
+      expect(markCard.locationCandidates).toEqual([])
+      expect(room.getPlayer(3).knownHandCards).toEqual([handCard])
+      // 候选落定后下一轮刷新展示额度，再执行一轮确认稳定。
+      expect(room.lastResolveRounds).toBe(3)
+      expect(stats.sites.get('handSlotCounts:collectBySeat')).toEqual({ calls: 2, visited: 4 })
+
+      room.resolveConstraints()
+      expect(room.lastResolveRounds).toBe(1)
+      expect(handCard.owner).toBe(3)
+      expect(markCard.spellID).toBe(700)
+    }
+  )
 
   it('已有完整位置候选时 addSeat 会真正追加目标座位候选', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0, 2, 7] })

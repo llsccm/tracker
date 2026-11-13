@@ -56,7 +56,7 @@
 - 已知牌三路来源解析与统一确认在 `room/movement/knownSources.ts`，逐牌来源校正、落区和旧公共槽回补在 `room/movement/knownPlacement.ts`；RoomMovement 的两个已知牌入口仅保留阶段编排，不缓存批次状态或重复实现来源置换。
 - 移动上下文快照由无状态的 `room/movement/context.ts` 构造；未知身份的来源取牌与目标落区阶段由 `room/movement/unknownPlacement.ts` 实现，RoomMovement 保留调用入口与阶段顺序。
 - 装备容器座位、迁座、稳定记录键和完整快照规则在 `room/movement/equipmentMarks.ts`；该模块只读输入，暗置标记组件继续负责唯一账本、占位与收敛协调，不建立独立木牛状态。
-- `RoomConstraints` 位于 `src/tracker/room/constraints.ts`，集中实现不动点收敛、E1/E2 手牌槽懒缓存、匿名手牌实体对账、约束组维护、实体牌解析及稳定态的索引/视图组/计数器同步。Room 保留 `resolveConstraints()` 公开入口和状态所有权，DEV 诊断按需传入。
+- `RoomConstraints` 位于 `src/tracker/room/constraints.ts`，集中实现不动点收敛、手牌分配缓存、受影响座位筛选、匿名手牌实体对账、约束组维护、实体牌解析及稳定态的索引/视图组/计数器同步。Room 保留 `resolveConstraints()` 公开入口和状态所有权，DEV 诊断按需传入。
 - `RoomPublicZones` 位于 `src/tracker/room/publicZones.ts`，负责公共区一致性检查、洗牌槽位校准及玩家手牌 ID 查询。公共区牌序直接读取 `Room.getPublicZone()` 返回的 `Zone.cards`。
 - `RoomDiagnostics` 位于 `src/tracker/room/diagnostics.ts`，负责 DEV 身份/槽位与身份账本守恒、玩家快照和影子索引检查、抽样门控及收敛轮数告警；Room 的公开断言 API 保持不变。
 - `protocol/protocolZones.ts` 将区域 `4` 映射为玩家标记、区域 `8` 映射为独立临时弹窗 `popup`。`MoveEventNormalizer` 只做分类与字段映射，不直接修改 `Room` 状态。玩家端点使用 `seatID`，弹窗端点使用 `spaceID`；区域 `8` 的 `FromID` 是空间 ID，不是玩家座位；当 `FromID` 为 `255` 时，`FromID` 作为来源端点的弹窗 `spaceID` 使用 `SpellID`。玩家标记空间在归一化时按端点 `ZoneParam` 解析为 `markSpellID`，与触发移动的 `SpellID` 分开。
@@ -88,7 +88,7 @@
 
 ### 其它核心对象
 
-- `AmbiguousKnownIndex`：替代旧 `Zone.obj.unknown` 的部分展示语义，跟踪跨座位候选、完整位置候选、装备容器候选与公共候选的明牌；用于 `Card.getLocationDescription()` 的优先反查。已改为增量维护：通过事件流游标进行单牌增量更新，仅在约束组结构变化（`Room.constraintGroupsDirty === true`）时回退全量 `rebuild()`。容器候选展示时按当前装备承载座位展开。
+- `AmbiguousKnownIndex`：替代旧 `Zone.obj.unknown` 的部分展示语义，跟踪跨座位候选、完整位置候选、装备容器候选与公共候选的明牌；用于 `Card.getLocationDescription()` 的优先反查。通过事件流游标进行单牌增量更新；约束组结构变化（`Room.constraintGroupsDirty === true`）时，先消费卡牌脏事件，再由 `refreshGroupDescriptions()` 只刷新存量模糊明牌的分组和来源描述。事件游标断档时回退全量 `rebuild()`。容器候选展示时按当前装备承载座位展开。
 - `CardLocationIndex`：提供确定手牌、候选手牌、装备、判定、标记与公共区分组；`RoomConstraints.syncViewGroups()` 和公共区视图读取该索引，避免渲染阶段现场高频分类。已改为增量维护：消费 `dirtyCardEvents` 事件流游标进行投影增量更新，公共区变化通过 `Room.dirtyPublicZones` 变更集局部重算。在游标断档时自动回退全量 `rebuild()`。装备容器候选会先投影成当前承载座位的标记区，再进入玩家视图。
 - `CardCounter`：基于 `Room.cards` 生成 `CardInstance` 查询副本，建立名称、花色、点数、类型倒排索引，并根据 `Card.location` 同步牌堆、玩家、弃牌、销毁四类状态。状态桶已从全量 `update()` 改为增量同步：`Room.markCounterDirty()` / `CardCounter.markDirty()` 收集状态变化牌，getter 在无新变化时复用干净缓存；`createExternalCards()` 会显式注册新牌并推进连续已注册的尾部游标，避免后续更新再次扫描同一批实体。
 - `MoveEventNormalizer`：将原始 `PubGsCMoveCard` 字段归一为标准事件包，依赖 `protocol/protocolZones.ts` 处理 `FromZone`、`ToZone`、玩家子区与 `CardIDs` 等字段；`MoveType=18` 按来源标记“从牌堆获取牌”或“从弃牌堆获取牌”。

@@ -105,7 +105,7 @@ Controller 每次创建 Room 后、注册座位前调用 `Game.beginPlayback()`�
 | 分区         | 代表字段                                                         | 更新方式                                                                                   |
 | ------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | 位置投影     | `locationIndex`                                                  | `resolveConstraints()` 消费卡牌脏事件和公共区脏集合，断档时全量重建                        |
-| 模糊明牌反查 | `ambiguousKnownIndex`                                            | 通常增量更新；约束组结构变化时全量重建                                                     |
+| 模糊明牌反查 | `ambiguousKnownIndex`                                            | 按脏事件增量更新；约束组结构变化只刷新存量条目的分组描述，游标断档时全量重建                |
 | 计数查询     | `counter`                                                        | `initDeck()` 后创建，收敛尾部按脏牌增量更新                                                |
 | 玩家区快照   | `PlayerSnapshot` 内部数组、成员集合、游标与创建顺序              | Room 保留 `playerCardsSnapshot` 只读 getter；按 `dirtyCardEvents` 增量刷新，断档时回退全量 |
 | View 脏状态  | `viewDirty`、`dirtyCards`、`dirtyCardEvents`、`dirtyPublicZones` | 由卡牌/Zone 变更入口记录，供索引和视图各自按游标消费                                       |
@@ -191,7 +191,7 @@ Room 保留原有移动阶段顺序与最终收敛边界。RoomMovement 本身�
 `Room.resolveConstraints()` 保留为稳定公开入口，直接委托 `RoomConstraints.resolveConstraints()`。
 不动点循环和消费分配结果的 `reconcileAnonymousHandCards()` 集中在 `room/constraints.ts`；
 手牌分配统一由 `constraint/handSlotUsage.ts` 的 `computeHandSlotAllocation()` 计算。
-E1/E2 座位缓存不由 Room 实现，只在单次求解内存活。
+手牌分配缓存与受影响座位筛选由 `RoomConstraints` 实现，只在单次求解内有效。
 Room 仍持有权威状态、`resolveTouchedSeats`、收敛轮数与脏事件，DEV 诊断实例通过入口按需传入，
 不公开诊断字段，也不在约束模块复制状态。
 
