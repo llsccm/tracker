@@ -1,9 +1,11 @@
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { describe, expect, it } from 'vitest'
 import { collectTraversalStats } from '@/tracker/traversalStats'
-import { createTestRoom, getCard } from '../helpers/room'
+import { bindTestHand, createTestRoom, getCard } from '../helpers/room'
 import { expectLocationIndexMatchesRebuild } from '../helpers/locationIndex'
 import { expectAmbiguousKnownIndexMatchesRebuild } from '../helpers/ambiguousKnownIndex'
+import { equipmentContainer } from '../helpers/locationCandidates'
+import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/room/movement/types'
 
 // 覆盖 plans/cards-incremental-index-and-fast-path-plan.md 阶段 3：
 // resolveConstraints() 尾部由全量 rebuild 改为增量维护 locationIndex。
@@ -234,5 +236,161 @@ describe('resolveConstraints 接入 locationIndex 增量（阶段 3）', () => {
     expect(room.refreshPlayerSnapshot()).toEqual(
       room.cards.filter((card) => card.location === 'player')
     )
+  })
+})
+
+describe('收敛尾部按受影响座位同步玩家投影', () => {
+  it('摸牌只更新目标座位的分组，无变化收敛复用所有分组数组', () => {
+    const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [0, 1, 2] })
+    bindTestHand(room, 2, { knownIDs: [7] })
+    const mark = getCard(room, 8)
+    mark.bindCandidates([2], 'mark', 700, { known: true })
+    room.resolveConstraints()
+    const untouched = room.getPlayer(2)
+    const groups = [
+      untouched.knownHandCards,
+      untouched.candidateHandCards,
+      untouched.equipCards,
+      untouched.judgeCards,
+      untouched.markCards.get(700)
+    ]
+
+    room.moveCards([1], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'player', seatID: 0, subZone: 'hand' },
+      cardCount: 1
+    })
+
+    expect(room.getPlayer(0).knownHandCards).toEqual([getCard(room, 1)])
+    const currentGroups = [
+      untouched.knownHandCards,
+      untouched.candidateHandCards,
+      untouched.equipCards,
+      untouched.judgeCards,
+      untouched.markCards.get(700)
+    ]
+    currentGroups.forEach((cards, index) => expect(cards).toBe(groups[index]))
+    const drawnHand = room.getPlayer(0).knownHandCards
+
+    room.resolveConstraints()
+
+    expect(room.getPlayer(0).knownHandCards).toBe(drawnHand)
+    expect(untouched.knownHandCards).toBe(groups[0])
+  })
+
+  it('纯公共区暗牌移动更新公共桶并复用玩家分组数组', () => {
+    const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [0, 1] })
+    bindTestHand(room, 0, { knownIDs: [1] })
+    room.resolveConstraints()
+    const hands = Array.from(room.players.values(), (player) => player.knownHandCards)
+    const seq = room.dirtyCardSeq
+    const pileTop = room.getZone('pile').cards.at(-1)
+
+    room.moveCards([], {
+      from: { type: 'public', zone: 'pile', position: POSITION_TOP },
+      to: { type: 'public', zone: 'discard', position: POSITION_TOP },
+      cardCount: 1
+    })
+
+    expect(room.dirtyCardSeq).toBe(seq)
+    expect(room.locationIndex.publicByZone.get('discard')).toEqual([pileTop])
+    Array.from(room.players.values()).forEach((player, index) => {
+      expect(player.knownHandCards).toBe(hands[index])
+    })
+  })
+
+  it.each(['hand', 'equip', 'judge', 'mark'] as const)(
+    '%s 迁座和弃置同步新旧座位分组',
+    (subZone) => {
+      const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [0, 1, 2] })
+      const card = getCard(room, 1)
+      const spellID = subZone === 'mark' ? 700 : null
+      const cardsAt = (seatID: number) => {
+        const player = room.getPlayer(seatID)
+        if (subZone === 'hand') return player.knownHandCards
+        if (subZone === 'equip') return player.equipCards
+        if (subZone === 'judge') return player.judgeCards
+        return player.markCards.get(700) ?? []
+      }
+      card.bindCandidates([0], subZone, spellID, { known: true })
+      room.resolveConstraints()
+      expect(cardsAt(0)).toEqual([card])
+
+      card.bindCandidates([1], subZone, spellID, { known: true })
+      room.resolveConstraints()
+
+      expect(cardsAt(0)).toEqual([])
+      expect(cardsAt(1)).toEqual([card])
+
+      room.getZone('discard').add(card)
+      room.resolveConstraints()
+
+      expect(cardsAt(1)).toEqual([])
+      expectLocationIndexMatchesRebuild(room)
+    }
+  )
+
+  it('收敛期间候选缩减同步被删除的座位，并保留无关座位数组', () => {
+    const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [0, 1, 2] })
+    const card = getCard(room, 1)
+    card.bindCandidates([0, 1], 'hand', null, { known: true })
+    room.resolveConstraints()
+    expect(room.getPlayer(0).candidateHandCards).toEqual([card])
+    expect(room.getPlayer(1).candidateHandCards).toEqual([card])
+    const untouched = room.getPlayer(2).knownHandCards
+
+    room.syncObservedPlayerHandCount(0, 0)
+
+    expect(room.getPlayer(0).candidateHandCards).toEqual([])
+    expect(room.getPlayer(1).candidateHandCards).toEqual([])
+    expect(room.getPlayer(1).knownHandCards).toEqual([card])
+    expect(room.getPlayer(2).knownHandCards).toBe(untouched)
+  })
+
+  it('脏事件断档时全量同步，覆盖已丢失事件涉及的座位', () => {
+    const { room } = createTestRoom({ cardIDs: DECK, seatIDs: [0, 1, 2] })
+    bindTestHand(room, 0, { knownIDs: [1] })
+    room.resolveConstraints()
+    const card = getCard(room, 1)
+    const next = getCard(room, 2)
+    room.resolveConstraints()
+    const consumed = room.locationIndex.lastConsumedSeq
+    room.getZone('discard').add(card)
+    next.bindCandidates([1], 'hand', null, { known: true })
+    room.dirtyCardEvents = room.dirtyCardEvents.filter(
+      (event) => event.seq > consumed && event.card === next
+    )
+    expect(room.dirtyCardEvents[0].seq).toBeGreaterThan(consumed + 1)
+
+    room.resolveConstraints()
+
+    expect(room.getPlayer(0).knownHandCards).toEqual([])
+    expect(room.getPlayer(1).knownHandCards).toEqual([next])
+    expectLocationIndexMatchesRebuild(room)
+  })
+
+  it('容器观测座位变化且候选牌未变脏时，同步容器的新旧标记投影', () => {
+    const { room } = createTestRoom({ cardIDs: [161, ...DECK], seatIDs: [0, 1, 2] })
+    const equip = getCard(room, 161)
+    equip.bindCandidates([0], 'equip', null, { known: true })
+    const card = getCard(room, 1)
+    card.setLocationCandidates([equipmentContainer(161, 700)])
+    room.resolveConstraints()
+    expect(room.getPlayer(0).markCards.get(700)).toEqual([card])
+    const untouched = room.getPlayer(2).knownHandCards
+    const seq = room.dirtyCardSeq
+    const state = room.ensureSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY, () => ({
+      records: new Map(),
+      muniuMarkSeat: null
+    }))
+    state.muniuMarkSeat = 1
+
+    room.resolveConstraints()
+
+    expect(room.dirtyCardSeq).toBe(seq)
+    expect(room.getPlayer(0).markCards.has(700)).toBe(false)
+    expect(room.getPlayer(1).markCards.get(700)).toEqual([card])
+    expect(room.getPlayer(2).knownHandCards).toBe(untouched)
+    expectLocationIndexMatchesRebuild(room)
   })
 })

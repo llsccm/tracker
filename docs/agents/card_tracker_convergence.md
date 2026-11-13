@@ -138,7 +138,7 @@ URL 参数 `debugAssert=1` 会恢复逐次检查，`debugAssert=0` 会关闭收�
 
 1. 暂停追踪候选范围过宽的明牌。
 2. 按脏卡牌事件与 `dirtyPublicZones` 增量更新 `CardLocationIndex`。
-3. 同步玩家视图组。
+3. 按索引本批次新旧投影涉及的座位同步玩家视图组，包含未变脏的容器依赖牌；纯公共区变化跳过玩家组，事件游标断档回退时同步全部玩家。
 4. 约束组结构变化时全量重建 `AmbiguousKnownIndex`，否则按脏事件增量更新。
 5. 更新 `CardCounter`，并执行守恒断言。
 
