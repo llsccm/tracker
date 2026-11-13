@@ -22,7 +22,7 @@
 Room 仅保留该公开入口，实际不动点循环与稳定尾部在 `RoomConstraints.resolveConstraints()` 中实现。
 手牌分配统一通过 `constraint/handSlotUsage.ts` 的 `computeHandSlotAllocation()` 读取；
 `reconcileAnonymousHandCards()` 只消费分配结果，不再另行扫描卡牌或计算缺口。
-E1/E2 缓存只在单次收敛内存活。Room 继续持有牌局事实、触碰座位集合、脏事件和轮数统计；
+手牌分配缓存与受影响座位筛选只在单次收敛内有效。Room 继续持有牌局事实、触碰座位集合、脏事件和轮数统计；
 DEV 诊断实例由 Room 按需传入，诊断抽样与最终校验的执行顺序不变。
 
 收敛遵循以下边界：
@@ -98,6 +98,13 @@ flowchart TD
 
 三类约束完成后，`reconcileAnonymousHandCards()` 根据观测手牌数、确定明牌和模糊明牌槽位补建或释放匿名手牌实体。实体数量变化会改变玩家区快照，必须把本轮标记为有变化并重新执行全部约束。
 
+`ConstraintGroup` 在名额规范化时缓存解析后的完整位置；`getExpectedLocation()` 为
+`resolve()` 与 `collectConstraintHandSlots()` 复用该读面。缓存按名额 Map 隔离，名额原地
+扣减或删除不改变 Key 的位置语义，整表替换后读取新表的缓存。
+明牌容量求解用直接 Set 迭代判断分量交集，最多 30 个约束时用位掩码归并成员模式；
+DP 按层缓存混合基数整数状态，并原地修改、恢复容量。状态空间超出安全整数或成员模式
+超出位掩码范围时使用字符串 Key，保持大型分量的精确语义。
+
 名额解析的共同读面是 `constraint/constraintSlots.ts`；手牌分配唯一入口是
 `constraint/handSlotUsage.ts` 的 `computeHandSlotAllocation()`。它一次归组确定明牌、确定暗牌
 及候选明牌，并输出展示额度、暗实体覆盖和匿名补缺：
@@ -122,8 +129,8 @@ flowchart TD
 收敛循环使用三类增量机制：
 
 - **A2：玩家区增量快照**。`Room.refreshPlayerSnapshot()` 委托 `projection/playerSnapshot.ts` 按 `dirtyCardEvents` 游标维护快照；数组、成员集合、游标和顺序表只在该模块内保存，Room 的 `playerCardsSnapshot` 是只读 getter。事件断档时回退全量重建，开发构建由 `assertPlayerSnapshotConsistency()` 校验。新实体通过 `Room.registerCardEntity()` 预先登记创建顺序，首次入手无需 `Room.cards.indexOf()`。
-- **E1：手牌分配按座位缓存**。首轮批量计算有观测手牌数的座位，后续轮次沿共享约束组传播触碰座位，批量重算依赖闭包；缓存只在单次 `resolveConstraints()` 内有效。
-- **E2：跳过无关座位**。首轮处理全部已观测玩家，后续轮次跳过触碰座位依赖闭包以外的玩家。暗实体匹配仍消费完整组集合，不能因本轮只重算部分座位而改变结果。
+- **手牌分配缓存**。首轮批量计算有观测手牌数的座位，后续轮次沿共享约束组传播上次分配之后的触碰座位，批量重算依赖闭包；缓存只在单次 `resolveConstraints()` 内有效。
+- **受影响座位筛选**。`pendingAllocationTouchedSeats` 累计上次分配之后的卡牌变更，分配完成后清空；约束三排他和匿名对账产生的新触碰留到下一轮。首轮处理全部已观测玩家，后续轮次跳过待重算座位依赖闭包以外的玩家；待重算集合为空时，稳定末轮不再计算分配或组依赖闭包。暗实体匹配仍消费完整组集合，不能因本轮只重算部分座位而改变结果。
 
 收敛器按 `dirtyCardSeq` 判断玩家快照是否需要刷新，并把已刷新的快照传给分配入口，避免在同一同步阶段重复刷新。
 观测排他若改变候选，先进入下一轮重算分配，再执行匿名补位，不能用失效快照先造实体再回收。
@@ -139,7 +146,7 @@ URL 参数 `debugAssert=1` 会恢复逐次检查，`debugAssert=0` 会关闭收�
 1. 暂停追踪候选范围过宽的明牌。
 2. 按脏卡牌事件与 `dirtyPublicZones` 增量更新 `CardLocationIndex`。
 3. 按索引本批次新旧投影涉及的座位同步玩家视图组，包含未变脏的容器依赖牌；纯公共区变化跳过玩家组，事件游标断档回退时同步全部玩家。
-4. 约束组结构变化时全量重建 `AmbiguousKnownIndex`，否则按脏事件增量更新。
+4. 按脏事件增量更新 `AmbiguousKnownIndex`；约束组结构变化时，再刷新存量模糊明牌的分组与来源描述。游标断档已全量重建时跳过描述刷新。
 5. 更新 `CardCounter`，并执行守恒断言。
 
 索引游标断档允许回退全量重建；正常路径不应主动绕过增量入口。
@@ -193,7 +200,7 @@ URL 参数 `debugAssert=1` 会恢复逐次检查，`debugAssert=0` 会关闭收�
 
 收敛核心变更至少关注以下回归：
 
-- [`tests/tracker/convergence/convergenceTermination.test.ts`](../../tests/tracker/convergence/convergenceTermination.test.ts)：幂等与终止轮数、E1/E2 懒重算与缓存作用域、异常后的触碰座位清理。
+- [`tests/tracker/convergence/convergenceTermination.test.ts`](../../tests/tracker/convergence/convergenceTermination.test.ts)：幂等与终止轮数、手牌分配缓存与受影响座位筛选、异常后的触碰座位清理。
 - [`tests/tracker/convergence/locationCandidates.test.ts`](../../tests/tracker/convergence/locationCandidates.test.ts)：owner 与完整位置候选边界。
 - [`tests/tracker/convergence/handCountObservation.test.ts`](../../tests/tracker/convergence/handCountObservation.test.ts)：观测手牌数、匿名实体与排他逻辑。
 - [`tests/tracker/convergence/resolveConstraintsIncrementalIndex.test.ts`](../../tests/tracker/convergence/resolveConstraintsIncrementalIndex.test.ts)：收敛尾部增量索引一致性。

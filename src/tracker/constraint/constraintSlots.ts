@@ -1,7 +1,4 @@
-import {
-  createLocationCandidateKey,
-  parseLocationCandidateKey
-} from '../candidate/locationCandidate'
+import { createLocationCandidateKey } from '../candidate/locationCandidate'
 import type { Card } from '@/tracker/model/Card'
 import type { ConstraintGroup, SlotCountRange } from './ConstraintGroup'
 import type { LocationCandidate } from '../types'
@@ -23,9 +20,9 @@ export interface ConstraintHandSlotState extends ConstraintSlotState {
 export function getConstraintSlotState(
   cards: Iterable<Card>,
   location: LocationCandidate,
-  range: SlotCountRange
+  range: SlotCountRange,
+  key = createLocationCandidateKey(location)
 ): ConstraintSlotState {
-  const key = createLocationCandidateKey(location)
   const exactCards: Card[] = []
   const candidateCards: Card[] = []
   for (const card of cards) {
@@ -61,9 +58,9 @@ export function collectConstraintHandSlots(
   const slots: ConstraintHandSlotState[] = []
   for (const group of groups) {
     group.expectedSlotsByLocation.forEach((count, key) => {
-      const location = parseLocationCandidateKey(key)
+      const location = group.getExpectedLocation(key)
       if (location?.type !== 'player' || location.subZone !== 'hand') return
-      slots.push({ ...getConstraintSlotState(group.cards, location, count), group })
+      slots.push({ ...getConstraintSlotState(group.cards, location, count, key), group })
     })
   }
   return slots

@@ -9,7 +9,6 @@ import {
   type ConstraintGroupOptions,
   type SlotCountRange
 } from '../constraint/ConstraintGroup'
-import { getHandSlotKindForSeat } from '../constraint/handSlotCounts'
 import { computeHandSlotAllocation, type HandSlotAllocation } from '../constraint/handSlotUsage'
 import { isAmbiguousKnownCard } from '../projection/AmbiguousKnownIndex'
 import type { Room } from '../Room'
@@ -19,7 +18,7 @@ import type { RoomDiagnostics } from './diagnostics'
 
 const MAX_TRACKED_CANDIDATE_SEATS = 4
 
-// 约束组 dirty 标记只关心实际结构变化；集合等价时避免让高频移动回退全量 rebuild。
+// 约束组 dirty 标记只关心实际结构变化；集合等价时避免重复刷新模糊明牌的分组描述。
 function areNumberSetsEqual(left: Set<number>, right: Set<number>): boolean {
   if (left.size !== right.size) return false
   for (const value of left) {
@@ -57,7 +56,7 @@ function areSourceEventsEqual(
 
 /**
  * Room 的约束求解与稳定态同步模块。
- * 集中实现不动点循环、E1/E2 座位缓存、匿名手牌对账、约束组维护与暂停追踪。
+ * 集中实现不动点循环、手牌分配缓存、受影响座位筛选、匿名手牌对账、约束组维护与暂停追踪。
  * 权威状态仍由 Room 持有，手牌槽缓存只在单次收敛调用内存活。
  */
 export class RoomConstraints {
@@ -73,15 +72,15 @@ export class RoomConstraints {
     let changed = true
     let limit = 100 // 限制循环上限防死锁
     let overbroadKnownCards: Card[] = []
-    // E1：收敛循环内复用未触碰 seat 的手牌槽统计；触碰 seat 会按需刷新。
+    // 手牌分配缓存：收敛循环内复用未触碰座位的分配；触碰座位会按需刷新。
     const handAllocations = new Map<SeatID, HandSlotAllocation>()
     // A2：入口读取增量维护的 player 快照（消费上次收敛以来的 dirtyCardEvents）。
     // 非 player 牌不存在陈旧 owner，对约束一/三是严格 no-op；轮内 location 漂移必把
     // changed 置真，由轮末增量刷新兜底。游标断档时 refreshPlayerSnapshot 内部回退全量。
     let playerCards = room.refreshPlayerSnapshot()
     let playerSnapshotSeq = room.dirtyCardSeq
-    // E2：上一轮触碰座位集；null 表示首轮，约束三无条件处理全部玩家。
-    let previousTouchedSeats: Set<SeatID> | null = null
+    // 受影响座位筛选：只累计上次分配之后的触碰座位；分配消费后清空。
+    const pendingAllocationTouchedSeats = new Set<SeatID>()
     // 收敛轮数：喂给非终止回归看门狗（正常 ≤2 轮）。
     let rounds = 0
 
@@ -89,8 +88,7 @@ export class RoomConstraints {
       while (changed && limit-- > 0) {
         changed = false
         overbroadKnownCards = []
-        const touchedSeats = new Set<SeatID>()
-        room.resolveTouchedSeats = touchedSeats
+        room.resolveTouchedSeats = pendingAllocationTouchedSeats
         rounds += 1
 
         // === 约束一：候选席位变化后同步确定拥有者 ===
@@ -109,8 +107,8 @@ export class RoomConstraints {
         }
 
         // === 约束三：暗牌额度降为 0 时的排他排除 ===
-        // E1：首轮只批量计算有观测手牌数的座位；后续轮次按触碰座位及共享组依赖重算，
-        // 未触碰座位复用上一轮缓存，并由 E2 直接跳过。
+        // 首轮只批量计算有观测手牌数的座位；后续轮次按触碰座位及共享组依赖重算，
+        // 跳过依赖闭包以外的座位，复用它们的手牌分配缓存。
         const observedSeatIDs = Array.from(room.players.entries())
           .filter(([, player]) => player.hasObservedHandCount)
           .map(([seatID]) => seatID)
@@ -120,14 +118,15 @@ export class RoomConstraints {
         }
         const affectedSeatIDs = this.collectAffectedHandAllocationSeats(
           observedSeatIDs,
-          previousTouchedSeats,
-          touchedSeats
+          rounds === 1 ? null : pendingAllocationTouchedSeats
         )
         computeHandSlotAllocation(room, affectedSeatIDs, playerCards).forEach(
           (allocation, seatID) => {
             handAllocations.set(seatID, allocation)
           }
         )
+        // 约束一/二的变更已被本次分配消费；排他和匿名对账后的新事件留给下一轮。
+        pendingAllocationTouchedSeats.clear()
         const allocationSeq = room.dirtyCardSeq
 
         for (const [seatID, player] of room.players.entries()) {
@@ -143,38 +142,23 @@ export class RoomConstraints {
 
           // 只有确定明牌已经占满手牌总数时，才排除该玩家的候选明牌。
           if (player.hasObservedHandCount && player.observedHandCount - lockedKnownCount <= 0) {
-            recordTraversal('resolveConstraints:constraint3:exclusion', playerCards.length)
-            for (const card of playerCards) {
-              if (
-                card.location === 'player' &&
-                card.hasLocationCandidates() &&
-                getHandSlotKindForSeat(card, seatID) === 'candidate'
-              ) {
-                const handLocationCandidates = card.locationCandidates.filter(
-                  (candidate) =>
-                    candidate.type === 'player' &&
-                    candidate.seatID === seatID &&
-                    candidate.subZone === 'hand'
-                )
+            recordTraversal(
+              'resolveConstraints:constraint3:exclusion',
+              allocation.candidateKnownCards.length
+            )
+            for (const card of allocation.candidateKnownCards) {
+              // 前一个座位的排他可能已让共享候选牌落定，只删除当前仍存在的手牌候选。
+              const handLocationCandidates = card.locationCandidates.filter(
+                (candidate) =>
+                  candidate.type === 'player' &&
+                  candidate.seatID === seatID &&
+                  candidate.subZone === 'hand'
+              )
 
-                handLocationCandidates.forEach((candidate) => {
-                  changed =
-                    card.removeLocationCandidate(candidate, 'room:unknownQuotaExclusion') || changed
-                })
-
-                continue
-              }
-
-              if (
-                card.location === 'player' &&
-                card.subZone === 'hand' &&
-                // 完整位置候选由 expectedSlotsByLocation 处理，不参与座位级排除。
-                !card.locationCandidates.some((candidate) => candidate.type === 'player') &&
-                card.seats.size > 1 &&
-                card.seats.has(seatID)
-              ) {
-                changed = card.deleteSeat(seatID, 'room:unknownQuotaExclusion') || changed
-              }
+              handLocationCandidates.forEach((candidate) => {
+                changed =
+                  card.removeLocationCandidate(candidate, 'room:unknownQuotaExclusion') || changed
+              })
             }
           }
         }
@@ -188,8 +172,6 @@ export class RoomConstraints {
         if (anonymousHandChanges.created.length > 0 || anonymousHandChanges.released.length > 0) {
           changed = true
         }
-
-        previousTouchedSeats = touchedSeats
 
         // A2：轮内发生变化时增量刷新快照，兜住全部 location 漂移（含轮内新进入 player 的牌）。
         if (changed && playerSnapshotSeq !== room.dirtyCardSeq) {
@@ -229,14 +211,15 @@ export class RoomConstraints {
     // 新旧投影同时覆盖来源清理、候选收缩和容器迁座；纯公共区变化无需同步玩家组。
     this.syncViewGroups(affectedSeats)
 
-    // 增量维护已知明牌的模糊反查索引；约束组结构变化会影响 source label / membership，
-    // 单牌 dirty 事件无法覆盖这些跨牌描述变化，因此只在结构 dirty 时全量回退。
+    // 卡牌脏事件维护索引成员；约束组结构变化只需刷新存量模糊明牌的分组与来源描述。
     const constraintGroups = Array.from(room.constraintGroups.values())
+    const walkedIncremental = room.ambiguousKnownIndex.applyDirtyCardEvents(constraintGroups)
     if (room.constraintGroupsDirty) {
-      room.ambiguousKnownIndex.rebuild(constraintGroups)
+      // 游标断档时已按当前分组全量重建，无需再次刷新描述。
+      if (walkedIncremental) {
+        room.ambiguousKnownIndex.refreshGroupDescriptions(constraintGroups)
+      }
       room.constraintGroupsDirty = false
-    } else {
-      room.ambiguousKnownIndex.applyDirtyCardEvents(constraintGroups)
     }
 
     if (shouldAssertShadowIndexes) room.assertAmbiguousKnownIndexConsistency()
@@ -249,11 +232,10 @@ export class RoomConstraints {
 
   private collectAffectedHandAllocationSeats(
     observedSeatIDs: SeatID[],
-    previousTouchedSeats: Set<SeatID> | null,
-    touchedSeats: Set<SeatID>
+    touchedSeats: Set<SeatID> | null
   ): SeatID[] {
-    if (previousTouchedSeats === null) return observedSeatIDs
-    const affectedSeats = new Set([...previousTouchedSeats, ...touchedSeats])
+    if (touchedSeats === null) return observedSeatIDs
+    const affectedSeats = new Set(touchedSeats)
     if (affectedSeats.size === 0) return []
     const pendingGroups = new Set(
       Array.from(this.room.constraintGroups.values(), (group) => {

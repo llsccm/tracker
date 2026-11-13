@@ -2,13 +2,15 @@ import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { protocolMove } from '../helpers/trackerController'
 import { describe, expect, it } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
+import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { registerDefaultMoveEventHandlers } from '@/tracker/skill/registerHandlers'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import type { TraversalStats } from '@/tracker/traversalStats'
 import { createTestRoom, getCard, getSuspendedIdentityIDs } from '../helpers/room'
+import { playerLocation } from '../helpers/locationCandidates'
 
 // 覆盖 Room 高频移动与收敛路径的遍历基线场景。
-// 快照数字是遍历量护栏：结构性优化（如 A1/E2）应使数字下降并用 `vitest run -u` 刷新，
+// 快照数字是遍历量护栏：结构性优化（如增量快照或受影响座位筛选）应使数字下降并用 `vitest run -u` 刷新，
 // 无关改动使数字上升时需要先解释再更新。
 const DECK_IDS = Array.from({ length: 40 }, (_, index) => index + 1)
 
@@ -83,9 +85,79 @@ describe('Room.cards 遍历基线', () => {
         "handSlotCounts:collectBySeat": "calls=2 visited=1",
         "locationIndex:applyDirty": "calls=1 visited=1",
         "resolveConstraints:constraint1": "calls=2 visited=2",
-        "resolveConstraints:constraint3:exclusion": "calls=1 visited=1",
+        "resolveConstraints:constraint3:exclusion": "calls=1 visited=0",
         "resolveConstraints:playerSnapshotIncremental": "calls=2 visited=1",
-        "total": "visited=8",
+        "total": "visited=7",
+      }
+    `)
+  })
+
+  it('约束组收缩：稳定末轮跳过已消费的手牌分配', () => {
+    const { room } = createTestRoom({ cardIDs: DECK_IDS, seatIDs: [1, 2] })
+    const card = getCard(room, 1)!
+    const firstHand = playerLocation(1, 'hand')
+    const secondHand = playerLocation(2, 'hand')
+    card.setLocationCandidates([firstHand, secondHand])
+    room.createConstraintGroup({
+      cards: [card],
+      expectedSlotsByLocation: new Map([
+        [createLocationCandidateKey(firstHand), 1],
+        [createLocationCandidateKey(secondHand), 0]
+      ])
+    })
+    room.getPlayer(1).syncObservedHandCount(1)
+    room.getPlayer(2).syncObservedHandCount(0)
+
+    const { stats } = collectTraversalStats(() => room.resolveConstraints())
+
+    expect(card.owner).toBe(1)
+    expect(room.lastResolveRounds).toBe(2)
+    expect(summarize(stats)).toMatchInlineSnapshot(`
+      {
+        "ambiguousKnownIndex:applyDirty": "calls=1 visited=1",
+        "ambiguousKnownIndex:refreshGroups": "calls=1 visited=0",
+        "cardCounter:update": "calls=1 visited=1",
+        "handSlotCounts:collectBySeat": "calls=1 visited=1",
+        "locationIndex:applyDirty": "calls=1 visited=1",
+        "resolveConstraints:constraint1": "calls=2 visited=2",
+        "resolveConstraints:constraint3:exclusion": "calls=2 visited=0",
+        "resolveConstraints:playerSnapshotIncremental": "calls=2 visited=1",
+        "total": "visited=7",
+      }
+    `)
+  })
+
+  it('约束组来源更新：160 张牌池只刷新 2 张存量模糊明牌', () => {
+    const { room } = createTestRoom({
+      cardIDs: Array.from({ length: 160 }, (_, index) => index + 1),
+      seatIDs: [1, 2]
+    })
+    const cards = [getCard(room, 5)!, getCard(room, 6)!]
+    cards.forEach((card) => card.bindCandidates([1, 2], 'hand', null, { known: true }))
+    const group = room.createConstraintGroup({
+      cards,
+      sourceEvent: { label: '旧来源' }
+    })
+    room.resolveConstraints()
+    room.createConstraintGroup({ id: group.id, sourceEvent: { label: '新来源' } })
+
+    const { stats } = collectTraversalStats(() => room.resolveConstraints())
+
+    expect(room.ambiguousKnownIndex.items.size).toBe(2)
+    for (const card of cards) {
+      expect(room.ambiguousKnownIndex.describe(card.id)).toContain('新来源')
+      expect(room.ambiguousKnownIndex.describe(card.id)).not.toContain('旧来源')
+    }
+    expect(stats.sites.get('ambiguousKnownIndex:rebuild')).toBeUndefined()
+    expect(stats.sites.get('ambiguousKnownIndex:refreshGroups')).toEqual({ calls: 1, visited: 2 })
+    expect(summarize(stats)).toMatchInlineSnapshot(`
+      {
+        "ambiguousKnownIndex:applyDirty": "calls=1 visited=0",
+        "ambiguousKnownIndex:refreshGroups": "calls=1 visited=2",
+        "locationIndex:applyDirty": "calls=1 visited=0",
+        "resolveConstraints:constraint1": "calls=1 visited=2",
+        "resolveConstraints:playerSnapshotIncremental": "calls=1 visited=0",
+        "total": "visited=4",
       }
     `)
   })
@@ -143,9 +215,9 @@ describe('Room.cards 遍历基线', () => {
         "handSlotCounts:collectBySeat": "calls=3 visited=6",
         "locationIndex:applyDirty": "calls=1 visited=2",
         "resolveConstraints:constraint1": "calls=2 visited=4",
-        "resolveConstraints:constraint3:exclusion": "calls=2 visited=4",
+        "resolveConstraints:constraint3:exclusion": "calls=2 visited=2",
         "resolveConstraints:playerSnapshotIncremental": "calls=3 visited=2",
-        "total": "visited=22",
+        "total": "visited=20",
       }
     `)
   })

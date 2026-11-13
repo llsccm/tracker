@@ -1,11 +1,12 @@
 import {
   createLocationCandidateKey,
+  normalizeLocationCandidate,
   parseLocationCandidateKey
 } from '../candidate/locationCandidate'
 import type { LocationCandidateInput } from '../candidate/locationCandidate'
 import { getConstraintSlotState } from './constraintSlots'
 import type { Card } from '@/tracker/model'
-import type { MoveSourceEvent, SeatID } from '../types'
+import type { LocationCandidate, MoveSourceEvent, SeatID } from '../types'
 
 export interface SlotCountRange {
   readonly min: number
@@ -41,6 +42,10 @@ export class ConstraintGroup {
   declare expectedSlotsByLocation: Map<string, SlotCountRange>
   declare known: boolean
   declare sourceEvent: MoveSourceEvent | string | null
+  private readonly expectedLocations = new WeakMap<
+    Map<string, SlotCountRange>,
+    Map<string, LocationCandidate | null>
+  >()
 
   constructor(options: ConstraintGroupOptions = {}) {
     const { id, cards = [], candidateSeats = [], known = false, sourceEvent = null } = options
@@ -66,26 +71,31 @@ export class ConstraintGroup {
         ? Array.from(expectedSlotsByLocation.entries())
         : Object.entries(expectedSlotsByLocation ?? {})
 
-    return new Map<string, SlotCountRange>(
-      entries
-        .map(([candidate, count]): [string, SlotCountRange] => {
-          const key =
-            typeof candidate === 'string'
-              ? createLocationCandidateKey(parseLocationCandidateKey(candidate))
-              : createLocationCandidateKey(candidate)
-          const range = typeof count === 'number' ? { min: count, max: count } : count
-          if (
-            !Number.isSafeInteger(range.min) ||
-            !Number.isSafeInteger(range.max) ||
-            range.min < 0 ||
-            range.max < range.min
-          ) {
-            throw new RangeError('位置名额必须为安全整数且满足 0 <= min <= max')
-          }
-          return [key, { min: range.min, max: range.max }]
-        })
-        .filter(([key]) => key)
-    )
+    const slots = new Map<string, SlotCountRange>()
+    const locations = new Map<string, LocationCandidate | null>()
+    for (const [candidate, count] of entries) {
+      const location =
+        typeof candidate === 'string'
+          ? parseLocationCandidateKey(candidate)
+          : normalizeLocationCandidate(candidate)
+      // 名额只保存 Key 语义；公共候选的展示 label 不属于位置键。
+      if (location?.type === 'public') location.label = null
+      const key = createLocationCandidateKey(location ? Object.freeze(location) : null)
+      const range = typeof count === 'number' ? { min: count, max: count } : count
+      if (
+        !Number.isSafeInteger(range.min) ||
+        !Number.isSafeInteger(range.max) ||
+        range.min < 0 ||
+        range.max < range.min
+      ) {
+        throw new RangeError('位置名额必须为安全整数且满足 0 <= min <= max')
+      }
+      if (!key) continue
+      slots.set(key, { min: range.min, max: range.max })
+      locations.set(key, location)
+    }
+    this.expectedLocations.set(slots, locations)
+    return slots
   }
 
   addCards(cards: Card | Card[]): void {
@@ -95,6 +105,20 @@ export class ConstraintGroup {
         this.cards.add(card)
       }
     })
+  }
+
+  /** 位置只由 key 决定；名额原地扣减或删除不会使解析缓存失效。 */
+  getExpectedLocation(key: string): LocationCandidate | null {
+    let locations = this.expectedLocations.get(this.expectedSlotsByLocation)
+    if (!locations) {
+      locations = new Map()
+      this.expectedLocations.set(this.expectedSlotsByLocation, locations)
+    }
+    const cached = locations.get(key)
+    if (cached !== undefined) return cached
+    const location = parseLocationCandidateKey(key)
+    locations.set(key, location ? Object.freeze(location) : null)
+    return location
   }
 
   /**
@@ -125,12 +149,13 @@ export class ConstraintGroup {
     const slotEntries = this.expectedSlotsByLocation
 
     slotEntries.forEach((expectedCount, key) => {
-      const location = parseLocationCandidateKey(key)
+      const location = this.getExpectedLocation(key)
       if (!location) return
       const { candidateCards, remainingMin, remainingMax } = getConstraintSlotState(
         this.cards,
         location,
-        expectedCount
+        expectedCount,
+        key
       )
 
       if (remainingMax === 0) {
@@ -144,9 +169,7 @@ export class ConstraintGroup {
       // 组外位置仍然可能承接这些牌，局部名额不足以把它们锁定在本组。
       if (candidateCards.length > remainingMin) return
       const coversAllCandidates = candidateCards.every((card) =>
-        card.locationCandidates.every((candidate) =>
-          slotEntries.has(createLocationCandidateKey(candidate))
-        )
+        card.areLocationCandidatesCoveredBy(slotEntries)
       )
       if (!coversAllCandidates) return
 

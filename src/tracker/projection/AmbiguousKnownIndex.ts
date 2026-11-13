@@ -97,6 +97,18 @@ export class AmbiguousKnownIndex {
   }
 
   /**
+   * 消费卡牌脏事件后，约束组结构变化只需刷新存量模糊明牌的分组与来源描述。
+   */
+  refreshGroupDescriptions(groups: ConstraintGroup[] = []): void {
+    recordTraversal('ambiguousKnownIndex:refreshGroups', this.items.size)
+    for (const item of this.items.values()) {
+      const relatedGroups = this.getRelatedGroups(item.card, groups)
+      item.groups = relatedGroups
+      item.description = this.formatCardDescription(item.card, relatedGroups)
+    }
+  }
+
+  /**
    * 单牌更新：先删除旧条目，再按当前状态重新判定是否应进入索引。
    */
   applyCardChange(card: Card, groups: ConstraintGroup[] = []): void {
