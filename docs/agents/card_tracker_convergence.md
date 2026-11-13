@@ -98,6 +98,13 @@ flowchart TD
 
 三类约束完成后，`reconcileAnonymousHandCards()` 根据观测手牌数、确定明牌和模糊明牌槽位补建或释放匿名手牌实体。实体数量变化会改变玩家区快照，必须把本轮标记为有变化并重新执行全部约束。
 
+`ConstraintGroup` 在名额规范化时缓存解析后的完整位置；`getExpectedLocation()` 为
+`resolve()` 与 `collectConstraintHandSlots()` 复用该读面。缓存按名额 Map 隔离，名额原地
+扣减或删除不改变 Key 的位置语义，整表替换后读取新表的缓存。
+明牌容量求解用直接 Set 迭代判断分量交集，最多 30 个约束时用位掩码归并成员模式；
+DP 按层缓存混合基数整数状态，并原地修改、恢复容量。状态空间超出安全整数或成员模式
+超出位掩码范围时使用字符串 Key，保持大型分量的精确语义。
+
 名额解析的共同读面是 `constraint/constraintSlots.ts`；手牌分配唯一入口是
 `constraint/handSlotUsage.ts` 的 `computeHandSlotAllocation()`。它一次归组确定明牌、确定暗牌
 及候选明牌，并输出展示额度、暗实体覆盖和匿名补缺：

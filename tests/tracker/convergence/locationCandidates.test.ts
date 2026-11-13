@@ -15,6 +15,87 @@ import {
 } from '../helpers/locationCandidates'
 
 describe('完整位置候选回归', () => {
+  it('候选键查询在重排、去重、删除、落定和重置后保持一致', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0, 3] })
+    const card = getCard(room, 1)!
+    const locations = [
+      playerLocation(0, 'mark', 0),
+      playerLocation(3, 'hand'),
+      publicLocation('pile', 'top', 3),
+      equipmentContainer(161, 700),
+      outsideLocation('exchange'),
+      { type: 'popup', spaceID: 3544 },
+      { type: 'outside', zone: 'exchange', batchID: 'batch:1' }
+    ]
+    const keys = locations.map((location) => createLocationCandidateKey(location))
+    expect(card.setLocationCandidates(locations)).toBe(true)
+    keys.forEach((key) => expect(card.hasLocationCandidate(key)).toBe(true))
+    const dirtySeq = room.dirtyCardSeq
+    expect(card.setLocationCandidates([...locations].reverse().concat(locations))).toBe(false)
+    expect(room.dirtyCardSeq).toBe(dirtySeq)
+
+    for (const key of keys.slice(0, -1)) {
+      expect(card.removeLocationCandidate(key)).toBe(true)
+      expect(card.hasLocationCandidate(key)).toBe(false)
+    }
+    expect(card.hasLocationCandidate(keys.at(-1)!)).toBe(true)
+    card.resolveLocationCandidate(playerLocation(3, 'hand'))
+    keys.forEach((key) => expect(card.hasLocationCandidate(key)).toBe(false))
+    expect(card.getPossibleLocations()).toEqual([
+      { type: 'player', seatID: 3, subZone: 'hand', spellID: null }
+    ])
+    card.reset()
+    expect(card.getPossibleLocations()).toEqual([
+      { type: 'public', zone: 'pile', position: 'any', count: null, label: null }
+    ])
+  })
+
+  it('可变输入重新生成位置键，冻结候选的查询不受输入后续修改影响', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0, 3] })
+    const card = getCard(room, 1)!
+    const input = playerLocation(0, 'hand')
+    expect(createLocationCandidateKey(input)).toBe('player:0:hand:none')
+    card.setLocationCandidates([input, playerLocation(3, 'hand')])
+    input.seatID = 3
+    expect(createLocationCandidateKey(input)).toBe('player:3:hand:none')
+    expect(card.hasLocationCandidate('player:0:hand:none')).toBe(true)
+    expect(card.hasLocationCandidate(input)).toBe(true)
+  })
+
+  it('确定位置缓存随座位、子区、标记空间、弹窗和公共区切换刷新', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0, 3] })
+    const card = getCard(room, 1)!
+    card.resolveLocationCandidate(playerLocation(0, 'hand'))
+    expect(card.getPossibleLocations()).toEqual([
+      { type: 'player', seatID: 0, subZone: 'hand', spellID: null }
+    ])
+    card.setSeats([3])
+    expect(card.getPossibleLocations()).toEqual([
+      { type: 'player', seatID: 3, subZone: 'hand', spellID: null }
+    ])
+    for (const spellID of [0, 700]) {
+      card.resolveLocationCandidate(playerLocation(3, 'mark', spellID))
+      expect(card.getPossibleLocations()).toEqual([
+        { type: 'player', seatID: 3, subZone: 'mark', spellID }
+      ])
+    }
+    for (const spaceID of [3544, 3545]) {
+      card.resolveLocationCandidate({ type: 'popup', spaceID })
+      expect(card.getPossibleLocations()).toEqual([{ type: 'popup', spaceID }])
+    }
+    card.moveToPublicZone('discard')
+    expect(card.getPossibleLocations()).toEqual([
+      { type: 'public', zone: 'discard', position: 'any', count: null, label: null }
+    ])
+    card.suspended = true
+    expect(card.getPossibleLocations()).toEqual([])
+    card.suspended = false
+    card.moveToPublicZone('pile')
+    expect(card.getPossibleLocations()).toEqual([
+      { type: 'public', zone: 'pile', position: 'any', count: null, label: null }
+    ])
+  })
+
   it.each([
     { key: 'popup:3544', expected: { type: 'popup', spaceID: 3544 } },
     {

@@ -1,11 +1,56 @@
 import { describe, expect, it } from 'vitest'
 import { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
 import { computeHandSlotAllocation } from '@/tracker/constraint/handSlotUsage'
-import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
+import { collectConstraintHandSlots } from '@/tracker/constraint/constraintSlots'
+import {
+  createLocationCandidateKey,
+  parseLocationCandidateKey
+} from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from '../helpers/room'
 import { equipmentContainer, playerLocation, publicLocation } from '../helpers/locationCandidates'
 
 describe('区间名额', () => {
+  it.each([
+    playerLocation(0, 'mark', 0),
+    playerLocation(3, 'hand'),
+    { ...publicLocation('pile', 'top', 3), label: '展示标签' },
+    equipmentContainer(161, 700),
+    { type: 'popup', spaceID: 3544 },
+    { type: 'outside', zone: 'exchange', batchID: 'batch:1' }
+  ])('对象名额缓存与字符串位置键解析语义一致（%j）', (location) => {
+    const group = new ConstraintGroup({ expectedSlotsByLocation: new Map([[location, 1]]) })
+    const key = createLocationCandidateKey(location)
+    expect(group.getExpectedLocation(key)).toEqual(parseLocationCandidateKey(key))
+  })
+
+  it('位置解析缓存保持名额原地更新、删除和整表替换后的读面一致', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [0, 3] })
+    const cards = [1, 2].map((id) => getCard(room, id)!)
+    const hand = playerLocation(0, 'hand')
+    const otherHand = playerLocation(3, 'hand')
+    cards.forEach((card) => card.setLocationCandidates([hand, otherHand]))
+    const group = room.createConstraintGroup({
+      cards,
+      expectedSlotsByLocation: new Map([[hand, 1]])
+    })
+    expect(collectConstraintHandSlots([group])[0].remainingMax).toBe(1)
+    expect(group.resolve()).toBe(false)
+
+    group.expectedSlotsByLocation.set('player:0:hand:none', { min: 0, max: 0 })
+    expect(collectConstraintHandSlots([group])[0].remainingMax).toBe(0)
+    group.expectedSlotsByLocation.delete('player:0:hand:none')
+    expect(collectConstraintHandSlots([group])).toEqual([])
+    group.expectedSlotsByLocation.set('player:3:hand:none', { min: 0, max: 1 })
+    expect(collectConstraintHandSlots([group])[0]).toMatchObject({
+      location: { type: 'player', seatID: 3, subZone: 'hand' },
+      remainingMax: 1
+    })
+
+    room.createConstraintGroup({ id: group.id, expectedSlotsByLocation: new Map([[hand, 0]]) })
+    expect(group.resolve()).toBe(true)
+    expect(cards.every((card) => card.owner === 3 && card.subZone === 'hand')).toBe(true)
+  })
+
   it('建组对实体去重，候选座位快照不移动牌或覆盖已有位置候选', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0, 1] })
     const card = getCard(room, 1)!
@@ -259,6 +304,41 @@ describe('完整位置名额生命周期', () => {
       expect(room.getPlayer(1)!.getCandidateHandSlotCount(), `scenario ${scenario}`).toBe(expected)
     }
   })
+
+  it.each([
+    { groupCount: 2, minimumSize: 2, reverse: false },
+    { groupCount: 4, minimumSize: 2, reverse: true },
+    { groupCount: 30, minimumSize: 5, reverse: false },
+    { groupCount: 33, minimumSize: 2, reverse: true }
+  ])(
+    '多组容量编码与大型分量回退符合穷举（$groupCount 组，逆序：$reverse）',
+    ({ groupCount, minimumSize, reverse }) => {
+      const { room } = createTestRoom({ cardIDs: [1, 2, 3, 4, 5, 6, 7, 8], seatIDs: [1, 2] })
+      const cards = [1, 2, 3, 4, 5, 6, 7, 8].map((id) => getCard(room, id)!)
+      cards.forEach((card) => card.bindCandidates([1, 2], 'hand', null, { known: true }))
+      const countBits = (mask: number) => mask.toString(2).replaceAll('0', '').length
+      const facts = Array.from({ length: 255 }, (_, index) => ((index * 73 + 31) % 255) + 1)
+        .filter((mask) => countBits(mask) >= minimumSize)
+        .slice(0, groupCount)
+        .map((mask) => ({ mask, count: minimumSize === 5 ? 4 : 1 }))
+      const orderedFacts = reverse ? [...facts].reverse() : facts
+      orderedFacts.forEach(({ mask, count }) =>
+        room.createConstraintGroup({
+          cards: cards.filter((_, index) => (mask & (1 << index)) !== 0),
+          expectedSlotsByLocation: new Map([[playerLocation(1, 'hand'), count]])
+        })
+      )
+      const covered = facts.reduce((mask, fact) => mask | fact.mask, 0)
+      let expected = 0
+      for (let selection = 0; selection < 256; selection += 1) {
+        if ((selection & ~covered) !== 0) continue
+        if (facts.every((fact) => countBits(selection & fact.mask) <= fact.count)) {
+          expected = Math.max(expected, countBits(selection))
+        }
+      }
+      expect(room.getPlayer(1)!.getCandidateHandSlotCount()).toBe(expected)
+    }
+  )
 
   it('创建和更新仅维护完整位置名额，省略保持原值、空 Map 明确清空', () => {
     const { room } = createTestRoom({ cardIDs: [1] })
