@@ -216,14 +216,18 @@ export class RoomConstraints {
 
     // 增量维护区域投影索引；游标断档时 applyDirtyCardEvents 内部回退全量 rebuild。
     // 纯公共区之间的暗牌移动不发脏牌事件，靠 Zone 变更累积的 dirtyPublicZones 补齐。
-    room.locationIndex.applyDirtyCardEvents(room, { dirtyPublicZones: room.dirtyPublicZones })
+    const affectedSeats = new Set<SeatID>()
+    room.locationIndex.applyDirtyCardEvents(room, {
+      dirtyPublicZones: room.dirtyPublicZones,
+      affectedSeats
+    })
     room.dirtyPublicZones.clear()
     const shouldAssertShadowIndexes =
       import.meta.env.DEV && diagnostics?.shouldAssertShadowIndexConsistency()
     if (shouldAssertShadowIndexes) room.assertLocationIndexConsistency()
 
-    // 约束收敛完毕后同步视图物理组排序
-    this.syncViewGroups()
+    // 新旧投影同时覆盖来源清理、候选收缩和容器迁座；纯公共区变化无需同步玩家组。
+    this.syncViewGroups(affectedSeats)
 
     // 增量维护已知明牌的模糊反查索引；约束组结构变化会影响 source label / membership，
     // 单牌 dirty 事件无法覆盖这些跨牌描述变化，因此只在结构 dirty 时全量回退。

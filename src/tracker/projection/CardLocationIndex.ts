@@ -34,6 +34,8 @@ interface ApplyDirtyOptions {
    * 需要移动层显式告知；玩家区↔公共区的迁移会由脏牌自身的新旧位置覆盖。
    */
   dirtyPublicZones?: Iterable<PublicZoneName>
+  /** 收集本批次新旧玩家投影涉及的座位，供稳定尾部定向同步；断档回退时覆盖全部玩家。 */
+  affectedSeats?: Set<SeatID>
 }
 
 /**
@@ -151,6 +153,7 @@ export class CardLocationIndex {
     // 断档检测：需要的下一条事件已被 DIRTY_CARD_EVENT_LIMIT splice 掉时，只能全量回退。
     if (events.length > 0 && events[0].seq > this.lastConsumedSeq + 1) {
       this.rebuild(room)
+      room.players.forEach((_, seatID) => options.affectedSeats?.add(seatID))
       return false
     }
 
@@ -170,7 +173,7 @@ export class CardLocationIndex {
         affectedZones.add(previousLocation as PublicZoneName)
       }
 
-      this.applyCardChange(room, card)
+      this.applyCardChange(room, card, options.affectedSeats)
 
       if (room.zones.has(card.location as PublicZoneName)) {
         affectedZones.add(card.location as PublicZoneName)
@@ -181,7 +184,7 @@ export class CardLocationIndex {
     // 容器候选罕见（木马类装备标记空间），通常为空集，对常规移动零开销。
     if (this.containerDependentCards.size > 0) {
       for (const card of Array.from(this.containerDependentCards)) {
-        if (!affectedCards.has(card)) this.applyCardChange(room, card)
+        if (!affectedCards.has(card)) this.applyCardChange(room, card, options.affectedSeats)
       }
     }
 
@@ -195,14 +198,20 @@ export class CardLocationIndex {
   /**
    * 单牌重投影：先按旧投影记录从桶中删除，再按当前状态计算新投影并有序插入。
    */
-  applyCardChange(room: Room, card: Card): void {
+  applyCardChange(room: Room, card: Card, affectedSeats?: Set<SeatID>): void {
     const previous = this.projections.get(card)
     if (previous) {
-      previous.targets.forEach((target) => this.removeProjection(card, target))
+      previous.targets.forEach((target) => {
+        affectedSeats?.add(target.seat)
+        this.removeProjection(card, target)
+      })
     }
 
     const targets = this.projectCard(room, card)
-    targets.forEach((target) => this.insertProjectionOrdered(card, target))
+    targets.forEach((target) => {
+      affectedSeats?.add(target.seat)
+      this.insertProjectionOrdered(card, target)
+    })
     this.projections.set(card, { location: card.location, targets })
 
     if (this.cardHasContainerCandidates(card)) this.containerDependentCards.add(card)
