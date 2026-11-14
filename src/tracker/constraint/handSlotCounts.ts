@@ -52,14 +52,23 @@ export function collectHandSlotCardsBySeat(
       continue
     }
 
-    cardsBySeat.forEach((slotCards, seatID) => {
-      const handSlotKind = getHandSlotKindForSeat(card, seatID)
-      if (handSlotKind === 'known') {
-        slotCards.knownCards.push(card)
-      } else if (handSlotKind === 'candidate') {
-        slotCards.candidateCards.push(card)
+    const locations = card.getPossibleLocations()
+    if (locations.length === 1) {
+      const location = locations[0]
+      if (location.type === 'player' && location.subZone === 'hand') {
+        cardsBySeat.get(location.seatID)?.knownCards.push(card)
       }
-    })
+      continue
+    }
+    if (locations.length === 0) continue
+
+    const candidateSeats = new Set<number>()
+    for (const location of locations) {
+      if (location.type !== 'player' || location.subZone !== 'hand') continue
+      if (candidateSeats.has(location.seatID)) continue
+      candidateSeats.add(location.seatID)
+      cardsBySeat.get(location.seatID)?.candidateCards.push(card)
+    }
   }
 
   return cardsBySeat

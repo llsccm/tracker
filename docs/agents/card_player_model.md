@@ -64,6 +64,9 @@
   `resolveLocationCandidate()`；`bindCandidates()` 仅供内部委托使用，不应列为通用外部写入口。
 - `locationCandidates`、`seats`、`subZoneCandidates`、`publicCandidates` 均不允许
   在外部直接修改。
+- `storeLocationCandidates()` 同步维护候选 Key 集合，成员查询与集合相等性比较不重新格式化
+  旧候选；冻结候选的 Key 通过弱引用缓存，可变输入不缓存。`getPossibleLocations()` 对确定位置
+  复用冻结快照，并按 location、owner、subZone、spellID、popupSpaceID 字段变化刷新。
 - `seats.size === 1` 只表示 owner 确定；`A 手牌 / A 标记` 仍可能在子区域层未收敛。
 - `setSeats()` 是显式座位筛选入口，不是投影同步入口。候选写入由 `setLocationCandidates()`
   提交，单一玩家位置委托 `resolveLocationCandidate()` 落定；后续 owner/seat 投影不反向调用

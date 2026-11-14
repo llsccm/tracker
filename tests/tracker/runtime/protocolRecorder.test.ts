@@ -397,6 +397,13 @@ describe('tracker protocol projection', () => {
     })
   })
 
+  it('保留最早的重连版本通知，不记录无关版本字段', () => {
+    expect(projectTrackerProtocol({ className: 'SsClientVersionNtf', Version: 4080 })).toEqual({
+      className: 'SsClientVersionNtf',
+      payload: {}
+    })
+  })
+
   it('为录像开局保留处理器实际读取的 seatinfo', () => {
     const message = {
       className: 'decodeGsClientUserSeatFlagNtf',

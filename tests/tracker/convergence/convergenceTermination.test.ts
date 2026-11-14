@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
+import { collectTraversalStats } from '@/tracker/traversalStats'
+import { playerLocation } from '../helpers/locationCandidates'
 import { createTestRoom, getCard } from '../helpers/room'
 
 afterEach(() => {
@@ -18,6 +21,70 @@ afterEach(() => {
  * 高位就会被这里捕获，比 traversalBaseline 的遍历计数护栏更贴近"是否终止"本身。
  */
 describe('收敛终止性回归护栏（#2 约束二收敛非终止）', () => {
+  it('约束组收缩在分配阶段被消费，稳定末轮不再重算手牌槽', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
+    const card = getCard(room, 1)!
+    const firstHand = playerLocation(1, 'hand')
+    const secondHand = playerLocation(2, 'hand')
+    card.setLocationCandidates([firstHand, secondHand])
+    room.createConstraintGroup({
+      cards: [card],
+      expectedSlotsByLocation: new Map([
+        [createLocationCandidateKey(firstHand), 1],
+        [createLocationCandidateKey(secondHand), 0]
+      ])
+    })
+    const firstPlayer = room.getPlayer(1)
+    const secondPlayer = room.getPlayer(2)
+    firstPlayer.syncObservedHandCount(1)
+    secondPlayer.syncObservedHandCount(0)
+    const firstRefresh = vi.spyOn(firstPlayer, 'refreshUnknownCardCount')
+    const secondRefresh = vi.spyOn(secondPlayer, 'refreshUnknownCardCount')
+
+    const { stats } = collectTraversalStats(() => room.resolveConstraints())
+
+    expect(room.lastResolveRounds).toBe(2)
+    expect(card.owner).toBe(1)
+    expect(card.locationCandidates).toEqual([])
+    expect(firstPlayer.knownHandCards).toEqual([card])
+    expect(firstRefresh).toHaveBeenCalledTimes(1)
+    expect(secondRefresh).toHaveBeenCalledTimes(1)
+    expect(stats.sites.get('handSlotCounts:collectBySeat')).toEqual({ calls: 1, visited: 1 })
+  })
+
+  it('同座位在分配前收缩、分配后补位时，下一轮仍重算匿名覆盖', () => {
+    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
+    const card = getCard(room, 1)!
+    const hand = playerLocation(1, 'hand')
+    const mark = playerLocation(1, 'mark', 700)
+    card.setLocationCandidates([hand, mark])
+    room.createConstraintGroup({
+      cards: [card],
+      expectedSlotsByLocation: new Map([
+        [createLocationCandidateKey(hand), 1],
+        [createLocationCandidateKey(mark), 0]
+      ])
+    })
+    const firstPlayer = room.getPlayer(1)
+    const secondPlayer = room.getPlayer(2)
+    firstPlayer.syncObservedHandCount(2)
+    secondPlayer.syncObservedHandCount(0)
+    const firstRefresh = vi.spyOn(firstPlayer, 'refreshUnknownCardCount')
+    const secondRefresh = vi.spyOn(secondPlayer, 'refreshUnknownCardCount')
+
+    const { stats } = collectTraversalStats(() => room.resolveConstraints())
+
+    expect(room.lastResolveRounds).toBe(2)
+    expect(firstRefresh).toHaveBeenCalledTimes(2)
+    expect(secondRefresh).toHaveBeenCalledTimes(1)
+    expect(firstPlayer.unknownCardCount).toBe(1)
+    expect(firstPlayer.knownHandCards).toEqual([card])
+    expect(room.playerCardsSnapshot).toHaveLength(2)
+    expect(room.playerCardsSnapshot.filter((card) => card.isAnonymous)).toHaveLength(1)
+    expect(stats.sites.get('handSlotCounts:collectBySeat')).toEqual({ calls: 2, visited: 3 })
+    expect(room.resolveTouchedSeats).toBeNull()
+  })
+
   it('匿名手牌补位后只重算受影响座位，手牌槽缓存不跨次收敛复用', () => {
     const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
     const firstPlayer = room.players.get(1)!
@@ -47,6 +114,43 @@ describe('收敛终止性回归护栏（#2 约束二收敛非终止）', () => {
     expect(secondRefresh).toHaveBeenCalledTimes(1)
     expect(room.playerCardsSnapshot).toEqual([anonymousHandCard])
     expect(room.resolveTouchedSeats).toBeNull()
+  })
+
+  it('分配后的排他沿共享组传递重算，保留无关座位缓存', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2], seatIDs: [1, 2, 3, 4] })
+    const firstCard = getCard(room, 1)!
+    const secondCard = getCard(room, 2)!
+    const hands = [1, 2, 3].map((seatID) => playerLocation(seatID, 'hand'))
+    firstCard.setLocationCandidates(hands.slice(0, 2))
+    secondCard.setLocationCandidates(hands.slice(1))
+    const cards = [firstCard, secondCard]
+    cards.forEach((card, index) => {
+      room.createConstraintGroup({
+        cards: [card],
+        expectedSlotsByLocation: new Map(
+          hands
+            .slice(index, index + 2)
+            .map((hand) => [createLocationCandidateKey(hand), { min: 0, max: 1 }])
+        )
+      })
+    })
+    room.getPlayer(1).syncObservedHandCount(0)
+    room.getPlayer(2).syncObservedHandCount(1)
+    room.getPlayer(3).syncObservedHandCount(1)
+    room.getPlayer(4).syncObservedHandCount(0)
+    const thirdRefresh = vi.spyOn(room.getPlayer(3), 'refreshUnknownCardCount')
+    const fourthRefresh = vi.spyOn(room.getPlayer(4), 'refreshUnknownCardCount')
+
+    room.resolveConstraints()
+
+    expect(room.lastResolveRounds).toBe(3)
+    expect(firstCard.owner).toBe(2)
+    expect(secondCard.owner).toBe(3)
+    expect(firstCard.locationCandidates).toEqual([])
+    expect(secondCard.locationCandidates).toEqual([])
+    expect(thirdRefresh).toHaveBeenCalledTimes(3)
+    expect(fourthRefresh).toHaveBeenCalledTimes(1)
+    expect(room.playerCardsSnapshot).toHaveLength(2)
   })
 
   it('约束求解异常后清理触碰座位集合，后续调用仍可正常收敛', () => {

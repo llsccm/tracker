@@ -9,9 +9,9 @@ function registerGamePlayers(infos) {
   cancelGameOverTask()
   resetSeatUIs()
   tracker.initTrackerRoom()
-  tracker.registerTrackerPlayers(infos, user.userID)
   resetOrderContainer()
   hideOrderContainer(infos.length)
+  tracker.registerTrackerPlayers(infos, user.userID)
 }
 
 /** 旧录像可能没有该消息 GsCModifyUserseatNtf */

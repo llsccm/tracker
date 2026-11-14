@@ -146,13 +146,22 @@ sequenceDiagram
 执行顺序（以 `handleRecordStartGame` / `handleStartGame` 为准）：
 
 1. `resetSeatUIs()`：清理上一局的座位数据与镜像，重置布局提交状态。
-2. `tracker.initTrackerRoom()`（[`TrackerController`](../../src/tracker/runtime/trackerController.ts)）：销毁旧 Room，创建新 Room，在注册玩家前调用其 GameState 的 `beginPlayback()`，重置本轮运行状态，再注册默认移动事件处理器。
-3. `tracker.registerTrackerPlayers(infos, user.userID)`：
+2. `tracker.initTrackerRoom()`（[`TrackerController`](../../src/tracker/runtime/trackerController.ts)）：普通开局销毁旧 Room，创建新 Room，在注册玩家前调用其 GameState 的 `beginPlayback()`，重置本轮运行状态，再注册默认移动事件处理器。若 `SsClientVersionNtf` 已提前创建重连 Room，本次座位通知复用该 Room，不再次清空先手、轮次与牌堆。
+3. 重置并裁剪 `.sorderContainer`，再注册玩家，避免覆盖重连时立即补齐的座位布局。
+4. `tracker.registerTrackerPlayers(infos, user.userID)`：
    - `Room.registerPlayers()` 兼容 `SeatID`/`seat_id`、`ClientID`/`user_temp_id`；
    - 按 `user.userID` 匹配主视角；匹配不到则 `Game.isRecord = true`；
    - `size` / `seatIDs` 由 Room 写入，再 `syncRoomSeats` 到 Game；
-   - 早期 `view.mount(trackerRoom)`（牌堆未就绪时只建固定手牌容器）。
-4. 注册完成后重置并裁剪 `.sorderContainer`；Room 重建保留已经收到的对局 ID 和模式信息。
+   - 若重连先手已到达，补齐 `fixedViewId` 与座位布局；牌堆已就绪时补建玩家区索引。
+   - `view.mount(trackerRoom)`（牌堆未就绪时只建固定手牌容器）。
+
+Room 重建保留已经收到的对局 ID 和模式信息。
+
+`SsClientVersionNtf` 在首次登录和断线重连时都会到达。Controller 在没有 Room 时忽略它；
+已有 Room 时通过 `beginTrackerReconnect()` 销毁旧局运行状态、提前创建 `degraded` Room，
+由该 Room 接收随后到达的初始化信息、先手、轮次、牌堆及公共区移动。晚到的座位通知只消费
+一次待注册标记并补注册玩家，不重复重建。连续断线会重新创建恢复用 Room；销毁 Room 时清理
+待注册标记。重连完成后的普通座位开局仍重建为 `full`，不把降级状态带入下一次播放。
 
 `decodeGameRecordInitInfo` 由 `Game.updateRecordInfo()` 处理：按 `gameId` 的无符号高低位
 生成稳定键，新 ID 清理旧对局元信息再更新模式，但不重置座位、轮次、录像标记或技能状态。
@@ -201,13 +210,14 @@ sequenceDiagram
 
 ### 6. 对局运行
 
-- `MsgReconnectGame`：`tracker.degradeTrackerRoom(msg)` → `Room.degradeTracking()`，保留当前 Room 和视图，
+- `SsClientVersionNtf`：已有 Room 时提前创建有限模式 Room，具体初始化顺序见上文；录制器保留消息类名，不记录版本字段。
+- `MsgReconnectGame`：`tracker.degradeTrackerRoom(msg)` → `Room.degradeTracking()`，向当前 Room 恢复快照，
   继续处理后续协议；`RoomReconnect` 恢复 `CardPileCount`、手牌总数、装备及判定快照。只有重连标记
   时保留同一 Room 的明确洗牌数量锚点；快照先于牌堆初始化时按局暂存。新 Room 默认恢复 `full`。
-  录制器保留这些快照字段及嵌套的 `CardId` / `SpellId`，重连消息不再统一投影为空载荷。
+  没有先行版本通知的旁观残局仍由此消息降级；录制器保留快照字段及嵌套的 `CardId` / `SpellId`。
 - `PubGsCMoveCard`：[`handleMoveCard()`](../../src/handler/PubGsCMoveCard.js) 做预处理、特殊区域（`specialZones`）、局流状态（`gameFlowState`）、技能辅助（`spellEffects` / `skills/*`），再 `tracker.syncTrackerMove()` → `Room.moveCards()` / `shufflePile()`。
 - `MsgGameTurnNtf`：`handleGameTurn` 在首轮先隐藏主视角，再显示已完成定位的 `.sorderContainer`。随后调用纯状态
-  `Game.setTurn`，重置轮级战法 Laya 状态，最后 `scheduleTrackerRender`；容器重置与超出人数的容器隐藏在开局注册后完成。
+  `Game.setTurn`，重置轮级战法 Laya 状态，最后 `scheduleTrackerRender`；容器重置与超出人数的容器隐藏在开局注册玩家前完成。
 - `GsCGamephaseNtf`：`handleGamePhase` 按 `SeatRoundState` 编排阶段消息，调用纯状态
   `Game.enter`，再处理阶段 DOM、回合结果清理与战法 Laya 状态，最后
   `scheduleTrackerRender`。

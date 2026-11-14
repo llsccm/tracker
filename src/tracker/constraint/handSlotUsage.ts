@@ -142,7 +142,7 @@ function countCandidateHandSlots(
     remaining.delete(first)
     for (let index = 0; index < component.length; index += 1) {
       for (const budget of remaining) {
-        if (!Array.from(budget.cards).some((card) => cards.has(card))) continue
+        if (!haveCardOverlap(budget.cards, cards)) continue
         component.push(budget)
         budget.cards.forEach((card) => cards.add(card))
         remaining.delete(budget)
@@ -173,18 +173,42 @@ function countBudgetComponent(budgets: HandSlotBudget[], cards: Set<Card>): numb
   }
 
   // 同时属于相同约束的身份可以按数量一起求解，无需枚举具体 CardID 组合。
-  const buckets = new Map<string, { indices: number[]; count: number }>()
+  const useIntegerPatterns = constraints.length <= 30
+  const buckets = new Map<number | string, { indices: number[]; count: number }>()
   for (const card of cards) {
-    const indices = constraints.flatMap((budget, index) => (budget.cards.has(card) ? [index] : []))
-    const key = indices.join(',')
+    const indices: number[] = []
+    let mask = 0
+    for (let index = 0; index < constraints.length; index += 1) {
+      if (!constraints[index].cards.has(card)) continue
+      indices.push(index)
+      if (useIntegerPatterns) mask |= 1 << index
+    }
+    const key = useIntegerPatterns ? mask : indices.join(',')
     const bucket = buckets.get(key)
     if (bucket) bucket.count += 1
     else buckets.set(key, { indices, count: 1 })
   }
-  const patterns = Array.from(buckets.values()).sort(
-    (left, right) =>
-      right.indices.length - left.indices.length ||
-      left.indices.join(',').localeCompare(right.indices.join(','))
+  const patterns = Array.from(buckets.entries())
+    .sort(
+      ([leftKey, left], [rightKey, right]) =>
+        right.indices.length - left.indices.length ||
+        (useIntegerPatterns
+          ? (leftKey as number) - (rightKey as number)
+          : String(leftKey).localeCompare(String(rightKey)))
+    )
+    .map(([, bucket]) => bucket)
+  const capacities = constraints.map((budget) => budget.count)
+  const strides: number[] = []
+  let stateCount = 1
+  for (const capacity of capacities) {
+    strides.push(stateCount)
+    stateCount *= capacity + 1
+  }
+  // 混合基数必须精确；大型分量超出安全整数时保留通用字符串状态键。
+  const useIntegerStates = Number.isSafeInteger(stateCount)
+  const memoByIndex = Array.from(
+    { length: patterns.length },
+    () => new Map<number | string, number>()
   )
   const suffixCounts = new Array<number>(patterns.length + 1).fill(0)
   const suffixByConstraint = Array.from({ length: patterns.length + 1 }, () =>
@@ -197,41 +221,38 @@ function countBudgetComponent(budgets: HandSlotBudget[], cards: Set<Card>): numb
       suffixByConstraint[index][constraint] += patterns[index].count
     })
   }
-  const memo = new Map<string, number>()
-  const solve = (index: number, capacities: number[]): number => {
+  const solve = (index: number, state: number): number => {
     if (index === patterns.length) return 0
-    const key = `${index}:${capacities.join(',')}`
+    const memo = memoByIndex[index]
+    const key = useIntegerStates ? state : capacities.join(',')
     const cached = memo.get(key)
     if (cached !== undefined) return cached
-    const upper = Math.min(
-      suffixCounts[index],
-      ...capacities.map(
-        (capacity, constraint) =>
-          capacity + suffixCounts[index] - suffixByConstraint[index][constraint]
+    let upper = suffixCounts[index]
+    for (let constraint = 0; constraint < capacities.length; constraint += 1) {
+      upper = Math.min(
+        upper,
+        capacities[constraint] + suffixCounts[index] - suffixByConstraint[index][constraint]
       )
-    )
+    }
     const pattern = patterns[index]
-    const maximum = Math.min(
-      pattern.count,
-      ...pattern.indices.map((constraint) => capacities[constraint])
-    )
+    let maximum = pattern.count
+    let stateStep = 0
+    for (const constraint of pattern.indices) {
+      maximum = Math.min(maximum, capacities[constraint])
+      if (useIntegerStates) stateStep += strides[constraint]
+    }
     let best = 0
     for (let used = maximum; used >= 0; used -= 1) {
       if (used + suffixCounts[index + 1] <= best) break
-      const next = capacities.slice()
-      pattern.indices.forEach((constraint) => {
-        next[constraint] -= used
-      })
-      best = Math.max(best, used + solve(index + 1, next))
+      for (const constraint of pattern.indices) capacities[constraint] -= used
+      best = Math.max(best, used + solve(index + 1, state - used * stateStep))
+      for (const constraint of pattern.indices) capacities[constraint] += used
       if (best === upper) break
     }
     memo.set(key, best)
     return best
   }
-  return solve(
-    0,
-    constraints.map((budget) => budget.count)
-  )
+  return solve(0, useIntegerStates ? stateCount - 1 : 0)
 }
 
 interface HiddenHandCoveragePackage {
@@ -291,12 +312,11 @@ function collectHiddenHandCoverage(
   return { coveredBySeat: coverageBySeat, unresolvedSeats }
 }
 
-function haveHiddenCardOverlap(
-  left: HiddenHandCoveragePackage,
-  right: HiddenHandCoveragePackage
-): boolean {
-  for (const card of left.hiddenCards) {
-    if (right.hiddenCards.has(card)) return true
+function haveCardOverlap(left: ReadonlySet<Card>, right: ReadonlySet<Card>): boolean {
+  const smaller = left.size <= right.size ? left : right
+  const larger = left.size <= right.size ? right : left
+  for (const card of smaller) {
+    if (larger.has(card)) return true
   }
   return false
 }
@@ -320,7 +340,7 @@ function collectCoverageComponents(
       component.push(current)
 
       for (const candidate of remaining) {
-        if (!haveHiddenCardOverlap(current, candidate)) continue
+        if (!haveCardOverlap(current.hiddenCards, candidate.hiddenCards)) continue
         remaining.delete(candidate)
         queue.push(candidate)
       }

@@ -57,6 +57,15 @@ interface PublicMigrationSnapshot {
   suspended: boolean
 }
 
+interface PossibleLocationSnapshot {
+  location: CardLocation
+  owner: SeatID | null
+  subZone: SubZone | null
+  spellID: SpellID | null
+  popupSpaceID: number | null
+  candidates: readonly LocationCandidate[]
+}
+
 interface BindOptions {
   known?: boolean
 }
@@ -79,6 +88,8 @@ export class Card extends BaseCard {
   declare owner: SeatID | null
   /** 唯一候选存储；写入时冻结，读面可安全共享，不另存兼容投影。 */
   private _locationCandidates: readonly Readonly<LocationCandidate>[] = Object.freeze([])
+  private _locationCandidateKeys: ReadonlySet<string> = new Set()
+  private possibleLocationSnapshot: PossibleLocationSnapshot | null = null
   declare suspended: boolean
 
   /**
@@ -144,6 +155,9 @@ export class Card extends BaseCard {
   private storeLocationCandidates(candidates: readonly LocationCandidate[]): void {
     this._locationCandidates = Object.freeze(
       candidates.map((candidate) => Object.freeze(candidate))
+    )
+    this._locationCandidateKeys = new Set(
+      this._locationCandidates.map((candidate) => createLocationCandidateKey(candidate))
     )
   }
 
@@ -398,7 +412,14 @@ export class Card extends BaseCard {
     const key = typeof candidate === 'string' ? candidate : createLocationCandidateKey(candidate)
     if (!key) return false
 
-    return this.locationCandidates.some((item) => createLocationCandidateKey(item) === key)
+    return this._locationCandidateKeys.has(key)
+  }
+
+  areLocationCandidatesCoveredBy(keys: ReadonlyMap<string, unknown>): boolean {
+    for (const key of this._locationCandidateKeys) {
+      if (!keys.has(key)) return false
+    }
+    return true
   }
 
   /** 只写位置事实；候选提交、owner 同步与变更通知由调用方按事务顺序完成。 */
@@ -502,10 +523,30 @@ export class Card extends BaseCard {
   getPossibleLocations(): readonly LocationCandidate[] {
     if (this.suspended || this.location === 'suspended') return []
     if (this.locationCandidates.length > 0) return this.locationCandidates
-    if (this.location === 'player' || this.location === 'popup')
-      return this.getResolvedLocationCandidates()
-    const candidate = normalizeLocationCandidate({ type: 'public', zone: this.location })
-    return candidate ? [candidate] : []
+    const snapshot = this.possibleLocationSnapshot
+    if (
+      snapshot?.location === this.location &&
+      snapshot.owner === this.owner &&
+      snapshot.subZone === this.subZone &&
+      snapshot.spellID === this.spellID &&
+      snapshot.popupSpaceID === this.popupSpaceID
+    ) {
+      return snapshot.candidates
+    }
+    const candidate =
+      this.location === 'player' || this.location === 'popup'
+        ? this.getResolvedLocationCandidates()[0]
+        : normalizeLocationCandidate({ type: 'public', zone: this.location })
+    const candidates = Object.freeze(candidate ? [Object.freeze(candidate)] : [])
+    this.possibleLocationSnapshot = {
+      location: this.location,
+      owner: this.owner,
+      subZone: this.subZone,
+      spellID: this.spellID,
+      popupSpaceID: this.popupSpaceID,
+      candidates
+    }
+    return candidates
   }
 
   private getResolvedLocationCandidates(): LocationCandidate[] {
@@ -532,34 +573,32 @@ export class Card extends BaseCard {
     candidates.forEach((candidate) => {
       const normalized = normalizeLocationCandidate(candidate)
       if (!normalized) return
+      Object.freeze(normalized)
       uniqueCandidates.set(createLocationCandidateKey(normalized), normalized)
     })
 
-    const nextCandidates = Array.from(uniqueCandidates.values())
-
     // 单一玩家位置在写入事务内落定；投影同步不负责再次改写候选。
-    if (nextCandidates.length === 1 && ['player', 'popup'].includes(nextCandidates[0].type)) {
-      return this.resolveLocationCandidate(nextCandidates[0], reason)
+    if (uniqueCandidates.size === 1) {
+      const result = uniqueCandidates.values().next()
+      if (result.done === false) {
+        const candidate = result.value
+        if (candidate.type === 'player' || candidate.type === 'popup') {
+          return this.resolveLocationCandidate(candidate, reason)
+        }
+      }
     }
 
-    const previousKeys = this.locationCandidates
-      .map((candidate) => createLocationCandidateKey(candidate))
-      .sort()
-      .join('|')
-
-    const nextKeys = nextCandidates
-      .map((candidate) => createLocationCandidateKey(candidate))
-      .sort()
-      .join('|')
-
-    const changed = previousKeys !== nextKeys
-
-    if (!changed) return false
+    if (
+      uniqueCandidates.size === this._locationCandidateKeys.size &&
+      Array.from(uniqueCandidates.keys()).every((key) => this._locationCandidateKeys.has(key))
+    ) {
+      return false
+    }
 
     // 替换候选集前捕获席位集合：收缩后剩余多个候选时不会走 resolveLocationCandidate，
     // 后续 setSeats 入口看到的已是收缩后的投影，被移除的座位只在这里可见。
     const previousSeats = this.seats
-    this.storeLocationCandidates(nextCandidates)
+    this.storeLocationCandidates(Array.from(uniqueCandidates.values()))
     this.reconcileLocationStateFromCandidates(reason, previousSeats)
 
     this.room.notifyCardChanged(this, {

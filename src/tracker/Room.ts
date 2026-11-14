@@ -416,6 +416,12 @@ export class Room extends RoomBase {
     // 观看别人录像时
     this.game.isRecord = this.mySeatID === undefined
 
+    // 重连牌堆先于座位初始化时，补建玩家区索引桶，后续快照才能投影到新玩家。
+    if (this.isDeckReady) {
+      this.locationIndex.rebuild(this)
+      this.constraints.syncViewGroups()
+    }
+
     trackerLogger.info('Room 注册玩家', {
       seatIDs: this.seatIDs,
       currentUserID,

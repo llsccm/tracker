@@ -34,6 +34,9 @@ export interface LocationCandidateInput {
   batchID?: string | null
 }
 
+// 只缓存不可变对象；可变的协议输入仍按当前字段生成 key。
+const frozenLocationCandidateKeys = new WeakMap<LocationCandidateInput, string>()
+
 function isPlayerLocationCandidate(
   candidate: LocationCandidate | null
 ): candidate is PlayerLocationCandidate {
@@ -127,9 +130,17 @@ export function normalizeLocationCandidate(
  * 生成稳定 key。字符串 key 仅用于 Map/Set，不作为业务状态源。
  */
 export function createLocationCandidateKey(candidate: LocationCandidateInput | null = {}): string {
+  const cached = candidate ? frozenLocationCandidateKeys.get(candidate) : undefined
+  if (cached !== undefined) return cached
   const normalized = normalizeLocationCandidate(candidate)
   if (!normalized) return ''
 
+  const key = formatLocationCandidateKey(normalized)
+  if (candidate && Object.isFrozen(candidate)) frozenLocationCandidateKeys.set(candidate, key)
+  return key
+}
+
+function formatLocationCandidateKey(normalized: LocationCandidate): string {
   if (normalized.type === 'popup') return `popup:${normalized.spaceID}`
 
   if (normalized.type === 'player') {

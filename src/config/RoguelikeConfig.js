@@ -25,8 +25,10 @@ export class RoguelikeConfig extends ConfigBase {
   text = new Map()
   /** 奖励 */
   rewardGroupDict = new Map()
-  /** 章节地点 */
+  /** 章节配置，按 seasonID-uniqueID 索引 */
   chapterDict = new Map()
+  /** 地点对应的章节名称 */
+  chapterPlaceDict = new Map()
   /** 敌人数据 */
   generalDict = new Map()
   season = 0
@@ -55,6 +57,7 @@ export class RoguelikeConfig extends ConfigBase {
     this.text.clear()
     this.rewardGroupDict.clear()
     this.chapterDict.clear()
+    this.chapterPlaceDict.clear()
     this.generalDict.clear()
     this.season = 0
   }
@@ -66,6 +69,26 @@ export class RoguelikeConfig extends ConfigBase {
 
   getCity(id) {
     return this.levelDict.get(String(id))
+  }
+
+  getChapter(seasonId, chapterId) {
+    // 协议 chapterId 对应章节配置的 uniqueID，chapter 是章节序号。
+    return this.chapterDict.get(`${seasonId}-${chapterId}`)
+  }
+
+  getChapterBoss(seasonId, chapterData) {
+    const chapter = this.getChapter(seasonId, chapterData?.chapterId)
+    if (!chapter) return
+
+    const bossLocation = chapterData.locations?.find(
+      (location) => String(location.location) === String(chapter.bosslocation)
+    )
+    if (!bossLocation) return
+
+    const fight = this.getFight(bossLocation.event)
+    if (!fight) return
+
+    return { chapter, event: bossLocation.event, fight }
   }
 
   getChoice(id) {
@@ -150,14 +173,16 @@ export class RoguelikeConfig extends ConfigBase {
   }
 
   initChapterPlaces(chapters) {
-    for (const { seasonID, chapter, cityName, bosslocation, location } of chapters || []) {
+    for (const chapterData of chapters || []) {
+      const { seasonID, uniqueID, chapter, cityName, bosslocation, location } = chapterData
+      this.chapterDict.set(`${seasonID}-${uniqueID}`, chapterData)
       const placeName = `${seasonID}-${chapter}${cityName}`
 
       for (const locationId of location?.split(';') || []) {
-        this.chapterDict.set(String(locationId), placeName)
+        this.chapterPlaceDict.set(String(locationId), placeName)
       }
 
-      this.chapterDict.set(String(bosslocation), `${placeName}BOSS`)
+      this.chapterPlaceDict.set(String(bosslocation), `${placeName}BOSS`)
     }
   }
 
@@ -197,7 +222,7 @@ export class RoguelikeConfig extends ConfigBase {
       scene: level.scene || '',
       spell: level.scenespell,
       desc: level.scenesDesc,
-      cp: this.chapterDict.get(String(cityID)),
+      cp: this.chapterPlaceDict.get(String(cityID)),
       x,
       y: -y,
       boss: level.startshow,

@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/dom', () => ({ resetSeatUIs: vi.fn() }))
-vi.mock('@/handler', () => ({}))
+vi.mock('@/handler', async () => ({
+  ...(await import('@/handler/MsgGameTurnNtf')),
+  ...(await import('@/handler/PubGsCMoveCard'))
+}))
+vi.mock('@/handler/gameFlowState', () => ({ handleGameFlowState: vi.fn() }))
+vi.mock('@/handler/specialZones', () => ({
+  handleSpecialZones: () => ({ handled: false })
+}))
+vi.mock('@/handler/spellEffects', () => ({ applySpellEffect: vi.fn() }))
 vi.mock('@/handler/MsgGameOver', () => ({ cancelGameOverTask: vi.fn() }))
 vi.mock('@/handler/chat', () => ({}))
-vi.mock('@/runtime/gameAdapter', () => ({}))
+vi.mock('@/runtime/gameAdapter', () => ({ laya: { zhanfaReset: vi.fn() } }))
 vi.mock('@/tracker/runtime/browser', async () => {
   const { TrackerController } = await import('@/tracker/runtime/trackerController')
   const { Game } = await import('@/tracker')
@@ -24,14 +32,144 @@ import { logic } from '@/logic'
 import { Game } from '@/tracker'
 import { tracker } from '@/tracker/runtime/browser'
 import { recordTrackerProtocol } from '@/tracker/runtime/protocolRecorder'
+import { protocolMove } from '../helpers/trackerController'
 
 const gameId = { low: -1804863040, high: 207369892, unsigned: true }
+const reconnectSeats = {
+  className: 'decodeGsClientUserSeatFlagNtf',
+  data: {
+    protoObj: {
+      seatinfo: [
+        { seat_id: 0, user_temp_id: 100 },
+        { seat_id: 1, user_temp_id: 101 }
+      ]
+    }
+  }
+}
 
 describe('初始化消息路由', () => {
   beforeEach(() => {
     tracker.destroyTrackerRoom()
     Game.reset()
     vi.clearAllMocks()
+  })
+
+  it('首次登录和大厅重连的版本通知不创建 Room，随后正常开局仍为完整模式', () => {
+    logic({ className: 'SsClientVersionNtf' })
+    logic({ className: 'SsClientVersionNtf' })
+    expect(tracker.getTrackerRoom()).toBeNull()
+    expect(Game.isGameStart).toBe(false)
+
+    logic(reconnectSeats)
+    expect(tracker.getTrackerRoom()?.trackingMode).toBe('full')
+  })
+
+  it.each([0, 1])('已有 Room 重连时提前降级，晚到座位保留初始化结果并恢复视角 %s', (SeatIndex) => {
+    logic(reconnectSeats)
+    tracker.initTrackerDeck([11, 12, 13, 14, 15, 16, 17, 18])
+    tracker.syncTrackerMove(protocolMove({ CardIDs: [11], ToID: 0 }))
+    Game.setTurn(4)
+    Game.setSpellState('before-disconnect', true)
+
+    // 再次断线也必须重新恢复，不能复用上次已降级的牌局数据。
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const previousRoom = tracker.getTrackerRoom()!
+      logic({ className: 'SsClientVersionNtf' })
+      const room = tracker.getTrackerRoom()!
+      expect(room).not.toBe(previousRoom)
+      expect(previousRoom.cards).toHaveLength(0)
+      expect(previousRoom.players.size).toBe(0)
+      expect(room.trackingMode).toBe('degraded')
+      expect(room.isDeckReady).toBe(false)
+      expect(Game.getSpellState('before-disconnect')).toBeUndefined()
+
+      logic({ className: 'decodeGameRecordInitInfo', ProtoObj: { gameId } })
+      logic({ className: 'GsCFirstPhaseRole', SeatID: 1 })
+      logic({ className: 'MsgGameTurnNtf', TurnCnt: 7 })
+      logic({ className: 'MsgGamePlayCardNtf', CardList: [11, 12, 13, 14, 15, 16, 17, 18] })
+      logic({
+        className: 'PubGsCMoveCard',
+        ...protocolMove({
+          CardIDs: [],
+          CardCount: 3,
+          FromID: 255,
+          FromPosition: 65280,
+          FromZone: 2,
+          ToID: 255,
+          ToPosition: 0,
+          ToZone: 9,
+          MoveType: 255
+        })
+      })
+      const pileCards = [...room.getZone('pile').cards]
+
+      logic(reconnectSeats)
+      expect(tracker.getReadyTrackerRoom()).toBe(room)
+      expect(room.trackingMode).toBe('degraded')
+      expect(room.firstID).toBe(1)
+      expect(Game.turn).toBe(7)
+      expect(room.getZone('pile').cards).toEqual(pileCards)
+      expect(room.getZone('pile').cards).toHaveLength(3)
+      expect(room.isPileCountKnown).toBe(true)
+      expect(room.getPlayer(0)?.fixedViewId).toBe(2)
+      expect(room.getPlayer(1)?.fixedViewId).toBe(1)
+
+      logic({
+        className: 'MsgReconnectGame',
+        CardPileCount: 3,
+        SeatInfos: [
+          {
+            SeatID: SeatIndex,
+            HandCardCount: 2,
+            EquipCards: [{ CardId: 12 }],
+            JudgeCards: [{ CardId: 13, SpellId: 0 }]
+          }
+        ]
+      })
+      logic({ className: 'MsgReconnectGameHand', SeatIndex, Count: 2, CardIDs: [11, 0] })
+      expect(Game.myID).toBe(SeatIndex)
+      expect(room.getPlayer(SeatIndex)?.knownHandCards.map((card) => card.id)).toEqual([11])
+      expect(room.getPlayer(SeatIndex)?.observedHandCount).toBe(2)
+      expect(room.getPlayer(SeatIndex)?.unknownCardCount).toBe(1)
+      expect(room.getPlayer(SeatIndex)?.equipCards.map((card) => card.id)).toEqual([12])
+      expect(room.getPlayer(SeatIndex)?.judgeCards.map((card) => card.id)).toEqual([13])
+
+      logic({
+        className: 'PubGsCMoveCard',
+        ...protocolMove({ CardIDs: [], CardCount: 1, ToID: SeatIndex })
+      })
+      expect(room.getPlayer(SeatIndex)?.observedHandCount).toBe(3)
+      expect(room.getZone('pile').cards).toHaveLength(2)
+    }
+
+    // 重连的座位复用只消费一次，同一录像重新播放仍走正常重建。
+    const reconnectRoom = tracker.getTrackerRoom()
+    logic(reconnectSeats)
+    expect(tracker.getTrackerRoom()).not.toBe(reconnectRoom)
+    expect(tracker.getTrackerRoom()?.trackingMode).toBe('full')
+    expect(Game.turn).toBe(0)
+  })
+
+  it('恢复完成前再次收到版本通知会清理半成品，离桌也会清理待恢复座位标记', () => {
+    logic(reconnectSeats)
+    logic({ className: 'SsClientVersionNtf' })
+    const interruptedRoom = tracker.getTrackerRoom()!
+    logic({ className: 'GsCFirstPhaseRole', SeatID: 1 })
+    logic({ className: 'MsgGamePlayCardNtf', CardList: [11, 12] })
+
+    logic({ className: 'SsClientVersionNtf' })
+    const room = tracker.getTrackerRoom()!
+    expect(room).not.toBe(interruptedRoom)
+    expect(room.trackingMode).toBe('degraded')
+    expect(room.isDeckReady).toBe(false)
+    expect(room.firstID).toBeUndefined()
+
+    tracker.destroyTrackerRoom()
+    logic({ className: 'SsClientVersionNtf' })
+    expect(tracker.getTrackerRoom()).toBeNull()
+    logic(reconnectSeats)
+    expect(tracker.getTrackerRoom()?.trackingMode).toBe('full')
+    expect(Game.seatIDs).toEqual([0, 1])
   })
 
   it('连续初始化消息仍可补充模式并完整进入录制器', () => {

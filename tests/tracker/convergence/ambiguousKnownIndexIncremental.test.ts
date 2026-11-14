@@ -151,7 +151,7 @@ describe('AmbiguousKnownIndex 增量维护（Step 6）', () => {
     expectAmbiguousKnownIndexMatchesRebuild(room)
   })
 
-  it('约束组 source label 变化：结构 dirty 时走全量 rebuild 并刷新描述', () => {
+  it('约束组 source label 变化：无卡牌脏事件时只刷新存量模糊明牌描述', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1, 2] })
     const card = getCard(room, 1)
     room.clearCardsFromPublicZones([card])
@@ -165,6 +165,7 @@ describe('AmbiguousKnownIndex 增量维护（Step 6）', () => {
     })
     room.resolveConstraints()
     expect(room.ambiguousKnownIndex.describe(1)).toContain('旧来源')
+    const previousSeq = room.dirtyCardSeq
 
     room.createConstraintGroup({
       id: 'test:ambiguous-source',
@@ -175,8 +176,13 @@ describe('AmbiguousKnownIndex 增量维护（Step 6）', () => {
     })
     const { stats } = collectTraversalStats(() => room.resolveConstraints())
 
-    expect(stats.sites.get('ambiguousKnownIndex:rebuild')?.calls).toBe(1)
+    expect(room.dirtyCardSeq).toBe(previousSeq)
+    expect(room.constraintGroupsDirty).toBe(false)
+    expect(stats.sites.get('ambiguousKnownIndex:rebuild')).toBeUndefined()
+    expect(stats.sites.get('ambiguousKnownIndex:applyDirty')).toEqual({ calls: 1, visited: 0 })
+    expect(stats.sites.get('ambiguousKnownIndex:refreshGroups')).toEqual({ calls: 1, visited: 1 })
     expect(room.ambiguousKnownIndex.describe(1)).toContain('新来源')
+    expect(room.ambiguousKnownIndex.describe(1)).not.toContain('旧来源')
     expectAmbiguousKnownIndexMatchesRebuild(room)
   })
 
@@ -209,6 +215,104 @@ describe('AmbiguousKnownIndex 增量维护（Step 6）', () => {
     expectAmbiguousKnownIndexMatchesRebuild(room)
   })
 
+  it('约束组替换成员：无卡牌脏事件时同步旧成员和新成员的来源', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1, 2] })
+    const previousCard = getCard(room, 1)!
+    const nextCard = getCard(room, 2)!
+    previousCard.bindCandidates([1, 2], 'hand', null, { known: true })
+    nextCard.bindCandidates([1, 2], 'hand', null, { known: true })
+    const group = room.createConstraintGroup({
+      cards: [previousCard],
+      sourceEvent: { label: '替换来源' }
+    })
+    room.resolveConstraints()
+    const previousSeq = room.dirtyCardSeq
+
+    expect(room.constraints.replaceCardInConstraintGroups(previousCard, nextCard)).toBe(true)
+    const { stats } = collectTraversalStats(() => room.resolveConstraints())
+
+    expect(room.dirtyCardSeq).toBe(previousSeq)
+    expect(stats.sites.get('ambiguousKnownIndex:rebuild')).toBeUndefined()
+    expect(stats.sites.get('ambiguousKnownIndex:refreshGroups')).toEqual({ calls: 1, visited: 2 })
+    expect(room.ambiguousKnownIndex.get(1)?.groups).toEqual([])
+    expect(room.ambiguousKnownIndex.describe(1)).not.toContain('替换来源')
+    expect(room.ambiguousKnownIndex.get(2)?.groups).toEqual([group])
+    expect(room.ambiguousKnownIndex.describe(2)).toContain('替换来源')
+    expectAmbiguousKnownIndexMatchesRebuild(room)
+  })
+
+  it('结构变化与卡牌脏事件同时发生：先增删条目，再刷新所有存量来源', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1, 2] })
+    const resolvedCard = getCard(room, 1)!
+    const addedCard = getCard(room, 2)!
+    const keptCard = getCard(room, 3)!
+    resolvedCard.bindCandidates([1, 2], 'hand', null, { known: true })
+    addedCard.bindCandidates([1], 'hand', null, { known: true })
+    keptCard.bindCandidates([1, 2], 'hand', null, { known: true })
+    const group = room.createConstraintGroup({
+      id: 'test:mixed-group-changes',
+      cards: [resolvedCard, keptCard],
+      sourceEvent: { label: '旧来源' }
+    })
+    room.resolveConstraints()
+
+    resolvedCard.deleteSeat(2, 'test:resolved')
+    addedCard.setSeats([1, 2], 'test:added')
+    room.removeCardsFromConstraintGroups([resolvedCard])
+    room.createConstraintGroup({
+      id: group.id,
+      cards: [addedCard],
+      sourceEvent: { label: '新来源' }
+    })
+    const { stats } = collectTraversalStats(() => room.resolveConstraints())
+
+    expect(room.constraintGroupsDirty).toBe(false)
+    expect(stats.sites.get('ambiguousKnownIndex:rebuild')).toBeUndefined()
+    expect(stats.sites.get('ambiguousKnownIndex:applyDirty')).toEqual({ calls: 1, visited: 2 })
+    expect(stats.sites.get('ambiguousKnownIndex:refreshGroups')).toEqual({ calls: 1, visited: 2 })
+    expect(room.ambiguousKnownIndex.get(1)).toBeNull()
+    for (const card of [addedCard, keptCard]) {
+      expect(room.ambiguousKnownIndex.get(card.id)?.groups).toEqual([group])
+      expect(room.ambiguousKnownIndex.describe(card.id)).toContain('新来源')
+      expect(room.ambiguousKnownIndex.describe(card.id)).not.toContain('旧来源')
+    }
+    expectAmbiguousKnownIndexMatchesRebuild(room)
+  })
+
+  it('结构 dirty 且游标断档：全量重建已覆盖当前分组，不重复刷新描述', () => {
+    const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1, 2] })
+    const first = getCard(room, 1)!
+    const second = getCard(room, 2)!
+    first.bindCandidates([1, 2], 'hand', null, { known: true })
+    second.bindCandidates([1], 'hand', null, { known: true })
+    const group = room.createConstraintGroup({
+      cards: [first],
+      sourceEvent: { label: '旧来源' }
+    })
+    room.resolveConstraints()
+    const consumedSeq = room.ambiguousKnownIndex.lastConsumedSeq
+
+    second.setSeats([1, 2], 'test:gap')
+    room.createConstraintGroup({
+      id: group.id,
+      cards: [second],
+      sourceEvent: { label: '新来源' }
+    })
+    room.dirtyCardEvents = room.dirtyCardEvents.filter((event) => event.seq > consumedSeq + 1)
+    expect(room.dirtyCardEvents.length).toBeGreaterThan(0)
+    const { stats } = collectTraversalStats(() => room.resolveConstraints())
+
+    expect(room.constraintGroupsDirty).toBe(false)
+    expect(stats.sites.get('ambiguousKnownIndex:rebuild')?.calls).toBe(1)
+    expect(stats.sites.get('ambiguousKnownIndex:applyDirty')).toBeUndefined()
+    expect(stats.sites.get('ambiguousKnownIndex:refreshGroups')).toBeUndefined()
+    for (const card of [first, second]) {
+      expect(room.ambiguousKnownIndex.get(card.id)?.groups).toEqual([group])
+      expect(room.ambiguousKnownIndex.describe(card.id)).toContain('新来源')
+    }
+    expectAmbiguousKnownIndexMatchesRebuild(room)
+  })
+
   it('initDeck 全量重建后清理约束组 dirty 标记', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1] })
     room.markConstraintGroupsDirty('test:initDeck')
@@ -221,7 +325,7 @@ describe('AmbiguousKnownIndex 增量维护（Step 6）', () => {
     expectAmbiguousKnownIndexMatchesRebuild(room)
   })
 
-  it('约束组删除：结构 dirty 时走全量 rebuild 并移除来源描述', () => {
+  it('约束组删除：只刷新存量模糊明牌并移除来源描述', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1, 2] })
     const card = getCard(room, 1)
     room.clearCardsFromPublicZones([card])
@@ -240,7 +344,11 @@ describe('AmbiguousKnownIndex 增量维护（Step 6）', () => {
     expect(changed).toBe(true)
     const { stats } = collectTraversalStats(() => room.resolveConstraints())
 
-    expect(stats.sites.get('ambiguousKnownIndex:rebuild')?.calls).toBe(1)
+    expect(room.constraintGroupsDirty).toBe(false)
+    expect(stats.sites.get('ambiguousKnownIndex:rebuild')).toBeUndefined()
+    expect(stats.sites.get('ambiguousKnownIndex:applyDirty')).toEqual({ calls: 1, visited: 0 })
+    expect(stats.sites.get('ambiguousKnownIndex:refreshGroups')).toEqual({ calls: 1, visited: 1 })
+    expect(room.ambiguousKnownIndex.get(1)?.groups).toEqual([])
     expect(room.ambiguousKnownIndex.describe(1)).not.toContain('待删除来源')
     expectAmbiguousKnownIndexMatchesRebuild(room)
   })

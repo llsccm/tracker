@@ -296,6 +296,16 @@
       cursor: help;
     }
 
+    .rogue-boss-info {
+      margin: 2px 1px;
+      padding: 2px 2px;
+      border: 1px solid var(--border-color);
+      border-radius: 5px;
+      font-size: 12px;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
     .panel-header {
       background: var(--bg-primary);
       color: var(--text-gold);
@@ -306,7 +316,7 @@
       display: flex;
       align-items: center;
       border-radius: 5px;
-      border: 1px transparent solid;
+      border: 1px solid transparent;
       font-size: 13px;
     }
 
@@ -452,7 +462,7 @@
     .uuid:hover {
       color: var(--text-gold);
       background: var(--bg-hover);
-      border: 1px var(--bg-primary) solid;
+      border: 1px solid var(--bg-primary);
       animation: blink 2s infinite;
     }
 
@@ -1237,6 +1247,11 @@
             魅力:<span class="rogue-attr-value">--</span>
           </span>
         </fieldset>
+        <div class="rogue-boss-info" id="rogueBossInfo">
+          <div>关卡: <span id="rogueBossChapter">--</span></div>
+          <div>Boss: <span id="rogueBossDetail">--</span></div>
+          <div>属性: <span id="rogueBossAttributes">--</span></div>
+        </div>
         <div id="storeDetail">
           <button class="storeDetail">集市霸王·壹300</button>
           <button class="storeDetail">集市霸王·贰200</button>

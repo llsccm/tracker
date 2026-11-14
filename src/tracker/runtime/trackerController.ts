@@ -109,6 +109,7 @@ export class TrackerController {
     TrackerControllerOptions['registerMoveEventHandlers']
   >
   private trackerRoom: Room | null = null
+  private awaitingReconnectSeats = false
 
   constructor({
     view = noopView,
@@ -142,6 +143,18 @@ export class TrackerController {
     return this.isTrackerReady() ? this.trackerRoom : null
   }
 
+  /** 版本通知先于重连牌局数据；首次登录没有 Room，不启动重连。 */
+  beginTrackerReconnect(): void {
+    if (!this.trackerRoom) return
+    // 连续断线要重新开始恢复，不能消费上一次尚未到达的座位通知。
+    this.awaitingReconnectSeats = false
+    this.initTrackerRoom()
+    if (!this.trackerRoom) return
+    this.degradeTrackerRoom()
+    this.awaitingReconnectSeats = true
+    this.controllerView.mount(this.trackerRoom)
+  }
+
   /** 重连只降低本局推断能力，继续保留视图和后续协议同步。 */
   degradeTrackerRoom(snapshot?: ReconnectGameSnapshot): void {
     if (!this.trackerRoom) return
@@ -164,10 +177,14 @@ export class TrackerController {
   }
 
   /**
-   * 开局协议到达后创建单局 Room。
+   * 座位开局协议到达后创建单局 Room；重连时复用版本通知已提前创建的 Room。
    * 旧 Room 必须先销毁，避免断线/重进导致上一局约束组继续影响新牌局。
    */
   initTrackerRoom(): void {
+    if (this.awaitingReconnectSeats) {
+      this.awaitingReconnectSeats = false
+      return
+    }
     try {
       this.trackerRoom?.destroy()
       this.gameState.beginPlayback()
@@ -201,13 +218,17 @@ export class TrackerController {
 
   /**
    * 注册座位数据并同步 Game 兼容层。
-   * 玩家数据注册一定早于先手协议；这里先建立座位集合，后续先手协议只补固定视角顺序。
+   * 重连时先手可能早于座位通知，注册后补齐固定视角顺序。
    *
    */
   registerTrackerPlayers(infos: unknown[], currentUserID?: number): void {
     if (!this.trackerRoom) return
     // 玩家数据注册（内部已同步 gameState 座位列表与人数）
     this.trackerRoom.registerPlayers(infos as SeatInfo[], currentUserID)
+    if (this.trackerRoom.firstID !== undefined) {
+      this.trackerRoom.updateFixedViewIds()
+      this.getSeatUIs()
+    }
     this.controllerView.mount(this.trackerRoom)
     this.controllerView.scheduleRender()
   }
@@ -737,6 +758,7 @@ export class TrackerController {
   }
 
   destroyTrackerRoom(): void {
+    this.awaitingReconnectSeats = false
     try {
       this.controllerView.unmount()
       if (this.trackerRoom) {

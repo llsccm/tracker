@@ -3,12 +3,62 @@ import { describe, expect, it, vi } from 'vitest'
 import { trackerLogger } from '@/utils/logger'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { computeHandSlotAllocation } from '@/tracker/constraint/handSlotUsage'
+import { collectHandSlotCardsBySeat } from '@/tracker/constraint/handSlotCounts'
 import type { RoomMoveContext } from '@/tracker/room/index'
 import { createTestRoom, getCard, takeAnonymousCard } from '../helpers/room'
-import { playerLocation } from '../helpers/locationCandidates'
+import { playerLocation, publicLocation } from '../helpers/locationCandidates'
 import { getPlayerHandCardsBySeat } from '@/tracker/room/movement/sourceQueries'
 
 describe('玩家手牌数观测', () => {
+  it.each([
+    [0, 1, 2, 3, 4, 5, 6, 7],
+    [0, 2]
+  ])('八人局按目标座位归组手牌且每张明牌只读取一次位置（座位：%j）', (...seatIDs) => {
+    const { room } = createTestRoom({
+      cardIDs: [11, 12, 13, 14, 15, 16, 17],
+      seatIDs: [0, 1, 2, 3, 4, 5, 6, 7]
+    })
+    const knownCards = [11, 12, 13, 14, 15].map((id) => getCard(room, id)!)
+    knownCards[0].setLocationCandidates([playerLocation(0, 'hand')])
+    knownCards[1].setLocationCandidates([playerLocation(7, 'hand')])
+    knownCards[2].setLocationCandidates([
+      playerLocation(0, 'hand'),
+      playerLocation(2, 'hand'),
+      playerLocation(2, 'hand'),
+      playerLocation(2, 'mark', 700),
+      publicLocation('pile')
+    ])
+    knownCards[3].setLocationCandidates([playerLocation(1, 'hand'), playerLocation(1, 'mark', 700)])
+    knownCards[4].setLocationCandidates([playerLocation(3, 'equip')])
+    const hiddenCard = takeAnonymousCard(room)
+    hiddenCard.setLocationCandidates([playerLocation(0, 'hand')])
+    const ambiguousHiddenCard = takeAnonymousCard(room)
+    ambiguousHiddenCard.setLocationCandidates([
+      playerLocation(0, 'hand'),
+      playerLocation(0, 'mark', 700)
+    ])
+    const locationSpies = knownCards.map((card) => vi.spyOn(card, 'getPossibleLocations'))
+
+    const cardsBySeat = collectHandSlotCardsBySeat(
+      [...knownCards, hiddenCard, ambiguousHiddenCard],
+      seatIDs
+    )
+
+    expect([...cardsBySeat.keys()]).toEqual(seatIDs)
+    for (const seatID of seatIDs) {
+      expect(cardsBySeat.get(seatID)).toEqual({
+        knownCards: seatID === 0 ? [knownCards[0]] : seatID === 7 ? [knownCards[1]] : [],
+        candidateCards:
+          seatID === 0 || seatID === 2 ? [knownCards[2]] : seatID === 1 ? [knownCards[3]] : [],
+        exactHiddenCards: seatID === 0 ? [hiddenCard] : []
+      })
+    }
+    locationSpies.forEach((spy) => {
+      expect(spy).toHaveBeenCalledTimes(1)
+      spy.mockRestore()
+    })
+  })
+
   it('暗实体覆盖也扣除跨组限制后的明牌容量，不重复补建实体', () => {
     const { room } = createTestRoom({ cardIDs: [11, 12, 13, 14], seatIDs: [1] })
     const cards = [

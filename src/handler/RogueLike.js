@@ -1,7 +1,7 @@
 import { CharacterConfig, RoguelikeConfig } from '@/config'
 import { globalConfig, rogueMap, UI } from '@/tracker'
 import { laya } from '@/runtime/gameAdapter'
-import { drawCitiesUI, drawStore } from '@/ui/CitiesUI'
+import { drawCitiesUI, drawRogueBossInfo, drawStore } from '@/ui/CitiesUI'
 import { addTooltip } from '@/utils/notification'
 
 export async function showShanHeTuSponsorPrompt(ProtoObj) {
@@ -67,6 +67,9 @@ export async function handleRogueLike(ProtoObj) {
   const seasonData = allData.seasonData
   const difficulty = seasonData && seasonData.difficulty
   difficulty && (rogueMap.difficulty = difficulty)
+
+  const boss = RoguelikeConfig.GetInstance().getChapterBoss(seasonData?.seasonId, chapterData)
+  drawRogueBossInfo(boss)
 
   rogueMap.general = allData.gameData?.myGeneral?.uGeneralId ?? 0
   rogueMap.itemId = allData.gameData?.itemId ?? []
