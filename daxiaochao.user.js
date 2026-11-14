@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         三国杀小抄 Lite
 // @namespace    https://greasyfork.org/scripts/448004
-// @version      0.20.1
+// @version      0.20.2
 // @author       三国杀小抄
 // @description  三国杀记牌器
 // @license      GPL-3.0-or-later
@@ -474,6 +474,7 @@
 		text = new Map();
 		rewardGroupDict = new Map();
 		chapterDict = new Map();
+		chapterPlaceDict = new Map();
 		generalDict = new Map();
 		season = 0;
 		constructor() {
@@ -495,6 +496,7 @@
 			this.text.clear();
 			this.rewardGroupDict.clear();
 			this.chapterDict.clear();
+			this.chapterPlaceDict.clear();
 			this.generalDict.clear();
 			this.season = 0;
 		}
@@ -504,6 +506,22 @@
 		}
 		getCity(id) {
 			return this.levelDict.get(String(id));
+		}
+		getChapter(seasonId, chapterId) {
+			return this.chapterDict.get(`${seasonId}-${chapterId}`);
+		}
+		getChapterBoss(seasonId, chapterData) {
+			const chapter = this.getChapter(seasonId, chapterData?.chapterId);
+			if (!chapter) return;
+			const bossLocation = chapterData.locations?.find((location) => String(location.location) === String(chapter.bosslocation));
+			if (!bossLocation) return;
+			const fight = this.getFight(bossLocation.event);
+			if (!fight) return;
+			return {
+				chapter,
+				event: bossLocation.event,
+				fight
+			};
 		}
 		getChoice(id) {
 			const choice = this.adventureResultDict.get(String(id));
@@ -571,10 +589,12 @@
 			for (const { ID, text } of texts || []) this.text.set(String(ID), text);
 		}
 		initChapterPlaces(chapters) {
-			for (const { seasonID, chapter, cityName, bosslocation, location } of chapters || []) {
+			for (const chapterData of chapters || []) {
+				const { seasonID, uniqueID, chapter, cityName, bosslocation, location } = chapterData;
+				this.chapterDict.set(`${seasonID}-${uniqueID}`, chapterData);
 				const placeName = `${seasonID}-${chapter}${cityName}`;
-				for (const locationId of location?.split(";") || []) this.chapterDict.set(String(locationId), placeName);
-				this.chapterDict.set(String(bosslocation), `${placeName}BOSS`);
+				for (const locationId of location?.split(";") || []) this.chapterPlaceDict.set(String(locationId), placeName);
+				this.chapterPlaceDict.set(String(bosslocation), `${placeName}BOSS`);
 			}
 		}
 		initCities(levels) {
@@ -609,7 +629,7 @@
 				scene: level.scene || "",
 				spell: level.scenespell,
 				desc: level.scenesDesc,
-				cp: this.chapterDict.get(String(cityID)),
+				cp: this.chapterPlaceDict.get(String(cityID)),
 				x,
 				y: -y,
 				boss: level.startshow,
@@ -1234,6 +1254,7 @@
 		"ClientUserDataCounterNtf",
 		"SmsgUpdateTaskListToClient",
 		"ClientGuildMemberChangeNtf",
+		"SsClientVersionNtf",
 		"MsgReconnectGame",
 		"MsgReconnectGameHand",
 		"MsgHeartAliveRep",
@@ -1906,16 +1927,16 @@
 			this.deleteSpellState(3090);
 		}
 		shaCounter() {
-			const count = Number(this.getSpellState("三板斧")) || 0;
+			const count = this.getSpellState("三板斧") || 0;
 			this.setSpellState("三板斧", count + 1);
 		}
 		useCounter() {
-			const count = Number(this.getSpellState("手到擒来")) || 0;
+			const count = this.getSpellState("手到擒来") || 0;
 			this.setSpellState("手到擒来", count + 1);
 		}
 		drawCounter(count) {
-			const drawCount = Number(this.getSpellState("神龙摆尾")) || 0;
-			const drawTimes = Number(this.getSpellState("多多益善")) || 0;
+			const drawCount = this.getSpellState("神龙摆尾") || 0;
+			const drawTimes = this.getSpellState("多多益善") || 0;
 			this.setSpellState("神龙摆尾", drawCount + count);
 			this.setSpellState("多多益善", drawTimes + 1);
 		}
@@ -2025,6 +2046,7 @@
 		if (subZone === "mark") return "标记";
 		return "手牌";
 	}
+	var frozenLocationCandidateKeys = new WeakMap();
 	function isPlayerLocationCandidate(candidate) {
 		return candidate?.type === "player";
 	}
@@ -2093,8 +2115,15 @@
 		return null;
 	}
 	function createLocationCandidateKey(candidate = {}) {
+		const cached = candidate ? frozenLocationCandidateKeys.get(candidate) : void 0;
+		if (cached !== void 0) return cached;
 		const normalized = normalizeLocationCandidate(candidate);
 		if (!normalized) return "";
+		const key = formatLocationCandidateKey(normalized);
+		if (candidate && Object.isFrozen(candidate)) frozenLocationCandidateKeys.set(candidate, key);
+		return key;
+	}
+	function formatLocationCandidateKey(normalized) {
 		if (normalized.type === "popup") return `popup:${normalized.spaceID}`;
 		if (normalized.type === "player") return [
 			"player",
@@ -2578,6 +2607,8 @@
 	var Card = class extends BaseCard {
 		popupSpaceID = null;
 		_locationCandidates = Object.freeze([]);
+		_locationCandidateKeys = new Set();
+		possibleLocationSnapshot = null;
 		constructor(id, room) {
 			super(id);
 			this.room = room;
@@ -2614,6 +2645,7 @@
 		}
 		storeLocationCandidates(candidates) {
 			this._locationCandidates = Object.freeze(candidates.map((candidate) => Object.freeze(candidate)));
+			this._locationCandidateKeys = new Set(this._locationCandidates.map((candidate) => createLocationCandidateKey(candidate)));
 		}
 		get seats() {
 			const candidateSeats = projectSeatsFromLocationCandidates(this.locationCandidates);
@@ -2768,7 +2800,11 @@
 		hasLocationCandidate(candidate) {
 			const key = typeof candidate === "string" ? candidate : createLocationCandidateKey(candidate);
 			if (!key) return false;
-			return this.locationCandidates.some((item) => createLocationCandidateKey(item) === key);
+			return this._locationCandidateKeys.has(key);
+		}
+		areLocationCandidatesCoveredBy(keys) {
+			for (const key of this._locationCandidateKeys) if (!keys.has(key)) return false;
+			return true;
 		}
 		assignLocationState({ location, popupSpaceID = null, subZone = null, spellID = null, suspended = false, clearPublicZones = false, timestamp = "current" }) {
 			if (clearPublicZones) this.room.clearCardsFromPublicZones([this]);
@@ -2829,12 +2865,22 @@
 		getPossibleLocations() {
 			if (this.suspended || this.location === "suspended") return [];
 			if (this.locationCandidates.length > 0) return this.locationCandidates;
-			if (this.location === "player" || this.location === "popup") return this.getResolvedLocationCandidates();
-			const candidate = normalizeLocationCandidate({
+			const snapshot = this.possibleLocationSnapshot;
+			if (snapshot?.location === this.location && snapshot.owner === this.owner && snapshot.subZone === this.subZone && snapshot.spellID === this.spellID && snapshot.popupSpaceID === this.popupSpaceID) return snapshot.candidates;
+			const candidate = this.location === "player" || this.location === "popup" ? this.getResolvedLocationCandidates()[0] : normalizeLocationCandidate({
 				type: "public",
 				zone: this.location
 			});
-			return candidate ? [candidate] : [];
+			const candidates = Object.freeze(candidate ? [Object.freeze(candidate)] : []);
+			this.possibleLocationSnapshot = {
+				location: this.location,
+				owner: this.owner,
+				subZone: this.subZone,
+				spellID: this.spellID,
+				popupSpaceID: this.popupSpaceID,
+				candidates
+			};
+			return candidates;
 		}
 		getResolvedLocationCandidates() {
 			if (this.location === "popup" && this.popupSpaceID !== null) return [{
@@ -2854,13 +2900,19 @@
 			candidates.forEach((candidate) => {
 				const normalized = normalizeLocationCandidate(candidate);
 				if (!normalized) return;
+				Object.freeze(normalized);
 				uniqueCandidates.set(createLocationCandidateKey(normalized), normalized);
 			});
-			const nextCandidates = Array.from(uniqueCandidates.values());
-			if (nextCandidates.length === 1 && ["player", "popup"].includes(nextCandidates[0].type)) return this.resolveLocationCandidate(nextCandidates[0], reason);
-			if (!(this.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort().join("|") !== nextCandidates.map((candidate) => createLocationCandidateKey(candidate)).sort().join("|"))) return false;
+			if (uniqueCandidates.size === 1) {
+				const result = uniqueCandidates.values().next();
+				if (result.done === false) {
+					const candidate = result.value;
+					if (candidate.type === "player" || candidate.type === "popup") return this.resolveLocationCandidate(candidate, reason);
+				}
+			}
+			if (uniqueCandidates.size === this._locationCandidateKeys.size && Array.from(uniqueCandidates.keys()).every((key) => this._locationCandidateKeys.has(key))) return false;
 			const previousSeats = this.seats;
-			this.storeLocationCandidates(nextCandidates);
+			this.storeLocationCandidates(Array.from(uniqueCandidates.values()));
 			this.reconcileLocationStateFromCandidates(reason, previousSeats);
 			this.room.notifyCardChanged(this, {
 				type: "card-location-candidates-changed",
@@ -3033,8 +3085,7 @@
 			});
 		}
 	};
-	function getConstraintSlotState(cards, location, range) {
-		const key = createLocationCandidateKey(location);
+	function getConstraintSlotState(cards, location, range, key = createLocationCandidateKey(location)) {
 		const exactCards = [];
 		const candidateCards = [];
 		for (const card of cards) {
@@ -3058,10 +3109,10 @@
 	function collectConstraintHandSlots(groups) {
 		const slots = [];
 		for (const group of groups) group.expectedSlotsByLocation.forEach((count, key) => {
-			const location = parseLocationCandidateKey(key);
+			const location = group.getExpectedLocation(key);
 			if (location?.type !== "player" || location.subZone !== "hand") return;
 			slots.push({
-				...getConstraintSlotState(group.cards, location, count),
+				...getConstraintSlotState(group.cards, location, count, key),
 				group
 			});
 		});
@@ -3083,12 +3134,6 @@
 	function recordTraversal(site, visitedCount) {
 		if (activeStats) addTraversal(activeStats, site, visitedCount);
 	}
-	function getHandSlotKindForSeat(card, seatID) {
-		if (card.location !== "player" || card.isKnown !== true) return null;
-		const locations = card.getPossibleLocations();
-		if (!getPlayerLocationCandidates(locations).some((candidate) => candidate.seatID === seatID && candidate.subZone === "hand")) return null;
-		return locations.length === 1 ? "known" : "candidate";
-	}
 	function collectHandSlotCardsBySeat(cards, seatIDs) {
 		recordTraversal("handSlotCounts:collectBySeat", cards.length);
 		const cardsBySeat = new Map();
@@ -3103,11 +3148,20 @@
 				if (!card.hasLocationCandidates() && card.subZone === "hand" && card.owner !== null) cardsBySeat.get(card.owner)?.exactHiddenCards.push(card);
 				continue;
 			}
-			cardsBySeat.forEach((slotCards, seatID) => {
-				const handSlotKind = getHandSlotKindForSeat(card, seatID);
-				if (handSlotKind === "known") slotCards.knownCards.push(card);
-				else if (handSlotKind === "candidate") slotCards.candidateCards.push(card);
-			});
+			const locations = card.getPossibleLocations();
+			if (locations.length === 1) {
+				const location = locations[0];
+				if (location.type === "player" && location.subZone === "hand") cardsBySeat.get(location.seatID)?.knownCards.push(card);
+				continue;
+			}
+			if (locations.length === 0) continue;
+			const candidateSeats = new Set();
+			for (const location of locations) {
+				if (location.type !== "player" || location.subZone !== "hand") continue;
+				if (candidateSeats.has(location.seatID)) continue;
+				candidateSeats.add(location.seatID);
+				cardsBySeat.get(location.seatID)?.candidateCards.push(card);
+			}
 		}
 		return cardsBySeat;
 	}
@@ -3179,7 +3233,7 @@
 			const cards = new Set(first.cards);
 			remaining.delete(first);
 			for (let index = 0; index < component.length; index += 1) for (const budget of remaining) {
-				if (!Array.from(budget.cards).some((card) => cards.has(card))) continue;
+				if (!haveCardOverlap(budget.cards, cards)) continue;
 				component.push(budget);
 				budget.cards.forEach((card) => cards.add(card));
 				remaining.delete(budget);
@@ -3199,10 +3253,17 @@
 		const constraints = Array.from(uniqueBudgets.entries()).sort(([left], [right]) => left.localeCompare(right)).map(([, budget]) => budget);
 		if (constraints.length === 0) return cards.size;
 		if (constraints.length === 1) return cards.size - constraints[0].cards.size + constraints[0].count;
+		const useIntegerPatterns = constraints.length <= 30;
 		const buckets = new Map();
 		for (const card of cards) {
-			const indices = constraints.flatMap((budget, index) => budget.cards.has(card) ? [index] : []);
-			const key = indices.join(",");
+			const indices = [];
+			let mask = 0;
+			for (let index = 0; index < constraints.length; index += 1) {
+				if (!constraints[index].cards.has(card)) continue;
+				indices.push(index);
+				if (useIntegerPatterns) mask |= 1 << index;
+			}
+			const key = useIntegerPatterns ? mask : indices.join(",");
 			const bucket = buckets.get(key);
 			if (bucket) bucket.count += 1;
 			else buckets.set(key, {
@@ -3210,7 +3271,16 @@
 				count: 1
 			});
 		}
-		const patterns = Array.from(buckets.values()).sort((left, right) => right.indices.length - left.indices.length || left.indices.join(",").localeCompare(right.indices.join(",")));
+		const patterns = Array.from(buckets.entries()).sort(([leftKey, left], [rightKey, right]) => right.indices.length - left.indices.length || (useIntegerPatterns ? leftKey - rightKey : String(leftKey).localeCompare(String(rightKey)))).map(([, bucket]) => bucket);
+		const capacities = constraints.map((budget) => budget.count);
+		const strides = [];
+		let stateCount = 1;
+		for (const capacity of capacities) {
+			strides.push(stateCount);
+			stateCount *= capacity + 1;
+		}
+		const useIntegerStates = Number.isSafeInteger(stateCount);
+		const memoByIndex = Array.from({ length: patterns.length }, () => new Map());
 		const suffixCounts = new Array(patterns.length + 1).fill(0);
 		const suffixByConstraint = Array.from({ length: patterns.length + 1 }, () => new Array(constraints.length).fill(0));
 		for (let index = patterns.length - 1; index >= 0; index -= 1) {
@@ -3220,29 +3290,33 @@
 				suffixByConstraint[index][constraint] += patterns[index].count;
 			});
 		}
-		const memo = new Map();
-		const solve = (index, capacities) => {
+		const solve = (index, state) => {
 			if (index === patterns.length) return 0;
-			const key = `${index}:${capacities.join(",")}`;
+			const memo = memoByIndex[index];
+			const key = useIntegerStates ? state : capacities.join(",");
 			const cached = memo.get(key);
 			if (cached !== void 0) return cached;
-			const upper = Math.min(suffixCounts[index], ...capacities.map((capacity, constraint) => capacity + suffixCounts[index] - suffixByConstraint[index][constraint]));
+			let upper = suffixCounts[index];
+			for (let constraint = 0; constraint < capacities.length; constraint += 1) upper = Math.min(upper, capacities[constraint] + suffixCounts[index] - suffixByConstraint[index][constraint]);
 			const pattern = patterns[index];
-			const maximum = Math.min(pattern.count, ...pattern.indices.map((constraint) => capacities[constraint]));
+			let maximum = pattern.count;
+			let stateStep = 0;
+			for (const constraint of pattern.indices) {
+				maximum = Math.min(maximum, capacities[constraint]);
+				if (useIntegerStates) stateStep += strides[constraint];
+			}
 			let best = 0;
 			for (let used = maximum; used >= 0; used -= 1) {
 				if (used + suffixCounts[index + 1] <= best) break;
-				const next = capacities.slice();
-				pattern.indices.forEach((constraint) => {
-					next[constraint] -= used;
-				});
-				best = Math.max(best, used + solve(index + 1, next));
+				for (const constraint of pattern.indices) capacities[constraint] -= used;
+				best = Math.max(best, used + solve(index + 1, state - used * stateStep));
+				for (const constraint of pattern.indices) capacities[constraint] += used;
 				if (best === upper) break;
 			}
 			memo.set(key, best);
 			return best;
 		};
-		return solve(0, constraints.map((budget) => budget.count));
+		return solve(0, useIntegerStates ? stateCount - 1 : 0);
 	}
 	function collectHiddenHandCoverage(slots, countKnownSlots) {
 		const packagesByGroup = new Map();
@@ -3282,8 +3356,10 @@
 			unresolvedSeats
 		};
 	}
-	function haveHiddenCardOverlap(left, right) {
-		for (const card of left.hiddenCards) if (right.hiddenCards.has(card)) return true;
+	function haveCardOverlap(left, right) {
+		const smaller = left.size <= right.size ? left : right;
+		const larger = left.size <= right.size ? right : left;
+		for (const card of smaller) if (larger.has(card)) return true;
 		return false;
 	}
 	function collectCoverageComponents(packages) {
@@ -3299,7 +3375,7 @@
 				if (!current) continue;
 				component.push(current);
 				for (const candidate of remaining) {
-					if (!haveHiddenCardOverlap(current, candidate)) continue;
+					if (!haveCardOverlap(current.hiddenCards, candidate.hiddenCards)) continue;
 					remaining.delete(candidate);
 					queue.push(candidate);
 				}
@@ -4230,6 +4306,14 @@
 			this.lastConsumedSeq = this.room.dirtyCardSeq;
 			return true;
 		}
+		refreshGroupDescriptions(groups = []) {
+			recordTraversal("ambiguousKnownIndex:refreshGroups", this.items.size);
+			for (const item of this.items.values()) {
+				const relatedGroups = this.getRelatedGroups(item.card, groups);
+				item.groups = relatedGroups;
+				item.description = this.formatCardDescription(item.card, relatedGroups);
+			}
+		}
 		applyCardChange(card, groups = []) {
 			this.items.delete(card.id);
 			const item = this.buildItem(card, this.getRelatedGroups(card, groups));
@@ -4533,6 +4617,7 @@
 			const events = room.dirtyCardEvents;
 			if (events.length > 0 && events[0].seq > this.lastConsumedSeq + 1) {
 				this.rebuild(room);
+				room.players.forEach((_, seatID) => options.affectedSeats?.add(seatID));
 				return false;
 			}
 			const affectedCards = new Set();
@@ -4542,22 +4627,28 @@
 			affectedCards.forEach((card) => {
 				const previousLocation = this.projections.get(card)?.location;
 				if (previousLocation && room.zones.has(previousLocation)) affectedZones.add(previousLocation);
-				this.applyCardChange(room, card);
+				this.applyCardChange(room, card, options.affectedSeats);
 				if (room.zones.has(card.location)) affectedZones.add(card.location);
 			});
 			if (this.containerDependentCards.size > 0) {
-				for (const card of Array.from(this.containerDependentCards)) if (!affectedCards.has(card)) this.applyCardChange(room, card);
+				for (const card of Array.from(this.containerDependentCards)) if (!affectedCards.has(card)) this.applyCardChange(room, card, options.affectedSeats);
 			}
 			if (affectedZones.size > 0) this.refreshPublicZones(room, affectedZones);
 			recordTraversal("locationIndex:applyDirty", affectedCards.size);
 			this.lastConsumedSeq = room.dirtyCardSeq;
 			return true;
 		}
-		applyCardChange(room, card) {
+		applyCardChange(room, card, affectedSeats) {
 			const previous = this.projections.get(card);
-			if (previous) previous.targets.forEach((target) => this.removeProjection(card, target));
+			if (previous) previous.targets.forEach((target) => {
+				affectedSeats?.add(target.seat);
+				this.removeProjection(card, target);
+			});
 			const targets = this.projectCard(room, card);
-			targets.forEach((target) => this.insertProjectionOrdered(card, target));
+			targets.forEach((target) => {
+				affectedSeats?.add(target.seat);
+				this.insertProjectionOrdered(card, target);
+			});
 			this.projections.set(card, {
 				location: card.location,
 				targets
@@ -4849,6 +4940,7 @@
 		}
 	};
 	var ConstraintGroup = class {
+		expectedLocations = new WeakMap();
 		constructor(options = {}) {
 			const { id, cards = [], candidateSeats = [], known = false, sourceEvent = null } = options;
 			this.id = id;
@@ -4860,23 +4952,43 @@
 		}
 		normalizeExpectedLocationSlots(expectedSlotsByLocation) {
 			const entries = expectedSlotsByLocation instanceof Map ? Array.from(expectedSlotsByLocation.entries()) : Object.entries(expectedSlotsByLocation ?? {});
-			return new Map(entries.map(([candidate, count]) => {
-				const key = typeof candidate === "string" ? createLocationCandidateKey(parseLocationCandidateKey(candidate)) : createLocationCandidateKey(candidate);
+			const slots = new Map();
+			const locations = new Map();
+			for (const [candidate, count] of entries) {
+				const location = typeof candidate === "string" ? parseLocationCandidateKey(candidate) : normalizeLocationCandidate(candidate);
+				if (location?.type === "public") location.label = null;
+				const key = createLocationCandidateKey(location ? Object.freeze(location) : null);
 				const range = typeof count === "number" ? {
 					min: count,
 					max: count
 				} : count;
 				if (!Number.isSafeInteger(range.min) || !Number.isSafeInteger(range.max) || range.min < 0 || range.max < range.min) throw new RangeError("位置名额必须为安全整数且满足 0 <= min <= max");
-				return [key, {
+				if (!key) continue;
+				slots.set(key, {
 					min: range.min,
 					max: range.max
-				}];
-			}).filter(([key]) => key));
+				});
+				locations.set(key, location);
+			}
+			this.expectedLocations.set(slots, locations);
+			return slots;
 		}
 		addCards(cards) {
 			(Array.isArray(cards) ? cards : [cards]).forEach((card) => {
 				if (card) this.cards.add(card);
 			});
+		}
+		getExpectedLocation(key) {
+			let locations = this.expectedLocations.get(this.expectedSlotsByLocation);
+			if (!locations) {
+				locations = new Map();
+				this.expectedLocations.set(this.expectedSlotsByLocation, locations);
+			}
+			const cached = locations.get(key);
+			if (cached !== void 0) return cached;
+			const location = parseLocationCandidateKey(key);
+			locations.set(key, location ? Object.freeze(location) : null);
+			return location;
 		}
 		apply() {
 			let changed = false;
@@ -4893,9 +5005,9 @@
 			const ownerSyncedCards = new Set();
 			const slotEntries = this.expectedSlotsByLocation;
 			slotEntries.forEach((expectedCount, key) => {
-				const location = parseLocationCandidateKey(key);
+				const location = this.getExpectedLocation(key);
 				if (!location) return;
-				const { candidateCards, remainingMin, remainingMax } = getConstraintSlotState(this.cards, location, expectedCount);
+				const { candidateCards, remainingMin, remainingMax } = getConstraintSlotState(this.cards, location, expectedCount, key);
 				if (remainingMax === 0) {
 					candidateCards.forEach((card) => {
 						changed = card.removeLocationCandidate(key, "constraintGroup:expectedLocation") || changed;
@@ -4904,7 +5016,7 @@
 					return;
 				}
 				if (candidateCards.length > remainingMin) return;
-				if (!candidateCards.every((card) => card.locationCandidates.every((candidate) => slotEntries.has(createLocationCandidateKey(candidate))))) return;
+				if (!candidateCards.every((card) => card.areLocationCandidatesCoveredBy(slotEntries))) return;
 				candidateCards.forEach((card) => {
 					changed = (location.type === "player" || location.type === "popup" ? card.resolveLocationCandidate(location, "constraintGroup:expectedLocation") : card.setLocationCandidates([location], "constraintGroup:expectedLocation")) || changed;
 					ownerSyncedCards.add(card);
@@ -4948,14 +5060,13 @@
 			const handAllocations = new Map();
 			let playerCards = room.refreshPlayerSnapshot();
 			let playerSnapshotSeq = room.dirtyCardSeq;
-			let previousTouchedSeats = null;
+			const pendingAllocationTouchedSeats = new Set();
 			let rounds = 0;
 			try {
 				while (changed && limit-- > 0) {
 					changed = false;
 					overbroadKnownCards = [];
-					const touchedSeats = new Set();
-					room.resolveTouchedSeats = touchedSeats;
+					room.resolveTouchedSeats = pendingAllocationTouchedSeats;
 					rounds += 1;
 					recordTraversal("resolveConstraints:constraint1", playerCards.length);
 					for (const card of playerCards) {
@@ -4968,10 +5079,11 @@
 						playerCards = room.refreshPlayerSnapshot();
 						playerSnapshotSeq = room.dirtyCardSeq;
 					}
-					const affectedSeatIDs = this.collectAffectedHandAllocationSeats(observedSeatIDs, previousTouchedSeats, touchedSeats);
+					const affectedSeatIDs = this.collectAffectedHandAllocationSeats(observedSeatIDs, rounds === 1 ? null : pendingAllocationTouchedSeats);
 					computeHandSlotAllocation(room, affectedSeatIDs, playerCards).forEach((allocation, seatID) => {
 						handAllocations.set(seatID, allocation);
 					});
+					pendingAllocationTouchedSeats.clear();
 					const allocationSeq = room.dirtyCardSeq;
 					for (const [seatID, player] of room.players.entries()) {
 						if (!affectedSeatIDs.includes(seatID)) continue;
@@ -4979,16 +5091,10 @@
 						changed = player.refreshUnknownCardCount(allocation) || changed;
 						const lockedKnownCount = allocation.exactKnownCount;
 						if (player.hasObservedHandCount && player.observedHandCount - lockedKnownCount <= 0) {
-							recordTraversal("resolveConstraints:constraint3:exclusion", playerCards.length);
-							for (const card of playerCards) {
-								if (card.location === "player" && card.hasLocationCandidates() && getHandSlotKindForSeat(card, seatID) === "candidate") {
-									card.locationCandidates.filter((candidate) => candidate.type === "player" && candidate.seatID === seatID && candidate.subZone === "hand").forEach((candidate) => {
-										changed = card.removeLocationCandidate(candidate, "room:unknownQuotaExclusion") || changed;
-									});
-									continue;
-								}
-								if (card.location === "player" && card.subZone === "hand" && !card.locationCandidates.some((candidate) => candidate.type === "player") && card.seats.size > 1 && card.seats.has(seatID)) changed = card.deleteSeat(seatID, "room:unknownQuotaExclusion") || changed;
-							}
+							recordTraversal("resolveConstraints:constraint3:exclusion", allocation.candidateKnownCards.length);
+							for (const card of allocation.candidateKnownCards) card.locationCandidates.filter((candidate) => candidate.type === "player" && candidate.seatID === seatID && candidate.subZone === "hand").forEach((candidate) => {
+								changed = card.removeLocationCandidate(candidate, "room:unknownQuotaExclusion") || changed;
+							});
 						}
 					}
 					const anonymousHandChanges = room.dirtyCardSeq === allocationSeq ? this.reconcileAnonymousHandCards(handAllocations) : {
@@ -4996,7 +5102,6 @@
 						released: []
 					};
 					if (anonymousHandChanges.created.length > 0 || anonymousHandChanges.released.length > 0) changed = true;
-					previousTouchedSeats = touchedSeats;
 					if (changed && playerSnapshotSeq !== room.dirtyCardSeq) {
 						playerCards = room.refreshPlayerSnapshot();
 						playerSnapshotSeq = room.dirtyCardSeq;
@@ -5010,20 +5115,25 @@
 			room.assertPlayerSnapshotConsistency(playerCards);
 			if (changed) this.suspendOverbroadKnownCards();
 			else this.suspendOverbroadKnownCards(overbroadKnownCards);
-			room.locationIndex.applyDirtyCardEvents(room, { dirtyPublicZones: room.dirtyPublicZones });
+			const affectedSeats = new Set();
+			room.locationIndex.applyDirtyCardEvents(room, {
+				dirtyPublicZones: room.dirtyPublicZones,
+				affectedSeats
+			});
 			room.dirtyPublicZones.clear();
-			this.syncViewGroups();
+			this.syncViewGroups(affectedSeats);
 			const constraintGroups = Array.from(room.constraintGroups.values());
+			const walkedIncremental = room.ambiguousKnownIndex.applyDirtyCardEvents(constraintGroups);
 			if (room.constraintGroupsDirty) {
-				room.ambiguousKnownIndex.rebuild(constraintGroups);
+				if (walkedIncremental) room.ambiguousKnownIndex.refreshGroupDescriptions(constraintGroups);
 				room.constraintGroupsDirty = false;
-			} else room.ambiguousKnownIndex.applyDirtyCardEvents(constraintGroups);
+			}
 			room.counter.update();
 			room.assertConservation("resolveConstraints");
 		}
-		collectAffectedHandAllocationSeats(observedSeatIDs, previousTouchedSeats, touchedSeats) {
-			if (previousTouchedSeats === null) return observedSeatIDs;
-			const affectedSeats = new Set([...previousTouchedSeats, ...touchedSeats]);
+		collectAffectedHandAllocationSeats(observedSeatIDs, touchedSeats) {
+			if (touchedSeats === null) return observedSeatIDs;
+			const affectedSeats = new Set(touchedSeats);
 			if (affectedSeats.size === 0) return [];
 			const pendingGroups = new Set(Array.from(this.room.constraintGroups.values(), (group) => {
 				const seats = new Set(Array.from(group.cards).flatMap((card) => Array.from(card.seats)));
@@ -8459,6 +8569,10 @@
 			this.size = this.seatIDs.length;
 			this.game.syncRoomSeats(this);
 			this.game.isRecord = this.mySeatID === void 0;
+			if (this.isDeckReady) {
+				this.locationIndex.rebuild(this);
+				this.constraints.syncViewGroups();
+			}
 			trackerLogger.info("Room 注册玩家", {
 				seatIDs: this.seatIDs,
 				currentUserID,
@@ -10840,6 +10954,7 @@
 		getSeatUIs;
 		registerMoveEventHandlers;
 		trackerRoom = null;
+		awaitingReconnectSeats = false;
 		constructor({ view = noopView, gameState = Game, getSeatUIs = () => {}, logger = noopLogger, registerMoveEventHandlers = registerDefaultMoveEventHandlers } = {}) {
 			this.controllerView = {
 				...noopView,
@@ -10862,6 +10977,15 @@
 		getReadyTrackerRoom() {
 			return this.isTrackerReady() ? this.trackerRoom : null;
 		}
+		beginTrackerReconnect() {
+			if (!this.trackerRoom) return;
+			this.awaitingReconnectSeats = false;
+			this.initTrackerRoom();
+			if (!this.trackerRoom) return;
+			this.degradeTrackerRoom();
+			this.awaitingReconnectSeats = true;
+			this.controllerView.mount(this.trackerRoom);
+		}
 		degradeTrackerRoom(snapshot) {
 			if (!this.trackerRoom) return;
 			this.trackerRoom.degradeTracking(snapshot);
@@ -10878,6 +11002,10 @@
 			return this.getReadyTrackerRoom()?.getPlayerHandCardIDs(seatID) ?? [];
 		}
 		initTrackerRoom() {
+			if (this.awaitingReconnectSeats) {
+				this.awaitingReconnectSeats = false;
+				return;
+			}
 			try {
 				this.trackerRoom?.destroy();
 				this.gameState.beginPlayback();
@@ -10903,6 +11031,10 @@
 		registerTrackerPlayers(infos, currentUserID) {
 			if (!this.trackerRoom) return;
 			this.trackerRoom.registerPlayers(infos, currentUserID);
+			if (this.trackerRoom.firstID !== void 0) {
+				this.trackerRoom.updateFixedViewIds();
+				this.getSeatUIs();
+			}
 			this.controllerView.mount(this.trackerRoom);
 			this.controllerView.scheduleRender();
 		}
@@ -11278,6 +11410,7 @@
 			};
 		}
 		destroyTrackerRoom() {
+			this.awaitingReconnectSeats = false;
 			try {
 				this.controllerView.unmount();
 				if (this.trackerRoom) {
@@ -13625,7 +13758,7 @@
 		]);
 		shaCounter() {
 			if (!Game.isShanHeTu && !Game.isRoguelike1v1) return;
-			const value = Number(Game.getSpellState("三板斧")) % 3;
+			const value = Game.getSpellState("三板斧") % 3;
 			for (const id of [
 				13033,
 				13034,
@@ -13649,7 +13782,7 @@
 		}
 		drawCounter() {
 			if (!Game.isShanHeTu && !Game.isRoguelike1v1) return;
-			const count = Number(Game.getSpellState("神龙摆尾"));
+			const count = Game.getSpellState("神龙摆尾");
 			const times = Game.getSpellState("多多益善");
 			const shenlong1 = this.zhanfaMap.get(13091);
 			if (shenlong1) shenlong1.Value = count % 9;
@@ -14440,14 +14573,17 @@
 		return "";
 	}
 	function createGeneralRow(general, difficulty, eventData) {
+		return createTextRow(getGeneralDisplay(general, difficulty, eventData));
+	}
+	function getGeneralDisplay(general, difficulty, eventData) {
 		const [skills, red] = highlightedSkill(general, difficulty);
 		const canStart = String(eventData.CanStart || "").split(";").includes(String(difficulty));
 		const start = general.start && canStart ? "[先行]" : "";
-		return createTextRow({
+		return {
 			text: `${general.generalname}${start}${red ? " " + skills.join(" ") : ""}`,
 			color: red ? STYLES.GENERAL.warning : STYLES.GENERAL.normal,
 			fontSize: STYLES.GENERAL.fontSize
-		});
+		};
 	}
 	var spellList = [
 		"巳蛇",
@@ -14496,6 +14632,24 @@
 		const skills = difficultySpells.slice(0, currentLevelIndex + 1).flatMap((spell) => String(spell || "").split(";")).filter(Boolean).map((spell) => SkillsConfig.GetInstance().getSpellName(spell)).filter((name) => spellList.includes(name));
 		return [skills, skills.length > 0];
 	}
+	function drawRogueBossInfo(boss) {
+		const chapter = document.getElementById("rogueBossChapter");
+		const detail = document.getElementById("rogueBossDetail");
+		const attributes = document.getElementById("rogueBossAttributes");
+		if (!chapter || !detail || !attributes) return;
+		chapter.textContent = boss?.chapter.cityName ?? "--";
+		if (!boss || boss.fight.generals.length === 0) {
+			detail.textContent = "暂无 Boss 数据";
+			attributes.textContent = "--";
+			return;
+		}
+		const generals = boss.fight.generals;
+		detail.textContent = generals.map((general) => getGeneralDisplay(general, rogueMap.difficulty, boss.fight).text).join("、");
+		attributes.textContent = generals.map((general) => {
+			const { hp, maxhp, card, draw, sha, armor } = general.info;
+			return `${generals.length > 1 ? `${general.generalname}：` : ""}血量 ${hp}/${maxhp}，初始牌 ${card}，摸牌 ${draw}，出杀 ${sha}，护甲 ${armor}`;
+		}).join("；");
+	}
 	function drawStore(filteredPairs) {
 		var StoreHTML = document.getElementById("storeDetail");
 		StoreHTML.innerText = "";
@@ -14539,6 +14693,7 @@
 		const seasonData = allData.seasonData;
 		const difficulty = seasonData && seasonData.difficulty;
 		difficulty && (rogueMap.difficulty = difficulty);
+		drawRogueBossInfo(RoguelikeConfig.GetInstance().getChapterBoss(seasonData?.seasonId, chapterData));
 		rogueMap.general = allData.gameData?.myGeneral?.uGeneralId ?? 0;
 		rogueMap.itemId = allData.gameData?.itemId ?? [];
 		if (chapterData?.locations) {
@@ -14630,6 +14785,7 @@
 		}
 	};
 	var ALWAYS_RECORDED_CLASSES = new Set([
+		"SsClientVersionNtf",
 		"MsgReconnectGame",
 		"MsgReconnectGameHand",
 		"decodeGameRecordInitInfo",
@@ -14732,6 +14888,7 @@
 		["PubGsCMoveCard", new Set(["isSend"])]
 	]);
 	var ROOT_FIELD_ALLOWLISTS = {
+		SsClientVersionNtf: new Set(),
 		MsgReconnectGame: new Set(["CardPileCount", "SeatInfos"]),
 		MsgReconnectGameHand: new Set([
 			"CardIDs",
@@ -15797,7 +15954,7 @@
 		return response.text();
 	}
 	var iframe = null;
-	var version = "0.20.1";
+	var version = "0.20.2";
 	function getTrackedHandNumbers(seatID) {
 		const config = CardConfig.GetInstance();
 		return tracker.getTrackedPlayerHandCardIDs(seatID).map((id) => config.getCardNumber(id)).filter((number) => number > 0);
@@ -16124,7 +16281,7 @@
 			} else {
 				container.classList.remove("collapsed");
 				toggle.innerText = "-";
-				document.getElementById("title").innerText = "三国杀小抄0.20.1";
+				document.getElementById("title").innerText = "三国杀小抄0.20.2";
 				expandJiePanel({ defer: true });
 			}
 		};
@@ -16489,7 +16646,7 @@
 		const { CardID, spellID, useType } = msg;
 		const spell = spellID || msg.spellId;
 		const cardIDs = CardID ? [CardID] : msg.cardIds || [];
-		if ((msg.SeatID || msg.castSeatId) !== Game.myID) return;
+		if ((msg.SeatID ?? msg.castSeatId) !== Game.myID) return;
 		if (useType == 1) drawLastUseCard(cardIDs, {
 			spellId: spell,
 			color: msg.color
@@ -16507,9 +16664,9 @@
 		cancelGameOverTask();
 		resetSeatUIs();
 		tracker.initTrackerRoom();
-		tracker.registerTrackerPlayers(infos, user.userID);
 		resetOrderContainer();
 		hideOrderContainer(infos.length);
+		tracker.registerTrackerPlayers(infos, user.userID);
 	}
 	function handleRecordStartGame(msg) {
 		if (!user.userID) addTooltip("没有识别到uuid, 主视角数据可能会出错", "acTooltip", 4e3);
@@ -16729,6 +16886,9 @@
 				case "ClientBindKeyRep": break;
 				case "decodeSyncGameDataEvent":
 					handleAdWindow();
+					break;
+				case "SsClientVersionNtf":
+					tracker.beginTrackerReconnect();
 					break;
 				case "MsgReconnectGame":
 					tracker.degradeTrackerRoom(msg);
