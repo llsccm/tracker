@@ -1,3 +1,4 @@
+import { getPublicZoneConsistencyIssues } from '@/tracker/room/publicZones'
 import { describe, expect, it } from 'vitest'
 import { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
 import { collectTraversalStats } from '@/tracker/traversalStats'
@@ -235,7 +236,7 @@ describe('完整位置候选回归', () => {
     expect(card.location).toBe('player')
     expect(room.getPublicZone('pile').cards).not.toContain(card)
     expect(card.hasLocationCandidate(pileTop)).toBe(true)
-    expect(room.publicZones.getPublicZoneConsistencyIssues()).toEqual([])
+    expect(getPublicZoneConsistencyIssues(room)).toEqual([])
     card.setLocationCandidates([hand, mark])
     expect(room.getPublicZone('pile').cards).not.toContain(card)
     expect(card.hasLocationCandidate(hand)).toBe(true)

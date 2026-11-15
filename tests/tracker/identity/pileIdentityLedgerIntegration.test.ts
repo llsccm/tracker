@@ -1,3 +1,4 @@
+import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { trackerLogger } from '@/utils/logger'
 import { getPublicFieldCandidateCards } from '@/tracker/view/publicFieldCandidates'
 import { CARD_INSTANCE_STATUS } from '@/tracker/projection/CardCounter'
@@ -60,7 +61,7 @@ describe('PileIdentityLedger integration', () => {
       expect(pile.cards.every((card) => card.isAnonymous && !card.isKnown)).toBe(true)
       expect(room.cardIndex.has(cardID)).toBe(false)
       expect(room.unlocatedIdentities.has(cardID)).toBe(true)
-      expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([])
+      expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([])
       expect(room.assertPileIdentityLedgerConsistency('test:huntianyi-insert')).toEqual([])
     })
 
@@ -134,7 +135,7 @@ describe('PileIdentityLedger integration', () => {
     expect(room.zones.get('discard')!.cards).toEqual([])
     expect(room.suspendedKnownCards.size).toBe(0)
     expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3, 4]))
-    expect(room.pileIdentityLedger.getSnapshot().cohort.generation).toBe(0)
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).cohort.generation).toBe(0)
     expect(room.assertPileIdentityLedgerConsistency('test:initial-empty-shuffle')).toEqual([])
   })
 
@@ -172,7 +173,7 @@ describe('PileIdentityLedger integration', () => {
     expect(room.zones.get('discard')!.cards).toEqual([])
     expect(room.suspendedKnownCards.size).toBe(0)
     expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3, 4]))
-    expect(room.pileIdentityLedger.getSnapshot().cohort).toMatchObject({
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).cohort).toMatchObject({
       generation: 0,
       groups: [
         {
@@ -230,7 +231,7 @@ describe('PileIdentityLedger integration', () => {
       replaceAllSpy.mockRestore()
     }
 
-    expect(room.pileIdentityLedger.getSnapshot().cohort.generation).toBe(1)
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).cohort.generation).toBe(1)
     expect(room.unlocatedIdentities.has(1)).toBe(true)
     expect(
       Array.from(room.suspendedKnownCards, (card) => card.id).sort((left, right) => left - right)
@@ -254,7 +255,7 @@ describe('PileIdentityLedger integration', () => {
     )
 
     const room = controller.getTrackerRoom()
-    const ledgerSnapshot = room.pileIdentityLedger.getSnapshot()
+    const ledgerSnapshot = getPileIdentitySnapshot(room.pileIdentityLedger)
 
     expect(ledgerSnapshot.hiddenPileSlotCount).toBe(4)
     expect(ledgerSnapshot.cohort.groups).toEqual([
@@ -280,7 +281,7 @@ describe('PileIdentityLedger integration', () => {
     )
 
     const room = controller.getTrackerRoom()
-    const ledgerSnapshot = room.pileIdentityLedger.getSnapshot()
+    const ledgerSnapshot = getPileIdentitySnapshot(room.pileIdentityLedger)
 
     expect(ledgerSnapshot.knownPileIdentityIDs).toEqual([1])
     expect(ledgerSnapshot.hiddenPileSlotCount).toBe(2)
@@ -304,13 +305,13 @@ describe('PileIdentityLedger integration', () => {
     const discard = room.zones.get('discard')!
     const discardCard = room.cardIndex.get(1)
     expect(discard.cards).toContain(discardCard)
-    expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([1])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual([1])
 
     // public 只是明示目标，已有实体会继续停在 discard；账本必须读取同步后的实际位置。
     controller.revealTrackerCards({ type: 'public', zoneName: 'discard' }, [1])
 
     expect(discard.cards).toContain(discardCard)
-    expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([1])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual([1])
     expect(room.assertPileIdentityLedgerConsistency('test:discard-repeat-reveal')).toEqual([])
   })
 
@@ -348,7 +349,7 @@ describe('PileIdentityLedger integration', () => {
     const room = controller.getTrackerRoom()
     expect(room.zones.get('pile')!.cards.at(-1)).toMatchObject({ id: 127, isKnown: true })
     expect(room.unlocatedIdentities.has(127)).toBe(false)
-    expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger)).toMatchObject({
       knownPileIdentityIDs: [127],
       cohort: {
         groups: [{ cardIDs: [1, 2], remainingPileCount: 2 }]
@@ -406,7 +407,7 @@ describe('PileIdentityLedger integration', () => {
     expect(pile.cards[0]).toMatchObject({ id: 127, isKnown: true })
     expect(room.cardIndex.get(127)).toMatchObject({ location: 'pile', isKnown: true })
     expect(room.unlocatedIdentities.has(127)).toBe(false)
-    expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger)).toMatchObject({
       knownPileIdentityIDs: [1, 127],
       cohort: {
         groups: [{ cardIDs: [2, 3], remainingPileCount: 1 }]
@@ -470,7 +471,7 @@ describe('PileIdentityLedger integration', () => {
       expect(room.cardIndex.get(cardID)).toMatchObject({ location: 'pile', isKnown: true })
       expect(room.unlocatedIdentities.has(cardID)).toBe(false)
     })
-    expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger)).toMatchObject({
       knownPileIdentityIDs: knownBottomIDs,
       hiddenPileSlotCount: 1,
       cohort: {
@@ -538,11 +539,11 @@ describe('PileIdentityLedger integration', () => {
 
     shuffle()
 
-    expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger)).toMatchObject({
       knownPileIdentityIDs: [1, 2],
       accountedPileCount: 8
     })
-    expect(room.pileIdentityLedger.getSnapshot().cohort.generation).toBe(1)
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).cohort.generation).toBe(1)
     expect(room.zones.get('pile')!.cards.at(-1)).toMatchObject({ id: 1, isKnown: true })
     expect(room.cardIndex.get(2)).toMatchObject({ isKnown: true, location: 'pile' })
     expect(room.cardIndex.has(3)).toBe(false)
@@ -572,7 +573,7 @@ describe('PileIdentityLedger integration', () => {
     )
     shuffle()
 
-    const ledgerSnapshot = room.pileIdentityLedger.getSnapshot()
+    const ledgerSnapshot = getPileIdentitySnapshot(room.pileIdentityLedger)
     expect(ledgerSnapshot.cohort.generation).toBe(2)
     expect(ledgerSnapshot.knownPileIdentityIDs).toEqual([1, 2])
     expect(ledgerSnapshot.accountedPileCount).toBe(8)
@@ -622,12 +623,12 @@ describe('PileIdentityLedger integration', () => {
 
     expect(pile.cards.at(-1)).toMatchObject({ id: 1, isKnown: true })
     expect(room.cardIndex.get(2)).toMatchObject({ location: 'pile', isKnown: true })
-    expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger)).toMatchObject({
       knownPileIdentityIDs: [1, 2],
       hiddenPileSlotCount: 2,
       accountedPileCount: 4
     })
-    expect(room.pileIdentityLedger.getSnapshot().cohort.groups).toEqual([
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).cohort.groups).toEqual([
       {
         generation: 0,
         kind: 'partial',
@@ -650,7 +651,7 @@ describe('PileIdentityLedger integration', () => {
     )
 
     expect(pile.cards).toHaveLength(4)
-    expect(room.pileIdentityLedger.getSnapshot().cohort.groups).toEqual([
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).cohort.groups).toEqual([
       {
         generation: 0,
         kind: 'all-in-pile',
@@ -678,7 +679,7 @@ describe('PileIdentityLedger integration', () => {
 
     let room = controller.getTrackerRoom()
     expect(room.zones.get('pile')!.cards.at(-1)).toMatchObject({ id: 2, isKnown: true })
-    expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger)).toMatchObject({
       knownPileIdentityIDs: [2],
       hiddenPileSlotCount: 1
     })
@@ -688,7 +689,7 @@ describe('PileIdentityLedger integration', () => {
     )
 
     room = controller.getTrackerRoom()
-    const ledgerSnapshot = room.pileIdentityLedger.getSnapshot()
+    const ledgerSnapshot = getPileIdentitySnapshot(room.pileIdentityLedger)
 
     expect(room.zones.get('pile')!.cards).toHaveLength(0)
     expect(ledgerSnapshot.knownPileIdentityIDs).toEqual([])

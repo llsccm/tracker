@@ -1,3 +1,4 @@
+import { getPublicZoneConsistencyIssues } from '@/tracker/room/publicZones'
 import { describe, expect, it, vi } from 'vitest'
 import { POSITION_BOTTOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import type { Card } from '@/tracker/model/Card'
@@ -83,7 +84,7 @@ function withWarnSpy(run: (warnSpy: ReturnType<typeof vi.spyOn>) => void) {
 }
 
 function expectConsistentPublicZones(room: Room) {
-  expect(room.publicZones.getPublicZoneConsistencyIssues()).toEqual([])
+  expect(getPublicZoneConsistencyIssues(room)).toEqual([])
 }
 
 function playerHandPlaceholders(room: Room, seatID?: number) {

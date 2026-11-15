@@ -121,25 +121,6 @@ export class AmbiguousKnownIndex {
     else this.containerDependentCards.delete(card)
   }
 
-  /**
-   * 生成稳定可比较结构，供测试和 DEV 影子索引断言使用。
-   */
-  toComparable(room: Room = this.room): unknown {
-    const order = new Map<Card, number>()
-    room.cards.forEach((card, index) => order.set(card, index))
-    const token = (card: Card) => order.get(card) ?? -card.id
-
-    return Array.from(this.items.entries())
-      .sort((a, b) => Number(a[0]) - Number(b[0]))
-      .map(([cardID, item]) => [
-        cardID,
-        token(item.card),
-        item.candidateSeats.map(Number),
-        item.groups.map((group) => String(group.id)).sort(),
-        item.description
-      ])
-  }
-
   get(cardID: CardID): AmbiguousKnownItem | null {
     return this.items.get(cardID) ?? null
   }
@@ -220,4 +201,26 @@ export class AmbiguousKnownIndex {
     if (!card.hasLocationCandidates()) return false
     return getContainerLocationCandidates(card.locationCandidates).length > 0
   }
+}
+
+/**
+ * 生成稳定可比较结构，供测试和 DEV 影子索引断言使用。
+ */
+export function toComparableAmbiguousIndex(
+  index: AmbiguousKnownIndex,
+  room: Room = index.room
+): unknown {
+  const order = new Map<Card, number>()
+  room.cards.forEach((card, cardIndex) => order.set(card, cardIndex))
+  const token = (card: Card) => order.get(card) ?? -card.id
+
+  return Array.from(index.items.entries())
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([cardID, item]) => [
+      cardID,
+      token(item.card),
+      item.candidateSeats.map(Number),
+      item.groups.map((group) => String(group.id)).sort(),
+      item.description
+    ])
 }

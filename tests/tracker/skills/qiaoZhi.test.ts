@@ -1,3 +1,4 @@
+import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { describe, expect, it } from 'vitest'
 import { getPopupSpaceCards } from '@/tracker/room/movement/popupSpaces'
 
@@ -271,13 +272,13 @@ describe('巧织默认协议管线', () => {
           SpellID: 3544
         })
       )
-      const revision = room.pileIdentityLedger.getSnapshot().revision
+      const revision = getPileIdentitySnapshot(room.pileIdentityLedger).revision
       notifyRoleData()
       controller.dispatchSkillProtocolEvent({
         type: 'roleData',
         message: { DataID: 3544, SeatID: 3, Datas: [0, 0] }
       })
-      expect(room.pileIdentityLedger.getSnapshot().revision).toBe(revision)
+      expect(getPileIdentitySnapshot(room.pileIdentityLedger).revision).toBe(revision)
       expect(player.observedHandCount).toBe(1)
       expect(player.knownHandCards.map((card) => card.id)).toEqual([37])
       expect(player.candidateHandCards).toEqual([])

@@ -1,3 +1,8 @@
+import { getPublicZoneConsistencyIssues } from '@/tracker/room/publicZones'
+import {
+  assertPileIdentityConsistency,
+  getPileIdentitySnapshot
+} from '@/tracker/PileIdentityLedger'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { POSITION_RANDOM } from '@/tracker/candidate/cardPositions'
 import type { Room } from '@/tracker/Room'
@@ -40,9 +45,11 @@ function shuffleMove(cardCount: number) {
 
 function expectPileCount(room: Room, count: number) {
   expect(room.getZone('pile').cards).toHaveLength(count)
-  expect(room.pileIdentityLedger.getSnapshot().accountedPileCount).toBe(count)
-  expect(room.pileIdentityLedger.assertConsistency(count, 'test:degraded-pile')).toEqual([])
-  expect(room.publicZones.getPublicZoneConsistencyIssues()).toEqual([])
+  expect(getPileIdentitySnapshot(room.pileIdentityLedger).accountedPileCount).toBe(count)
+  expect(
+    assertPileIdentityConsistency(room.pileIdentityLedger, count, 'test:degraded-pile')
+  ).toEqual([])
+  expect(getPublicZoneConsistencyIssues(room)).toEqual([])
 }
 
 afterEach(() => vi.restoreAllMocks())
@@ -177,7 +184,7 @@ describe('重连残局降级追踪', () => {
     expect(room.getPlayer(0)?.handCountDelta).toBe(-2)
     expect(room.cardIndex.get(99)?.isKnown).toBe(true)
     expect(room.trackedCards.filter((card) => card.id === 99)).toHaveLength(1)
-    expect(room.publicZones.getPublicZoneConsistencyIssues()).toEqual([])
+    expect(getPublicZoneConsistencyIssues(room)).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -308,8 +315,10 @@ describe('重连残局降级追踪', () => {
     expect(room.trackingMode).toBe('degraded')
     expect(room.getZone('discard').cards).toEqual([])
     expectPileCount(room, count)
-    expect(room.pileIdentityLedger.getSnapshot().cohort.definitelyInPileIDs).toEqual([])
-    expect(room.pileIdentityLedger.getSnapshot().cohort.definitelyOutsidePileIDs).toEqual([])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).cohort.definitelyInPileIDs).toEqual([])
+    expect(
+      getPileIdentitySnapshot(room.pileIdentityLedger).cohort.definitelyOutsidePileIDs
+    ).toEqual([])
     expect(warn.mock.calls.filter(([message]) => message === '牌堆身份账本异常')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
@@ -348,7 +357,7 @@ describe('重连残局降级追踪', () => {
     controller.syncTrackerMove(shuffleMove(12))
     expectPileCount(room, 12)
     expect(room.getZone('pile').cards.at(-1)).toBe(knownTop)
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([11])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([11])
     expect(room.getZone('pile').cards.filter((card) => card.isKnown)).toEqual([knownTop])
 
     controller.syncTrackerMove(protocolMove({ CardIDs: [], CardCount: 1, ToID: 0 }))
@@ -379,7 +388,7 @@ describe('重连残局降级追踪', () => {
 
     expectPileCount(room, 9)
     expect(room.isPileCountKnown).toBe(true)
-    expect(room.pileIdentityLedger.getSnapshot().identityUniverseIDs).toEqual([11, 12])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).identityUniverseIDs).toEqual([11, 12])
     expect(warn.mock.calls.filter(([message]) => message === '牌堆身份账本异常')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
@@ -398,11 +407,12 @@ describe('重连残局降级追踪', () => {
   })
 
   it('关闭跨账本强断言，仍保持实体与公共区域结构一致性检查', () => {
-    const { room, errorSpy } = createDegradedRoom()
-    const assertLedger = vi.spyOn(room.pileIdentityLedger, 'assertConsistency')
+    const { room, errorSpy, warn } = createDegradedRoom()
+    warn.mockClear()
+    room.pileIdentityLedger.reconcilePileCount(999)
     expect(room.assertPileIdentityLedgerConsistency('test:degraded')).toEqual([])
-    expect(assertLedger).not.toHaveBeenCalled()
-    expect(room.publicZones.getPublicZoneConsistencyIssues()).toEqual([])
+    expect(warn).not.toHaveBeenCalled()
+    expect(getPublicZoneConsistencyIssues(room)).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -421,6 +431,8 @@ describe('重连残局降级追踪', () => {
     expect(nextRoom.isPileCountKnown).toBe(true)
     expect(nextRoom.getPlayer(0)?.handCountDelta).toBe(0)
     expectPileCount(nextRoom, 2)
-    expect(nextRoom.pileIdentityLedger.getSnapshot().cohort.definitelyInPileIDs).toEqual([11, 12])
+    expect(getPileIdentitySnapshot(nextRoom.pileIdentityLedger).cohort.definitelyInPileIDs).toEqual(
+      [11, 12]
+    )
   })
 })

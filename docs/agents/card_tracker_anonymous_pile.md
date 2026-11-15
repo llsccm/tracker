@@ -32,7 +32,7 @@
 | cohort 如何消费、合并和降级 | `PileIdentityLedger.applyMove()` | `tests/tracker/identity/pileIdentityLedger.test.ts` |
 | 洗牌如何关闭旧世代 | `Room.shufflePile()`、`PileIdentityLedger.createShuffleTransition()` | `tests/tracker/identity/pileIdentityLedgerIntegration.test.ts` |
 | suspended 身份如何恢复 | `Room.suspendUnresolvedPileIdentitiesForShuffle()`、`Room.resumeSuspendedKnownCard()` | `tests/tracker/identity/pileIdentityLedgerIntegration.test.ts` |
-| 账本与 Room 为什么不一致 | `Room.assertPileIdentityLedgerConsistency()`、`PileIdentityLedger.getSnapshot()` | `tests/tracker/identity/pileIdentityLedger.test.ts`、`tests/tracker/runtime/traversalBaseline.test.ts` |
+| 账本与 Room 为什么不一致 | `Room.assertPileIdentityLedgerConsistency()`、`getPileIdentitySnapshot()` | `tests/tracker/identity/pileIdentityLedger.test.ts`、`tests/tracker/runtime/traversalBaseline.test.ts` |
 | 重连如何保留有限追踪并恢复数量 | `Room.degradeTracking()`、`RoomReconnect.restore()`、`Room.isPileCountKnown` | `degradedTracking.test.ts`、`reconnectSnapshot.test.ts` |
 
 ## 三层模型
@@ -281,7 +281,7 @@ accountedPileCount
 
 ## 诊断快照
 
-`PileIdentityLedger.getSnapshot()` 的常用字段：
+`getPileIdentitySnapshot(ledger)` 的常用字段：
 
 | 字段 | 用途 |
 | --- | --- |

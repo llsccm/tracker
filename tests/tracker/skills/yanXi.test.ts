@@ -1,3 +1,4 @@
+import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { getMovePosition } from '@/tracker/helper/moveEndpoint'
 import { describe, expect, it } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
@@ -71,7 +72,9 @@ describe('宴戏成功批次与暗牌失败降级', () => {
       expect(room.hasSkillState(7017)).toBe(false)
       topIDs.slice(0, 2).forEach((id) => {
         expect(room.getPlayerHandCardIDs(7)).toContain(id)
-        expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).not.toContain(id)
+        expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).not.toContain(
+          id
+        )
       })
       expect(errorSpy).not.toHaveBeenCalled()
     }
@@ -119,7 +122,7 @@ describe('宴戏成功批次与暗牌失败降级', () => {
       expect(room.getPlayer(7)!.observedHandCount).toBe(1)
       expect(room.getPlayerHandCardIDs(7)).toEqual([])
       expect(room.cards).toHaveLength(entityCount)
-      expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([3])
+      expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([3])
       expect(room.assertPileIdentityLedgerConsistency('yanxi:hidden-failure')).toEqual([])
       expect(errorSpy).not.toHaveBeenCalled()
     }
@@ -167,7 +170,7 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     expect(top.location).toBe('pile')
     expect(top.isKnown).toBe(true)
     expect(third.isKnown).toBe(true)
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([1, 3])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([1, 3])
     expect(room.assertPileIdentityLedgerConsistency('yanxi:known-failure')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
@@ -197,7 +200,7 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     controller.syncTrackerMove(yanXiMove({ CardIDs: [9] }))
 
     expect(room.getPlayerHandCardIDs(7)).toEqual(expect.arrayContaining([19, 8, 9]))
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([1, 2, 3])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([1, 2, 3])
     expect(room.hasSkillState(7017)).toBe(false)
     expect(room.assertPileIdentityLedgerConsistency('yanxi:guozhan-known')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()

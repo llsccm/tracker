@@ -230,43 +230,6 @@ export class CardLocationIndex {
   }
 
   /**
-   * 把各桶归一化为可比较的纯结构（用 room.cards 下标做身份令牌，含桶内顺序）。
-   * 供 DEV 一致性断言与测试比对“增量结果 vs 全量 rebuild 结果”。
-   */
-  toComparable(room: Room): unknown {
-    const order = new Map<Card, number>()
-    room.cards.forEach((card, index) => order.set(card, index))
-    const token = (card: Card) => order.get(card) ?? -card.id
-
-    const bySeat = (map: CardsBySeat) =>
-      Array.from(map.entries())
-        .sort((a, b) => Number(a[0]) - Number(b[0]))
-        .map(([seat, cards]) => [Number(seat), cards.map(token)])
-
-    const mark = Array.from(this.markBySeatAndSpell.entries())
-      .sort((a, b) => Number(a[0]) - Number(b[0]))
-      .map(([seat, spellMap]) => [
-        Number(seat),
-        Array.from(spellMap.entries())
-          .sort((a, b) => Number(a[0]) - Number(b[0]))
-          .map(([spellID, cards]) => [spellID, cards.map(token)])
-      ])
-
-    const publicByZone = Array.from(this.publicByZone.entries())
-      .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
-      .map(([zoneID, cards]) => [String(zoneID), cards.map(token)])
-
-    return {
-      knownHand: bySeat(this.knownHandBySeat),
-      candidateHand: bySeat(this.candidateHandBySeat),
-      equip: bySeat(this.equipBySeat),
-      judge: bySeat(this.judgeBySeat),
-      mark,
-      public: publicByZone
-    }
-  }
-
-  /**
    * 是否带装备容器候选（投影座位依赖装备承载座位的跨牌依赖）。
    */
   private cardHasContainerCandidates(card: Card): boolean {
@@ -426,5 +389,42 @@ export class CardLocationIndex {
     // rebuild 之后新增（append 到 room.cards 末尾）的牌，顺序键单调递增即可保持追加序。
     this.registerCard(card)
     return this.cardOrder.get(card) ?? this.maxOrder
+  }
+}
+
+/**
+ * 把各桶归一化为可比较的纯结构（用 room.cards 下标做身份令牌，含桶内顺序）。
+ * 供 DEV 一致性断言与测试比对“增量结果 vs 全量 rebuild 结果”。
+ */
+export function toComparableLocationIndex(index: CardLocationIndex, room: Room): unknown {
+  const order = new Map<Card, number>()
+  room.cards.forEach((card, cardIndex) => order.set(card, cardIndex))
+  const token = (card: Card) => order.get(card) ?? -card.id
+
+  const bySeat = (map: CardsBySeat) =>
+    Array.from(map.entries())
+      .sort((a, b) => Number(a[0]) - Number(b[0]))
+      .map(([seat, cards]) => [Number(seat), cards.map(token)])
+
+  const mark = Array.from(index.markBySeatAndSpell.entries())
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([seat, spellMap]) => [
+      Number(seat),
+      Array.from(spellMap.entries())
+        .sort((a, b) => Number(a[0]) - Number(b[0]))
+        .map(([spellID, cards]) => [spellID, cards.map(token)])
+    ])
+
+  const publicByZone = Array.from(index.publicByZone.entries())
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+    .map(([zoneID, cards]) => [String(zoneID), cards.map(token)])
+
+  return {
+    knownHand: bySeat(index.knownHandBySeat),
+    candidateHand: bySeat(index.candidateHandBySeat),
+    equip: bySeat(index.equipBySeat),
+    judge: bySeat(index.judgeBySeat),
+    mark,
+    public: publicByZone
   }
 }
