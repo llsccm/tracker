@@ -37,6 +37,7 @@ function ensureStyle() {
     #tracker-shell .header {
       margin: 1px;
       user-select: none;
+      touch-action: none;
       cursor: grab;
       display: flex;
       align-items: center;

@@ -71,6 +71,7 @@ function getShellStyle(id) {
       align-items: center;
       justify-content: space-between;
       background: #7b292d;
+      touch-action: none;
       cursor: grab;
     }
     #${id}.is-dragging .draggable-window-header { cursor: grabbing; }
@@ -98,11 +99,13 @@ function bindDrag(element, handle, state) {
     if (event.pointerId !== pointerId) return
     pointerId = null
     element.classList.remove('is-dragging')
-    handle.releasePointerCapture?.(event.pointerId)
+    if (handle.hasPointerCapture?.(event.pointerId)) {
+      handle.releasePointerCapture?.(event.pointerId)
+    }
   }
 
   const start = (event) => {
-    if (event.button !== 0) return
+    if (pointerId !== null || event.isPrimary === false || event.button !== 0) return
     const rect = element.getBoundingClientRect()
     pointerId = event.pointerId
     offsetX = event.clientX - rect.left
@@ -115,12 +118,19 @@ function bindDrag(element, handle, state) {
   handle.addEventListener('pointermove', move)
   handle.addEventListener('pointerup', stop)
   handle.addEventListener('pointercancel', stop)
+  handle.addEventListener('lostpointercapture', stop)
 
   state.cleanupDrag = () => {
+    if (pointerId !== null && handle.hasPointerCapture?.(pointerId)) {
+      handle.releasePointerCapture?.(pointerId)
+    }
+    pointerId = null
+    element.classList.remove('is-dragging')
     handle.removeEventListener('pointerdown', start)
     handle.removeEventListener('pointermove', move)
     handle.removeEventListener('pointerup', stop)
     handle.removeEventListener('pointercancel', stop)
+    handle.removeEventListener('lostpointercapture', stop)
     state.cleanupDrag = null
   }
 }
