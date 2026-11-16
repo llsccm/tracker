@@ -4,6 +4,7 @@ import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidat
 import type { PopupSpaceState } from '@/tracker/room/movement/types'
 import { createTestRoom, getCard } from '../helpers/room'
 import { locationKeys, playerHand, publicLocation } from '../helpers/locationCandidates'
+import { getPlayerCardsSnapshot } from '@/tracker/projection/playerSnapshot'
 
 describe('Room.moveCards 组合路线', () => {
   it('候选多目标只移动一份实体，重复座位收敛为单个零号玩家端点', () => {
@@ -55,10 +56,10 @@ describe('Room.moveCards 组合路线', () => {
         sourceEvent: { type: 'test:visible-subzone-count-only-transfer' }
       })
 
-      const sourceCards = room.playerCardsSnapshot.filter(
+      const sourceCards = getPlayerCardsSnapshot(room).filter(
         (card) => card.subZone === subZone && card.resolvedSeat === 1
       )
-      const targetCards = room.playerCardsSnapshot.filter(
+      const targetCards = getPlayerCardsSnapshot(room).filter(
         (card) => card.subZone === 'hand' && card.resolvedSeat === 2
       )
       expect(sourceCards).toHaveLength(cards.length - cardCount)

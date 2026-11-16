@@ -34,8 +34,8 @@
   技能/移动处理器与视图脏状态。座位、视角、对局上下文及技能状态访问由单层父类
   `src/tracker/room/RoomBase.ts` 提供；玩家注册、GameState 绑定和销毁仍由完整 Room 协调。
 - 构造时挂载移动、约束、公共区、身份处理与事件装饰模块，并独立封装玩家快照；高频入口保留在 Room，
-  阶段细节委托给模块，不复制身份或推断状态。DEV 环境另挂载只读 `diagnostics`，
-  集中执行开发断言与告警，生产环境不创建诊断实例。
+  阶段细节委托给模块，不复制身份或推断状态。DEV 环境另挂载 `diagnostics`，
+  维护抽样状态与收敛告警；只读断言由独立函数执行，生产环境不创建诊断实例。
 - 生命周期主入口是 `registerPlayers()`、`initDeck()`、`moveCards()`、`resolveConstraints()`、
   `shufflePile()` 与 `destroy()`；生产 `initDeck()` 只创建匿名物理槽，真实身份由身份分区和
   `PileIdentityLedger` 管理。
@@ -57,8 +57,8 @@
 - 移动上下文快照由无状态的 `room/movement/context.ts` 构造；未知身份的来源取牌与目标落区阶段由 `room/movement/unknownPlacement.ts` 实现，RoomMovement 保留调用入口与阶段顺序。
 - 装备容器座位、迁座、稳定记录键和完整快照规则在 `room/movement/equipmentMarks.ts`；该模块只读输入，暗置标记组件继续负责唯一账本、占位与收敛协调，不建立独立木牛状态。
 - `RoomConstraints` 位于 `src/tracker/room/constraints.ts`，集中实现不动点收敛、手牌分配缓存、受影响座位筛选、匿名手牌实体对账、约束组维护、实体牌解析及稳定态的索引/视图组/计数器同步。Room 保留 `resolveConstraints()` 公开入口和状态所有权，DEV 诊断按需传入。
-- `RoomPublicZones` 位于 `src/tracker/room/publicZones.ts`，负责公共区一致性检查、洗牌槽位校准及玩家手牌 ID 查询。公共区牌序直接读取 `Room.getPublicZone()` 返回的 `Zone.cards`。
-- `RoomDiagnostics` 位于 `src/tracker/room/diagnostics.ts`，负责 DEV 身份/槽位与身份账本守恒、玩家快照和影子索引检查、抽样门控及收敛轮数告警；Room 的公开断言 API 保持不变。
+- `RoomPublicZones` 位于 `src/tracker/room/publicZones.ts`，负责洗牌槽位校准及玩家手牌 ID 查询；公共区一致性检查作为同文件的独立函数导出。公共区牌序直接读取 `Room.getPublicZone()` 返回的 `Zone.cards`。
+- `RoomDiagnostics` 位于 `src/tracker/room/diagnostics.ts`，只维护 DEV 抽样状态并报告收敛轮数异常。身份/槽位与身份账本守恒、玩家快照和影子索引检查由同文件的独立断言函数执行；Room 与行为模块在 DEV 分支直接调用这些函数，诊断对象不保留转发包装。
 - `protocol/protocolZones.ts` 将区域 `4` 映射为玩家标记、区域 `8` 映射为独立临时弹窗 `popup`。`MoveEventNormalizer` 只做分类与字段映射，不直接修改 `Room` 状态。玩家端点使用 `seatID`，弹窗端点使用 `spaceID`；区域 `8` 的 `FromID` 是空间 ID，不是玩家座位；当 `FromID` 为 `255` 时，`FromID` 作为来源端点的弹窗 `spaceID` 使用 `SpellID`。玩家标记空间在归一化时按端点 `ZoneParam` 解析为 `markSpellID`，与触发移动的 `SpellID` 分开。
 - `Room.moveCards()`、`Room.resolveConstraints()`、`Room.shufflePile()`、`Room.getPublicZone()` 是高频核心入口，应优先留在 `Room` 中；新增内部辅助方法时优先放入对应行为模块，再由 `Room` 暴露必要的薄入口。
 

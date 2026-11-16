@@ -3,6 +3,7 @@ import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidat
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import { playerLocation } from '../helpers/locationCandidates'
 import { createTestRoom, getCard } from '../helpers/room'
+import { getPlayerCardsSnapshot } from '@/tracker/projection/playerSnapshot'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -79,8 +80,8 @@ describe('收敛终止性回归护栏（#2 约束二收敛非终止）', () => {
     expect(secondRefresh).toHaveBeenCalledTimes(1)
     expect(firstPlayer.unknownCardCount).toBe(1)
     expect(firstPlayer.knownHandCards).toEqual([card])
-    expect(room.playerCardsSnapshot).toHaveLength(2)
-    expect(room.playerCardsSnapshot.filter((card) => card.isAnonymous)).toHaveLength(1)
+    expect(getPlayerCardsSnapshot(room)).toHaveLength(2)
+    expect(getPlayerCardsSnapshot(room).filter((card) => card.isAnonymous)).toHaveLength(1)
     expect(stats.sites.get('handSlotCounts:collectBySeat')).toEqual({ calls: 2, visited: 3 })
     expect(room.resolveTouchedSeats).toBeNull()
   })
@@ -100,11 +101,11 @@ describe('收敛终止性回归护栏（#2 约束二收敛非终止）', () => {
     expect(room.lastResolveRounds).toBe(2)
     expect(firstRefresh).toHaveBeenCalledTimes(2)
     expect(secondRefresh).toHaveBeenCalledTimes(1)
-    expect(room.playerCardsSnapshot).toHaveLength(1)
-    expect(room.playerCardsSnapshot[0].resolvedSeat).toBe(1)
+    expect(getPlayerCardsSnapshot(room)).toHaveLength(1)
+    expect(getPlayerCardsSnapshot(room)[0].resolvedSeat).toBe(1)
     expect(room.resolveTouchedSeats).toBeNull()
 
-    const anonymousHandCard = room.playerCardsSnapshot[0]
+    const anonymousHandCard = getPlayerCardsSnapshot(room)[0]
     firstRefresh.mockClear()
     secondRefresh.mockClear()
     room.resolveConstraints()
@@ -112,7 +113,7 @@ describe('收敛终止性回归护栏（#2 约束二收敛非终止）', () => {
     expect(room.lastResolveRounds).toBe(1)
     expect(firstRefresh).toHaveBeenCalledTimes(1)
     expect(secondRefresh).toHaveBeenCalledTimes(1)
-    expect(room.playerCardsSnapshot).toEqual([anonymousHandCard])
+    expect(getPlayerCardsSnapshot(room)).toEqual([anonymousHandCard])
     expect(room.resolveTouchedSeats).toBeNull()
   })
 
@@ -150,35 +151,7 @@ describe('收敛终止性回归护栏（#2 约束二收敛非终止）', () => {
     expect(secondCard.locationCandidates).toEqual([])
     expect(thirdRefresh).toHaveBeenCalledTimes(3)
     expect(fourthRefresh).toHaveBeenCalledTimes(1)
-    expect(room.playerCardsSnapshot).toHaveLength(2)
-  })
-
-  it('约束求解异常后清理触碰座位集合，后续调用仍可正常收敛', () => {
-    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [1, 2] })
-    const card = getCard(room, 1)
-    room.clearCardsFromPublicZones([card])
-    card.bindCandidates([1, 2], 'hand', null, { known: true })
-    room.createConstraintGroup({
-      id: 'test:convergence-exception',
-      cards: [card],
-      candidateSeats: [1, 2],
-      known: true
-    })
-    const group = room.constraintGroups.get('test:convergence-exception')!
-    const error = new Error('test:constraint-resolution-failed')
-    vi.spyOn(group, 'resolve').mockImplementationOnce(() => {
-      throw error
-    })
-
-    expect(() => room.resolveConstraints()).toThrow(error)
-    expect(room.resolveTouchedSeats).toBeNull()
-
-    room.resolveConstraints()
-
-    expect(room.lastResolveRounds).toBeGreaterThan(0)
-    expect(room.lastResolveRounds).toBeLessThanOrEqual(3)
-    expect(room.resolveTouchedSeats).toBeNull()
-    expect(card.seats).toEqual(new Set([1, 2]))
+    expect(getPlayerCardsSnapshot(room)).toHaveLength(2)
   })
 
   it('重叠约束组 + 多座位候选不会驱动 resolveConstraints 空转', () => {

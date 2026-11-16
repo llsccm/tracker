@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { createTestRoom, getCard } from '../helpers/room'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { protocolMove } from '../helpers/trackerController'
+import { getPlayerCardsSnapshot } from '@/tracker/projection/playerSnapshot'
 
 describe('已知牌来源与落区阶段顺序', () => {
   it.each([POSITION_TOP, POSITION_BOTTOM])(
@@ -128,7 +129,7 @@ describe('已知牌来源与落区阶段顺序', () => {
         { cardID: 50, confirmed: [true, true] }
       ])
       expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual(cardIDs)
-      expect(room.playerCardsSnapshot).toHaveLength(0)
+      expect(getPlayerCardsSnapshot(room)).toHaveLength(0)
     }
   )
 

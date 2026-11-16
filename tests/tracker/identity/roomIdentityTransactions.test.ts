@@ -7,6 +7,8 @@ import { MOVE_TYPE } from '@/tracker/protocol/MoveEventNormalizer'
 import { trackerLogger } from '@/utils/logger'
 import { createTestRoom } from '../helpers/room'
 import { protocolMove, createReadyControllerHarness } from '../helpers/trackerController'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
+import { getPlayerCardsSnapshot } from '@/tracker/projection/playerSnapshot'
 
 const topThree = fromPublicCandidate(createPublicCandidate('pile', POSITION_TOP, 3))!
 
@@ -35,7 +37,7 @@ describe('Room 身份事务', () => {
     expect(room.cardIndex.has(2)).toBe(false)
     expect(room.unlocatedIdentities.has(2)).toBe(true)
     expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual([])
-    expect(room.assertPileIdentityLedgerConsistency('direct-moves')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'direct-moves')).toEqual([])
   })
 
   it.each([POSITION_TOP, POSITION_BOTTOM])('直调常规暗摸精确消费端点明牌（%s）', (position) => {
@@ -53,7 +55,7 @@ describe('Room 身份事务', () => {
     expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([])
     expect(getPileIdentitySnapshot(room.pileIdentityLedger).accountedPileCount).toBe(2)
     expect(room.cards).toHaveLength(physicalCount)
-    expect(room.assertPileIdentityLedgerConsistency('direct-draw')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'direct-draw')).toEqual([])
   })
 
   it('匿名化预检失败时实体和账本都不提交', () => {
@@ -88,7 +90,7 @@ describe('Room 身份事务', () => {
     const revision = getPileIdentitySnapshot(room.pileIdentityLedger).revision
     controller.syncTrackerMove(protocolMove({ CardIDs: [1], ToID: 1 }))
     expect(getPileIdentitySnapshot(room.pileIdentityLedger).revision).toBe(revision + 1)
-    expect(room.assertPileIdentityLedgerConsistency('controller-once')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'controller-once')).toEqual([])
   })
 })
 
@@ -105,7 +107,7 @@ describe('公共范围身份的物理容量', () => {
     expect(identity.suspended).toBe(false)
     room.ambiguousKnownIndex.rebuild([])
     expect(room.ambiguousKnownIndex.get(1)?.card).toBe(identity)
-    expect(room.assertPileIdentityLedgerConsistency('detached-reveal')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'detached-reveal')).toEqual([])
   })
 
   it('端点揭示在原匿名槽物化身份并回收范围载体', () => {
@@ -122,7 +124,7 @@ describe('公共范围身份的物理容量', () => {
     expect(room.detachedKnownCards.size).toBe(0)
     expect(room.ambiguousKnownIndex.get(1)).toBeNull()
     expect(room.counter.cardsByStatus.flatMap((cards) => Array.from(cards))).not.toContain(identity)
-    expect(room.assertPileIdentityLedgerConsistency('detached-materialized')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'detached-materialized')).toEqual([])
   })
 
   it('候选暗摸后在玩家匿名槽揭示，不新增牌或残留候选', () => {
@@ -144,7 +146,7 @@ describe('公共范围身份的物理容量', () => {
     expect(room.getPublicZone('discard').cards).toEqual([target])
     expect(room.detachedKnownCards.size).toBe(0)
     expect(room.cards).toHaveLength(4)
-    expect(room.assertPileIdentityLedgerConsistency('detached-player')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'detached-player')).toEqual([])
   })
 
   it('整个候选范围被摸走后复用手牌匿名槽落定身份', () => {
@@ -161,7 +163,7 @@ describe('公共范围身份的物理容量', () => {
     expect(room.cards.filter((card) => card.location === 'player')).toHaveLength(3)
     expect(room.getPlayer(1)?.knownHandCards.map((card) => card.id)).toEqual([1])
     expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([])
-    expect(room.assertPileIdentityLedgerConsistency('detached-range-draw')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'detached-range-draw')).toEqual([])
   })
 
   it('端点没有匿名槽时保留范围身份，不覆盖其他正 ID 或增加实体', () => {
@@ -173,7 +175,7 @@ describe('公共范围身份的物理容量', () => {
     expect(room.cardIndex.get(1)).toBe(identity)
     expect(room.getPublicZone('pile').cards.at(-1)?.id).toBe(2)
     expect(room.cards).toHaveLength(4)
-    expect(room.assertPileIdentityLedgerConsistency('detached-blocked-endpoint')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'detached-blocked-endpoint')).toEqual([])
   })
 
   it('断档重建及新增候选之后保持增量玩家索引的顺序与内容', () => {
@@ -188,7 +190,7 @@ describe('公共范围身份的物理容量', () => {
       cardCount: 1,
       moveType: MOVE_TYPE.DRAW
     })
-    const incremental = [...room.playerCardsSnapshot]
+    const incremental = [...getPlayerCardsSnapshot(room)]
     const candidates = [...room.getPlayer(1)!.candidateHandCards]
     expect(room.rebuildPlayerSnapshot()).toEqual(incremental)
     room.locationIndex.rebuild(room)

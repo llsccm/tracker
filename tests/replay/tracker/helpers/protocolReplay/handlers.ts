@@ -19,6 +19,7 @@ import {
   recordDuoQiRoleDataTarget
 } from '@/tracker/skill/DuoQi'
 import type { ApplyTrackerProtocolResult, TrackerProtocolReplayContext } from './types'
+import { getPlayerCardsSnapshot } from '@/tracker/projection/playerSnapshot'
 
 interface ReplayMoveContext {
   game: GameState
@@ -667,7 +668,7 @@ function applyJieLi(
   if (pileCount > 0) revealPileCards(context, record, params.slice(2, 2 + pileCount))
   if (handCount > 0 && targetSeatID !== 255) {
     const player = room.getPlayer(targetSeatID)
-    const localHandCount = room.playerCardsSnapshot.filter(
+    const localHandCount = getPlayerCardsSnapshot(room).filter(
       (card) => card.subZone === 'hand' && card.seats.has(Number(targetSeatID))
     ).length
     const fullHand = shouldRevealAsFullHand({

@@ -4,11 +4,12 @@ import type { Room } from '@/tracker/Room'
 import type { CardID } from '@/tracker/types'
 import { trackerLogger } from '@/utils/logger'
 import { createTestRoom } from '../helpers/room'
+import { assertConservation, assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
 
 /**
  * 身份账本守恒回归。
  *
- * `Room.assertConservation()` 已经能识别 `identity-missing`（身份既不在 cardIndex 也不在
+ * `assertConservation(room)` 已经能识别 `identity-missing`（身份既不在 cardIndex 也不在
  * unlocatedIdentities），但它只写 warn 日志。历史上 147 号身份就是这样从可枚举集合里
  * 永久漏出的：cardIndex 仍认为它已定位，CardCounter 却已把实体归为移出，
  * 于是后续洗牌既找不到它，也不会把它分类为活动 suspended。
@@ -22,7 +23,7 @@ function captureConservationIssues(room: Room, context: string): Record<string, 
   const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
 
   try {
-    room.assertConservation(context)
+    assertConservation(room, context)
 
     const warning = warnSpy.mock.calls.find(
       ([message]) => message === 'Room 身份/槽位守恒观测发现不一致'
@@ -102,7 +103,7 @@ describe('身份账本守恒', () => {
       expect(card.location).toBe('player')
       expect(card.isKnown).toBe(true)
       expect(room.suspendedKnownCards.size).toBe(0)
-      expect(room.assertPileIdentityLedgerConsistency('test:direct-shuffle')).toEqual([])
+      expect(assertPileIdentityLedgerConsistency(room, 'test:direct-shuffle')).toEqual([])
     } finally {
       warnSpy.mockRestore()
     }
@@ -120,7 +121,7 @@ describe('身份账本守恒', () => {
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
 
     try {
-      const issues = room.assertPileIdentityLedgerConsistency('test:hidden-pile-identity')
+      const issues = assertPileIdentityLedgerConsistency(room, 'test:hidden-pile-identity')
 
       expect(issues).toContainEqual({
         context: 'test:hidden-pile-identity',

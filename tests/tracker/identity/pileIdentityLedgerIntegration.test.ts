@@ -12,6 +12,7 @@ import {
   protocolMove,
   createReadyControllerHarness
 } from '../helpers/trackerController'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
 
 /** 两个暗手牌槽、三张明弃牌及一个剩余牌堆槽，用于跨世代身份回归。 */
 function createAnonymousShuffleRoom(observeCount = false) {
@@ -62,7 +63,7 @@ describe('PileIdentityLedger integration', () => {
       expect(room.cardIndex.has(cardID)).toBe(false)
       expect(room.unlocatedIdentities.has(cardID)).toBe(true)
       expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([])
-      expect(room.assertPileIdentityLedgerConsistency('test:huntianyi-insert')).toEqual([])
+      expect(assertPileIdentityLedgerConsistency(room, 'test:huntianyi-insert')).toEqual([])
     })
 
     const entityCount = room.cards.length
@@ -112,7 +113,7 @@ describe('PileIdentityLedger integration', () => {
     expect(room.cards).toHaveLength(entityCount)
     expect(createExternalSpy).not.toHaveBeenCalled()
     expect(errorSpy).not.toHaveBeenCalled()
-    expect(room.assertPileIdentityLedgerConsistency('test:huntianyi-draw')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:huntianyi-draw')).toEqual([])
   })
 
   it('开局空弃牌堆洗牌通知不滚动世代或暂停初始卡池身份', () => {
@@ -136,7 +137,7 @@ describe('PileIdentityLedger integration', () => {
     expect(room.suspendedKnownCards.size).toBe(0)
     expect(room.unlocatedIdentities).toEqual(new Set([1, 2, 3, 4]))
     expect(getPileIdentitySnapshot(room.pileIdentityLedger).cohort.generation).toBe(0)
-    expect(room.assertPileIdentityLedgerConsistency('test:initial-empty-shuffle')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:initial-empty-shuffle')).toEqual([])
   })
 
   it('开局整副牌暂存在弃牌堆时洗回但不暂停初始卡池身份', () => {
@@ -184,7 +185,7 @@ describe('PileIdentityLedger integration', () => {
         }
       ]
     })
-    expect(room.assertPileIdentityLedgerConsistency('test:initial-full-discard-shuffle')).toEqual(
+    expect(assertPileIdentityLedgerConsistency(room, 'test:initial-full-discard-shuffle')).toEqual(
       []
     )
   })
@@ -236,7 +237,7 @@ describe('PileIdentityLedger integration', () => {
     expect(
       Array.from(room.suspendedKnownCards, (card) => card.id).sort((left, right) => left - right)
     ).toEqual([2, 3, 4])
-    expect(room.assertPileIdentityLedgerConsistency('test:shuffle-commit-order')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:shuffle-commit-order')).toEqual([])
   })
 
   it('成功协议移动后更新 Room 权威身份账本', () => {
@@ -266,7 +267,7 @@ describe('PileIdentityLedger integration', () => {
         remainingPileCount: 4
       }
     ])
-    expect(room.assertPileIdentityLedgerConsistency('test:anonymous-gain')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:anonymous-gain')).toEqual([])
   })
 
   it('显式揭示通过同一后置入口更新权威身份账本', () => {
@@ -285,7 +286,7 @@ describe('PileIdentityLedger integration', () => {
 
     expect(ledgerSnapshot.knownPileIdentityIDs).toEqual([1])
     expect(ledgerSnapshot.hiddenPileSlotCount).toBe(2)
-    expect(room.assertPileIdentityLedgerConsistency('test:explicit-reveal')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:explicit-reveal')).toEqual([])
   })
 
   it('弃牌区重复明示不会撤销已知弃牌身份', () => {
@@ -312,7 +313,7 @@ describe('PileIdentityLedger integration', () => {
 
     expect(discard.cards).toContain(discardCard)
     expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual([1])
-    expect(room.assertPileIdentityLedgerConsistency('test:discard-repeat-reveal')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:discard-repeat-reveal')).toEqual([])
   })
 
   it('思泣将已知弃牌移回牌堆时保持 Room 与 ledger 身份分区一致', () => {
@@ -355,7 +356,7 @@ describe('PileIdentityLedger integration', () => {
         groups: [{ cardIDs: [1, 2], remainingPileCount: 2 }]
       }
     })
-    expect(room.assertPileIdentityLedgerConsistency('test:siqi-known-return')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:siqi-known-return')).toEqual([])
   })
 
   it('匿名任意位置获得后保留牌底已知身份并允许后续移动到 mark', () => {
@@ -413,7 +414,7 @@ describe('PileIdentityLedger integration', () => {
         groups: [{ cardIDs: [2, 3], remainingPileCount: 1 }]
       }
     })
-    expect(room.assertPileIdentityLedgerConsistency('test:anonymous-gain-preserve-known')).toEqual(
+    expect(assertPileIdentityLedgerConsistency(room, 'test:anonymous-gain-preserve-known')).toEqual(
       []
     )
 
@@ -432,7 +433,9 @@ describe('PileIdentityLedger integration', () => {
       })
     )
     expect(pile.cards[0]).toMatchObject({ id: 127, isKnown: true })
-    expect(room.assertPileIdentityLedgerConsistency('test:move-to-mark-preserve-known')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:move-to-mark-preserve-known')).toEqual(
+      []
+    )
   })
 
   it('匿名任意位置获得保留连续十张已知牌底身份', () => {
@@ -478,7 +481,7 @@ describe('PileIdentityLedger integration', () => {
         groups: [{ cardIDs: [1, 2], remainingPileCount: 1 }]
       }
     })
-    expect(room.assertPileIdentityLedgerConsistency('test:ten-known-bottom-cards')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:ten-known-bottom-cards')).toEqual([])
   })
 
   it('连续洗牌由 cohort 滚动并保留公开牌顶牌底身份', () => {
@@ -587,7 +590,7 @@ describe('PileIdentityLedger integration', () => {
     expect(
       Array.from(room.suspendedKnownCards, (card) => card.id).sort((left, right) => left - right)
     ).toEqual([3, 4, 6, 7, 8])
-    expect(room.assertPileIdentityLedgerConsistency('test:second-shuffle')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:second-shuffle')).toEqual([])
   })
 
   it('MoveType=18 匿名获得跳过全部已知牌堆身份，只消费暗占位并等待后续展示', () => {
@@ -636,7 +639,7 @@ describe('PileIdentityLedger integration', () => {
         remainingPileCount: 2
       }
     ])
-    expect(room.assertPileIdentityLedgerConsistency('test:anonymous-gain-known-pile')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:anonymous-gain-known-pile')).toEqual([])
 
     controller.syncTrackerMove(
       protocolMove({
@@ -659,7 +662,7 @@ describe('PileIdentityLedger integration', () => {
         remainingPileCount: 3
       }
     ])
-    expect(room.assertPileIdentityLedgerConsistency('test:delayed-reveal')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:delayed-reveal')).toEqual([])
   })
 
   it('MoveType=1 常规摸牌同步扣除牌顶明牌身份与后续暗槽', () => {
@@ -702,7 +705,7 @@ describe('PileIdentityLedger integration', () => {
         remainingPileCount: 0
       }
     ])
-    expect(room.assertPileIdentityLedgerConsistency('test:regular-draw')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:regular-draw')).toEqual([])
   })
   it('技能3571从牌堆揭示陈旧已知手牌时置换实体并保持牌堆数量', () => {
     const { controller } = createReadyControllerHarness({

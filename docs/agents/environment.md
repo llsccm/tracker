@@ -11,6 +11,9 @@
 - 启动开发服务器：`pnpm dev`。
 - 开发模式构建：`pnpm build`。
 - 生产模式构建：`pnpm build:prod`（GitHub Releases 渠道）。
+- 构建的 `--mode` 选择环境文件与发布元信息，不直接决定 `import.meta.env.DEV`。
+  未显式覆盖 `NODE_ENV` 时，`pnpm build` 与 `pnpm build:prod` 都采用 `NODE_ENV=production`，
+  DEV 诊断会被移除。需要带诊断的构建时，显式设置 `NODE_ENV=development` 后再执行 `pnpm build`。
 - CDN 渠道构建：`pnpm build:cdn`（`releases` 分支 / jsDelivr 渠道）。
 - 预览构建结果：`pnpm preview`。
 - 代码格式化：`pnpm format`。

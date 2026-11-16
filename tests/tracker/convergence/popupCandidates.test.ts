@@ -5,6 +5,13 @@ import {
   createLocationCandidateKey,
   parseLocationCandidateKey
 } from '@/tracker/candidate/locationCandidate'
+import {
+  assertAmbiguousKnownIndexConsistency,
+  assertLocationIndexConsistency,
+  assertPileIdentityLedgerConsistency
+} from '@/tracker/room/diagnostics'
+import { getCandidateHandSlotCount } from '@/tracker/model/Player'
+import { hasSkillState } from '@/tracker/room/RoomBase'
 
 function setup(cardIDs: number[]) {
   const { controller } = createReadyControllerHarness({ seatIDs: [1, 2], cardIDs: cardIDs })
@@ -54,7 +61,7 @@ describe('临时弹窗空间通用收敛', () => {
     expect(group.expectedSlotsByLocation.size).toBe(0)
     expect(room.getPlayer(1)!.knownHandCards).toEqual([])
     expect(room.getPlayer(2)!.knownHandCards).toEqual([])
-    expect(room.assertPileIdentityLedgerConsistency('popup:weak-successive')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'popup:weak-successive')).toEqual([])
   })
 
   it.each([1, 2])('连续暗取更新空间与目标手牌名额，第二次交给座位 %s', (secondSeat) => {
@@ -71,7 +78,7 @@ describe('临时弹窗空间通用收敛', () => {
       min: secondSeat === 2 ? 2 : 1,
       max: secondSeat === 2 ? 2 : 1
     })
-    expect(room.getPlayer(secondSeat)!.getCandidateHandSlotCount()).toBe(secondSeat === 2 ? 2 : 1)
+    expect(getCandidateHandSlotCount(room.getPlayer(secondSeat)!)).toBe(secondSeat === 2 ? 2 : 1)
     if (secondSeat === 1) {
       expect(group.expectedSlotsByLocation.get('player:1:hand:none')).toEqual({ min: 1, max: 1 })
     }
@@ -82,7 +89,7 @@ describe('临时弹窗空间通用收敛', () => {
     // 最后一次暗取耗尽空间；身份仍由两个目标的名额决定。
     move(3544, 8, 5, [], 1, 2)
     expect(getPopupSpaceCards(room, 3544)).toEqual([])
-    expect(room.getPlayer(2)!.getCandidateHandSlotCount()).toBe(secondSeat === 2 ? 0 : 2)
+    expect(getCandidateHandSlotCount(room.getPlayer(2)!)).toBe(secondSeat === 2 ? 0 : 2)
     if (secondSeat === 2) {
       expect(
         room
@@ -99,9 +106,9 @@ describe('临时弹窗空间通用收敛', () => {
           .sort()
       ).toEqual([2, 3])
     }
-    room.assertLocationIndexConsistency()
-    room.assertAmbiguousKnownIndexConsistency()
-    expect(room.assertPileIdentityLedgerConsistency('popup:successive')).toEqual([])
+    assertLocationIndexConsistency(room)
+    assertAmbiguousKnownIndexConsistency(room)
+    expect(assertPileIdentityLedgerConsistency(room, 'popup:successive')).toEqual([])
   })
 
   it.each([
@@ -115,7 +122,7 @@ describe('临时弹窗空间通用收敛', () => {
     move(3571, 3, 8, [], ids.length)
     move(3571, 8, 5, [], gain)
     expect(room.getPlayer(2)!.candidateHandCards).toHaveLength(ids.length)
-    expect(room.getPlayer(2)!.getCandidateHandSlotCount()).toBe(gain)
+    expect(getCandidateHandSlotCount(room.getPlayer(2)!)).toBe(gain)
     for (let index = gain; index < ids.length; index++) {
       move(3571, 8, 2, [ids[index]])
       expect(room.getPlayer(2)!.observedHandCount).toBe(gain)
@@ -134,9 +141,9 @@ describe('临时弹窗空间通用收敛', () => {
       expect(room.cardIndex.get(id)!.spellID).toBeNull()
       expect(room.cardIndex.get(id)!.hasLocationCandidates()).toBe(false)
     })
-    room.assertLocationIndexConsistency()
-    room.assertAmbiguousKnownIndexConsistency()
-    expect(room.assertPileIdentityLedgerConsistency('popup:gain')).toEqual([])
+    assertLocationIndexConsistency(room)
+    assertAmbiguousKnownIndexConsistency(room)
+    expect(assertPileIdentityLedgerConsistency(room, 'popup:gain')).toEqual([])
   })
 
   it('技能空间相互隔离，连续批次和新 Room 不沿用旧成员', () => {
@@ -160,10 +167,10 @@ describe('临时弹窗空间通用收敛', () => {
         .knownHandCards.map((card) => card.id)
         .sort()
     ).toEqual([1, 5])
-    expect(room.hasSkillState('popupSpaces')).toBe(false)
+    expect(hasSkillState(room, 'popupSpaces')).toBe(false)
     room.destroy()
     controller.initTrackerRoom()
-    expect(controller.getTrackerRoom()!.hasSkillState('popupSpaces')).toBe(false)
+    expect(hasSkillState(controller.getTrackerRoom()!, 'popupSpaces')).toBe(false)
   })
 
   it('明暗混合空间保持保守，不能套用全明精确名额', () => {

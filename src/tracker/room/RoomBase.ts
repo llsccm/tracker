@@ -1,4 +1,4 @@
-import type { GameState, GameStateKey } from '../Game'
+import { hasGameState, type GameState, type GameStateKey } from '../Game'
 import type { Player } from '@/tracker/model'
 import type { SeatID } from '../types'
 import { trackerLogger } from '@/utils/logger'
@@ -49,10 +49,6 @@ export abstract class RoomBase {
   /** 主视角在牌局中的顺位 */
   getMyDisplayID(): number | undefined {
     return this.mySeatID === undefined ? undefined : this.getDisplayID(this.mySeatID)
-  }
-
-  getMyPlayer(): Player | undefined {
-    return this.mySeatID === undefined ? undefined : this.getPlayer(this.mySeatID)
   }
 
   /**
@@ -109,35 +105,35 @@ export abstract class RoomBase {
    * 查询、结算和清理路径应优先使用本方法，避免一次只读检查留下空账本。
    */
   readSkillState<T = unknown>(stateKey: GameStateKey): T | undefined {
-    if (!this.isCurrentGameRoom()) return undefined
+    if (!isCurrentGameRoom(this)) return undefined
     return this.game.readState<T>('tracker', stateKey)
-  }
-
-  /** 判断当前一局是否已经保存指定的记牌器推断状态。 */
-  hasSkillState(stateKey: GameStateKey): boolean {
-    if (!this.isCurrentGameRoom()) return false
-    return this.game.hasState('tracker', stateKey)
   }
 
   /** 取得当前 Room 的技能推断状态，不存在时按需创建。 */
   ensureSkillState<T>(stateKey: GameStateKey, createState: () => T): T {
-    if (!this.isCurrentGameRoom()) return createState()
+    if (!isCurrentGameRoom(this)) return createState()
     return this.game.ensureState('tracker', stateKey, createState)
   }
 
   /** 显式写入当前 Room 的技能推断状态。 */
   setSkillState<T>(stateKey: GameStateKey, state: T): void {
-    if (!this.isCurrentGameRoom()) return
+    if (!isCurrentGameRoom(this)) return
     this.game.setState('tracker', stateKey, state)
   }
 
   /** 删除当前 Room 的技能推断状态。 */
   deleteSkillState(stateKey: GameStateKey): void {
-    if (!this.isCurrentGameRoom()) return
+    if (!isCurrentGameRoom(this)) return
     this.game.deleteState('tracker', stateKey)
   }
+}
 
-  private isCurrentGameRoom(): boolean {
-    return Object.is(this.game.room, this)
-  }
+function isCurrentGameRoom(room: RoomBase): boolean {
+  return Object.is(room.game.room, room)
+}
+
+/** 判断当前一局是否已经保存指定的记牌器推断状态。 */
+export function hasSkillState(room: RoomBase, stateKey: GameStateKey): boolean {
+  if (!isCurrentGameRoom(room)) return false
+  return hasGameState(room.game, 'tracker', stateKey)
 }

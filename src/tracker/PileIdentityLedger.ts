@@ -395,23 +395,6 @@ export class PileIdentityLedger {
     }
   }
 
-  consumeAnonymous(count: number, position: PublicPosition, reason: string): void {
-    this.commit(reason, () => this.consumeAnonymousInternal(count, position))
-  }
-
-  revealIdentity(
-    cardID: CardID,
-    source: 'pile' | 'outside',
-    reason: string,
-    staysInPile = false
-  ): void {
-    this.commit(reason, () => {
-      if (source === 'pile' && staysInPile) this.revealIdentityInPileInternal(cardID)
-      else if (source === 'pile') this.revealIdentityFromPileInternal(cardID)
-      else this.revealIdentityOutsidePileInternal(cardID)
-    })
-  }
-
   insertKnown(
     cardIDs: readonly CardID[],
     count: number,
@@ -432,20 +415,6 @@ export class PileIdentityLedger {
     this.commit(reason, () =>
       this.insertKnownInternal(identities, identities.length, POSITION_RANDOM)
     )
-  }
-
-  insertAnonymous(count: number, position: PublicPosition, reason: string): void {
-    this.commit(reason, () => this.insertAnonymousInternal(count, position))
-  }
-
-  mergeAll(reason: string): void {
-    this.commit(reason, () => {
-      this.mergeAllCohortsInternal()
-    })
-  }
-
-  rotateFromDiscard(cardIDs: readonly CardID[], reason: string): void {
-    this.commit(reason, () => this.rotateFromDiscardInternal(cardIDs))
   }
 
   getUnresolvedIdentityIDs(): CardID[] {

@@ -6,6 +6,7 @@ import type { PatchedMoveCardFields, RawMoveCardEvent } from '@/tracker/types'
 import { registerDefaultMoveEventHandlers } from '@/tracker/skill/registerHandlers'
 import { createTestRoom } from '../helpers/room'
 import { protocolMove, createReadyControllerHarness } from '../helpers/trackerController'
+import { getCandidateHandSlotCount } from '@/tracker/model/Player'
 
 const rooms: Room[] = []
 afterEach(() => rooms.splice(0).forEach((room) => room.destroy()))
@@ -266,7 +267,7 @@ describe('技能插件归一化前补牌', () => {
     controller.syncTrackerMove(context.patched, context.raw)
     expect(context.patched.CardIDs).toEqual([])
     expect(room.getPlayer(5)!.candidateHandCards).toHaveLength(6)
-    expect(room.getPlayer(5)!.getCandidateHandSlotCount()).toBe(5)
+    expect(getCandidateHandSlotCount(room.getPlayer(5)!)).toBe(5)
     controller.syncTrackerMove(
       protocolMove({
         CardIDs: [otherCardID],

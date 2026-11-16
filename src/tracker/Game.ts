@@ -45,6 +45,8 @@ export class GameState {
    * GameState.end()、reset()/init() 以及 Room 替换或销毁时统一清理。
    */
   private readonly stateStore = new Map<StoredGameStateKey, unknown>()
+  /** 供状态查询与诊断纯函数读取；写入仍由 GameState 的状态入口负责。 */
+  readonly stateStoreView: ReadonlyMap<StoredGameStateKey, unknown> = this.stateStore
   declare configHandCards: unknown[]
   declare configHandCardsMode: string
   declare configHandCardsRejected: boolean
@@ -171,19 +173,14 @@ export class GameState {
     this.generalChangeListener = listener
   }
 
-  /** 判断当前一局的指定命名空间是否已经保存状态。 */
-  hasState(scope: GameStateScope, stateKey: GameStateKey): boolean {
-    return this.stateStore.has(this.getStateStoreKey(scope, stateKey))
-  }
-
   /** 只读获取当前一局状态；不存在时不创建。 */
   readState<T = unknown>(scope: GameStateScope, stateKey: GameStateKey): T | undefined {
-    return this.stateStore.get(this.getStateStoreKey(scope, stateKey)) as T | undefined
+    return this.stateStore.get(getStateStoreKey(scope, stateKey)) as T | undefined
   }
 
   /** 取得当前一局状态，不存在时按需创建。 */
   ensureState<T>(scope: GameStateScope, stateKey: GameStateKey, createState: () => T): T {
-    const storeKey = this.getStateStoreKey(scope, stateKey)
+    const storeKey = getStateStoreKey(scope, stateKey)
     if (this.stateStore.has(storeKey)) return this.stateStore.get(storeKey) as T
 
     const state = createState()
@@ -193,12 +190,12 @@ export class GameState {
 
   /** 写入当前一局状态。 */
   setState<T>(scope: GameStateScope, stateKey: GameStateKey, state: T): void {
-    this.stateStore.set(this.getStateStoreKey(scope, stateKey), state)
+    this.stateStore.set(getStateStoreKey(scope, stateKey), state)
   }
 
   /** 删除当前一局状态。 */
   deleteState(scope: GameStateScope, stateKey: GameStateKey): void {
-    this.stateStore.delete(this.getStateStoreKey(scope, stateKey))
+    this.stateStore.delete(getStateStoreKey(scope, stateKey))
   }
 
   /** handler/UI 使用的 `spell` 命名空间兼容读取入口。 */
@@ -219,22 +216,6 @@ export class GameState {
   /** handler/UI 使用的 `spell` 命名空间兼容删除入口。 */
   deleteSpellState(spellID: GameStateKey): void {
     this.deleteState('spell', spellID)
-  }
-
-  /**
-   * 导出与内部状态隔离的 `spell` scope 当前快照，供回放或诊断输出使用。
-   *
-   * 快照中的数组、对象、Map 与 Set 等可变值均为副本，修改快照不会反向修改当前局状态。
-   */
-  getSpellStateSnapshot(): Record<string, unknown> {
-    const spellPrefix = 'spell:'
-    const snapshot: Record<string, unknown> = {}
-    for (const [key, value] of this.stateStore) {
-      if (key.startsWith(spellPrefix)) {
-        snapshot[key.slice(spellPrefix.length)] = structuredClone(value)
-      }
-    }
-    return snapshot
   }
 
   syncRoomSeats(room: Room | null = this.room): void {
@@ -380,15 +361,36 @@ export class GameState {
     this.resetGameInfo()
   }
 
-  private getStateStoreKey(scope: GameStateScope, stateKey: GameStateKey): StoredGameStateKey {
-    const numericKey = Number(stateKey)
-    const normalizedKey = Number.isNaN(numericKey) ? String(stateKey) : String(numericKey)
-    return `${scope}:${normalizedKey}` as StoredGameStateKey
-  }
-
   private clearStateStore(): void {
     this.stateStore.clear()
   }
+}
+
+function getStateStoreKey(scope: GameStateScope, stateKey: GameStateKey): StoredGameStateKey {
+  const numericKey = Number(stateKey)
+  const normalizedKey = Number.isNaN(numericKey) ? String(stateKey) : String(numericKey)
+  return `${scope}:${normalizedKey}` as StoredGameStateKey
+}
+
+/** 判断当前一局的指定命名空间是否已经保存状态，包含值为 undefined 的记录。 */
+export function hasGameState(
+  game: GameState,
+  scope: GameStateScope,
+  stateKey: GameStateKey
+): boolean {
+  return game.stateStoreView.has(getStateStoreKey(scope, stateKey))
+}
+
+/** 导出 spell 状态副本；快照中的可变值不与当前局状态共享引用。 */
+export function getSpellStateSnapshot(game: GameState): Record<string, unknown> {
+  const spellPrefix = 'spell:'
+  const snapshot: Record<string, unknown> = {}
+  for (const [key, value] of game.stateStoreView) {
+    if (key.startsWith(spellPrefix)) {
+      snapshot[key.slice(spellPrefix.length)] = structuredClone(value)
+    }
+  }
+  return snapshot
 }
 
 export const Game = new GameState({ orderLabels: UI.ORDER_LABELS })

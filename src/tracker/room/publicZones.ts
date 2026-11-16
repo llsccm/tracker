@@ -198,22 +198,6 @@ export class RoomPublicZones {
   }
 
   /**
-   * 开发期公共区一致性检查。生产环境仅返回空数组，不影响运行。
-   */
-  assertPublicZoneConsistency(context = ''): PublicZoneIssue[] {
-    if (!import.meta.env.DEV) return []
-
-    const issues = getPublicZoneConsistencyIssues(this.room)
-    if (issues.length > 0) {
-      trackerLogger.warn('公共区顺序关系不一致', {
-        context,
-        issues
-      })
-    }
-    return issues
-  }
-
-  /**
    * 获取指定玩家手牌中的物理牌 ID。
    */
   getPlayerHandCardIDs(seatID: SeatID, options: PlayerHandCardIDOptions = {}): CardID[] {
@@ -243,6 +227,22 @@ export class RoomPublicZones {
       .map((card) => card.id)
       .filter((id) => id > 0)
   }
+}
+
+/**
+ * 开发期公共区一致性检查。生产环境仅返回空数组，不影响运行。
+ */
+export function assertPublicZoneConsistency(room: Room, context = ''): PublicZoneIssue[] {
+  if (!import.meta.env.DEV) return []
+
+  const issues = getPublicZoneConsistencyIssues(room)
+  if (issues.length > 0) {
+    trackerLogger.warn('公共区顺序关系不一致', {
+      context,
+      issues
+    })
+  }
+  return issues
 }
 
 /**

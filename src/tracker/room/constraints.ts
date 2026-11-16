@@ -14,7 +14,13 @@ import { isAmbiguousKnownCard } from '../projection/AmbiguousKnownIndex'
 import type { Room } from '../Room'
 import { recordTraversal } from '../traversalStats'
 import type { LocationCandidate, MoveSourceEvent, SeatID } from '../types'
-import type { RoomDiagnostics } from './diagnostics'
+import {
+  assertAmbiguousKnownIndexConsistency,
+  assertConservation,
+  assertLocationIndexConsistency,
+  assertPlayerSnapshotConsistency,
+  type RoomDiagnostics
+} from './diagnostics'
 
 const MAX_TRACKED_CANDIDATE_SEATS = 4
 
@@ -185,9 +191,10 @@ export class RoomConstraints {
 
     room.lastResolveRounds = rounds
     if (rounds > room.maxResolveRounds) room.maxResolveRounds = rounds
-    if (import.meta.env.DEV) diagnostics?.assertConvergenceRounds(rounds)
-
-    room.assertPlayerSnapshotConsistency(playerCards)
+    if (import.meta.env.DEV) {
+      diagnostics?.assertConvergenceRounds(rounds)
+      assertPlayerSnapshotConsistency(room, playerCards)
+    }
 
     // changed=true 说明本轮可能新增过渡发散明牌，需全量扫描；稳定时只检查本轮收集的集合。
     if (changed) {
@@ -206,7 +213,7 @@ export class RoomConstraints {
     room.dirtyPublicZones.clear()
     const shouldAssertShadowIndexes =
       import.meta.env.DEV && diagnostics?.shouldAssertShadowIndexConsistency()
-    if (shouldAssertShadowIndexes) room.assertLocationIndexConsistency()
+    if (shouldAssertShadowIndexes) assertLocationIndexConsistency(room)
 
     // 新旧投影同时覆盖来源清理、候选收缩和容器迁座；纯公共区变化无需同步玩家组。
     this.syncViewGroups(affectedSeats)
@@ -222,12 +229,12 @@ export class RoomConstraints {
       room.constraintGroupsDirty = false
     }
 
-    if (shouldAssertShadowIndexes) room.assertAmbiguousKnownIndexConsistency()
+    if (shouldAssertShadowIndexes) assertAmbiguousKnownIndexConsistency(room)
 
     // 触发计数器与视图订阅更新
     room.counter.update()
 
-    room.assertConservation('resolveConstraints')
+    if (import.meta.env.DEV) assertConservation(room, 'resolveConstraints')
   }
 
   private collectAffectedHandAllocationSeats(

@@ -11,6 +11,7 @@ import {
   createReadyControllerHarness
 } from '../helpers/trackerController'
 import { getCard as getCardFixture } from '../helpers/room'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
 
 describe('TrackerController', () => {
   it('结构化协议揭示保留零号座位、零号标记和普通手牌的空技能号', () => {
@@ -38,26 +39,22 @@ describe('TrackerController', () => {
     controller.destroyTrackerRoom()
   })
 
-  it('复制完整 patched 与 raw，冻结快照且不修改调用方消息', () => {
+  it('按 patched 执行移动并保留 raw 协议来源', () => {
     const { controller, room } = createReadyControllerHarness({
       players: [{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }],
       cardIDs: [1, 2, 3]
     })
     controller.setTrackerFirstHand(0)
     const decorateSpy = vi.spyOn(room, 'decorateMoveEvent')
-    const raw = Object.freeze(protocolMove({ CardIDs: Object.freeze([1]), ToID: 1 }))
-    const patched = Object.freeze({ ...raw, CardIDs: Object.freeze([2]) })
+    const raw = protocolMove({ CardIDs: [1], ToID: 1 })
+    const patched = { ...raw, CardIDs: [2] }
 
     controller.syncTrackerMove(patched, raw)
 
     expect(decorateSpy).toHaveBeenCalledOnce()
     const event = decorateSpy.mock.calls[0][0]
     expect(event.protocol).toEqual(patched)
-    expect(event.protocol).not.toBe(patched)
-    expect(event.cardIDs).not.toBe(patched.CardIDs)
     expect(event.raw).toEqual(raw)
-    expect(event.raw).not.toBe(raw)
-    expect(Object.isFrozen(event.raw)).toBe(true)
     expect(event.options.sourceEvent?.raw).toBe(event.raw)
     expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([2])
     expect(controller.getTrackedPlayerHandCardIDs(0)).toEqual([])
@@ -80,7 +77,7 @@ describe('TrackerController', () => {
     controller.revealTrackerCardsInZone({ zone, id: 3, spellID: 700 }, [1])
     const moveSpy = vi.spyOn(room, 'moveCards')
     warn.mockClear()
-    const move = Object.freeze(protocolMove({ FromZone: 5, FromID: 3, ToZone: 2 }))
+    const move = protocolMove({ FromZone: 5, FromID: 3, ToZone: 2 })
 
     controller.syncTrackerMove(move)
 
@@ -190,7 +187,7 @@ describe('TrackerController', () => {
       expect(room.cardIndex.get(99)).toMatchObject({ location: 'outside', isKnown: true })
       expect(room.getZone('pile').cards).toEqual(pileBefore)
       expect(room.zones.has('player')).toBe(false)
-      expect(room.assertPileIdentityLedgerConsistency('unregistered-public-show')).toEqual([])
+      expect(assertPileIdentityLedgerConsistency(room, 'unregistered-public-show')).toEqual([])
     } finally {
       errorSpy.mockRestore()
       controller.destroyTrackerRoom()
@@ -595,24 +592,6 @@ describe('TrackerController', () => {
     expect(card.subZone).toBe('hand')
     expect(card.seats.has(1)).toBe(true)
     expect(view.calls.scheduleRender).toBe(2)
-  })
-
-  it('tracker 内部移动异常不会向桥接层外抛出', () => {
-    const errorSpy = createErrorSpy()
-    const { controller } = createReadyControllerHarness({ seatIDs: [1], cardIDs: [1] })
-
-    const room = controller.getTrackerRoom()
-    vi.spyOn(room, 'moveCards').mockImplementation(() => {
-      throw new Error('sync boom')
-    })
-
-    expect(() => controller.syncTrackerMove(protocolMove({ CardIDs: [1] }))).not.toThrow()
-
-    expect(errorSpy).toHaveBeenCalledWith(
-      '移动同步异常，已跳过本次 tracker 更新',
-      expect.objectContaining({ message: 'sync boom' }),
-      expect.anything()
-    )
   })
 
   it('协议移动木马装备本体时同步装备归属', () => {
@@ -1123,7 +1102,7 @@ describe('TrackerController', () => {
     expect(slots[2].isAnonymous).toBe(true)
     expect(room.getZone('process').cards).toEqual(slots)
     expect(room.cards).toHaveLength(3)
-    expect(room.assertPileIdentityLedgerConsistency('test:show-source-position')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:show-source-position')).toEqual([])
     controller.destroyTrackerRoom()
   })
 

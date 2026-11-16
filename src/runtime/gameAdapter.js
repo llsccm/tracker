@@ -500,12 +500,6 @@ export class GameRuntime {
     return foundWindow ?? null
   }
 
-  HideStartLoadingListener() {
-    const GameEventDispatcher = this.ged
-    if (!GameEventDispatcher) return
-    GameEventDispatcher.on('HIDE_CHALLENGE_GAME_START', this, this.showName)
-  }
-
   async showName() {
     const seatUIs = await wait(() => this.gamescene?.seatContainer?.seatUIs)
     if (!seatUIs) return

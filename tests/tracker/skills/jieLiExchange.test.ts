@@ -8,6 +8,7 @@ import type { Room } from '@/tracker/Room'
 import { JIE_LI_SPELL_ID, recordJieLiContext, recordJieLiSelection } from '@/tracker/skill/JieLi'
 import { locationKeys, playerHand, publicLocation } from '../helpers/locationCandidates'
 import { createReadyControllerHarness, protocolMove } from '../helpers/trackerController'
+import { hasSkillState } from '@/tracker/room/RoomBase'
 
 const observerSeat = 2
 const actorSeat = 3
@@ -178,7 +179,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     expect(room.cards).toHaveLength(entityCount)
     expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([48])
     expect(room.cardIndex.get(48)!.publicCandidates).toEqual([])
-    expect(room.hasSkillState(JIE_LI_SPELL_ID)).toBe(false)
+    expect(hasSkillState(room, JIE_LI_SPELL_ID)).toBe(false)
   })
 
   it('生产目标视角按 Type 53 配对定位 91/158，不公开 81/99', () => {
@@ -203,7 +204,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     expect(pile.cards).toHaveLength(pileCount)
     expect(room.cards).toHaveLength(entityCount)
     expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([91, 158])
-    expect(room.hasSkillState(JIE_LI_SPELL_ID)).toBe(false)
+    expect(hasSkillState(room, JIE_LI_SPELL_ID)).toBe(false)
   })
 
   it('开发模式的目标视角可保留完整牌堆身份', () => {
@@ -223,7 +224,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([
       81, 91, 99, 158
     ])
-    expect(room.hasSkillState(JIE_LI_SPELL_ID)).toBe(false)
+    expect(hasSkillState(room, JIE_LI_SPELL_ID)).toBe(false)
   })
 
   it('发动者视角使用已公开结果走默认移动，不建立推断批次', () => {
@@ -256,7 +257,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     ).toEqual([81, 91, 99, 158])
     expect(room.cardIndex.get(91)!.publicCandidates).toEqual([])
     expect(room.cardIndex.get(158)!.publicCandidates).toEqual([])
-    expect(room.hasSkillState(JIE_LI_SPELL_ID)).toBe(false)
+    expect(hasSkillState(room, JIE_LI_SPELL_ID)).toBe(false)
   })
 
   it.each([false, true])('其它视角在 DEV=%s 时只建立目标手牌/牌顶范围弱候选', (isDev) => {
@@ -284,7 +285,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
           .sort()
       )
     })
-    expect(room.hasSkillState(JIE_LI_SPELL_ID)).toBe(false)
+    expect(hasSkillState(room, JIE_LI_SPELL_ID)).toBe(false)
   })
 
   it('其它视角保留目标手牌候选的原有位置分支', () => {
@@ -342,7 +343,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     expect(room.getPlayer(targetSeat)!.observedHandCount).toBe(handCountBefore)
     expect(exchange.cards).toHaveLength(0)
     expect(handCard.locationCandidates).toEqual([])
-    expect(room.hasSkillState(JIE_LI_SPELL_ID)).toBe(false)
+    expect(hasSkillState(room, JIE_LI_SPELL_ID)).toBe(false)
   })
 
   it('其它视角的半链状态由下一次上下文覆盖且不会污染新批次', () => {
@@ -382,6 +383,6 @@ describe('族钟繇诫厉视角权限与交换', () => {
         .map((candidate) => createLocationCandidateKey(candidate))
         .sort()
     )
-    expect(room.hasSkillState(JIE_LI_SPELL_ID)).toBe(false)
+    expect(hasSkillState(room, JIE_LI_SPELL_ID)).toBe(false)
   })
 })

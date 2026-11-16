@@ -13,6 +13,8 @@ import {
   protocolMove,
   createReadyControllerHarness
 } from '../helpers/trackerController'
+import { getMarkCardsBySpell } from '@/tracker/model/Player'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
 
 function createDegradedRoom(cardIDs = [11, 12, 13, 14]) {
   const errorSpy = createErrorSpy()
@@ -179,7 +181,7 @@ describe('重连残局降级追踪', () => {
 
     expect(room.getZone('discard').cards.map((card) => card.id)).toEqual([99, 11])
     expect(room.getPlayer(0)?.equipCards).toEqual([])
-    expect(room.getPlayer(0)?.getMarkCardsBySpell(3000)).toEqual([])
+    expect(getMarkCardsBySpell(room.getPlayer(0)!, 3000)).toEqual([])
     expect(room.getPlayer(0)?.knownHandCards.map((card) => card.id)).toEqual([13])
     expect(room.getPlayer(0)?.handCountDelta).toBe(-2)
     expect(room.cardIndex.get(99)?.isKnown).toBe(true)
@@ -410,7 +412,7 @@ describe('重连残局降级追踪', () => {
     const { room, errorSpy, warn } = createDegradedRoom()
     warn.mockClear()
     room.pileIdentityLedger.reconcilePileCount(999)
-    expect(room.assertPileIdentityLedgerConsistency('test:degraded')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:degraded')).toEqual([])
     expect(warn).not.toHaveBeenCalled()
     expect(getPublicZoneConsistencyIssues(room)).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()

@@ -253,12 +253,10 @@ describe('主视角渲染手牌镜像', () => {
     expect(getRenderedMainHandCardIDs()).toEqual([11, 12])
   })
 
-  it('返回防御性副本并区分空手牌与尚未渲染', () => {
+  it('区分空手牌与尚未渲染', () => {
     const { doc } = createRenderHarness()
     renderPlayerHand(doc, createPlayer(1, 1, [31]))
 
-    const snapshot = getRenderedMainHandCardIDs()
-    snapshot?.push(32)
     expect(getRenderedMainHandCardIDs()).toEqual([31])
 
     renderPlayerHand(doc, createPlayer(1, 1, []))

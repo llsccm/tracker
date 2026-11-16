@@ -7,6 +7,7 @@ import {
   protocolMove,
   createReadyControllerHarness
 } from '../helpers/trackerController'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
 
 const DISCARD_SETUP = {
   cardIDs: [1, 2, 3, 4, 5, 6, 7, 8],
@@ -93,7 +94,7 @@ describe('弃牌堆未知获得', () => {
     expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual([
       1, 2, 3, 4, 5, 6
     ])
-    expect(room.assertPileIdentityLedgerConsistency('test:anonymous-discard-gain')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:anonymous-discard-gain')).toEqual([])
     expect(message.CardIDs).toEqual(cardIDsBefore)
     expect(errorSpy).not.toHaveBeenCalled()
   })
@@ -130,7 +131,7 @@ describe('弃牌堆未知获得', () => {
     expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual([
       127, 128, 129
     ])
-    expect(room.assertPileIdentityLedgerConsistency('test:3653-discard-gain')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:3653-discard-gain')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -180,7 +181,7 @@ describe('弃牌堆未知获得', () => {
     expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual(
       testCase.discardIDs
     )
-    expect(room.assertPileIdentityLedgerConsistency('test:known-discard-gain')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:known-discard-gain')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -327,7 +328,7 @@ describe('弃牌堆未知获得', () => {
     expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual([
       1, 3, 4, 6
     ])
-    expect(room.assertPileIdentityLedgerConsistency('test:discard-gain-reveal')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:discard-gain-reveal')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -362,7 +363,7 @@ describe.each([8, 15])('MoveType=%i 弃牌堆明确来源兼容', (moveType) => 
     expect(player.observedHandCount).toBe(2)
     expect(player.unknownCardCount).toBe(0)
     expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual([1, 3, 4, 6])
-    expect(room.assertPileIdentityLedgerConsistency('test:known-discard-gain')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:known-discard-gain')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 

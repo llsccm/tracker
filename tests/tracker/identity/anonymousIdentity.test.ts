@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Card } from '@/tracker/model/Card'
 import { trackerLogger } from '@/utils/logger'
 import { createTestRoom, getCard } from '../helpers/room'
+import { assertConservation } from '@/tracker/room/diagnostics'
 
 describe('阶段 0 匿名身份与守恒观测', () => {
   it('匿名占位使用唯一负 ID 且不进入真实身份索引', () => {
@@ -22,7 +23,7 @@ describe('阶段 0 匿名身份与守恒观测', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1] })
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
 
-    room.assertConservation('test:healthy')
+    assertConservation(room, 'test:healthy')
 
     expect(warnSpy).not.toHaveBeenCalled()
     warnSpy.mockRestore()
@@ -36,7 +37,7 @@ describe('阶段 0 匿名身份与守恒观测', () => {
     room.zones.get('outside')!.add(duplicate)
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
 
-    expect(() => room.assertConservation('test:duplicated-identity')).not.toThrow()
+    expect(() => assertConservation(room, 'test:duplicated-identity')).not.toThrow()
 
     const warning = warnSpy.mock.calls.find(
       ([message]) => message === 'Room 身份/槽位守恒观测发现不一致'
@@ -59,7 +60,7 @@ describe('阶段 0 匿名身份与守恒观测', () => {
     card.location = 'discard'
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
 
-    expect(() => room.assertConservation('test:slot-mismatch')).not.toThrow()
+    expect(() => assertConservation(room, 'test:slot-mismatch')).not.toThrow()
 
     const warning = warnSpy.mock.calls.find(
       ([message]) => message === 'Room 身份/槽位守恒观测发现不一致'
@@ -77,11 +78,25 @@ describe('阶段 0 匿名身份与守恒观测', () => {
 
   it('resolveConstraints 尾部自动运行守恒观测', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1] })
-    const assertSpy = vi.spyOn(room, 'assertConservation')
+    const card = getCard(room, 1)
+    card.location = 'discard'
+    const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
 
     room.resolveConstraints()
 
-    expect(assertSpy).toHaveBeenCalledWith('resolveConstraints')
-    assertSpy.mockRestore()
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Room 身份/槽位守恒观测发现不一致',
+      expect.objectContaining({
+        context: 'resolveConstraints',
+        issues: expect.arrayContaining([
+          expect.objectContaining({
+            domain: 'slot',
+            type: 'zone-card-location-mismatch',
+            cardID: 1
+          })
+        ])
+      })
+    )
+    warnSpy.mockRestore()
   })
 })

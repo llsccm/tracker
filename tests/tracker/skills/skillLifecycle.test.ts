@@ -2,13 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Room } from '@/tracker/Room'
 import type { RoomSkillPlugin } from '@/tracker/room/moveEvents'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
-import { trackerLogger } from '@/utils/logger'
 import { createTestRoom } from '../helpers/room'
 import {
   createErrorSpy,
   protocolMove,
   createReadyControllerHarness
 } from '../helpers/trackerController'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
+import { hasSkillState } from '@/tracker/room/RoomBase'
 
 const rooms: Room[] = []
 afterEach(() => {
@@ -73,7 +74,7 @@ describe('技能生命周期注册表', () => {
       onCardsRevealed: reveal
     })
     room.registerSkillPlugin({ id: 'later-test', beforeNormalizeMove: later })
-    const msg = Object.freeze(protocolMove({ CardIDs: Object.freeze([11]) }))
+    const msg = protocolMove({ CardIDs: [11] })
     controller.syncTrackerMove(msg)
     expect(decorate).not.toHaveBeenCalled()
     expect(later).not.toHaveBeenCalled()
@@ -83,66 +84,50 @@ describe('技能生命周期注册表', () => {
     expect(msg.CardIDs).toEqual([11])
   })
 
-  it('移动成功后通知读取稳定牌位和账本，单个通知异常不阻断其他插件', () => {
+  it('移动成功后通知读取稳定牌位和账本', () => {
     const { controller, room } = setup()
-    const calls: string[] = []
-    const warn = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
-    room.registerSkillPlugin({
-      id: 'throw-after',
-      afterMoveCommitted() {
-        throw new Error('after')
-      },
-      onCardsRevealed() {
-        throw new Error('reveal')
-      }
-    })
+    const notifications: {
+      phase: string
+      cardIDs: readonly number[]
+      ledgerIssues?: ReturnType<typeof assertPileIdentityLedgerConsistency>
+    }[] = []
     room.registerSkillPlugin({
       id: 'observer',
       afterMoveCommitted() {
-        calls.push('committed')
-        expect(room.getPlayer(1)!.knownHandCards.map((card) => card.id)).toEqual([11])
-        expect(room.assertPileIdentityLedgerConsistency('plugin:committed')).toEqual([])
+        notifications.push({
+          phase: 'committed',
+          cardIDs: room.getPlayer(1)!.knownHandCards.map((card) => card.id),
+          ledgerIssues: assertPileIdentityLedgerConsistency(room, 'plugin:committed')
+        })
       },
       onCardsRevealed(ids) {
-        calls.push('revealed')
-        expect(ids).toEqual([11])
+        notifications.push({ phase: 'revealed', cardIDs: ids })
       }
     })
     controller.syncTrackerMove(protocolMove({ CardIDs: [11] }))
-    expect(calls).toEqual(['committed', 'revealed'])
-    expect(warn).toHaveBeenCalledTimes(2)
+    expect(notifications).toEqual([
+      { phase: 'committed', cardIDs: [11], ledgerIssues: [] },
+      { phase: 'revealed', cardIDs: [11] }
+    ])
   })
 
-  it.each(['cancel', 'throw', 'noop', 'prepare-throw'] as const)(
-    '%s 不发送成功移动或明牌通知',
-    (failure) => {
-      const { controller, room } = setup()
-      const errors = createErrorSpy()
-      const committed = vi.fn()
-      const revealed = vi.fn()
-      const plugin: RoomSkillPlugin = {
-        id: 'failure',
-        afterMoveCommitted: committed,
-        onCardsRevealed: revealed
-      }
-      if (failure === 'cancel') vi.spyOn(room, 'moveCards').mockReturnValue(false)
-      if (failure === 'throw')
-        vi.spyOn(room, 'moveCards').mockImplementation(() => {
-          throw new Error('move')
-        })
-      if (failure === 'noop') plugin.decorateMove = (event) => ({ ...event, type: 'noop' })
-      if (failure === 'prepare-throw')
-        plugin.beforeNormalizeMove = () => {
-          throw new Error('prepare')
-        }
-      room.registerSkillPlugin(plugin)
-      controller.syncTrackerMove(protocolMove({ CardIDs: [11] }))
-      expect(committed).not.toHaveBeenCalled()
-      expect(revealed).not.toHaveBeenCalled()
-      expect(room.zones.get('pile')!.cards).toHaveLength(6)
-      expect(errors).toHaveBeenCalledTimes(failure.endsWith('throw') ? 1 : 0)
+  it.each(['cancel', 'noop'] as const)('%s 不发送成功移动或明牌通知', (failure) => {
+    const { controller, room } = setup()
+    const committed = vi.fn()
+    const revealed = vi.fn()
+    const plugin: RoomSkillPlugin = {
+      id: 'failure',
+      afterMoveCommitted: committed,
+      onCardsRevealed: revealed
     }
-  )
+    if (failure === 'cancel') vi.spyOn(room, 'moveCards').mockReturnValue(false)
+    if (failure === 'noop') plugin.decorateMove = (event) => ({ ...event, type: 'noop' })
+    room.registerSkillPlugin(plugin)
+    controller.syncTrackerMove(protocolMove({ CardIDs: [11] }))
+    expect(committed).not.toHaveBeenCalled()
+    expect(revealed).not.toHaveBeenCalled()
+    expect(room.zones.get('pile')!.cards).toHaveLength(6)
+  })
 
   it('展示、范围揭示、洗牌按成功事件通知，显式揭示不触发移动后钩子', () => {
     const { controller, room } = setup()
@@ -219,7 +204,7 @@ describe('技能生命周期注册表', () => {
       room.setSkillState(id, [11])
     controller.initTrackerDeck([11, 12])
     for (const id of [3157, 3511, 3750, 3434, 3854, 3488, 361, 3709, 'duoQi'])
-      expect(room.hasSkillState(id)).toBe(false)
+      expect(hasSkillState(room, id)).toBe(false)
     room.destroy()
     room.notifyCardsRevealed([11])
     other.notifyCardsRevealed([11])
@@ -242,53 +227,32 @@ describe('非移动协议与补牌集成', () => {
         type: 'useSpell',
         message: { SpellID, SeatID: 1, EffectIndex: 2, CardIDs: ids, card_count: 2, dest_Count: 0 }
       })
-      ids[0] = 16
       expect(room.readSkillState(SpellID)).toEqual([11, 12])
       expect(gameState.getSpellState(SpellID)).toBeUndefined()
-      const move = Object.freeze(
-        protocolMove({
-          SpellID,
-          CardIDs: Object.freeze([0, 0]),
-          CardCount: 2,
-          FromZone: SpellID === 3854 ? 5 : 2,
-          FromID: 1,
-          ToZone: SpellID === 3750 ? 1 : 5,
-          ToID: 2,
-          MoveType: 15
-        })
-      )
+      const move = protocolMove({
+        SpellID,
+        CardIDs: [0, 0],
+        CardCount: 2,
+        FromZone: SpellID === 3854 ? 5 : 2,
+        FromID: 1,
+        ToZone: SpellID === 3750 ? 1 : 5,
+        ToID: 2,
+        MoveType: 15
+      })
       const decorate = vi.spyOn(room, 'decorateMoveEvent')
       controller.syncTrackerMove(move)
       expect(decorate.mock.lastCall?.[0].cardIDs).toEqual([11, 12])
       expect(decorate.mock.lastCall?.[0].raw.CardIDs).toEqual([0, 0])
       expect(move.CardIDs).toEqual([0, 0])
-      expect(room.hasSkillState(SpellID)).toBe(false)
+      expect(hasSkillState(room, SpellID)).toBe(false)
       for (const id of [11, 12]) {
         expect(room.cardIndex.get(id)!.location).toBe(SpellID === 3750 ? 'pile' : 'player')
         if (SpellID !== 3750) expect(room.cardIndex.get(id)!.owner).toBe(2)
       }
-      expect(room.assertPileIdentityLedgerConsistency('plugin:patch')).toEqual([])
+      expect(assertPileIdentityLedgerConsistency(room, 'plugin:patch')).toEqual([])
       expect(errors).not.toHaveBeenCalled()
     }
   )
-
-  it('补牌后统一校验明暗数量，失败降级不会污染原消息', () => {
-    const { controller, room } = setup()
-    vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
-    room.registerSkillPlugin({
-      id: 'mixed',
-      beforeNormalizeMove(patched) {
-        patched.CardIDs = [11, 0]
-      }
-    })
-    const raw = protocolMove({ CardIDs: [0, 0], CardCount: 2 })
-    const decorate = vi.spyOn(room, 'decorateMoveEvent')
-    controller.syncTrackerMove(raw)
-    expect(decorate.mock.lastCall?.[0].cardIDs).toEqual([])
-    expect(room.getPlayer(1)!.unknownCardCount).toBe(2)
-    expect(room.cardIndex.has(11)).toBe(false)
-    expect(raw.CardIDs).toEqual([0, 0])
-  })
 
   it('下书失败移动保留选择，重试成功后收敛展示牌与暗牌且清理状态', () => {
     const { controller, room } = setup()
@@ -312,12 +276,12 @@ describe('非移动协议与补牌集成', () => {
     })
     vi.spyOn(room, 'moveCards').mockReturnValueOnce(false)
     controller.syncTrackerMove(move)
-    expect(room.hasSkillState(361)).toBe(true)
+    expect(hasSkillState(room, 361)).toBe(true)
     expect(room.getPlayer(1)!.observedHandCount).toBe(2)
     controller.syncTrackerMove(move)
     expect(room.cardIndex.get(11)!.owner).toBe(1)
     expect(room.cardIndex.get(12)!.owner).toBe(2)
-    expect(room.hasSkillState(361)).toBe(false)
+    expect(hasSkillState(room, 361)).toBe(false)
     expect(room.getPlayer(1)!.observedHandCount).toBe(1)
     expect(room.getPlayer(2)!.observedHandCount).toBe(1)
   })

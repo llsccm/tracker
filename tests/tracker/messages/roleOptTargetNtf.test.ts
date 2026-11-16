@@ -36,6 +36,7 @@ import { handleRoleOptTargetNtf } from '@/handler/GsCRoleOptTargetNtf'
 import { Game } from '@/tracker'
 import { Room } from '@/tracker/Room'
 import { registerDefaultMoveEventHandlers } from '@/tracker/skill/registerHandlers'
+import { hasSkillState } from '@/tracker/room/RoomBase'
 
 describe('GsCRoleOptTargetNtf', () => {
   beforeEach(() => {
@@ -348,7 +349,7 @@ describe('GsCRoleOptTargetNtf', () => {
       targetSeatID: 4
     })
 
-    expect(room.hasSkillState(3483)).toBe(false)
+    expect(hasSkillState(room, 3483)).toBe(false)
     expect(revealTrackerCards).not.toHaveBeenCalled()
     room.destroy()
   })

@@ -15,7 +15,7 @@ describe('移动输入的只读直传契约', () => {
     expectTypeOf<NormalizedMoveEvent['cardIDs']>().toEqualTypeOf<readonly CardID[]>()
   })
 
-  it('最终 patched 不重新拼接或复制，事件装饰使用独立的新列表', () => {
+  it('归一化和装饰保留协议来源，不修改只读输入', () => {
     const raw = Object.freeze(
       protocolMove({
         CardIDs: Object.freeze([0]),
@@ -32,19 +32,19 @@ describe('移动输入的只读直传契约', () => {
     const decorated = patchEvent(event, { cardIDs: [113] })
 
     expect(event.type).toBe('drawKnown')
-    expect(event.protocol).toBe(patched)
-    expect(event.cardIDs).toBe(patched.CardIDs)
-    expect(event.raw).toBe(raw)
-    expect(event.options.sourceEvent?.raw).toBe(raw)
+    expect(event.protocol).toEqual(patched)
+    expect(event.cardIDs).toEqual([96])
+    expect(event.raw).toEqual(raw)
+    expect(event.options.sourceEvent?.raw).toEqual(raw)
     expect(getMovePosition(event.from)).toBe(POSITION_TOP)
     expect(decorated.cardIDs).toEqual([113])
-    expect(decorated.protocol).toBe(patched)
-    expect(decorated.raw).toBe(raw)
+    expect(decorated.protocol).toEqual(patched)
+    expect(decorated.raw).toEqual(raw)
     expect(patched.CardIDs).toEqual([96])
     expect(raw.CardIDs).toEqual([0])
   })
 
-  it('单牌数组与匿名空数组都不被 Room 修改，移动张数由协议给出', () => {
+  it('明牌与匿名牌移动不修改输入数组，按协议张数更新手牌和牌堆', () => {
     const { controller, room } = createReadyControllerHarness({
       players: [{ SeatID: 0, ClientID: 100 }, { SeatID: 1 }],
       cardIDs: [1, 2, 3]

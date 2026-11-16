@@ -10,6 +10,7 @@ import {
   type RecordedTrackerProtocol
 } from './helpers/protocolReplay'
 import { assertTrackerReplayConsistency } from './helpers/protocolReplay/snapshot'
+import { getPlayerCardsSnapshot } from '@/tracker/projection/playerSnapshot'
 
 describe('tracker protocol replay', () => {
   afterEach(() => {
@@ -327,7 +328,7 @@ describe('tracker protocol replay', () => {
 
     const room = replayer.controller.getReadyTrackerRoom()
     if (!room) throw new Error('测试预期 Room 已完成重建')
-    const snapshot = room.playerCardsSnapshot
+    const snapshot = getPlayerCardsSnapshot(room)
     const snapshotCards = [...snapshot]
     const refreshSpy = vi.spyOn(room, 'refreshPlayerSnapshot')
     const rebuildSpy = vi.spyOn(room, 'rebuildPlayerSnapshot')
@@ -336,8 +337,8 @@ describe('tracker protocol replay', () => {
 
     expect(refreshSpy).not.toHaveBeenCalled()
     expect(rebuildSpy).not.toHaveBeenCalled()
-    expect(room.playerCardsSnapshot).toBe(snapshot)
-    expect(room.playerCardsSnapshot).toEqual(snapshotCards)
+    expect(getPlayerCardsSnapshot(room)).toBe(snapshot)
+    expect(getPlayerCardsSnapshot(room)).toEqual(snapshotCards)
   })
 
   it('保留 isSend 后与生产处理器一致跳过发送侧移动', () => {
