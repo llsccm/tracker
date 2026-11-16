@@ -4,19 +4,15 @@ import { recordTraversal } from '../traversalStats'
 
 /** 玩家区派生快照的唯一缓存；顺序始终与 Room.cards 一致。 */
 export class PlayerSnapshot {
-  private snapshot: Card[] = []
+  cards: Card[] = []
   private readonly members = new Set<Card>()
   private readonly order = new Map<Card, number>()
   private lastConsumedSeq = -1
 
   constructor(private readonly room: Room) {}
 
-  get cards(): readonly Card[] {
-    return this.snapshot
-  }
-
   reset(): void {
-    this.snapshot = []
+    this.cards = []
     this.members.clear()
     this.order.clear()
     this.lastConsumedSeq = -1
@@ -26,7 +22,7 @@ export class PlayerSnapshot {
   registerCard(card: Card, index: number): void {
     this.order.set(card, index)
     if (this.members.has(card)) {
-      this.snapshot.splice(this.snapshot.indexOf(card), 1)
+      this.cards.splice(this.cards.indexOf(card), 1)
       this.insertOrdered(card)
     }
   }
@@ -38,12 +34,12 @@ export class PlayerSnapshot {
     room.trackedCards.forEach((card, index) => {
       this.registerCard(card, room.getDetachedCardOrder(card) ?? index)
       if (card.location === 'player') {
-        this.snapshot.push(card)
+        this.cards.push(card)
         this.members.add(card)
       }
     })
     this.lastConsumedSeq = room.dirtyCardSeq
-    return this.snapshot
+    return this.cards
   }
 
   refresh(): Card[] {
@@ -70,20 +66,25 @@ export class PlayerSnapshot {
         this.insertOrdered(card)
       } else if (!isPlayer && inSnapshot) {
         this.members.delete(card)
-        const index = this.snapshot.indexOf(card)
-        if (index >= 0) this.snapshot.splice(index, 1)
+        const index = this.cards.indexOf(card)
+        if (index >= 0) this.cards.splice(index, 1)
       }
     })
 
     recordTraversal('resolveConstraints:playerSnapshotIncremental', affectedCards.size)
     this.lastConsumedSeq = room.dirtyCardSeq
-    return this.snapshot
+    return this.cards
   }
 
   private insertOrdered(card: Card): void {
     const key = this.order.get(card)!
-    let index = this.snapshot.length
-    while (index > 0 && this.order.get(this.snapshot[index - 1])! > key) index -= 1
-    this.snapshot.splice(index, 0, card)
+    let index = this.cards.length
+    while (index > 0 && this.order.get(this.cards[index - 1])! > key) index -= 1
+    this.cards.splice(index, 0, card)
   }
+}
+
+/** 玩家区快照的兼容只读入口；缓存仅由 PlayerSnapshot 维护。 */
+export function getPlayerCardsSnapshot(room: Room): readonly Card[] {
+  return room.playerSnapshot.cards
 }

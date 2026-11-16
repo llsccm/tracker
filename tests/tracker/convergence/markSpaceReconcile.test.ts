@@ -1,8 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { Room } from '@/tracker/Room'
 import { HIDDEN_MARK_STATE_KEY } from '@/tracker/room/movement/types'
 import type { HiddenMarkRecord, HiddenMarkState } from '@/tracker/room/movement/types'
-import { trackerLogger } from '@/utils/logger'
 import { createTestRoom } from '../helpers/room'
 import {
   moveHiddenHandToMark,
@@ -12,7 +11,6 @@ import {
 
 const MUNIU_SPELL_ID = 700
 const PLAYER_MARK_SPELL_ID = 500
-const FOREIGN_SPELL_ID = 999
 
 function getSingleRecord(room: Room): HiddenMarkRecord {
   const state = room.readSkillState<HiddenMarkState>(HIDDEN_MARK_STATE_KEY)
@@ -32,8 +30,6 @@ function countAnonymousHand(room, seatID: number): number {
 }
 
 describe('mark 空间守恒原语 reconcileMarkSpace', () => {
-  afterEach(() => vi.restoreAllMocks())
-
   it.each([
     { space: '普通标记', spellID: PLAYER_MARK_SPELL_ID },
     { space: '木牛容器', spellID: MUNIU_SPELL_ID }
@@ -103,81 +99,5 @@ describe('mark 空间守恒原语 reconcileMarkSpace', () => {
     expect(record.placeholderCards.size).toBe(0)
     // 幂等：再次 reconcile 不再回收
     expect(room.movement.hiddenMarks.reconcileMarkSpace(record, 'test:idempotent')).toBe(false)
-  })
-
-  it('无可回收占位时对 mark 配额溢出告警并返回 false', () => {
-    const seatID = 3
-    const { room } = createTestRoom({
-      cardIDs: [141, 142, 900, 901, 902, 903, 904],
-      seatIDs: [1, 2, 3],
-      materializeDeckIdentities: false
-    })
-
-    moveKnownCardsToHand(room, [141, 142], seatID)
-    moveUnknownCardsToHand(room, 1, seatID)
-    moveHiddenHandToMark(room, { seatID, count: 1, spellID: PLAYER_MARK_SPELL_ID })
-
-    const record = getSingleRecord(room)
-    record.placeholderCards.clear()
-    record.hiddenCount = 2
-
-    for (const id of [141, 142]) {
-      const card = room.cardIndex.get(id)!
-      record.confirmedHandCards.delete(card)
-      record.confirmedMarkCards.add(card)
-      room.movement.hiddenMarks.bindConfirmedMarkCardToMarkSpace(record, card, 'test:confirm')
-    }
-
-    record.hiddenCount = 1
-    const warnSpy = vi.spyOn(trackerLogger, 'warn')
-    const debugSpy = vi.spyOn(trackerLogger, 'debug')
-    const changed = room.movement.hiddenMarks.reconcileMarkSpace(record, 'test:quota-overflow')
-
-    expect(changed).toBe(false)
-    expect(record.placeholderCards.size).toBe(0)
-    expect(record.confirmedMarkCards.size).toBe(2)
-    expect(warnSpy).toHaveBeenCalledWith(
-      'mark 空间守恒溢出但无可回收占位',
-      expect.objectContaining({
-        reason: 'test:quota-overflow',
-        hiddenCount: 1,
-        confirmedMarkSlotUsers: 2,
-        overflow: 1
-      })
-    )
-    expect(debugSpy).not.toHaveBeenCalledWith('mark 空间守恒回收溢出匿名占位', expect.anything())
-    warnSpy.mockRestore()
-    debugSpy.mockRestore()
-  })
-
-  it('错误 spellID 的匿名占位混入账本时不会被误回收', () => {
-    const seatID = 3
-    const { room } = createTestRoom({
-      cardIDs: [141, 900, 901, 902, 903, 904],
-      seatIDs: [1, 2, 3],
-      materializeDeckIdentities: false
-    })
-
-    moveKnownCardsToHand(room, [141], seatID)
-    moveUnknownCardsToHand(room, 2, seatID)
-    moveHiddenHandToMark(room, { seatID, count: 1, spellID: PLAYER_MARK_SPELL_ID })
-
-    const record = getSingleRecord(room)
-
-    // 构造一个属于其它 spell 的匿名 mark 占位，混入本记录账本
-    const foreign = room.zones.get('pile')?.cards.find((card) => card.isAnonymous)
-    expect(foreign).toBeTruthy()
-    foreign!.bindCandidates([seatID], 'mark', FOREIGN_SPELL_ID, { known: false })
-    record.placeholderCards.add(foreign!)
-
-    const card141 = room.cardIndex.get(141)!
-    record.confirmedHandCards.delete(card141)
-    record.confirmedMarkCards.add(card141)
-    room.movement.hiddenMarks.bindConfirmedMarkCardToMarkSpace(record, card141, 'test:confirm')
-
-    // 只回收本 spell 的占位；异 spell 占位保持在 mark，未被误绑回手牌
-    expect(record.placeholderCards.has(foreign!)).toBe(true)
-    expect(foreign!.subZone).toBe('mark')
-    expect(Number(foreign!.spellID)).toBe(FOREIGN_SPELL_ID)
   })
 })

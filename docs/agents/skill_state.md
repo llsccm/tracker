@@ -31,52 +31,62 @@ Game（稳定单例门面）
         └── tracker:* Card / 候选 / 约束 / 技能推断
 ```
 
-`stateStore` 是实现细节，不对调用方暴露直接 Map 读写。GameState 负责状态生命周期，Room 只负责
-记牌器领域行为和 `tracker` 状态访问语义。
+`stateStore` 是私有写面，GameState 负责状态生命周期。`stateStoreView` 是供查询和诊断纯函数
+使用的 `ReadonlyMap` 视图；业务代码仍通过状态 API 读写，Room 只负责记牌器领域行为和
+`tracker` 状态访问语义。
 
 ## API
 
 ### GameState 通用入口
 
 ```ts
+import { hasGameState } from '@/tracker/Game'
+
 const state = game.readState<MyState>('spell', spellID)
 const writableState = game.ensureState('spell', spellID, () => ({ count: 0 }))
 
 game.setState('spell', spellID, { count: 1 })
 game.deleteState('spell', spellID)
-game.hasState('spell', spellID)
+hasGameState(game, 'spell', spellID)
 ```
 
 通用入口接受 `spell` 或 `tracker` scope。只读路径使用 `readState()`；只有确定开始新批次时才使用
-`ensureState()` 或 `setState()`。
+`ensureState()` 或 `setState()`。`hasGameState()` 是独立查询函数，区分缺失记录与值为
+`undefined` 的记录，不创建状态。
 
 ### handler / UI 兼容入口
 
 ```ts
+import { getSpellStateSnapshot } from '@/tracker/Game'
+
 const state = game.getSpellState<MyState>(spellID)
 const writableState = game.ensureSpellState(spellID, () => ({ count: 0 }))
-const spellSnapshot = game.getSpellStateSnapshot()
+const spellSnapshot = getSpellStateSnapshot(game)
 
 game.setSpellState(spellID, { count: 1 })
 game.deleteSpellState(spellID)
 ```
 
-这些方法统一委托到 `spell` scope，用于控制迁移范围并保持既有 handler 可读性。禁止恢复
-`game.spellSpace[key]` 形式的无类型直接访问。
+兼容方法统一委托到 `spell` scope，用于保持既有 handler 可读性。诊断快照由独立的
+`getSpellStateSnapshot(game)` 返回，嵌套可变值均为副本；未被生产入口引用时可从构建产物移除。
+禁止恢复 `game.spellSpace[key]` 形式的无类型直接访问。
 
 ### tracker / Room 入口
 
 ```ts
+import { hasSkillState } from '@/tracker/room/RoomBase'
+
 const state = room.readSkillState<MyState>('example')
 const writableState = room.ensureSkillState('example', () => ({ cards: [] }))
 
 room.setSkillState('example', { cards: [] })
 room.deleteSkillState('example')
-room.hasSkillState('example')
+hasSkillState(room, 'example')
 ```
 
-这些方法统一委托到当前 GameState 的 `tracker` scope。Room 不再提供 `skillState`、`getSkillState()`
-或 `clearSkillState()` 兼容入口；读取、创建、判断和删除必须使用语义明确的方法。
+这些入口统一委托到当前 GameState 的 `tracker` scope。存在性查询使用独立的
+`hasSkillState(room, key)`，不挂在 Room 原型上。Room 不再提供 `skillState`、`getSkillState()`
+或 `clearSkillState()` 兼容入口；读取、创建、判断和删除必须使用语义明确的入口。
 
 ## 生命周期
 

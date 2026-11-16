@@ -122,11 +122,14 @@ owner 同步和变更事件仍由各入口控制顺序。候选协调含玩家�
   `room.resolveConstraints()` 后再读。
 - `cards` 是动态归组读面：`room.cards.filter((card) => card.location === 'player' &&
 card.seats.has(seatID))`，包含匿名暗牌，适合一次性归组而不是高频渲染。
-- `getKnownHandSlotCount()` 返回确定明牌槽位数；`getCandidateHandSlotCount()` 返回受组内
+- `getCandidateHandSlotCount(player)` 返回受组内
   剩余名额约束的单座位候选容量上界，不是 `Card[]` 长度。同一身份在该座位最多计一次，
   不同座位的可能上界不能相加当作全局确定数量。名额解析与重叠处理统一在
   `constraint/constraintSlots.ts` / `constraint/handSlotUsage.ts`。
+  它与 `getMarkCardsBySpell(player, spellID)` 都是 `model/Player.ts` 的独立只读函数；
+  不在 Player 原型上保留仅供诊断或测试使用的方法。
 - `computeHandSlotAllocation(room)` 同时给出确定明暗占用、候选明牌容量上界、暗实体覆盖和匿名补缺；
+  其中 `exactKnownCount` 是确定普通明牌占用的手牌槽位数。
   Player 与收敛器共用该结果。未观测手牌总数、未决名额不足或覆盖无法完整匹配时不执行匿名补位。
 - 重连先使旧手牌总数基线失效，再由 `SeatInfos.HandCardCount`（包括 `0`）恢复。缺少快照时，
   摸牌和出牌只更新 `handCountDelta`；不能从累计摸牌数或本地已知实体数推断整手揭示。

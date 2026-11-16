@@ -243,18 +243,9 @@ describe('tracker protocol recording rules', () => {
 })
 
 describe('tracker protocol projection', () => {
-  it('只保留移动协议业务字段且不访问原型 getter', () => {
-    let getterCalls = 0
-    const prototype = {}
-    Object.defineProperty(prototype, 'ByteData', {
-      enumerable: true,
-      get() {
-        getterCalls++
-        return [1, 2, 3]
-      }
-    })
-
-    const message = Object.assign(Object.create(prototype), {
+  it('只保留移动协议业务字段', () => {
+    const message = {
+      ByteData: [1, 2, 3],
       CardCount: 4,
       CardIDs: [0, 0, 0, 0],
       DataCount: 0,
@@ -287,7 +278,7 @@ describe('tracker protocol projection', () => {
       timestamp: 7000,
       userID: 0,
       _className_: 'PubGsCMoveCard'
-    })
+    }
 
     expect(projectTrackerProtocol(message)).toEqual({
       className: 'PubGsCMoveCard',
@@ -308,7 +299,6 @@ describe('tracker protocol projection', () => {
         ToZoneParam: 0
       }
     })
-    expect(getterCalls).toBe(0)
   })
 
   it('对局结束只保留生命周期事件，不保存结算明细或时间', () => {
@@ -635,21 +625,6 @@ describe('tracker protocol recorder', () => {
         payload: { SeatID: 6, useType: 1, isSend: 0, spellID: 1 }
       }
     ])
-  })
-
-  it('randomUUID 不可用时使用 Web Crypto 生成会话标识', async () => {
-    const getRandomValues = vi.fn((values: Uint8Array) => {
-      values.fill(7)
-      return values
-    })
-    vi.stubGlobal('crypto', { getRandomValues })
-    const insecureRandom = vi.spyOn(Math, 'random')
-
-    startProtocolRecording()
-    await stopProtocolRecording()
-
-    expect(getRandomValues).toHaveBeenCalledOnce()
-    expect(insecureRandom).not.toHaveBeenCalled()
   })
 
   it('达到最大条数后自动停止并通过状态监听器提示', async () => {

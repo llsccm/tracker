@@ -8,6 +8,7 @@ import {
   protocolMove,
   createReadyControllerHarness
 } from '../helpers/trackerController'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
 
 const CARD_IDS = Array.from({ length: 10 }, (_, index) => index + 25)
 
@@ -33,7 +34,7 @@ function expectConsistentPile(room: Room, count: number) {
   expect(room.zones.get('pile')!.cards).toHaveLength(count)
   expect(room.zones.get('discard')!.cards).toEqual([])
   expect(getPileIdentitySnapshot(room.pileIdentityLedger).accountedPileCount).toBe(count)
-  expect(room.assertPileIdentityLedgerConsistency('test:shuffle-protocol-count')).toEqual([])
+  expect(assertPileIdentityLedgerConsistency(room, 'test:shuffle-protocol-count')).toEqual([])
   expect(getPublicZoneConsistencyIssues(room)).toEqual([])
 }
 

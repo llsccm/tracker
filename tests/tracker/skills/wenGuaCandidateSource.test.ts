@@ -7,6 +7,8 @@ import {
   protocolMove,
   createReadyControllerHarness
 } from '../helpers/trackerController'
+import { hasSkillState } from '@/tracker/room/RoomBase'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
 
 function createHarness(sourceIDs = [11, 12, 0], targetIDs = [13, 0]) {
   const errorSpy = createErrorSpy()
@@ -120,15 +122,15 @@ describe('问卦候选来源筛选', () => {
       expect(room.getPlayer(1)!.observedHandCount).toBe(2)
       expect(room.getPlayer(4)!.observedHandCount).toBe(2)
       expect(pile.cards).toHaveLength(pileCount + 1)
-      expect(room.hasSkillState(780)).toBe(false)
-      expect(room.assertPileIdentityLedgerConsistency('test:wengua-candidate-return')).toEqual([])
+      expect(hasSkillState(room, 780)).toBe(false)
+      expect(assertPileIdentityLedgerConsistency(room, 'test:wengua-candidate-return')).toEqual([])
 
       controller.syncTrackerMove(
         protocolMove({ CardIDs: [], CardCount: 1, FromPosition: position, ToID: 7 })
       )
       expect(originalTargetCard.seats).toEqual(new Set([4]))
       expect(originalTargetCard.publicCandidates).toEqual([])
-      expect(room.assertPileIdentityLedgerConsistency('test:wengua-candidate-draw')).toEqual([])
+      expect(assertPileIdentityLedgerConsistency(room, 'test:wengua-candidate-draw')).toEqual([])
       expect(errorSpy).not.toHaveBeenCalled()
     }
   )
@@ -141,20 +143,20 @@ describe('问卦候选来源筛选', () => {
     expect(moveSpy.mock.lastCall?.[1]?.publicCandidateSource).toEqual({ fromSeat: 1, cards: [] })
     expect(room.cardIndex.get(13)!.publicCandidates).toEqual([])
     expect(room.cardIndex.get(13)!.seats).toEqual(new Set([4]))
-    expect(room.assertPileIdentityLedgerConsistency('test:wengua-dark-source')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:wengua-dark-source')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('可见 ID 的交互视角仍直接走通用已知牌移动', () => {
     const { controller, room, errorSpy } = createHarness()
     controller.syncTrackerMove(giveMove({ CardIDs: [11] }))
-    expect(room.hasSkillState(780)).toBe(false)
+    expect(hasSkillState(room, 780)).toBe(false)
     const moveSpy = vi.spyOn(room, 'moveCards')
     controller.syncTrackerMove(returnMove({ CardIDs: [11] }))
     expect(moveSpy.mock.lastCall?.[1]?.publicCandidateSource).toBeUndefined()
     expect(room.zones.get('pile')!.cards[0].id).toBe(11)
     expect(room.cardIndex.get(13)!.publicCandidates).toEqual([])
-    expect(room.assertPileIdentityLedgerConsistency('test:wengua-visible')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:wengua-visible')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -170,7 +172,7 @@ describe('问卦候选来源筛选', () => {
     expect(room.cardIndex.get(13)!.seats).toEqual(new Set([4]))
     expect(room.cardIndex.get(13)!.publicCandidates).toEqual([])
     expect(room.getPlayer(4)!.observedHandCount).toBe(1)
-    expect(room.assertPileIdentityLedgerConsistency('test:wengua-known-recipient')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:wengua-known-recipient')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -192,7 +194,7 @@ describe('问卦候选来源筛选', () => {
                 : {}
       controller.syncTrackerMove(returnMove(overrides))
       expect(moveSpy.mock.lastCall?.[1]?.publicCandidateSource).toBeUndefined()
-      expect(room.hasSkillState(780)).toBe(false)
+      expect(hasSkillState(room, 780)).toBe(false)
     }
   )
 
@@ -209,15 +211,15 @@ describe('问卦候选来源筛选', () => {
     const stateSpy = vi.spyOn(room, 'readSkillState')
     controller.syncTrackerMove(protocolMove({ CardIDs: [], CardCount: 1, ToID: 7, SpellID: 4567 }))
     expect(stateSpy.mock.calls.some(([key]) => key === 780)).toBe(false)
-    expect(room.hasSkillState(780)).toBe(false)
+    expect(hasSkillState(room, 780)).toBe(false)
   })
 
   it('新 Room 不继承上一局的问卦候选记录', () => {
     const { controller } = createHarness()
     controller.syncTrackerMove(giveMove())
-    expect(controller.getTrackerRoom()!.hasSkillState(780)).toBe(true)
+    expect(hasSkillState(controller.getTrackerRoom()!, 780)).toBe(true)
     controller.destroyTrackerRoom()
     controller.initTrackerRoom()
-    expect(controller.getTrackerRoom()!.hasSkillState(780)).toBe(false)
+    expect(hasSkillState(controller.getTrackerRoom()!, 780)).toBe(false)
   })
 })

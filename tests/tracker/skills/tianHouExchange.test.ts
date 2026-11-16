@@ -5,6 +5,7 @@ import { TIAN_HOU_STATE_KEY } from '@/tracker/skill/TianHou'
 import { locationKeys, playerHand, publicLocation } from '../helpers/locationCandidates'
 import { bindTestHand } from '../helpers/room'
 import { createReadyControllerHarness, protocolMove } from '../helpers/trackerController'
+import { hasSkillState } from '@/tracker/room/RoomBase'
 
 describe('周群天候其他视角换牌候选', () => {
   const viewerSeat = 1
@@ -167,7 +168,7 @@ describe('周群天候其他视角换牌候选', () => {
     ])
     expectHandOrPileTop(knownCards[1], 2)
     expect(room.zones.get('pile')!.cards.map((card) => card.id)).toEqual(pileBeforeShow)
-    expect(room.hasSkillState(TIAN_HOU_STATE_KEY)).toBe(false)
+    expect(hasSkillState(room, TIAN_HOU_STATE_KEY)).toBe(false)
   })
 
   it.each([1, 2])('未观测手牌总数且暗牌有位置候选时，交换 %i 张保留明牌去留区间', (count) => {

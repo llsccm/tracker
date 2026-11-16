@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { getPopupSpaceCards } from '@/tracker/room/movement/popupSpaces'
 
 import { protocolMove, createReadyControllerHarness } from '../helpers/trackerController'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
 
 describe('巧织默认协议管线', () => {
   it('明弃未选牌后由通用数量约束确认暗取牌身份', () => {
@@ -288,7 +289,7 @@ describe('巧织默认协议管线', () => {
       ])
       expect(room.cards).toHaveLength(2)
       expect(getPopupSpaceCards(room, 3544)).toEqual([])
-      expect(room.assertPileIdentityLedgerConsistency('qiaoZhi:roleData')).toEqual([])
+      expect(assertPileIdentityLedgerConsistency(room, 'qiaoZhi:roleData')).toEqual([])
     }
   )
 })

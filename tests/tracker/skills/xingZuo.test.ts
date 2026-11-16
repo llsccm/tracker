@@ -5,6 +5,8 @@ import {
   protocolMove,
   createReadyControllerHarness
 } from '../helpers/trackerController'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
+import { hasSkillState } from '@/tracker/room/RoomBase'
 
 function setupExchange(bottomIDs: number[] = [1, 2, 3], handIDs: number[] = []) {
   const errorSpy = createErrorSpy()
@@ -65,7 +67,7 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
           .sort()
       ).toEqual(originalBottom.map((card) => card.id).sort())
       expect(pile.cards).toEqual(remainingPile)
-      expect(room.assertPileIdentityLedgerConsistency('3776:stage')).toEqual([])
+      expect(assertPileIdentityLedgerConsistency(room, '3776:stage')).toEqual([])
 
       moves.slice(1).forEach((move) => controller.syncTrackerMove(move))
 
@@ -85,9 +87,9 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
       expect(pile.cards.slice(4)).toEqual(remainingPile)
       expect(pile.cards.slice(0, 4).every((card) => card.isAnonymous)).toBe(true)
       expect(room.cards).toHaveLength(entityCount)
-      expect(room.hasSkillState(3776)).toBe(false)
-      expect(room.hasSkillState('handExchangeBatches')).toBe(false)
-      expect(room.assertPileIdentityLedgerConsistency('3776:complete')).toEqual([])
+      expect(hasSkillState(room, 3776)).toBe(false)
+      expect(hasSkillState(room, 'handExchangeBatches')).toBe(false)
+      expect(assertPileIdentityLedgerConsistency(room, '3776:complete')).toEqual([])
       expect(errorSpy).not.toHaveBeenCalled()
     }
   )
@@ -116,7 +118,7 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
         .filter((card) => card.isAnonymous)
     ).toHaveLength(2)
     expect(room.zones.get('exchange')!.cards).toEqual([])
-    expect(room.assertPileIdentityLedgerConsistency('3776:known-return')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, '3776:known-return')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -137,8 +139,8 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
         .sort()
     ).toEqual([1, 2, 3])
     expect(room.zones.get('exchange')!.cards).toEqual([])
-    expect(room.hasSkillState(3776)).toBe(false)
-    expect(room.assertPileIdentityLedgerConsistency('3776:second-exchange')).toEqual([])
+    expect(hasSkillState(room, 3776)).toBe(false)
+    expect(assertPileIdentityLedgerConsistency(room, '3776:second-exchange')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -156,7 +158,7 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
         .knownHandCards.map((card) => card.id)
         .sort()
     ).toEqual([1, 2, 3])
-    expect(room.assertPileIdentityLedgerConsistency('3776:other-batch')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, '3776:other-batch')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -186,7 +188,7 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
     ).toEqual([10, 11, 8, 9])
     expect(room.zones.get('exchange')!.cards).toEqual([])
     expect(room.cards).toHaveLength(20)
-    expect(room.assertPileIdentityLedgerConsistency('3776:visible-return')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, '3776:visible-return')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 })

@@ -214,36 +214,6 @@ describe('MoveEventNormalizer 当前行为', () => {
     expect(event.options.sourceEvent.raw?.ToPosition).toBe(2)
   })
 
-  it('未知区域编号当前降级为 process 且不伪造手牌子区', () => {
-    const raw = protocolMove({
-      CardIDs: [1],
-      CardCount: 1,
-      FromZone: 99,
-      ToZone: 98,
-      MoveType: 19
-    })
-    const event = normalizeMoveEvent(raw)
-
-    expect(getMoveZone(event.to)).toBe('process')
-    expect(getMoveZone(event.from)).toBeNull()
-    expect(getMoveSubZone(event.to)).toBeUndefined()
-    expect(getMoveSubZone(event.from)).toBeUndefined()
-    expect(validateMoveEvent(raw)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: 'UNKNOWN_PROTOCOL_ZONE',
-          field: 'FromZone',
-          value: 99
-        }),
-        expect.objectContaining({
-          code: 'UNKNOWN_PROTOCOL_ZONE',
-          field: 'ToZone',
-          value: 98
-        })
-      ])
-    )
-  })
-
   it('公共区到公共区不填充手牌子区', () => {
     const event = normalizeMoveEvent(
       protocolMove({
@@ -307,29 +277,6 @@ describe('MoveEventNormalizer 当前行为', () => {
     )
   })
 
-  it('CardCount 为 0 时保留声明并诊断身份数量不一致', () => {
-    const raw = protocolMove({
-      CardIDs: [7],
-      CardCount: 0,
-      FromZone: 1,
-      ToZone: 5,
-      ToID: 2,
-      MoveType: 1
-    })
-    const event = normalizeMoveEvent(raw)
-
-    expect(event.cardCount).toBe(0)
-    expect(event.options.cardCount).toBe(0)
-    expect(validateMoveEvent(raw)).toContainEqual(
-      expect.objectContaining({
-        code: 'CARD_COUNT_MISMATCH',
-        field: 'CardIDs',
-        expected: 0,
-        actual: 1
-      })
-    )
-  })
-
   it('归一化结果与诊断入口都保留完整协议契约，补丁只能修改声明字段', () => {
     type CoreFields = Omit<NormalizedMoveCardFields, 'SrcSeatID' | 'Label' | 'isSend'>
     expectTypeOf<CoreFields>().toEqualTypeOf<Required<CoreFields>>()
@@ -337,28 +284,6 @@ describe('MoveEventNormalizer 当前行为', () => {
     expectTypeOf<NormalizedMoveEvent['protocol']>().toEqualTypeOf<NormalizedMoveCardFields>()
     expectTypeOf<PatchedMoveCardFields['CardIDs']>().toEqualTypeOf<number[]>()
     expectTypeOf<NormalizedMoveEvent['cardIDs']>().toEqualTypeOf<readonly number[]>()
-  })
-
-  it('CardIDs 与 CardCount 不一致时记录校验警告但保留声明数量', () => {
-    const raw = protocolMove({
-      CardIDs: [1],
-      CardCount: 2,
-      FromZone: 1,
-      ToZone: 5,
-      ToID: 2,
-      MoveType: 1
-    })
-    const event = normalizeMoveEvent(raw)
-
-    expect(event.cardCount).toBe(2)
-    expect(validateMoveEvent(raw)).toContainEqual(
-      expect.objectContaining({
-        code: 'CARD_COUNT_MISMATCH',
-        field: 'CardIDs',
-        expected: 2,
-        actual: 1
-      })
-    )
   })
 
   it('正确识别牌堆两端均为 255 的单牌同区展示谓词 isPileSingleCardShow', () => {

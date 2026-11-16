@@ -13,7 +13,7 @@ import {
 } from '@/tracker/projection/CardLocationIndex'
 import { getPublicZoneConsistencyIssues } from '@/tracker/room/publicZones'
 import type { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
-import type { GameState } from '@/tracker/Game'
+import { type GameState, getSpellStateSnapshot } from '@/tracker/Game'
 import type { Player } from '@/tracker/model/Player'
 import type { Room } from '@/tracker/Room'
 import { snapshotLocationSlots } from './constraintSlots'
@@ -25,6 +25,7 @@ import type {
   TrackerReplaySnapshot,
   TrackerReplayZoneSnapshot
 } from './types'
+import { getPlayerCardsSnapshot } from '@/tracker/projection/playerSnapshot'
 
 export function createTrackerReplaySnapshot(
   gameState: GameState,
@@ -43,7 +44,7 @@ export function createTrackerReplaySnapshot(
       round: gameState.round,
       phase: gameState.phase,
       currentSeatID: gameState.currentID ?? null,
-      spellState: normalizeJsonValue(gameState.getSpellStateSnapshot())
+      spellState: normalizeJsonValue(getSpellStateSnapshot(gameState))
     },
     room: room ? createRoomSnapshot(room) : null
   }
@@ -252,7 +253,7 @@ function collectIndexIssues(room: Room, issues: unknown[], metrics: ReplayMetric
 }
 
 function collectPlayerSnapshotIssues(room: Room, issues: unknown[]): void {
-  const snapshot = room.playerCardsSnapshot
+  const snapshot = getPlayerCardsSnapshot(room)
   const current = room.cards.filter((card) => card.location === 'player')
   const matches =
     snapshot.length === current.length && snapshot.every((card, index) => card === current[index])
