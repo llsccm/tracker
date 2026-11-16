@@ -1,3 +1,5 @@
+import { getPublicZoneConsistencyIssues } from '@/tracker/room/publicZones'
+import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { describe, expect, it } from 'vitest'
 import { POSITION_RANDOM } from '@/tracker/candidate/cardPositions'
 import type { Room } from '@/tracker/Room'
@@ -30,9 +32,9 @@ function shuffleMove(cardCount: number) {
 function expectConsistentPile(room: Room, count: number) {
   expect(room.zones.get('pile')!.cards).toHaveLength(count)
   expect(room.zones.get('discard')!.cards).toEqual([])
-  expect(room.pileIdentityLedger.getSnapshot().accountedPileCount).toBe(count)
+  expect(getPileIdentitySnapshot(room.pileIdentityLedger).accountedPileCount).toBe(count)
   expect(room.assertPileIdentityLedgerConsistency('test:shuffle-protocol-count')).toEqual([])
-  expect(room.publicZones.getPublicZoneConsistencyIssues()).toEqual([])
+  expect(getPublicZoneConsistencyIssues(room)).toEqual([])
 }
 
 describe('洗牌使用协议张数并保留身份候选', () => {
@@ -49,7 +51,7 @@ describe('洗牌使用协议张数并保留身份候选', () => {
     expectConsistentPile(room, 5)
     expect(room.zones.get('pile')!.cards.every((card) => card.isAnonymous)).toBe(true)
     expect(room.players.get(3)!.cards).toEqual(handBefore)
-    expect(room.pileIdentityLedger.getSnapshot().cohort).toMatchObject({
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).cohort).toMatchObject({
       generation: 1,
       flatCandidateWidth: 10,
       groups: [{ cardIDs: CARD_IDS, remainingPileCount: 5, kind: 'partial' }]
@@ -84,7 +86,7 @@ describe('洗牌使用协议张数并保留身份候选', () => {
       controller.syncTrackerMove(shuffleMove(5))
 
       expectConsistentPile(room, 5)
-      expect(room.pileIdentityLedger.getSnapshot().cohort.definitelyInPileIDs).toEqual(
+      expect(getPileIdentitySnapshot(room.pileIdentityLedger).cohort.definitelyInPileIDs).toEqual(
         CARD_IDS.slice(5)
       )
       knownCards.forEach((card) => {
@@ -111,7 +113,7 @@ describe('洗牌使用协议张数并保留身份候选', () => {
     expectConsistentPile(room, 5)
     expect(room.zones.get('pile')!.cards.slice(-2)).toEqual(remainingPileCards)
     expect(remainingPileCards.every((card) => card.isKnown)).toBe(true)
-    expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger)).toMatchObject({
       knownPileIdentityIDs: CARD_IDS.slice(8),
       hiddenPileSlotCount: 3,
       cohort: {
@@ -130,7 +132,7 @@ describe('洗牌使用协议张数并保留身份候选', () => {
 
     expectConsistentPile(room, 0)
     expect(room.players.get(3)!.cards).toHaveLength(10)
-    expect(room.pileIdentityLedger.getSnapshot().cohort).toMatchObject({
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).cohort).toMatchObject({
       flatCandidateWidth: 0,
       groups: [{ cardIDs: CARD_IDS, remainingPileCount: 0, kind: 'none-in-pile' }]
     })
@@ -150,7 +152,7 @@ describe('洗牌使用协议张数并保留身份候选', () => {
 
     expectConsistentPile(room, 1)
     expect(room.zones.get('pile')!.cards.every((card) => card.isAnonymous)).toBe(true)
-    expect(room.pileIdentityLedger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger)).toMatchObject({
       knownPileIdentityIDs: [],
       cohort: { groups: [{ cardIDs: CARD_IDS, remainingPileCount: 1, kind: 'partial' }] }
     })
@@ -166,7 +168,7 @@ describe('洗牌使用协议张数并保留身份候选', () => {
 
     controller.syncTrackerMove(protocolMove({ CardIDs: [], CardCount: 1, ToID: 1 }))
     expect(room.zones.get('pile')!.cards).toHaveLength(4)
-    expect(room.pileIdentityLedger.getSnapshot().accountedPileCount).toBe(4)
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).accountedPileCount).toBe(4)
     controller.revealTrackerCards({ type: 'player', seatID: 3 }, [29])
     controller.syncTrackerMove(
       protocolMove({ CardIDs: [29], FromZone: 5, FromID: 3, ToZone: 2, ToID: 255, MoveType: 4 })

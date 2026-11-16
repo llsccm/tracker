@@ -1,5 +1,8 @@
 import { expect } from 'vitest'
-import { AmbiguousKnownIndex } from '@/tracker/projection/AmbiguousKnownIndex'
+import {
+  AmbiguousKnownIndex,
+  toComparableAmbiguousIndex
+} from '@/tracker/projection/AmbiguousKnownIndex'
 import type { Room } from '@/tracker/Room'
 
 /**
@@ -8,5 +11,7 @@ import type { Room } from '@/tracker/Room'
 export function expectAmbiguousKnownIndexMatchesRebuild(room: Room): void {
   const shadow = new AmbiguousKnownIndex(room)
   shadow.rebuild(Array.from(room.constraintGroups.values()), { record: false })
-  expect(room.ambiguousKnownIndex.toComparable(room)).toEqual(shadow.toComparable(room))
+  expect(toComparableAmbiguousIndex(room.ambiguousKnownIndex, room)).toEqual(
+    toComparableAmbiguousIndex(shadow, room)
+  )
 }

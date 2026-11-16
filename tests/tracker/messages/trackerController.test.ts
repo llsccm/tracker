@@ -1,3 +1,4 @@
+import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { describe, expect, it, vi } from 'vitest'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { HIDDEN_MARK_STATE_KEY, type HiddenMarkState } from '@/tracker/room/movement/types'
@@ -717,7 +718,7 @@ describe('TrackerController', () => {
     expect(pileCards).toHaveLength(cardIDs.length + 1)
     expect(pileCards.every((card) => card.id < 0 && card.entityID < 0)).toBe(true)
     expect(pileCards.every((card) => card.isKnown !== true)).toBe(true)
-    expect(room.pileIdentityLedger.getSnapshot().cohort.groups).toEqual([
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).cohort.groups).toEqual([
       {
         generation: 0,
         kind: 'all-in-pile',

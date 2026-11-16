@@ -1,3 +1,4 @@
+import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { describe, expect, it } from 'vitest'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import type { RawMoveCardEvent } from '@/tracker/types'
@@ -89,7 +90,7 @@ describe('弃牌堆未知获得', () => {
     expect(player.knownHandCards).toEqual([])
     expect(room.zones.get('discard')!.cards).toEqual(discardBefore)
     expect(room.zones.get('pile')!.cards).toEqual(pileBefore)
-    expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual([
       1, 2, 3, 4, 5, 6
     ])
     expect(room.assertPileIdentityLedgerConsistency('test:anonymous-discard-gain')).toEqual([])
@@ -126,7 +127,9 @@ describe('弃牌堆未知获得', () => {
       expect(player.unknownCardCount).toBe(1)
     }
     expect(room.zones.get('discard')!.cards).toEqual(discardBefore)
-    expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([127, 128, 129])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual([
+      127, 128, 129
+    ])
     expect(room.assertPileIdentityLedgerConsistency('test:3653-discard-gain')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
@@ -174,7 +177,7 @@ describe('弃牌堆未知获得', () => {
     expect(player.observedHandCount).toBe(4)
     expect(player.unknownCardCount).toBe(testCase.unknownCount)
     expect(room.zones.get('discard')!.cards.map((card) => card.id)).toEqual(testCase.discardIDs)
-    expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual(
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual(
       testCase.discardIDs
     )
     expect(room.assertPileIdentityLedgerConsistency('test:known-discard-gain')).toEqual([])
@@ -321,7 +324,9 @@ describe('弃牌堆未知获得', () => {
     expect(player.unknownCardCount).toBe(2)
     expect(room.cards.filter((card) => card.id === 2)).toHaveLength(1)
     expect(room.cards.filter((card) => card.id === 5)).toHaveLength(1)
-    expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([1, 3, 4, 6])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual([
+      1, 3, 4, 6
+    ])
     expect(room.assertPileIdentityLedgerConsistency('test:discard-gain-reveal')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })

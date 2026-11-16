@@ -1,3 +1,4 @@
+import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { bindTestHand, getHandCardIDs } from '../helpers/room'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
@@ -175,7 +176,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     expect(exchange.cards).toHaveLength(0)
     expect(pile.cards).toHaveLength(pileCount)
     expect(room.cards).toHaveLength(entityCount)
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([48])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([48])
     expect(room.cardIndex.get(48)!.publicCandidates).toEqual([])
     expect(room.hasSkillState(JIE_LI_SPELL_ID)).toBe(false)
   })
@@ -201,7 +202,7 @@ describe('族钟繇诫厉视角权限与交换', () => {
     expect(exchange.cards).toHaveLength(0)
     expect(pile.cards).toHaveLength(pileCount)
     expect(room.cards).toHaveLength(entityCount)
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([91, 158])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([91, 158])
     expect(room.hasSkillState(JIE_LI_SPELL_ID)).toBe(false)
   })
 
@@ -219,7 +220,9 @@ describe('族钟繇诫厉视角权限与交换', () => {
     expect(exchange.cards).toHaveLength(0)
     expect(pile.cards).toHaveLength(pileCount)
     expect(room.cards).toHaveLength(entityCount)
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([81, 91, 99, 158])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([
+      81, 91, 99, 158
+    ])
     expect(room.hasSkillState(JIE_LI_SPELL_ID)).toBe(false)
   })
 

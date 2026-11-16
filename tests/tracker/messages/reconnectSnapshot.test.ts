@@ -1,3 +1,5 @@
+import { getPublicZoneConsistencyIssues } from '@/tracker/room/publicZones'
+import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ReconnectGameSnapshot, ReconnectSeatInfo } from '@/tracker/types'
 import { trackerLogger } from '@/utils/logger'
@@ -62,7 +64,7 @@ describe('重连消息中的残局快照', () => {
     const { controller, room, errorSpy } = createReconnectRoom()
     controller.degradeTrackerRoom(reconnectSnapshot())
     const pileCards = room.getZone('pile').cards.slice()
-    const generation = room.pileIdentityLedger.getSnapshot().cohort.generation
+    const generation = getPileIdentitySnapshot(room.pileIdentityLedger).cohort.generation
     const snapshot = { SeatIndex, Count: 3, CardIDs: [11, 0, 12] }
 
     controller.restoreTrackerReconnectHand(snapshot)
@@ -83,8 +85,8 @@ describe('重连消息中的残局快照', () => {
     expect(room.cards).toHaveLength(entityCount)
     expect(room.getZone('pile').cards).toEqual(pileCards)
     expect(room.isPileCountKnown).toBe(true)
-    expect(room.pileIdentityLedger.getSnapshot().accountedPileCount).toBe(71)
-    expect(room.pileIdentityLedger.getSnapshot().cohort.generation).toBe(generation)
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).accountedPileCount).toBe(71)
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).cohort.generation).toBe(generation)
     expect(room.unlocatedIdentities.has(11)).toBe(false)
     expect(room.unlocatedIdentities.has(12)).toBe(false)
     expect(room.getPlayer(7)?.equipCards.map((card) => card.id)).toEqual([122, 136])
@@ -210,7 +212,7 @@ describe('重连消息中的残局快照', () => {
     expect(room.trackingMode).toBe('degraded')
     expect(room.isPileCountKnown).toBe(true)
     expect(room.getZone('pile').cards).toHaveLength(71)
-    expect(room.pileIdentityLedger.getSnapshot().accountedPileCount).toBe(71)
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).accountedPileCount).toBe(71)
     const player = room.getPlayer(7)!
     expect(player.hasObservedHandCount).toBe(true)
     expect(player.observedHandCount).toBe(0)
@@ -219,7 +221,7 @@ describe('重连消息中的残局快照', () => {
     expect(player.figure).toBe(2)
     expect(player.equipCards.map((card) => card.id)).toEqual([122, 136])
     expect(player.judgeCards.map((card) => [card.id, card.spellID])).toEqual([[32, 15]])
-    expect(room.publicZones.getPublicZoneConsistencyIssues()).toEqual([])
+    expect(getPublicZoneConsistencyIssues(room)).toEqual([])
     expect(view.calls.unmount).toBe(0)
     expect(warn.mock.calls.filter(([message]) => message === '牌堆身份账本异常')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
@@ -264,7 +266,7 @@ describe('重连消息中的残局快照', () => {
     expect(room.getZone('discard').cards.map((card) => card.id)).toEqual([122, 32])
     expect(room.getZone('pile').cards).toHaveLength(68)
     expect(room.isPileCountKnown).toBe(true)
-    expect(room.pileIdentityLedger.getSnapshot().accountedPileCount).toBe(68)
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).accountedPileCount).toBe(68)
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -333,12 +335,12 @@ describe('重连消息中的残局快照', () => {
   it('重连数量快照不会清空已有弃牌，也不会推进洗牌世代', () => {
     const { controller, room, errorSpy } = createReconnectRoom()
     controller.syncTrackerMove(protocolMove({ CardIDs: [99], ToID: 255, ToZone: 2, MoveType: 4 }))
-    const generation = room.pileIdentityLedger.getSnapshot().cohort.generation
+    const generation = getPileIdentitySnapshot(room.pileIdentityLedger).cohort.generation
 
     controller.degradeTrackerRoom({ CardPileCount: 71 })
 
     expect(room.getZone('discard').cards.map((card) => card.id)).toEqual([99])
-    expect(room.pileIdentityLedger.getSnapshot().cohort.generation).toBe(generation)
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).cohort.generation).toBe(generation)
     expect(room.getZone('pile').cards).toHaveLength(71)
     expect(errorSpy).not.toHaveBeenCalled()
   })
@@ -346,15 +348,15 @@ describe('重连消息中的残局快照', () => {
   it('数量快照不能保留断线前的已知牌顶位置，身份仍可在后续协议中重新揭示', () => {
     const { controller, room, errorSpy } = createReconnectRoom()
     controller.revealTrackerCardsInZone({ zone: 1, id: 255 }, [11])
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([11])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([11])
 
     controller.degradeTrackerRoom({ CardPileCount: 71 })
 
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([])
     expect(room.getZone('pile').cards.every((card) => card.isAnonymous)).toBe(true)
     expect(room.unlocatedIdentities.has(11)).toBe(true)
     controller.revealTrackerCardsInZone({ zone: 1, id: 255 }, [11])
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([11])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([11])
     expect(room.getZone('pile').cards).toHaveLength(71)
     expect(room.isPileCountKnown).toBe(true)
     expect(errorSpy).not.toHaveBeenCalled()
@@ -379,7 +381,7 @@ describe('重连消息中的残局快照', () => {
     expect(room.getZone('pile').cards).toHaveLength(6)
     expect(room.isPileCountKnown).toBe(true)
     expect(room.trackingMode).toBe('degraded')
-    expect(room.pileIdentityLedger.getSnapshot().accountedPileCount).toBe(6)
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).accountedPileCount).toBe(6)
     expect(errorSpy).not.toHaveBeenCalled()
   })
 })

@@ -1,3 +1,4 @@
+import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { describe, expect, it, vi } from 'vitest'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { fromPublicCandidate } from '@/tracker/candidate/locationCandidate'
@@ -16,24 +17,24 @@ describe('Room 身份事务', () => {
       from: { type: 'public', zone: 'pile', position: POSITION_TOP },
       to: { type: 'player', seatID: 1, subZone: 'hand' }
     })
-    expect(room.pileIdentityLedger.getSnapshot().locatedIdentityIDs).toEqual([1, 2])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).locatedIdentityIDs).toEqual([1, 2])
     room.moveCards([1, 2], {
       from: { type: 'player', seatID: 1, subZone: 'hand' },
       to: { type: 'public', zone: 'discard', position: POSITION_TOP }
     })
-    expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([1, 2])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual([1, 2])
     room.moveCards([1], {
       from: { type: 'public', zone: 'discard', position: POSITION_BOTTOM },
       to: { type: 'public', zone: 'pile', position: POSITION_BOTTOM }
     })
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([1])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([1])
     room.moveCards([2], {
       from: { type: 'public', zone: 'discard', position: POSITION_RANDOM },
       to: { type: 'public', zone: 'pile', position: POSITION_RANDOM }
     })
     expect(room.cardIndex.has(2)).toBe(false)
     expect(room.unlocatedIdentities.has(2)).toBe(true)
-    expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual([])
     expect(room.assertPileIdentityLedgerConsistency('direct-moves')).toEqual([])
   })
 
@@ -49,8 +50,8 @@ describe('Room 身份事务', () => {
       moveType: MOVE_TYPE.DRAW
     })
     expect(room.cardIndex.get(1)?.resolvedSeat).toBe(1)
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([])
-    expect(room.pileIdentityLedger.getSnapshot().accountedPileCount).toBe(2)
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).accountedPileCount).toBe(2)
     expect(room.cards).toHaveLength(physicalCount)
     expect(room.assertPileIdentityLedgerConsistency('direct-draw')).toEqual([])
   })
@@ -58,7 +59,7 @@ describe('Room 身份事务', () => {
   it('匿名化预检失败时实体和账本都不提交', () => {
     const { room } = createTestRoom({ cardIDs: [1, 2, 3] })
     const pileBefore = [...room.getPublicZone('pile').cards]
-    const ledgerBefore = room.pileIdentityLedger.getSnapshot()
+    const ledgerBefore = getPileIdentitySnapshot(room.pileIdentityLedger)
     const warn = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
     try {
       expect(
@@ -71,7 +72,7 @@ describe('Room 身份事务', () => {
         })
       ).toBe(false)
       expect(room.getPublicZone('pile').cards).toEqual(pileBefore)
-      expect(room.pileIdentityLedger.getSnapshot()).toEqual(ledgerBefore)
+      expect(getPileIdentitySnapshot(room.pileIdentityLedger)).toEqual(ledgerBefore)
       expect(room.getPlayer(1)?.observedHandCount).toBe(0)
     } finally {
       warn.mockRestore()
@@ -84,9 +85,9 @@ describe('Room 身份事务', () => {
       currentUserID: 1,
       cardIDs: [1, 2, 3]
     })
-    const revision = room.pileIdentityLedger.getSnapshot().revision
+    const revision = getPileIdentitySnapshot(room.pileIdentityLedger).revision
     controller.syncTrackerMove(protocolMove({ CardIDs: [1], ToID: 1 }))
-    expect(room.pileIdentityLedger.getSnapshot().revision).toBe(revision + 1)
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).revision).toBe(revision + 1)
     expect(room.assertPileIdentityLedgerConsistency('controller-once')).toEqual([])
   })
 })
@@ -159,7 +160,7 @@ describe('公共范围身份的物理容量', () => {
     expect(room.cards).toHaveLength(4)
     expect(room.cards.filter((card) => card.location === 'player')).toHaveLength(3)
     expect(room.getPlayer(1)?.knownHandCards.map((card) => card.id)).toEqual([1])
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([])
     expect(room.assertPileIdentityLedgerConsistency('detached-range-draw')).toEqual([])
   })
 

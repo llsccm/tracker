@@ -1,3 +1,4 @@
+import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { describe, expect, it } from 'vitest'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { normalizeTrackerMovePosition } from '@/tracker/protocol/protocolRules'
@@ -58,7 +59,7 @@ describe('回堆位置与匿名身份', () => {
     expect(pile.cards).toHaveLength(3)
     expect(card.isAnonymous).toBe(true)
     expect(room.cardIndex.has(17)).toBe(false)
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([])
     expect(room.assertPileIdentityLedgerConsistency('test:random-pile-reinsert')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
@@ -89,7 +90,7 @@ describe('回堆位置与匿名身份', () => {
     expect(pile.cards.every((card) => card.isAnonymous && !card.isKnown)).toBe(true)
     expect(room.cardIndex.has(17)).toBe(false)
     expect(room.unlocatedIdentities.has(17)).toBe(true)
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([])
     expect(room.assertPileIdentityLedgerConsistency('test:generic-random-return')).toEqual([])
 
     controller.syncTrackerMove(protocolMove({ CardIDs: [], CardCount: 1 }))
@@ -154,7 +155,7 @@ describe('回堆位置与匿名身份', () => {
       expect(returnedCard).toMatchObject({ id: 17, location: 'pile', isKnown: true })
       expect(room.cardIndex.get(17)).toBe(returnedCard)
       expect(room.unlocatedIdentities.has(17)).toBe(false)
-      expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([17])
+      expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([17])
       expect(room.assertPileIdentityLedgerConsistency('test:exact-return')).toEqual([])
       expect(errorSpy).not.toHaveBeenCalled()
     }

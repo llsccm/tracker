@@ -1,3 +1,4 @@
+import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { describe, expect, it } from 'vitest'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import {
@@ -84,15 +85,15 @@ describe('骋烈：其他视角的牌顶展示与暗取', () => {
       }
 
       expect(pile.cards).toEqual(remainingCards)
-      expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([])
+      expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([])
       for (const id of revealedIDs) {
         expect(room.cardIndex.get(id)!.location).toBe('discard')
         expect(room.cardIndex.get(id)!.suspended).toBe(false)
       }
       expect(room.zones.get('discard')!.cards).toHaveLength(3)
-      expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs.sort()).toEqual(
-        [...revealedIDs].sort()
-      )
+      expect(
+        getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs.sort()
+      ).toEqual([...revealedIDs].sort())
       expect(room.zones.get('exchange')!.cards).toHaveLength(0)
       expect(room.getPlayer(0)!.knownHandCards).toHaveLength(0)
       expect(room.getPlayer(0)!.observedHandCount).toBe(1)

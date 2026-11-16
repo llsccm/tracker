@@ -1,3 +1,4 @@
+import { getPublicZoneConsistencyIssues } from '@/tracker/room/publicZones'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
@@ -705,7 +706,7 @@ describe('木牛流马候选与收敛', () => {
             card.seats.has(7)
         )
       ).toHaveLength(0)
-      expect(room.publicZones.getPublicZoneConsistencyIssues()).toEqual([])
+      expect(getPublicZoneConsistencyIssues(room)).toEqual([])
     })
 
     it('整手离场揭示 [29,50,113] 时应收敛 141 进木马且不产生实体缺口', () => {

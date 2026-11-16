@@ -1,7 +1,11 @@
-import { AmbiguousKnownIndex } from '../projection/AmbiguousKnownIndex'
+import { AmbiguousKnownIndex, toComparableAmbiguousIndex } from '../projection/AmbiguousKnownIndex'
 import type { Card } from '../model/Card'
-import { CardLocationIndex } from '../projection/CardLocationIndex'
-import type { PileIdentityConsistencyIssue } from '../PileIdentityLedger'
+import { CardLocationIndex, toComparableLocationIndex } from '../projection/CardLocationIndex'
+import {
+  assertPileIdentityConsistency,
+  type PileIdentityConsistencyIssue
+} from '../PileIdentityLedger'
+import { getPublicZoneConsistencyIssues } from './publicZones'
 import type { Room } from '../Room'
 import type { CardID } from '../types'
 import { trackerLogger } from '@/utils/logger'
@@ -65,11 +69,16 @@ export class RoomDiagnostics {
     const suspendedIdentityIDs = new Set(
       Array.from(room.suspendedKnownCards, (card) => card.id).filter((cardID) => cardID > 0)
     )
-    const issues = room.pileIdentityLedger.assertConsistency(pile.cards.length, context, {
-      deckIdentityIDs: room.deckIdentities,
-      unlocatedIdentityIDs: room.unlocatedIdentities,
-      suspendedIdentityIDs
-    })
+    const issues = assertPileIdentityConsistency(
+      room.pileIdentityLedger,
+      pile.cards.length,
+      context,
+      {
+        deckIdentityIDs: room.deckIdentities,
+        unlocatedIdentityIDs: room.unlocatedIdentities,
+        suspendedIdentityIDs
+      }
+    )
     const hiddenPileIdentityIDs = pile.cards
       .filter((card) => card.id > 0 && card.isKnown !== true)
       .map((card) => card.id)
@@ -200,7 +209,7 @@ export class RoomDiagnostics {
       }
     })
 
-    const slotIssues = room.publicZones.getPublicZoneConsistencyIssues()
+    const slotIssues = getPublicZoneConsistencyIssues(room)
     const issues = [
       ...identityIssues.map((issue) => ({ domain: 'identity', ...issue })),
       ...slotIssues.map((issue) => ({ domain: 'slot', ...issue }))
@@ -234,8 +243,8 @@ export class RoomDiagnostics {
     const shadow = new CardLocationIndex()
     shadow.rebuild(room, { record: false })
 
-    const live = JSON.stringify(room.locationIndex.toComparable(room))
-    const expected = JSON.stringify(shadow.toComparable(room))
+    const live = JSON.stringify(toComparableLocationIndex(room.locationIndex, room))
+    const expected = JSON.stringify(toComparableLocationIndex(shadow, room))
 
     if (live !== expected) {
       /* prettier-ignore */
@@ -249,8 +258,8 @@ export class RoomDiagnostics {
     const shadow = new AmbiguousKnownIndex(room)
     shadow.rebuild(groups, { record: false })
 
-    const live = JSON.stringify(room.ambiguousKnownIndex.toComparable(room))
-    const expected = JSON.stringify(shadow.toComparable(room))
+    const live = JSON.stringify(toComparableAmbiguousIndex(room.ambiguousKnownIndex, room))
+    const expected = JSON.stringify(toComparableAmbiguousIndex(shadow, room))
 
     if (live !== expected) {
       /* prettier-ignore */
