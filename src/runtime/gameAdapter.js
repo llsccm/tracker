@@ -27,16 +27,6 @@ export function redefine(obj, prop, value) {
 }
 
 /**
- * 获取当前页面的 window 对象（兼容 GM/Tampermonkey 脚本环境下的 unsafeWindow）
- *
- * @returns {Window & typeof globalThis}
- */
-function getPageWindow() {
-  if (typeof unsafeWindow == 'object') return unsafeWindow
-  return window
-}
-
-/**
  * 辅助工具函数：根据事件名称在监听者列表中检索对应的 caller 对象
  *
  * @param {any} emitter 事件派发器
@@ -114,16 +104,6 @@ function findInStage(stage, key) {
  * @type {Object<string, (runtime: GameRuntime) => any>}
  */
 const classResolvers = {
-  GameContext(_runtime) {
-    const page = getPageWindow()
-    const ctx = page?.GameContext || window.Laya?.Browser?.window?.GameContext || window.GameContext
-    if (ctx && typeof ctx.GetModeType == 'function' && typeof ctx.GetGroupID == 'function') {
-      return ctx
-    }
-  },
-  GetGoodsByID(runtime) {
-    return runtime.get('SgxFPreviewWindow', null, 0)?.getGoodConfig
-  },
   SgsText(runtime) {
     return runtime.scene?.topMenu?.timeLabel?.constructor
   },
@@ -483,7 +463,7 @@ export class GameRuntime {
   ShowWindow(name) {
     const GameEventDispatcher = this.ged
     if (!GameEventDispatcher) return
-    GameEventDispatcher.i?.(name)
+    GameEventDispatcher._?.(name)
   }
 
   // 不能使用 WindowManager.GetWindow 此方法会找不到窗口会创建一个 造成污染
