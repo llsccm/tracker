@@ -322,7 +322,7 @@ export class RoomIdentity {
 
     const existing = room.cardIndex.get(normalizedCardID)
     if (existing) {
-      if (room.detachedKnownCards.has(existing) && !target?.isAnonymous) return null
+      if (room.detachedKnownCards.has(existing)) return target?.isAnonymous ? target : null
       return existing
     }
     if (!target || target.hasRealIdentity) return null
