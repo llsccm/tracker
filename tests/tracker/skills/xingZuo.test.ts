@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
+import { fromPublicCandidate } from '@/tracker/candidate/locationCandidate'
+import { createPublicCandidate } from '@/tracker/candidate/publicCandidate'
 import {
   createErrorSpy,
   protocolMove,
@@ -49,6 +51,38 @@ function exchangeMoves(pileCount = 3, handCount = 4) {
 }
 
 describe('兴作：牌堆底部经交换区换入手牌', () => {
+  it.each([1, 5])('第 %s 步揭示范围身份时只物化原牌底批次', (revealStep) => {
+    const { controller, room, errorSpy } = setupExchange([])
+    const pile = room.getZone('pile')
+    const originalBottom = pile.cards.slice(0, 3)
+    const remainingPile = pile.cards.slice(3)
+    const candidate = fromPublicCandidate(createPublicCandidate('pile', POSITION_BOTTOM, 3))!
+    const identities = room.revealPublicCandidates([1, 2, 3], candidate)
+    expect(identities.every((card) => room.detachedKnownCards.has(card))).toBe(true)
+    const moves = exchangeMoves()
+    moves[revealStep - 1].CardIDs = [1, 2, 3]
+
+    controller.syncTrackerMove(moves[0])
+    expect(hasSkillState(room, 3776)).toBe(true)
+    expect(room.publicZones.getExchangeBatch('3776:pile:7').cards).toEqual(originalBottom)
+    moves.slice(1).forEach((move) => controller.syncTrackerMove(move))
+
+    expect(room.getPlayer(4)!.knownHandCards.map((card) => card.id)).toEqual([1, 2, 3])
+    expect(room.getPlayer(4)!.unknownCardCount).toBe(0)
+    expect(originalBottom.every((card) => card.location === 'player' && card.owner === 4)).toBe(
+      true
+    )
+    expect(room.cardIndex.get(1)).toBe(originalBottom[0])
+    expect(room.cardIndex.get(2)).toBe(originalBottom[1])
+    expect(room.detachedKnownCards.size).toBe(0)
+    expect(pile.cards.slice(4)).toEqual(remainingPile)
+    expect(room.getZone('exchange').cards).toEqual([])
+    expect(room.cards).toHaveLength(20)
+    expect(hasSkillState(room, 3776)).toBe(false)
+    expect(assertPileIdentityLedgerConsistency(room, '3776:detached-return')).toEqual([])
+    expect(errorSpy).not.toHaveBeenCalled()
+  })
+
   it.each([{ bottomIDs: [1, 2, 3] }, { bottomIDs: [1] }, { bottomIDs: [] }])(
     '底部已知牌 $bottomIDs 在六步交换后仍显示为目标手牌',
     ({ bottomIDs }) => {

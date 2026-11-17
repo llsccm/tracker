@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { POSITION_RANDOM } from '@/tracker/candidate/cardPositions'
+import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
+import { fromPublicCandidate } from '@/tracker/candidate/locationCandidate'
+import { createPublicCandidate } from '@/tracker/candidate/publicCandidate'
 import { MOVE_TYPE } from '@/tracker/protocol/MoveEventNormalizer'
 import { GUAN_XU_STATE_KEY } from '@/tracker/skill/GuanXu'
-import { protocolMove, createReadyControllerHarness } from '../helpers/trackerController'
+import {
+  createErrorSpy,
+  protocolMove,
+  createReadyControllerHarness
+} from '../helpers/trackerController'
 import { hasSkillState } from '@/tracker/room/RoomBase'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
 
 type RawMoveOverrides = NonNullable<Parameters<typeof protocolMove>[0]>
 
@@ -20,6 +27,60 @@ function guanXuMove(overrides: RawMoveOverrides): ReturnType<typeof protocolMove
 }
 
 describe('黄承彦观虚目标视角交换', () => {
+  it.each([987, 988])('技能 %s 的范围身份进入牌堆桶后保留批次与拆回顺序', (spellID) => {
+    const errorSpy = createErrorSpy()
+    const { controller, room } = createReadyControllerHarness({
+      players: [1, 6].map((seat) => ({ SeatID: seat, ClientID: seat })),
+      currentUserID: 1,
+      cardIDs: Array.from({ length: 10 }, (_, index) => index + 1)
+    })
+    controller.syncTrackerMove(protocolMove({ ToID: 1, CardCount: 1, CardIDs: [10] }))
+    const returnedHandCard = room.cardIndex.get(10)!
+    const pile = room.getZone('pile')
+    const pileCount = pile.cards.length
+    const originalTopFive = pile.cards.slice(-5)
+    const candidate = fromPublicCandidate(createPublicCandidate('pile', POSITION_TOP, 5))!
+    const identities = room.revealPublicCandidates([1, 2, 3, 4, 5], candidate)
+    expect(identities.every((card) => room.detachedKnownCards.has(card))).toBe(true)
+
+    const moves = [
+      { FromID: 255, FromZone: 1, ToID: 6, ToZone: 10, CardCount: 5, CardIDs: [1, 2, 3, 4, 5] },
+      { FromID: 1, FromZone: 5, ToID: 1, ToZone: 10, CardCount: 1, CardIDs: [10] },
+      { FromID: 6, FromZone: 10, ToID: 1, ToZone: 10, CardCount: 1, CardIDs: [1] },
+      {
+        FromID: 1,
+        FromZone: 10,
+        ToID: 6,
+        ToZone: 10,
+        CardCount: 1,
+        CardIDs: [10],
+        ToPosition: 0
+      },
+      { FromID: 6, FromZone: 10, ToID: 255, ToZone: 1, CardCount: 5, CardIDs: [] },
+      { FromID: 1, FromZone: 10, ToID: 1, ToZone: 5, CardCount: 1, CardIDs: [1] }
+    ].map((move) => guanXuMove({ SpellID: spellID, ...move }))
+
+    controller.syncTrackerMove(moves[0])
+
+    expect(hasSkillState(room, GUAN_XU_STATE_KEY)).toBe(true)
+    expect(room.publicZones.getExchangeBatch(`${spellID}:pile:6`).cards).toEqual(originalTopFive)
+    expect(room.cardIndex.get(1)).toBe(originalTopFive[0])
+    expect(room.cardIndex.get(2)).toBe(originalTopFive[1])
+    expect(room.detachedKnownCards.size).toBe(0)
+    expect(assertPileIdentityLedgerConsistency(room, 'guanXu:detached-stage')).toEqual([])
+
+    moves.slice(1).forEach((move) => controller.syncTrackerMove(move))
+
+    expect(room.getPlayer(1)!.knownHandCards.map((card) => card.id)).toEqual([1])
+    expect(pile.cards.slice(-5)).toEqual([returnedHandCard, ...originalTopFive.slice(1)])
+    expect(pile.cards).toHaveLength(pileCount)
+    expect(room.getZone('exchange').cards).toEqual([])
+    expect(room.cards).toHaveLength(10)
+    expect(hasSkillState(room, GUAN_XU_STATE_KEY)).toBe(false)
+    expect(assertPileIdentityLedgerConsistency(room, 'guanXu:detached-return')).toEqual([])
+    expect(errorSpy).not.toHaveBeenCalled()
+  })
+
   it('目标手牌按 ToPosition 的确定槽位回堆，选中的牌堆身份进入目标手牌且不补建实体', () => {
     const targetSeat = 1
     const actorSeat = 6
