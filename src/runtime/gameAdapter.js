@@ -216,9 +216,9 @@ export class GameRuntime {
   /**
    * 获取或注册一个类
    * 如果传入 value 则注册该类；如果 value 是函数则注册其返回值。
-   * 若无 value，则根据预设规则（如 GameContext 等）在页面 window 或 Laya 下自动寻找并注册。
+   * 若无 value，则根据预设规则在页面 window 或 Laya 下自动寻找并注册。
    *
-   * @param {string} name 类的唯一命名（如 'GameContext', 'SgsText' 等）
+   * @param {string} name 类的唯一命名（如 'SgsText' 等）
    * @param {boolean} [anew=false] 是否强制重新解析/注册
    * @param {any} [value] 注册的类定义或生成类的函数
    * @returns {any} 返回注册成功的类（构造函数）

@@ -41,14 +41,6 @@ export function createChatRoomLink(laya, wait, redefine) {
   }
 
   function focusChatRoomMode() {
-    const ctx = laya.class('GameContext')
-    if (ctx) {
-      ctx.ReqEnterModeID = CHAT_ROOM_MODE_ID
-      ctx.ReqEnterGroupID = CHAT_ROOM_SECTION
-      ctx.HallEnterModeID = CHAT_ROOM_MODE_ID
-      ctx.HallEnterGroupID = CHAT_ROOM_SECTION
-      ctx.SetModeType?.(CHAT_ROOM_MODE_ID, CHAT_ROOM_SECTION)
-    }
     const roomListView = laya.scene?.roomListView
     if (!roomListView) return
     roomListView.modeId = CHAT_ROOM_MODE_ID
