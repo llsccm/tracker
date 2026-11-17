@@ -13,6 +13,7 @@ import {
   type MoveEventDraft
 } from './moveEventUtils'
 import { CARD_INSTANCE_STATUS } from '../projection/CardCounter'
+import { defineSkillState } from './skillState'
 
 const CHENG_LIE_DISCARD_QUEUE = 'chengLieDiscardQueue'
 
@@ -24,6 +25,9 @@ interface ChengLieState {
   sourceEvent?: MoveSourceEvent
 }
 
+const chengLieState = defineSkillState<ChengLieState>(3208)
+const chengLieDiscardQueue = defineSkillState<number[]>(CHENG_LIE_DISCARD_QUEUE)
+
 /** 骋烈暗标记不绑定身份；按约定在标记弃置时逐张近似回收展示牌。 */
 export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEventDraft {
   const move = event.protocol
@@ -34,13 +38,13 @@ export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEve
   const fromZoneParam = move.FromZoneParam
   const moveType = move.MoveType
 
-  const pendingIDs = room.readSkillState<number[]>(CHENG_LIE_DISCARD_QUEUE)
+  const pendingIDs = chengLieDiscardQueue.read(room)
   if (hasPositiveID(event.cardIDs)) {
     // 显式身份优先，已经重新出现的牌不再参与之后的近似弃置。
     if (pendingIDs) {
       const ids = new Set(getPositiveIDs(event.cardIDs))
-      room.setSkillState(
-        CHENG_LIE_DISCARD_QUEUE,
+      chengLieDiscardQueue.set(
+        room,
         pendingIDs.filter((id) => !ids.has(id))
       )
     }
@@ -51,8 +55,8 @@ export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEve
     const availableIDs = pendingIDs.filter((id) => room.cardIndex.get(id)?.location === 'outside')
     const cardIDs = availableIDs.slice(0, getCount(event))
     const remainingIDs = availableIDs.slice(cardIDs.length)
-    if (remainingIDs.length > 0) room.setSkillState(CHENG_LIE_DISCARD_QUEUE, remainingIDs)
-    else room.deleteSkillState(CHENG_LIE_DISCARD_QUEUE)
+    if (remainingIDs.length > 0) chengLieDiscardQueue.set(room, remainingIDs)
+    else chengLieDiscardQueue.clear(room)
     // 这是用户指定的近似记账，并非协议公开的对应关系；按数量消费标记暗槽，
     // 同时把推定身份提交给弃牌账本，供后续洗牌回收。
     return patchEvent(event, { cardIDs, options: { pileIdentityCardIDs: cardIDs } })
@@ -88,7 +92,7 @@ export function decorateChengLieMove(event: MoveEventDraft, room: Room): MoveEve
   const cards = room.getPublicEndpointCards('pile', getCount(event), POSITION_TOP)
   const knownCards = new Set(cards.filter((card) => card.id > 0 && card.isKnown === true))
   const cardIDs = Array.from(knownCards, (card) => card.id)
-  room.setSkillState(CHENG_LIE_DISCARD_QUEUE, [...new Set([...(pendingIDs ?? []), ...cardIDs])])
+  chengLieDiscardQueue.set(room, [...new Set([...(pendingIDs ?? []), ...cardIDs])])
   return patchEvent(event, {
     cardIDs,
     from: event.from.type === 'public' ? { ...event.from, position: POSITION_TOP } : event.from,
@@ -244,7 +248,7 @@ function settleChengLieInference(event: MoveEventDraft, room: Room, state: Cheng
     })
   }
 
-  room.deleteSkillState(3208)
+  chengLieState.clear(room)
 }
 
 function isChengLieFinalDiscard(
@@ -264,7 +268,7 @@ function getChengLieDiscardHint(move: NormalizedMoveCardFields): boolean {
 }
 
 function getPendingChengLieState(room: Room): ChengLieState | null {
-  const state = room.readSkillState<ChengLieState>(3208)
+  const state = chengLieState.read(room)
   return state && state.revealedIDs.length > 0 ? state : null
 }
 
@@ -311,7 +315,7 @@ function getAmbiguousKnownHandCards(room: Room): Card[] {
 }
 
 function getChengLieState(room: Room): ChengLieState {
-  const state = room.ensureSkillState<ChengLieState>(3208, () => ({
+  const state = chengLieState.ensure(room, () => ({
     revealedIDs: [],
     finalDiscardIDs: [],
     casterSeatID: null,
