@@ -289,6 +289,8 @@ Phase 6 已删除 belief epoch、三模型只读 observer、控制台报告入�
 - 结构性优化导致数字下降：可更新快照，并在 PR 说明收益场景
 - 无关改动导致数字上升：先解释原因；不能无说明地 `-u`
 - 新增必要全量扫描：先问能否改增量；若必须全量，插桩 + 基线场景同步落地
+- `recordTraversal(...)` 的调用点必须放在 `import.meta.env.DEV` 分支内，连同统计参数一起从
+  发布产物裁剪；Vitest 保留 DEV 插桩，不能通过关闭测试统计来降低基线数字。
 - `createTestRoom()` 默认对齐生产 `Room.initDeck()` 的匿名牌堆；暗牌单元夹具可用
   `takeAnonymousCard()` 取出未分配身份的物理槽，不把 CardID 当作暗牌索引。
   `materializeDeckIdentities: true` 仅用于显式构造历史正 ID 暗槽异常或性能对照。

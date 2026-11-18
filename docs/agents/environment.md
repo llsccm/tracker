@@ -14,6 +14,9 @@
 - 构建的 `--mode` 选择环境文件与发布元信息，不直接决定 `import.meta.env.DEV`。
   未显式覆盖 `NODE_ENV` 时，`pnpm build` 与 `pnpm build:prod` 都采用 `NODE_ENV=production`，
   DEV 诊断会被移除。需要带诊断的构建时，显式设置 `NODE_ENV=development` 后再执行 `pnpm build`。
+- 协议录制器及控件、遍历统计调用、tracker 的 `info` / `debug` 详细日志仅保留在 DEV 环境。
+  发布版保留 `warn` / `error`，由调试日志开关控制；开关关闭时不构造日志参数。
+  录制控件在远端 HTML 中默认隐藏，仅由 DEV 脚本绑定后显示；更新 HTML 时仍需部署远端资源。
 - CDN 渠道构建：`pnpm build:cdn`（`releases` 分支 / jsDelivr 渠道）。
 - 预览构建结果：`pnpm preview`。
 - 代码格式化：`pnpm format`。

@@ -98,7 +98,9 @@ export class RoomConstraints {
         rounds += 1
 
         // === 约束一：候选席位变化后同步确定拥有者 ===
-        recordTraversal('resolveConstraints:constraint1', playerCards.length)
+        if (import.meta.env.DEV) {
+          recordTraversal('resolveConstraints:constraint1', playerCards.length)
+        }
         for (const card of playerCards) {
           changed = card.syncOwnerFromSeats('room:resolveOwner') || changed
           // 判断是否过渡发散 停止追踪
@@ -148,10 +150,12 @@ export class RoomConstraints {
 
           // 只有确定明牌已经占满手牌总数时，才排除该玩家的候选明牌。
           if (player.hasObservedHandCount && player.observedHandCount - lockedKnownCount <= 0) {
-            recordTraversal(
-              'resolveConstraints:constraint3:exclusion',
-              allocation.candidateKnownCards.length
-            )
+            if (import.meta.env.DEV) {
+              recordTraversal(
+                'resolveConstraints:constraint3:exclusion',
+                allocation.candidateKnownCards.length
+              )
+            }
             for (const card of allocation.candidateKnownCards) {
               // 前一个座位的排他可能已让共享候选牌落定，只删除当前仍存在的手牌候选。
               const handLocationCandidates = card.locationCandidates.filter(
@@ -315,15 +319,17 @@ export class RoomConstraints {
     })
 
     if (created.length > 0 || released.length > 0) {
-      trackerLogger.info('匿名手牌实体对账', {
-        created: created.map((card) => ({
-          entityID: card.entityID,
-          seatID: card.resolvedSeat
-        })),
-        released: released.map((card) => ({
-          entityID: card.entityID
-        }))
-      })
+      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        trackerLogger.info('匿名手牌实体对账', {
+          created: created.map((card) => ({
+            entityID: card.entityID,
+            seatID: card.resolvedSeat
+          })),
+          released: released.map((card) => ({
+            entityID: card.entityID
+          }))
+        })
+      }
     }
     return { created, released }
   }
@@ -590,12 +596,14 @@ export class RoomConstraints {
     this.room.markCounterDirty(card)
     this.room.suspendedKnownCards.add(card)
 
-    trackerLogger.info('卡牌身份位置发散，暂停追踪', {
-      id: card.id,
-      name: card.name,
-      reason,
-      suspendedCount: this.room.suspendedKnownCards.size
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('卡牌身份位置发散，暂停追踪', {
+        id: card.id,
+        name: card.name,
+        reason,
+        suspendedCount: this.room.suspendedKnownCards.size
+      })
+    }
   }
 
   /**
@@ -606,9 +614,11 @@ export class RoomConstraints {
 
     card.suspended = false
     this.room.suspendedKnownCards.delete(card)
-    trackerLogger.info('卡牌身份再次出现，恢复追踪', {
-      id: card.id,
-      name: card.name
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('卡牌身份再次出现，恢复追踪', {
+        id: card.id,
+        name: card.name
+      })
+    }
   }
 }

@@ -306,7 +306,9 @@ export class Room extends RoomBase {
         assertPileIdentityLedgerConsistency(this, context)
       }
     } catch (error) {
-      trackerLogger.warn('牌堆身份账本移动更新失败', { error, move })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('牌堆身份账本移动更新失败', { error, move })
+      }
     }
   }
 
@@ -366,7 +368,9 @@ export class Room extends RoomBase {
         }
       }
     } catch (error) {
-      trackerLogger.warn('牌堆身份账本揭示更新失败', { error, cardIDs, location })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('牌堆身份账本揭示更新失败', { error, cardIDs, location })
+      }
     }
   }
 
@@ -415,11 +419,13 @@ export class Room extends RoomBase {
       this.constraints.syncViewGroups()
     }
 
-    trackerLogger.info('Room 注册玩家', {
-      seatIDs: this.seatIDs,
-      currentUserID,
-      mySeatID: this.mySeatID
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('Room 注册玩家', {
+        seatIDs: this.seatIDs,
+        currentUserID,
+        mySeatID: this.mySeatID
+      })
+    }
   }
 
   setPlayerShowStatuses(statuses: readonly (readonly [SeatID, number])[]): boolean {
@@ -597,7 +603,7 @@ export class Room extends RoomBase {
   resolvePublicKnownCards(
     ids: CardID[],
     target: { zoneName: PublicZoneName; position: PublicPosition } | null = null,
-    logger?: Pick<TrackerLogger, 'warn'>
+    logger?: Pick<TrackerLogger, 'warn' | 'enabled'>
   ): Card[] {
     return this.identity.resolvePublicKnownCards(ids, target, logger)
   }
@@ -609,7 +615,7 @@ export class Room extends RoomBase {
     knownCards: Card[],
     zoneName: PublicZoneName,
     options: PublicRevealPlacementOptions = {},
-    logger?: Pick<TrackerLogger, 'info'>
+    logger?: Pick<TrackerLogger, 'info' | 'enabled'>
   ): void {
     this.publicZones.placePublicRevealCards(knownCards, zoneName, options, logger)
   }
@@ -910,24 +916,28 @@ export class Room extends RoomBase {
       actualPileCount !== rebuiltPileCount ||
       discardCountAfterShuffle !== 0
     ) {
-      trackerLogger.warn('洗牌后实际牌堆实体数量不一致', {
-        reason: 'shufflePile:actualPileConsistency',
-        targetPileCount,
-        actualPileCount,
-        rebuiltPileCount,
-        discardCountAfterShuffle,
-        rebuiltPileCardIDs: rebuiltPileCards.map((card) => card.id),
-        actualPileCardIDs: pile.cards.map((card) => card.id)
-      })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('洗牌后实际牌堆实体数量不一致', {
+          reason: 'shufflePile:actualPileConsistency',
+          targetPileCount,
+          actualPileCount,
+          rebuiltPileCount,
+          discardCountAfterShuffle,
+          rebuiltPileCardIDs: rebuiltPileCards.map((card) => card.id),
+          actualPileCardIDs: pile.cards.map((card) => card.id)
+        })
+      }
     }
 
     if (newlySuspendedCardIDs.length > 0) {
-      trackerLogger.info('洗牌后暂停追踪旧牌堆世代中尚未出现的身份', {
-        suspendedCardIDs: newlySuspendedCardIDs,
-        activeSuspendedCardIDs: Array.from(this.suspendedKnownCards, (card) => card.id).filter(
-          (cardID) => cardID > 0
-        )
-      })
+      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        trackerLogger.info('洗牌后暂停追踪旧牌堆世代中尚未出现的身份', {
+          suspendedCardIDs: newlySuspendedCardIDs,
+          activeSuspendedCardIDs: Array.from(this.suspendedKnownCards, (card) => card.id).filter(
+            (cardID) => cardID > 0
+          )
+        })
+      }
     }
 
     // 账本已经在物理事务前滚动；这里完成实体投影、收敛与最终态校验，事务中间态不告警。
@@ -959,20 +969,24 @@ export class Room extends RoomBase {
       })
       if (result.committed && result.shuffleTransition) return result.shuffleTransition
 
-      trackerLogger.warn('洗牌前牌堆身份账本事务未提交，已跳过旧世代身份暂停', {
-        move,
-        pileCountAfter,
-        discardCountBefore,
-        knownDiscardIdentityIDsBefore
-      })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('洗牌前牌堆身份账本事务未提交，已跳过旧世代身份暂停', {
+          move,
+          pileCountAfter,
+          discardCountBefore,
+          knownDiscardIdentityIDsBefore
+        })
+      }
     } catch (error) {
-      trackerLogger.warn('洗牌前牌堆身份账本更新失败，已跳过旧世代身份暂停', {
-        error,
-        move,
-        pileCountAfter,
-        discardCountBefore,
-        knownDiscardIdentityIDsBefore
-      })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('洗牌前牌堆身份账本更新失败，已跳过旧世代身份暂停', {
+          error,
+          move,
+          pileCountAfter,
+          discardCountBefore,
+          knownDiscardIdentityIDsBefore
+        })
+      }
     }
     return null
   }
@@ -1048,11 +1062,6 @@ export class Room extends RoomBase {
       )
     }
 
-    // trackerLogger.info(
-    //   'moveCards 开始',
-    //   summarizeMoveContext(context, { includeKnownCardIDs: true })
-    // )
-
     this.movement.sources.applyHandTotalDelta(
       context.sourceHandSeat,
       context.targetHandSeat,
@@ -1099,13 +1108,15 @@ export class Room extends RoomBase {
       assertPileIdentityLedgerConsistency(this, 'moveCards')
     }
 
-    trackerLogger.info('moveCards 完成', {
-      ...summarizeMoveContext(context, { includeKnownCardIDs: true }),
-      publicMovedCardIDs: context.publicMovedCards.map((card) => card.id),
-      movedUnknownCardIDs: context.movedUnknownCards.map((card) => card.id),
-      dirtyCardCount: this.dirtyCards.size,
-      constraintGroupCount: this.constraintGroups.size
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('moveCards 完成', {
+        ...summarizeMoveContext(context, { includeKnownCardIDs: true }),
+        publicMovedCardIDs: context.publicMovedCards.map((card) => card.id),
+        movedUnknownCardIDs: context.movedUnknownCards.map((card) => card.id),
+        dirtyCardCount: this.dirtyCards.size,
+        constraintGroupCount: this.constraintGroups.size
+      })
+    }
 
     return true
   }
@@ -1118,12 +1129,14 @@ export class Room extends RoomBase {
       this.game.bindRoom(null)
     }
 
-    trackerLogger.info('Room destroy 开始', {
-      cardCount: this.cards.length,
-      playerCount: this.players.size,
-      constraintGroupCount: this.constraintGroups.size,
-      suspendedCount: this.suspendedKnownCards.size
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('Room destroy 开始', {
+        cardCount: this.cards.length,
+        playerCount: this.players.size,
+        constraintGroupCount: this.constraintGroups.size,
+        suspendedCount: this.suspendedKnownCards.size
+      })
+    }
 
     this.players.forEach((player) => player.reset())
     this.players.clear()
@@ -1136,6 +1149,8 @@ export class Room extends RoomBase {
     this.size = 0
     this.firstID = undefined
     this.mySeatID = undefined
-    trackerLogger.info('Room destroy 完成')
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('Room destroy 完成')
+    }
   }
 }

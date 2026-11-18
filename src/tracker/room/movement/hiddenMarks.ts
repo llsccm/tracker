@@ -126,13 +126,15 @@ export class RoomMovementHiddenMarks {
     })
 
     if (records.length > 0 || movedMarkCardIDs.length > 0) {
-      trackerLogger.info('木牛流马内部牌按标记空间协议迁移', {
-        spellID,
-        fromSeat,
-        targetSeat,
-        movedMarkCardIDs,
-        retargetedRecordIDs: records.map((record) => record.id)
-      })
+      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        trackerLogger.info('木牛流马内部牌按标记空间协议迁移', {
+          spellID,
+          fromSeat,
+          targetSeat,
+          movedMarkCardIDs,
+          retargetedRecordIDs: records.map((record) => record.id)
+        })
+      }
     }
   }
 
@@ -159,13 +161,15 @@ export class RoomMovementHiddenMarks {
     // 完整容器位置 key 不变，但约束的 candidateSeats 仍需要同步。
     this.removeHiddenMarkConstraint(record)
     this.applyHiddenMarkProjection(record)
-    trackerLogger.info('木牛流马暗标记账本更新承载座位', {
-      recordID: record.id,
-      sourceSeat: record.sourceSeat,
-      previousTargetSeat,
-      targetSeat,
-      candidateCardIDs: Array.from(record.cards, (card) => card.id)
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('木牛流马暗标记账本更新承载座位', {
+        recordID: record.id,
+        sourceSeat: record.sourceSeat,
+        previousTargetSeat,
+        targetSeat,
+        candidateCardIDs: Array.from(record.cards, (card) => card.id)
+      })
+    }
 
     return true
   }
@@ -328,16 +332,18 @@ export class RoomMovementHiddenMarks {
     this.applyHiddenMarkProjection(record)
     this.moveHiddenMarkPlaceholders(context, record)
 
-    trackerLogger.info('手牌暗置标记区候选记录', {
-      sourceSeat,
-      targetSeat,
-      spellID,
-      hiddenCount: context.unknownCount,
-      candidateCardIDs: candidateCards.map((card) => card.id),
-      knownMarkMin,
-      knownMarkMax,
-      exact: record.knownMarkMin === record.knownMarkMax
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('手牌暗置标记区候选记录', {
+        sourceSeat,
+        targetSeat,
+        spellID,
+        hiddenCount: context.unknownCount,
+        candidateCardIDs: candidateCards.map((card) => card.id),
+        knownMarkMin,
+        knownMarkMax,
+        exact: record.knownMarkMin === record.knownMarkMax
+      })
+    }
 
     return true
   }
@@ -360,13 +366,15 @@ export class RoomMovementHiddenMarks {
     })
     context.movedUnknownCards.push(...placeholderCards)
 
-    trackerLogger.debug('手牌暗置标记区占位移动', {
-      sourceSeat: record.sourceSeat,
-      targetSeat: record.targetSeat,
-      spellID: record.spellID,
-      requestedCount: count,
-      placeholderCardIDs: placeholderCards.map((card) => card.id)
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.debug('手牌暗置标记区占位移动', {
+        sourceSeat: record.sourceSeat,
+        targetSeat: record.targetSeat,
+        spellID: record.spellID,
+        requestedCount: count,
+        placeholderCardIDs: placeholderCards.map((card) => card.id)
+      })
+    }
 
     return placeholderCards
   }
@@ -477,15 +485,17 @@ export class RoomMovementHiddenMarks {
     })
 
     if (materialized.length > 0) {
-      trackerLogger.info('暗置标记占位物化未定位身份', {
-        reason,
-        spellID: record.spellID,
-        sourceSeat: record.sourceSeat,
-        targetSeat: record.targetSeat,
-        materialized,
-        remainingPlaceholderCount: record.placeholderCards.size,
-        remainingPendingIDs: pendingIDs.filter((id) => !this.room.cardIndex.has(id))
-      })
+      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        trackerLogger.info('暗置标记占位物化未定位身份', {
+          reason,
+          spellID: record.spellID,
+          sourceSeat: record.sourceSeat,
+          targetSeat: record.targetSeat,
+          materialized,
+          remainingPlaceholderCount: record.placeholderCards.size,
+          remainingPendingIDs: pendingIDs.filter((id) => !this.room.cardIndex.has(id))
+        })
+      }
     }
 
     return materialized
@@ -573,15 +583,17 @@ export class RoomMovementHiddenMarks {
     if (evictCount <= 0) {
       // confirmedMarkSlotUsers 已超过 hiddenCount，但没有存活占位可回收——
       // 说明账本配额被上游突破，需要显式告警而不是假装发生了变更。
-      trackerLogger.warn('mark 空间守恒溢出但无可回收占位', {
-        reason,
-        spellID: record.spellID,
-        sourceSeat: record.sourceSeat,
-        targetSeat: record.targetSeat,
-        hiddenCount: record.hiddenCount,
-        confirmedMarkSlotUsers,
-        overflow
-      })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('mark 空间守恒溢出但无可回收占位', {
+          reason,
+          spellID: record.spellID,
+          sourceSeat: record.sourceSeat,
+          targetSeat: record.targetSeat,
+          hiddenCount: record.hiddenCount,
+          confirmedMarkSlotUsers,
+          overflow
+        })
+      }
       return false
     }
     for (let index = 0; index < evictCount; index += 1) {
@@ -593,17 +605,19 @@ export class RoomMovementHiddenMarks {
       recycledPlaceholderEntityIDs.push(placeholder.entityID)
     }
 
-    trackerLogger.debug('mark 空间守恒回收溢出匿名占位', {
-      reason,
-      spellID: record.spellID,
-      sourceSeat: record.sourceSeat,
-      targetSeat: record.targetSeat,
-      hiddenCount: record.hiddenCount,
-      confirmedMarkSlotUsers,
-      overflow,
-      recycledPlaceholderEntityIDs,
-      remainingPlaceholderCount: record.placeholderCards.size
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.debug('mark 空间守恒回收溢出匿名占位', {
+        reason,
+        spellID: record.spellID,
+        sourceSeat: record.sourceSeat,
+        targetSeat: record.targetSeat,
+        hiddenCount: record.hiddenCount,
+        confirmedMarkSlotUsers,
+        overflow,
+        recycledPlaceholderEntityIDs,
+        remainingPlaceholderCount: record.placeholderCards.size
+      })
+    }
 
     return true
   }
@@ -797,15 +811,17 @@ export class RoomMovementHiddenMarks {
         this.setHiddenMarkConfirmation(record, card, 'mark')
         changed = true
 
-        trackerLogger.info('整手完整揭示反向收敛木马候选', {
-          spellID: record.spellID,
-          sourceSeat: record.sourceSeat,
-          targetSeat: record.targetSeat,
-          cardID: card.id,
-          revealedIDs: context.knownIDs,
-          confirmedMarkCount: record.confirmedMarkCards.size,
-          placeholderCount: record.placeholderCards.size
-        })
+        if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+          trackerLogger.info('整手完整揭示反向收敛木马候选', {
+            spellID: record.spellID,
+            sourceSeat: record.sourceSeat,
+            targetSeat: record.targetSeat,
+            cardID: card.id,
+            revealedIDs: context.knownIDs,
+            confirmedMarkCount: record.confirmedMarkCards.size,
+            placeholderCount: record.placeholderCards.size
+          })
+        }
       })
 
       // 被正 ID 挤出的匿名占位由守恒原语统一挤回来源手牌，供随后 known 物化取用；
@@ -866,17 +882,19 @@ export class RoomMovementHiddenMarks {
         } else if (card.hasLocationCandidate(candidate)) {
           changed = card.resolveLocationCandidate(candidate, 'hiddenMark:confirmedMark') || changed
         }
-        trackerLogger.info('手牌暗置标记区候选确认进标记', {
-          spellID: record.spellID,
-          sourceSeat: record.sourceSeat,
-          targetSeat: record.targetSeat,
-          cardID: card.id,
-          fromSubZone: getMoveSubZone(context.from),
-          fromSpellID: getMoveMarkSpellID(context.from),
-          confirmedMarkCount: record.confirmedMarkCards.size,
-          confirmedHandCount: record.confirmedHandCards.size,
-          placeholderCount: record.placeholderCards.size
-        })
+        if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+          trackerLogger.info('手牌暗置标记区候选确认进标记', {
+            spellID: record.spellID,
+            sourceSeat: record.sourceSeat,
+            targetSeat: record.targetSeat,
+            cardID: card.id,
+            fromSubZone: getMoveSubZone(context.from),
+            fromSpellID: getMoveMarkSpellID(context.from),
+            confirmedMarkCount: record.confirmedMarkCards.size,
+            confirmedHandCount: record.confirmedHandCards.size,
+            placeholderCount: record.placeholderCards.size
+          })
+        }
       } else if (getMoveSubZone(context.from) === 'hand') {
         const moveHandSeat =
           getMoveSeat(context.from) !== null ? getMoveSeat(context.from) : record.sourceSeat
@@ -895,16 +913,18 @@ export class RoomMovementHiddenMarks {
         if (card.hasLocationCandidate(candidate)) {
           changed = card.resolveLocationCandidate(candidate, 'hiddenMark:confirmedHand') || changed
         }
-        trackerLogger.info('手牌暗置标记区候选确认回手牌', {
-          spellID: record.spellID,
-          sourceSeat: record.sourceSeat,
-          targetSeat: record.targetSeat,
-          cardID: card.id,
-          fromSubZone: getMoveSubZone(context.from),
-          confirmedMarkCount: record.confirmedMarkCards.size,
-          confirmedHandCount: record.confirmedHandCards.size,
-          placeholderCount: record.placeholderCards.size
-        })
+        if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+          trackerLogger.info('手牌暗置标记区候选确认回手牌', {
+            spellID: record.spellID,
+            sourceSeat: record.sourceSeat,
+            targetSeat: record.targetSeat,
+            cardID: card.id,
+            fromSubZone: getMoveSubZone(context.from),
+            confirmedMarkCount: record.confirmedMarkCards.size,
+            confirmedHandCount: record.confirmedHandCards.size,
+            placeholderCount: record.placeholderCards.size
+          })
+        }
       }
 
       this.settleHiddenMarkRecord(record, 'move')
@@ -1021,15 +1041,17 @@ export class RoomMovementHiddenMarks {
       this.settleHiddenMarkRecord(record, 'observedContainerSnapshot')
     })
 
-    trackerLogger.info('手牌暗置标记区候选按可见装备容器快照收敛', {
-      spellID: markSpellID,
-      targetSeat: observedSeat,
-      visibleCardIDs: context.knownIDs,
-      resolvedHandCardIDs,
-      clearedPlaceholderIDs,
-      knownCardCount: context.knownCards.length,
-      knownIDs: context.knownIDs
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('手牌暗置标记区候选按可见装备容器快照收敛', {
+        spellID: markSpellID,
+        targetSeat: observedSeat,
+        visibleCardIDs: context.knownIDs,
+        resolvedHandCardIDs,
+        clearedPlaceholderIDs,
+        knownCardCount: context.knownCards.length,
+        knownIDs: context.knownIDs
+      })
+    }
 
     return changed
   }
@@ -1053,15 +1075,17 @@ export class RoomMovementHiddenMarks {
   private settleHiddenMarkRecord(record: HiddenMarkRecord, reason: string): void {
     if (record.confirmedHandCards.size + record.confirmedMarkCards.size < record.cards.size) return
 
-    trackerLogger.info('手牌暗置标记区候选账本结清', {
-      spellID: record.spellID,
-      sourceSeat: record.sourceSeat,
-      targetSeat: record.targetSeat,
-      reason,
-      confirmedMarkCardIDs: Array.from(record.confirmedMarkCards, (card) => card.id),
-      confirmedHandCardIDs: Array.from(record.confirmedHandCards, (card) => card.id),
-      remainingPlaceholderCount: record.placeholderCards.size
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('手牌暗置标记区候选账本结清', {
+        spellID: record.spellID,
+        sourceSeat: record.sourceSeat,
+        targetSeat: record.targetSeat,
+        reason,
+        confirmedMarkCardIDs: Array.from(record.confirmedMarkCards, (card) => card.id),
+        confirmedHandCardIDs: Array.from(record.confirmedHandCards, (card) => card.id),
+        remainingPlaceholderCount: record.placeholderCards.size
+      })
+    }
     this.getHiddenMarkState().records.delete(record.id)
   }
 }

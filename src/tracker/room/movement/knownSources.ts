@@ -67,7 +67,9 @@ export class RoomMovementKnownSources {
       // 来源没有合法匿名槽时沿用 known 缺口补建语义；范围载体只在此刻成为物理实体。
       if (this.room.detachedKnownCards.delete(card)) {
         this.room.registerCardEntity(card)
-        trackerLogger.warn('已知移动缺少匿名来源槽，范围身份转为物理实体', { cardID: card.id })
+        if (trackerLogger.enabled !== false) {
+          trackerLogger.warn('已知移动缺少匿名来源槽，范围身份转为物理实体', { cardID: card.id })
+        }
       }
       const wasSuspended = card.suspended === true || this.room.suspendedKnownCards.has(card)
       this.room.resumeSuspendedKnownCard(card)
@@ -85,36 +87,40 @@ export class RoomMovementKnownSources {
     })
 
     if (confirmedFromUnknownIDs.length > 0) {
-      trackerLogger.info('已知牌解析后补确认明牌', {
+      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        trackerLogger.info('已知牌解析后补确认明牌', {
+          knownIDs,
+          confirmedFromUnknownIDs,
+          createdCardIDs: createdCards.map((card) => card.id),
+          missingIDs,
+          fromZone,
+          fromSeat,
+          sourceIsOutside,
+          isExternalSource,
+          knownCardCreationReason
+        })
+      }
+    }
+
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.debug('已知牌解析完成', {
         knownIDs,
-        confirmedFromUnknownIDs,
-        createdCardIDs: createdCards.map((card) => card.id),
+        resolvedCardIDs: context.knownCards.map((card) => card.id),
+        knownCardStates: context.knownCards.map((card) => ({
+          id: card.id,
+          entityID: card.entityID,
+          isKnown: card.isKnown === true,
+          location: card.location
+        })),
         missingIDs,
-        fromZone,
-        fromSeat,
+        createdCardIDs: createdCards.map((card) => card.id),
+        resumedCardIDs,
+        confirmedFromUnknownIDs,
         sourceIsOutside,
         isExternalSource,
         knownCardCreationReason
       })
     }
-
-    trackerLogger.debug('已知牌解析完成', {
-      knownIDs,
-      resolvedCardIDs: context.knownCards.map((card) => card.id),
-      knownCardStates: context.knownCards.map((card) => ({
-        id: card.id,
-        entityID: card.entityID,
-        isKnown: card.isKnown === true,
-        location: card.location
-      })),
-      missingIDs,
-      createdCardIDs: createdCards.map((card) => card.id),
-      resumedCardIDs,
-      confirmedFromUnknownIDs,
-      sourceIsOutside,
-      isExternalSource,
-      knownCardCreationReason
-    })
   }
 
   private resolveOutsideSource(
@@ -173,7 +179,8 @@ export class RoomMovementKnownSources {
     // 真实身份的匿名槽。TOP/BOTTOM 仍限于协议端点；RANDOM 没有端点事实，只枚举匿名代表。
     const availableTargets = endpointCards.filter((card) => card.isAnonymous)
     const anonymousTargetCountBefore = availableTargets.length
-    const resolveAttempts: Record<string, unknown>[] = []
+    const collectDetails = import.meta.env.DEV && trackerLogger.enabled
+    const resolveAttempts: Record<string, unknown>[] | undefined = collectDetails ? [] : undefined
 
     context.knownCards = knownIDs
       .map((cardID) => {
@@ -181,17 +188,19 @@ export class RoomMovementKnownSources {
         const existingInSource = Boolean(existing && sourceZone?.cards.includes(existing))
         const hadAnonymousTarget = !existingInSource && availableTargets.length > 0
         const target = existingInSource ? existing : availableTargets.shift()
-        const ledgerBefore = {
-          inCardIndex: this.room.cardIndex.has(cardID),
-          inUnlocated: this.room.unlocatedIdentities.has(cardID),
-          inDeckIdentities: this.room.deckIdentities.has(cardID),
-          existingLocation: existing?.location ?? null,
-          existingIsKnown: existing?.isKnown === true,
-          existingInSource,
-          tookAnonymousTarget: Boolean(target && target !== existing && target.isAnonymous),
-          targetEntityID: target?.entityID ?? null,
-          remainingAnonymousTargets: availableTargets.length
-        }
+        const ledgerBefore = collectDetails
+          ? {
+              inCardIndex: this.room.cardIndex.has(cardID),
+              inUnlocated: this.room.unlocatedIdentities.has(cardID),
+              inDeckIdentities: this.room.deckIdentities.has(cardID),
+              existingLocation: existing?.location ?? null,
+              existingIsKnown: existing?.isKnown === true,
+              existingInSource,
+              tookAnonymousTarget: Boolean(target && target !== existing && target.isAnonymous),
+              targetEntityID: target?.entityID ?? null,
+              remainingAnonymousTargets: availableTargets.length
+            }
+          : undefined
         // 12 区中已经带正 ID 的暗实体仍由末尾统一确认并记录诊断；匿名槽则在这里物化。
         const materialized =
           isExternalSource && existingInSource
@@ -200,7 +209,7 @@ export class RoomMovementKnownSources {
         // 匿名端点按协议顺序一经分配就不回塞。正常情况下 materialize 必然成功；若身份
         // 分区异常导致失败，保留该名额可避免后续 CardID 错占前一张牌的物理端点。
         const resolved = materialized ?? existing
-        resolveAttempts.push({
+        resolveAttempts?.push({
           cardID,
           ...ledgerBefore,
           hadAnonymousTarget,
@@ -214,33 +223,35 @@ export class RoomMovementKnownSources {
 
     // 端点无匿名槽可物化时，与 outside/exile 一致：按协议正 ID 补建外部实体，避免 knownCards 静默短少。
     if (missingIDs.length > 0) {
-      trackerLogger.info('known 路径实体缺口，将 createExternal', {
-        knownIDs,
-        missingIDs,
-        fromZone,
-        fromPosition,
-        anonymousTargetCountBefore,
-        anonymousTargetCountAfter: availableTargets.length,
-        sourceZoneCards: (sourceZone?.cards ?? []).map((card) => ({
-          id: card.id,
-          entityID: card.entityID,
-          isKnown: card.isKnown === true,
-          isAnonymous: card.isAnonymous
-        })),
-        endpointCards: endpointCards.map((card) => ({
-          id: card.id,
-          entityID: card.entityID,
-          isKnown: card.isKnown === true,
-          isAnonymous: card.isAnonymous
-        })),
-        resolveAttempts,
-        knownIDLedgers: knownIDs.map((cardID) => ({
-          cardID,
-          inCardIndex: this.room.cardIndex.has(cardID),
-          inUnlocated: this.room.unlocatedIdentities.has(cardID),
-          inDeckIdentities: this.room.deckIdentities.has(cardID)
-        }))
-      })
+      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        trackerLogger.info('known 路径实体缺口，将 createExternal', {
+          knownIDs,
+          missingIDs,
+          fromZone,
+          fromPosition,
+          anonymousTargetCountBefore,
+          anonymousTargetCountAfter: availableTargets.length,
+          sourceZoneCards: (sourceZone?.cards ?? []).map((card) => ({
+            id: card.id,
+            entityID: card.entityID,
+            isKnown: card.isKnown === true,
+            isAnonymous: card.isAnonymous
+          })),
+          endpointCards: endpointCards.map((card) => ({
+            id: card.id,
+            entityID: card.entityID,
+            isKnown: card.isKnown === true,
+            isAnonymous: card.isAnonymous
+          })),
+          resolveAttempts,
+          knownIDLedgers: knownIDs.map((cardID) => ({
+            cardID,
+            inCardIndex: this.room.cardIndex.has(cardID),
+            inUnlocated: this.room.unlocatedIdentities.has(cardID),
+            inDeckIdentities: this.room.deckIdentities.has(cardID)
+          }))
+        })
+      }
       knownCardCreationReason = isExternalSource ? 'external-source' : 'known-fallback'
       createdCards = this.room.createExternalCards(missingIDs, missingIDs.length)
       const cardMap = new Map(context.knownCards.map((card) => [card.id, card]))
@@ -308,7 +319,8 @@ export class RoomMovementKnownSources {
       })
     }
 
-    const resolveAttempts: Record<string, unknown>[] = []
+    const collectDetails = import.meta.env.DEV && trackerLogger.enabled
+    const resolveAttempts: Record<string, unknown>[] | undefined = collectDetails ? [] : undefined
     context.knownCards = knownIDs
       .map((cardID) => {
         const existing = this.room.cardIndex.get(cardID)
@@ -318,20 +330,22 @@ export class RoomMovementKnownSources {
           this.sources.isCardInStoredSource(existing, context)
         )
         const target = existingInSource ? existing : availableTargets.shift()
-        const ledgerBefore = {
-          inCardIndex: this.room.cardIndex.has(cardID),
-          inUnlocated: this.room.unlocatedIdentities.has(cardID),
-          inDeckIdentities: this.room.deckIdentities.has(cardID),
-          existingLocation: existing?.location ?? null,
-          existingSubZone: existing?.subZone ?? null,
-          existingIsKnown: existing?.isKnown === true,
-          existingInSource,
-          tookAnonymousTarget: Boolean(target && target.isAnonymous),
-          targetSubZone: target?.subZone ?? null,
-          remainingAnonymousTargets: availableTargets.length
-        }
+        const ledgerBefore = collectDetails
+          ? {
+              inCardIndex: this.room.cardIndex.has(cardID),
+              inUnlocated: this.room.unlocatedIdentities.has(cardID),
+              inDeckIdentities: this.room.deckIdentities.has(cardID),
+              existingLocation: existing?.location ?? null,
+              existingSubZone: existing?.subZone ?? null,
+              existingIsKnown: existing?.isKnown === true,
+              existingInSource,
+              tookAnonymousTarget: Boolean(target && target.isAnonymous),
+              targetSubZone: target?.subZone ?? null,
+              remainingAnonymousTargets: availableTargets.length
+            }
+          : undefined
         const resolved = this.room.materialize(cardID, target ?? null) ?? existing
-        resolveAttempts.push({
+        resolveAttempts?.push({
           cardID,
           ...ledgerBefore,
           materializeOk: Boolean(resolved),
@@ -345,22 +359,24 @@ export class RoomMovementKnownSources {
     // 协议 known 声明的正 ID 必须落地实体：座位存在时也不能再静默丢牌。
     // 手牌缺口只 createExternal，绝不消费木马/标记匿名占位。
     if (missingIDs.length > 0) {
-      trackerLogger.warn('玩家来源 known 路径实体缺口，将 createExternal', {
-        knownIDs,
-        missingIDs,
-        fromSeat,
-        fromSubZone,
-        markSpellID,
-        sourceAnonymousCountBefore,
-        remainingAnonymousTargets: availableTargets.length,
-        resolveAttempts,
-        knownIDLedgers: knownIDs.map((cardID) => ({
-          cardID,
-          inCardIndex: this.room.cardIndex.has(cardID),
-          inUnlocated: this.room.unlocatedIdentities.has(cardID),
-          inDeckIdentities: this.room.deckIdentities.has(cardID)
-        }))
-      })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('玩家来源 known 路径实体缺口，将 createExternal', {
+          knownIDs,
+          missingIDs,
+          fromSeat,
+          fromSubZone,
+          markSpellID,
+          sourceAnonymousCountBefore,
+          remainingAnonymousTargets: availableTargets.length,
+          resolveAttempts,
+          knownIDLedgers: knownIDs.map((cardID) => ({
+            cardID,
+            inCardIndex: this.room.cardIndex.has(cardID),
+            inUnlocated: this.room.unlocatedIdentities.has(cardID),
+            inDeckIdentities: this.room.deckIdentities.has(cardID)
+          }))
+        })
+      }
       knownCardCreationReason = 'known-fallback'
       createdCards = this.room.createExternalCards(missingIDs, missingIDs.length)
       const cardMap = new Map(context.knownCards.map((card) => [card.id, card]))

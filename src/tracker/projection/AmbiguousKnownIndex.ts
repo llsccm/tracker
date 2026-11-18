@@ -51,7 +51,9 @@ export class AmbiguousKnownIndex {
    */
   rebuild(groups: ConstraintGroup[] = [], options: { record?: boolean } = {}): void {
     const { record = true } = options
-    if (record) recordTraversal('ambiguousKnownIndex:rebuild', this.room.trackedCards.length)
+    if (import.meta.env.DEV && record) {
+      recordTraversal('ambiguousKnownIndex:rebuild', this.room.trackedCards.length)
+    }
     this.items.clear()
     this.containerDependentCards.clear()
 
@@ -91,7 +93,9 @@ export class AmbiguousKnownIndex {
       }
     }
 
-    recordTraversal('ambiguousKnownIndex:applyDirty', affectedCards.size)
+    if (import.meta.env.DEV) {
+      recordTraversal('ambiguousKnownIndex:applyDirty', affectedCards.size)
+    }
     this.lastConsumedSeq = this.room.dirtyCardSeq
     return true
   }
@@ -100,7 +104,9 @@ export class AmbiguousKnownIndex {
    * 消费卡牌脏事件后，约束组结构变化只需刷新存量模糊明牌的分组与来源描述。
    */
   refreshGroupDescriptions(groups: ConstraintGroup[] = []): void {
-    recordTraversal('ambiguousKnownIndex:refreshGroups', this.items.size)
+    if (import.meta.env.DEV) {
+      recordTraversal('ambiguousKnownIndex:refreshGroups', this.items.size)
+    }
     for (const item of this.items.values()) {
       const relatedGroups = this.getRelatedGroups(item.card, groups)
       item.groups = relatedGroups

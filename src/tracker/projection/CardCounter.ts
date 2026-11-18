@@ -154,7 +154,9 @@ export class CardCounter {
     const dirtyCards = Array.from(this.dirtyCards).filter((card) => !newRoomCardSet.has(card))
     if (newRoomCards.length === 0 && dirtyCards.length === 0) return
 
-    recordTraversal('cardCounter:update', newRoomCards.length + dirtyCards.length)
+    if (import.meta.env.DEV) {
+      recordTraversal('cardCounter:update', newRoomCards.length + dirtyCards.length)
+    }
 
     // 先注册新牌：正 ID 需要补建 name/color/number/type 倒排索引，匿名牌只进入状态桶。
     newRoomCards.forEach((card) => this.addCard(card))
@@ -212,7 +214,9 @@ export class CardCounter {
 
     const appendedCards = this.room.cards.slice(this.roomCardCursor)
     if (appendedCards.length > 0) {
-      recordTraversal('cardCounter:collectNewRoomCards', appendedCards.length)
+      if (import.meta.env.DEV) {
+        recordTraversal('cardCounter:collectNewRoomCards', appendedCards.length)
+      }
     }
     const newCards = appendedCards.filter((card) => !this.registeredCards.has(card))
     this.roomCardCursor = this.room.cards.length

@@ -17,6 +17,7 @@ function readDebugLogSwitch() {
 }
 
 function isLoggerEnabled() {
+  // DEV 的 info/debug 调用由调用点门控；发布版开关只启用保留的 warn/error。
   return Boolean(import.meta.env.DEV || readDebugLogSwitch())
 }
 

@@ -122,13 +122,15 @@ export class RoomIdentity {
 
       if (invalidCards.length > 0) {
         invalidCards.forEach((card) => {
-          trackerLogger.warn('模糊来源实体匿名化失败，身份仍被视为已定位', {
-            reason: 'moveCards:ambiguousSource:preflight',
-            cardID: card.id,
-            entityID: card.entityID,
-            location: card.location,
-            isKnown: card.isKnown
-          })
+          if (trackerLogger.enabled !== false) {
+            trackerLogger.warn('模糊来源实体匿名化失败，身份仍被视为已定位', {
+              reason: 'moveCards:ambiguousSource:preflight',
+              cardID: card.id,
+              entityID: card.entityID,
+              location: card.location,
+              isKnown: card.isKnown
+            })
+          }
         })
         return { success: false, pileIdentityIDs: [] }
       }
@@ -145,13 +147,15 @@ export class RoomIdentity {
         continue
       }
 
-      trackerLogger.warn('模糊来源实体匿名化失败，身份仍被视为已定位', {
-        reason: 'moveCards:ambiguousSource',
-        cardID: card.id,
-        entityID: card.entityID,
-        location: card.location,
-        isKnown: card.isKnown
-      })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('模糊来源实体匿名化失败，身份仍被视为已定位', {
+          reason: 'moveCards:ambiguousSource',
+          cardID: card.id,
+          entityID: card.entityID,
+          location: card.location,
+          isKnown: card.isKnown
+        })
+      }
 
       if (requireSuccess) return { success: false, pileIdentityIDs: [] }
     }
@@ -173,11 +177,13 @@ export class RoomIdentity {
 
       const previousCardID = this.room.anonymizeLocatedIdentity(card, 'moveCards:randomPileReturn')
       if (previousCardID === null) {
-        trackerLogger.warn('随机入堆匿名化失败：card/index 不一致', {
-          cardID: card.id,
-          entityID: card.entityID,
-          sourceEvent: context.sourceEvent
-        })
+        if (trackerLogger.enabled !== false) {
+          trackerLogger.warn('随机入堆匿名化失败：card/index 不一致', {
+            cardID: card.id,
+            entityID: card.entityID,
+            sourceEvent: context.sourceEvent
+          })
+        }
         return
       }
       card.reset()
@@ -263,12 +269,14 @@ export class RoomIdentity {
     const room = this.room
     const previousCardID = card.id
     if (previousCardID > 0 && card.isKnown === true) {
-      trackerLogger.warn('拒绝将已知正 ID 卡牌按暗占位移出追踪区', {
-        reason,
-        cardID: previousCardID,
-        entityID: card.entityID,
-        location: card.location
-      })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('拒绝将已知正 ID 卡牌按暗占位移出追踪区', {
+          reason,
+          cardID: previousCardID,
+          entityID: card.entityID,
+          location: card.location
+        })
+      }
       return null
     }
 
@@ -279,12 +287,14 @@ export class RoomIdentity {
 
     if (shouldReleaseIdentity && releasedIdentityID === null) {
       // 索引已经异常时宁可保留一个 suspended 身份，也不能继续移出并永久漏掉该 ID。
-      trackerLogger.warn('正 ID 暗占位移出追踪区前释放身份失败，改为暂停身份', {
-        reason,
-        cardID: previousCardID,
-        entityID: card.entityID,
-        indexedCardID: room.cardIndex.get(previousCardID)?.id ?? null
-      })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('正 ID 暗占位移出追踪区前释放身份失败，改为暂停身份', {
+          reason,
+          cardID: previousCardID,
+          entityID: card.entityID,
+          indexedCardID: room.cardIndex.get(previousCardID)?.id ?? null
+        })
+      }
       card.confirmKnown()
       room.constraints.suspendKnownCard(card, `${reason}:releaseIdentityFailed`)
       return null
@@ -292,11 +302,13 @@ export class RoomIdentity {
 
     card.moveToPublicZone('outside')
     if (releasedIdentityID !== null) {
-      trackerLogger.info('正 ID 暗占位移出追踪区前已释放身份', {
-        reason,
-        releasedIdentityID,
-        replacementEntityID: card.entityID
-      })
+      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        trackerLogger.info('正 ID 暗占位移出追踪区前已释放身份', {
+          reason,
+          releasedIdentityID,
+          replacementEntityID: card.entityID
+        })
+      }
     }
     return releasedIdentityID
   }
@@ -426,7 +438,7 @@ export class RoomIdentity {
   resolvePublicKnownCards(
     ids: CardID[],
     target: { zoneName: PublicZoneName; position: PublicPosition } | null = null,
-    logger: Pick<TrackerLogger, 'warn'> = trackerLogger
+    logger: Pick<TrackerLogger, 'warn' | 'enabled'> = trackerLogger
   ): Card[] {
     const room = this.room
     if (target) {
@@ -453,11 +465,13 @@ export class RoomIdentity {
       (id) => !cardMap.has(id) && room.unlocatedIdentities.has(id)
     )
     if (unresolvedIdentityIDs.length > 0) {
-      logger.warn('揭示身份未能物化到匿名槽，已从已知牌集合中略过', {
-        reason: 'resolveKnownCards:unresolvedUnlocatedIdentity',
-        unresolvedIdentityIDs,
-        target
-      })
+      if (logger.enabled !== false) {
+        logger.warn('揭示身份未能物化到匿名槽，已从已知牌集合中略过', {
+          reason: 'resolveKnownCards:unresolvedUnlocatedIdentity',
+          unresolvedIdentityIDs,
+          target
+        })
+      }
     }
 
     return ids.map((id) => cardMap.get(id)).filter((card): card is Card => Boolean(card))
@@ -594,12 +608,14 @@ export class RoomIdentity {
       )
 
       if (releasedIdentityID === null) {
-        trackerLogger.warn('牌堆 cohort 身份投影匿名化失败', {
-          context,
-          cardID,
-          entityID: card.entityID,
-          location: card.location
-        })
+        if (trackerLogger.enabled !== false) {
+          trackerLogger.warn('牌堆 cohort 身份投影匿名化失败', {
+            context,
+            cardID,
+            entityID: card.entityID,
+            location: card.location
+          })
+        }
         return
       }
 
@@ -607,10 +623,12 @@ export class RoomIdentity {
     })
 
     if (anonymizedIdentityIDs.length > 0) {
-      trackerLogger.debug('牌堆 cohort 身份已投影为匿名槽', {
-        context,
-        cardIDs: anonymizedIdentityIDs
-      })
+      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        trackerLogger.debug('牌堆 cohort 身份已投影为匿名槽', {
+          context,
+          cardIDs: anonymizedIdentityIDs
+        })
+      }
     }
 
     return anonymizedIdentityIDs
@@ -648,22 +666,28 @@ export class RoomIdentity {
           { preservePlacement: true }
         )
         if (releasedIdentityID === null) {
-          trackerLogger.warn('洗牌关闭旧牌堆世代时释放暗实体身份失败', {
-            cardID,
-            entityID: existing.entityID,
-            location: existing.location
-          })
+          if (trackerLogger.enabled !== false) {
+            trackerLogger.warn('洗牌关闭旧牌堆世代时释放暗实体身份失败', {
+              cardID,
+              entityID: existing.entityID,
+              location: existing.location
+            })
+          }
           return
         }
         anonymizedIdentityIDs.push(releasedIdentityID)
       } else if (!room.unlocatedIdentities.has(cardID)) {
-        trackerLogger.warn('洗牌关闭旧牌堆世代时身份不在 Room 分区中', { cardID })
+        if (trackerLogger.enabled !== false) {
+          trackerLogger.warn('洗牌关闭旧牌堆世代时身份不在 Room 分区中', { cardID })
+        }
         return
       }
 
       const displayCard = this.createDetachedSuspendedIdentity(cardID)
       if (!displayCard) {
-        trackerLogger.warn('洗牌关闭旧牌堆世代时创建 suspended 展示实体失败', { cardID })
+        if (trackerLogger.enabled !== false) {
+          trackerLogger.warn('洗牌关闭旧牌堆世代时创建 suspended 展示实体失败', { cardID })
+        }
         return
       }
       suspendedIdentityIDs.push(cardID)
