@@ -19,8 +19,6 @@ interface RogueMapState {
 
 interface UIState {
   seatWidthPercent: number
-  /** 座位覆盖层是否已经完成首轮位置计算 */
-  firstUpdateSeatUI: boolean
   scoreFrameTotal: number
   scoreFrameIndex: number
   paddingLeft: number
@@ -95,7 +93,6 @@ const rogueMap: RogueMapState = {
 
 const UI: UIState = {
   seatWidthPercent: 0.3,
-  firstUpdateSeatUI: false,
   scoreFrameTotal: 10,
   scoreFrameIndex: 0,
   paddingLeft: 10,

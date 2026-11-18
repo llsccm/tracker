@@ -11,7 +11,7 @@ export function getLayoutViewportWidth() {
   return document.documentElement.clientWidth || window.innerWidth
 }
 
-export function initDragElement(globalConfig, globalState, refreshSidebarViewport) {
+export function initDragElement(globalConfig, globalState, requestWindowResize) {
   bindSorderPenetration()
 
   // 获取需要拖动的元素
@@ -40,7 +40,7 @@ export function initDragElement(globalConfig, globalState, refreshSidebarViewpor
       document.getElementById('toggle-me')?.click()
     }
     globalConfig.padding = 232
-    refreshSidebarViewport()
+    requestWindowResize()
     translateX = 0
     translateY = 0
     container.style.transform = 'translate(0px, 0px)'
@@ -98,7 +98,7 @@ export function initDragElement(globalConfig, globalState, refreshSidebarViewpor
     if (globalConfig.padding) {
       globalConfig.padding = 0
       container.style.height = '500px'
-      refreshSidebarViewport()
+      requestWindowResize()
     }
 
     if (!pendingFrame) {

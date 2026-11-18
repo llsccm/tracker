@@ -1,8 +1,7 @@
-import { getSeatUIs } from '@/dom'
-import { Game, UI } from '@/tracker'
+import { Game } from '@/tracker'
 import { tracker } from '@/tracker/runtime/browser'
 import { laya } from '@/runtime/gameAdapter'
-import { hideSelfOrderContainer, showOrderContainers } from '@/ui/seatOverlay'
+import { updateSeatOverlay } from '@/ui/seatOverlay'
 
 // 2033, 2034, 2035, 双刃
 // 2085 策定天下13076
@@ -17,21 +16,19 @@ import { hideSelfOrderContainer, showOrderContainers } from '@/ui/seatOverlay'
 
 export function handleGameTurn(msg) {
   const { TurnCnt } = msg
-  if (typeof TurnCnt !== 'number' || !Number.isFinite(TurnCnt)) return
+  if (typeof TurnCnt !== 'number') return
 
   if (TurnCnt === 1) {
     // 战法实例映射
     laya.zhanfaRegister()
-    // 此时已具备座位信息
-    getSeatUIs()
-    hideSelfOrderContainer(Game.myDisplayID)
-    if (UI.firstUpdateSeatUI) showOrderContainers()
   }
 
   if (TurnCnt > 0) {
     Game.setTurn(TurnCnt)
     laya.zhanfaReset()
   }
+
+  if (TurnCnt === 1) updateSeatOverlay(tracker.getTrackerRoom())
 
   tracker.scheduleTrackerRender()
 }

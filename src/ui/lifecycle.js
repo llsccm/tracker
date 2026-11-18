@@ -1,8 +1,10 @@
 import { unbindTrackerVisibilityShortcut } from './trackerVisibility'
 import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
+import { destroyPingJianWindow } from './PingJianWindow'
 import { unbindPeiXiuHandSuitColorRefresh } from './PeiXiuHandMirror'
+import { destroySeatOverlay } from './seatOverlay'
 
-export function bindInitialResize(globalConfig, resize) {
+export function configureViewport(globalConfig) {
   window.WDVerSion = '1.0.0'
   window.padding = globalConfig.padding || 0
   // 每次读取都按当前视口扣除侧栏，避免 Electron 最大化/还原时读到旧宽度。
@@ -14,32 +16,22 @@ export function bindInitialResize(globalConfig, resize) {
       return document.documentElement.clientWidth - padding
     }
   })
-  // 捕获阶段先同步覆盖层中心位置。
-  window.addEventListener('resize', resize, true)
-}
-
-export function observeDomResize(onResize) {
-  const viewport = window.visualViewport
-  viewport?.addEventListener('resize', onResize)
-
-  return () => viewport?.removeEventListener('resize', onResize)
 }
 
 export function removeInjectedDom(globalState) {
   unbindPeiXiuHandSuitColorRefresh()
   unbindTrackerVisibilityShortcut()
   //document.getElementById('injectCSS')?.remove()
-  document.getElementById('seatUI')?.remove()
+  destroySeatOverlay()
   document.getElementById('cusBGDiv')?.remove()
   document.getElementById('tracker-shell')?.remove()
   destroyPeiXiuMapWindow()
+  destroyPingJianWindow()
   document.getElementById('peixiu-map-style')?.remove()
   globalState.isFrameAdd = false
 }
 
-export function cleanupLifecycle({ resize, scheduleSetGameSize, globalState }) {
-  window.removeEventListener('resize', resize, true)
-  window.removeEventListener('resize', scheduleSetGameSize)
+export function cleanupLifecycle(globalState) {
   removeInjectedDom(globalState)
   return true
 }

@@ -1,3 +1,5 @@
+import { requestWindowResize } from './windowResize'
+
 export function addDynamicBG() {
   var bgDiv = document.getElementById('bgDiv')
   if (bgDiv) {
@@ -38,7 +40,7 @@ export function addDynamicBG() {
     bgDiv.appendChild(cusBGDiv)
     //创建完，初始化
 
-    window.dispatchEvent(new Event('resize'))
+    requestWindowResize()
   }
 }
 

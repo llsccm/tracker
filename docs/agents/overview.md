@@ -18,7 +18,9 @@
   - `src/ui/`：
     - `domHelpers.js`：tooltip/外链
     - `drag.js`：拖拽
-    - `seatOverlay.js`：座位覆盖层
+    - `seatOverlay.js`：座位覆盖层的创建、尺寸同步、座位排列、坐标计算、布局提交、显隐、重置与销毁；牌内容由 tracker 视图同步
+    - `deckEdgeOverlay.js`：牌堆顶/底边缘镜像的节点创建、缓存清理、渲染与定位，当前未接通渲染调用
+    - `windowResize.js`：统一窗口 resize 监听、订阅分发、取消订阅与主动通知宿主
     - `shell.js`：主窗口 shell（含可见性快捷键绑定）
     - `frameContent.js`：注入 HTML 初始化
     - `CitiesUI.js`：山河图城市与商店 Laya UI

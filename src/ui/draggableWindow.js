@@ -1,4 +1,5 @@
 import { getLayoutViewportWidth } from './drag'
+import { subscribeWindowResize } from './windowResize'
 
 const windowStates = new Map()
 
@@ -140,12 +141,12 @@ function bindPositionCorrection(element, state) {
   const correct = () => correctPosition(element, state)
   const observer = new ResizeObserver(correct)
   observer.observe(element, { box: 'border-box' })
-  window.addEventListener('resize', correct)
+  const stopWindowResize = subscribeWindowResize(correct)
   correct()
 
   state.cleanupPosition = () => {
     observer.disconnect()
-    window.removeEventListener('resize', correct)
+    stopWindowResize()
     state.cleanupPosition = null
   }
 }

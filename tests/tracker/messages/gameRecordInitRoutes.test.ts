@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/dom', () => ({ resetSeatUIs: vi.fn() }))
+vi.mock('@/dom', () => ({}))
 vi.mock('@/handler', async () => ({
   ...(await import('@/handler/MsgGameTurnNtf')),
   ...(await import('@/handler/PubGsCMoveCard'))
@@ -18,7 +18,7 @@ vi.mock('@/tracker/runtime/browser', async () => {
   const { Game } = await import('@/tracker')
   return { tracker: new TrackerController({ gameState: Game }) }
 })
-vi.mock('@/ui/seatOverlay', () => ({ resetOrderContainer: vi.fn(), hideOrderContainer: vi.fn() }))
+vi.mock('@/ui/seatOverlay', () => ({ resetSeatOverlay: vi.fn(), updateSeatOverlay: vi.fn() }))
 vi.mock('@/ui/statusTip', () => ({}))
 vi.mock('@/utils', () => ({}))
 vi.mock('@/utils/notification', () => ({}))
