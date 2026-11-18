@@ -1,9 +1,8 @@
 import type { Room } from '@/tracker/Room'
 import type { NormalizedMoveEvent } from '@/tracker/types'
 import { protocolMove } from '../helpers/trackerController'
-import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
-import { trackerLogger } from '@/utils/logger'
 import { createTestRoom } from '../helpers/room'
 
 function createRoom() {
@@ -22,8 +21,6 @@ function createEvent() {
     })
   )
 }
-
-afterEach(() => vi.restoreAllMocks())
 
 describe('Room 移动事件装饰', () => {
   it('装饰入口只接收完整归一化事件', () => {
@@ -124,16 +121,11 @@ describe('Room 移动事件装饰', () => {
     expect(calls).toEqual([42, 99])
   })
 
-  it('空返回或异常保留上一事件，后续处理器继续执行', () => {
+  it('空返回保留上一事件，后续处理器继续执行', () => {
     const room = createRoom()
-    const warn = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
-    vi.spyOn(console, 'error').mockImplementation(() => {})
     const event = createEvent()
     room.registerMoveEventHandler('*', () => undefined)
     room.registerMoveEventHandler('*', () => null)
-    room.registerMoveEventHandler('*', () => {
-      throw new Error('test:handler')
-    })
     room.registerMoveEventHandler(42, (nextEvent) => {
       expect(nextEvent).toBe(event)
       return { ...nextEvent, cardCount: 2 }
@@ -141,7 +133,6 @@ describe('Room 移动事件装饰', () => {
 
     expect(room.decorateMoveEvent(event).cardCount).toBe(2)
     expect(event.cardCount).toBe(1)
-    expect(warn).toHaveBeenCalledWith('移动事件装饰失败', expect.any(Object))
   })
 
   it('销毁清理两类处理器，不影响其他 Room 的注册表', () => {

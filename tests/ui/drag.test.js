@@ -43,8 +43,8 @@ describe('主面板拖动', () => {
     vi.stubGlobal('requestAnimationFrame', (callback) => callback())
 
     initDragElement({ padding: 0 }, { closeIframe: false }, vi.fn())
-    draggableListeners.get('mousedown')({ clientX: 800, clientY: 100 })
-    documentListeners.get('mousemove')[0]({ clientX: 750, clientY: 120 })
+    draggableListeners.get('pointerdown')({ pointerId: 1, button: 0, clientX: 800, clientY: 100 })
+    draggableListeners.get('pointermove')({ pointerId: 1, clientX: 750, clientY: 120 })
 
     expect(container.style.transform).toBe('translate(-50px, 20px)')
   })

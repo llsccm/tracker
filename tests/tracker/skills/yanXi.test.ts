@@ -1,3 +1,4 @@
+import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { getMovePosition } from '@/tracker/helper/moveEndpoint'
 import { describe, expect, it } from 'vitest'
 import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
@@ -8,6 +9,9 @@ import {
   protocolMove,
   createReadyControllerHarness
 } from '../helpers/trackerController'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
+import { hasSkillState } from '@/tracker/room/RoomBase'
+import { hasGameState } from '@/tracker/Game'
 
 function setupYanXi(topIDs: number[] = [1, 2, 3], isGuoZhan = false) {
   const errorSpy = createErrorSpy()
@@ -60,7 +64,7 @@ describe('宴戏成功批次与暗牌失败降级', () => {
         controller.syncTrackerMove(move)
         expect(originalTop[index].location).toBe('player')
         expect(originalTop[index].seats.has(7)).toBe(true)
-        expect(room.assertPileIdentityLedgerConsistency('yanxi:success')).toEqual([])
+        expect(assertPileIdentityLedgerConsistency(room, 'yanxi:success')).toEqual([])
         expect(move.FromPosition).toBe(POSITION_RANDOM)
         expect(move.CardIDs).toEqual([])
       })
@@ -68,10 +72,12 @@ describe('宴戏成功批次与暗牌失败降级', () => {
       expect(pile.cards).toEqual(remainingPile)
       expect(room.getPlayer(7)!.observedHandCount).toBe(3)
       expect(room.cards).toHaveLength(entityCount)
-      expect(room.hasSkillState(7017)).toBe(false)
+      expect(hasSkillState(room, 7017)).toBe(false)
       topIDs.slice(0, 2).forEach((id) => {
         expect(room.getPlayerHandCardIDs(7)).toContain(id)
-        expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).not.toContain(id)
+        expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).not.toContain(
+          id
+        )
       })
       expect(errorSpy).not.toHaveBeenCalled()
     }
@@ -90,8 +96,8 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     expect(room.zones.get('pile')!.cards).toHaveLength(pileCount - 2)
     expect(first.CardIDs).toEqual([1])
     expect(first.FromPosition).toBe(POSITION_RANDOM)
-    expect(room.hasSkillState(7017)).toBe(false)
-    expect(room.assertPileIdentityLedgerConsistency('yanxi:known-success')).toEqual([])
+    expect(hasSkillState(room, 7017)).toBe(false)
+    expect(assertPileIdentityLedgerConsistency(room, 'yanxi:known-success')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -119,8 +125,8 @@ describe('宴戏成功批次与暗牌失败降级', () => {
       expect(room.getPlayer(7)!.observedHandCount).toBe(1)
       expect(room.getPlayerHandCardIDs(7)).toEqual([])
       expect(room.cards).toHaveLength(entityCount)
-      expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([3])
-      expect(room.assertPileIdentityLedgerConsistency('yanxi:hidden-failure')).toEqual([])
+      expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([3])
+      expect(assertPileIdentityLedgerConsistency(room, 'yanxi:hidden-failure')).toEqual([])
       expect(errorSpy).not.toHaveBeenCalled()
     }
   )
@@ -152,7 +158,7 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     expect(first.isAnonymous).toBe(true)
     expect(third.id).toBe(3)
     expect(third.isKnown).toBe(true)
-    expect(room.assertPileIdentityLedgerConsistency('yanxi:one-known')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'yanxi:one-known')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -167,8 +173,8 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     expect(top.location).toBe('pile')
     expect(top.isKnown).toBe(true)
     expect(third.isKnown).toBe(true)
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([1, 3])
-    expect(room.assertPileIdentityLedgerConsistency('yanxi:known-failure')).toEqual([])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([1, 3])
+    expect(assertPileIdentityLedgerConsistency(room, 'yanxi:known-failure')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -185,8 +191,8 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     expect(room.getPlayerHandCardIDs(7)).toEqual([19])
     expect(room.getPlayer(7)!.observedHandCount).toBe(3)
     expect(room.zones.get('pile')!.cards).toHaveLength(pileCount - 2)
-    expect(room.hasSkillState(7017)).toBe(false)
-    expect(room.assertPileIdentityLedgerConsistency('yanxi:guozhan-success')).toEqual([])
+    expect(hasSkillState(room, 7017)).toBe(false)
+    expect(assertPileIdentityLedgerConsistency(room, 'yanxi:guozhan-success')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -197,9 +203,9 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     controller.syncTrackerMove(yanXiMove({ CardIDs: [9] }))
 
     expect(room.getPlayerHandCardIDs(7)).toEqual(expect.arrayContaining([19, 8, 9]))
-    expect(room.pileIdentityLedger.getSnapshot().knownPileIdentityIDs).toEqual([1, 2, 3])
-    expect(room.hasSkillState(7017)).toBe(false)
-    expect(room.assertPileIdentityLedgerConsistency('yanxi:guozhan-known')).toEqual([])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([1, 2, 3])
+    expect(hasSkillState(room, 7017)).toBe(false)
+    expect(assertPileIdentityLedgerConsistency(room, 'yanxi:guozhan-known')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -214,7 +220,7 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     expect(room.cardIndex.has(3)).toBe(false)
     expect(room.cardIndex.has(4)).toBe(false)
     expect(room.cardIndex.get(5)!.isKnown).toBe(true)
-    expect(room.assertPileIdentityLedgerConsistency('yanxi:next-failure')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'yanxi:next-failure')).toEqual([])
   })
 
   it('新的成功标记替换旧批次，Room 销毁后不保留状态', () => {
@@ -225,6 +231,6 @@ describe('宴戏成功批次与暗牌失败降级', () => {
     expect(getMovePosition(next.from)).toBe(POSITION_TOP)
     expect(room.readSkillState(7017)).toMatchObject({ toSeatID: 1, remainingPileCards: 1 })
     room.destroy()
-    expect(gameState.hasState('tracker', 7017)).toBe(false)
+    expect(hasGameState(gameState, 'tracker', 7017)).toBe(false)
   })
 })

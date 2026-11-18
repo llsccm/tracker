@@ -186,23 +186,23 @@ const HISTORY_DEPENDENT_WARNINGS = new Set([
  * 本地代表顺序制造精确信息。
  */
 export class PileIdentityLedger {
-  private revision = 0
+  revision = 0
   // 每次弃牌洗回递增，用于保留仍可证明的牌底到牌顶批次顺序。
-  private generation = 0
+  generation = 0
   // 本局见过的全部合法真实身份；降级时从这里补回仍未定位的候选。
-  private identityUniverse = new Set<CardID>()
+  identityUniverse = new Set<CardID>()
   // 已被协议定位到具体实体/区域的身份，knownPileIdentityIDs 也属于这一集合。
-  private locatedIdentityIDs = new Set<CardID>()
+  locatedIdentityIDs = new Set<CardID>()
   // 协议明确仍在牌堆且身份可见的牌，例如已知牌顶或牌底。
-  private knownPileIdentityIDs = new Set<CardID>()
+  knownPileIdentityIDs = new Set<CardID>()
   // 弃牌区内身份明确的牌，洗牌时会形成新 generation 的牌底 cohort。
-  private knownDiscardIdentityIDs = new Set<CardID>()
+  knownDiscardIdentityIDs = new Set<CardID>()
   // 用于识别弃牌堆中无法枚举 CardID 的匿名槽；只保存最近一次协议计数。
-  private previousDiscardCount = 0
+  previousDiscardCount = 0
   // 数组顺序为牌底到牌顶；只有边界仍可证明时该顺序才有消费意义。
-  private cohorts: PileIdentityCohort[] = []
+  cohorts: PileIdentityCohort[] = []
 
-  constructor(private readonly isFullTracking: () => boolean = () => true) {}
+  constructor(readonly isFullTracking: () => boolean = () => true) {}
 
   /** 数量与身份覆盖分开；不完整历史下只聚合物理暗槽，不建立全集守恒陈述。 */
   reconcilePileCount(pileCountAfter: number): void {
@@ -229,7 +229,9 @@ export class PileIdentityLedger {
             }
           ]
 
-    this.warnForIssues(this.collectConsistencyIssues(identities.length, 'initialize'))
+    if (import.meta.env.DEV) {
+      warnForIssues(this, collectConsistencyIssues(this, identities.length, 'initialize'))
+    }
   }
 
   registerAmbiguousOutsideGroup(cardIDs: readonly CardID[]): boolean {
@@ -353,7 +355,12 @@ export class PileIdentityLedger {
       this.previousDiscardCount = normalizeCount(move.discardCountAfter)
     })
 
-    this.warnForIssues(this.collectConsistencyIssues(move.pileCountAfter, `move:${move.eventType}`))
+    if (import.meta.env.DEV) {
+      warnForIssues(
+        this,
+        collectConsistencyIssues(this, move.pileCountAfter, `move:${move.eventType}`)
+      )
+    }
     return committed && shuffleTransition ? { committed, shuffleTransition } : { committed }
   }
 
@@ -380,26 +387,12 @@ export class PileIdentityLedger {
       this.previousDiscardCount = normalizeCount(reveal.discardCountAfter)
     })
 
-    this.warnForIssues(
-      this.collectConsistencyIssues(reveal.pileCountAfter, `reveal:${reveal.location}`)
-    )
-  }
-
-  consumeAnonymous(count: number, position: PublicPosition, reason: string): void {
-    this.commit(reason, () => this.consumeAnonymousInternal(count, position))
-  }
-
-  revealIdentity(
-    cardID: CardID,
-    source: 'pile' | 'outside',
-    reason: string,
-    staysInPile = false
-  ): void {
-    this.commit(reason, () => {
-      if (source === 'pile' && staysInPile) this.revealIdentityInPileInternal(cardID)
-      else if (source === 'pile') this.revealIdentityFromPileInternal(cardID)
-      else this.revealIdentityOutsidePileInternal(cardID)
-    })
+    if (import.meta.env.DEV) {
+      warnForIssues(
+        this,
+        collectConsistencyIssues(this, reveal.pileCountAfter, `reveal:${reveal.location}`)
+      )
+    }
   }
 
   insertKnown(
@@ -422,54 +415,6 @@ export class PileIdentityLedger {
     this.commit(reason, () =>
       this.insertKnownInternal(identities, identities.length, POSITION_RANDOM)
     )
-  }
-
-  insertAnonymous(count: number, position: PublicPosition, reason: string): void {
-    this.commit(reason, () => this.insertAnonymousInternal(count, position))
-  }
-
-  mergeAll(reason: string): void {
-    this.commit(reason, () => {
-      this.mergeAllCohortsInternal()
-    })
-  }
-
-  rotateFromDiscard(cardIDs: readonly CardID[], reason: string): void {
-    this.commit(reason, () => this.rotateFromDiscardInternal(cardIDs))
-  }
-
-  /**
-   * 检查账本内部基数，并在 Room 提供身份分区时启用最终目标态断言。
-   *
-   * cohort 身份有两种合法的 Room 表达：未物化身份留在 `unlocatedIdentities`；旧世代失效
-   * 后，为了继续向用户展示而创建的身份则进入 `suspendedKnownCards`。suspended 实体只有
-   * 展示身份，没有物理位置，牌堆基数与集合归属仍以本 ledger 为权威。
-   *
-   * 该断言必须放在 Room 物理移动和 ledger 事件都完成之后运行，事务中途的短暂状态不参与
-   * 判断。
-   */
-  assertConsistency(
-    pileCount: number,
-    context: string,
-    roomPartition?: PileIdentityRoomPartition
-  ): PileIdentityConsistencyIssue[] {
-    const issues = this.collectConsistencyIssues(pileCount, context, roomPartition)
-    this.warnForIssues(issues)
-    return issues
-  }
-
-  getSnapshot(): PileIdentityLedgerSnapshot {
-    const cohort = this.projectCohorts()
-    return {
-      revision: this.revision,
-      identityUniverseIDs: normalizeIDs(Array.from(this.identityUniverse)),
-      locatedIdentityIDs: normalizeIDs(Array.from(this.locatedIdentityIDs)),
-      knownPileIdentityIDs: normalizeIDs(Array.from(this.knownPileIdentityIDs)),
-      knownDiscardIdentityIDs: normalizeIDs(Array.from(this.knownDiscardIdentityIDs)),
-      hiddenPileSlotCount: this.getHiddenPileSlotCount(),
-      accountedPileCount: this.getAccountedPileCount(),
-      cohort
-    }
   }
 
   getUnresolvedIdentityIDs(): CardID[] {
@@ -877,191 +822,241 @@ export class PileIdentityLedger {
     )
   }
 
-  private getHiddenPileSlotCount(): number {
+  getHiddenPileSlotCount(): number {
     return this.cohorts.reduce((sum, cohort) => sum + cohort.remainingPileCount, 0)
   }
 
-  private getAccountedPileCount(): number {
+  getAccountedPileCount(): number {
     return this.knownPileIdentityIDs.size + this.getHiddenPileSlotCount()
   }
 
-  private projectCohorts(): PileIdentityCohortSnapshot {
-    const groups: PileIdentityCohortProjectionGroup[] = []
-    const definitelyInPileIDs = new Set<CardID>(this.knownPileIdentityIDs)
-    const definitelyOutsidePileIDs = new Set<CardID>()
-    let flatCandidateWidth = 0
-
-    this.cohorts.forEach((cohort) => {
-      const cardIDs = normalizeIDs(Array.from(cohort.candidateIdentityIDs))
-      if (cardIDs.length === 0) return
-
-      const kind: PileIdentityCohortKind = !this.isFullTracking()
-        ? 'partial'
-        : cohort.remainingPileCount === 0
-          ? 'none-in-pile'
-          : cohort.remainingPileCount === cardIDs.length
-            ? 'all-in-pile'
-            : 'partial'
-      groups.push({
-        generation: cohort.generation,
-        kind,
-        cardIDs,
-        remainingPileCount: cohort.remainingPileCount
-      })
-
-      if (kind === 'all-in-pile') {
-        cardIDs.forEach((cardID) => definitelyInPileIDs.add(cardID))
-        return
-      }
-      if (kind === 'none-in-pile') {
-        cardIDs.forEach((cardID) => definitelyOutsidePileIDs.add(cardID))
-        return
-      }
-
-      // 扁平候选宽度只统计 partial 组；确定在堆/堆外的组无需逐卡作为“可能”展示。
-      flatCandidateWidth += cardIDs.length
-    })
-
-    return {
-      generation: this.generation,
-      groups,
-      definitelyInPileIDs: normalizeIDs(Array.from(definitelyInPileIDs)),
-      definitelyOutsidePileIDs: normalizeIDs(Array.from(definitelyOutsidePileIDs)),
-      flatCandidateWidth
-    }
-  }
-
-  private collectConsistencyIssues(
-    pileCount: number,
-    context: string,
-    roomPartition?: PileIdentityRoomPartition
-  ): PileIdentityConsistencyIssue[] {
-    const issues: PileIdentityConsistencyIssue[] = []
-    const seen = new Set<CardID>()
-
-    // cohort 身份必须互斥，且不能同时出现在任何精确位置集合中。
-    this.cohorts.forEach((cohort) => {
-      if (
-        cohort.remainingPileCount < 0 ||
-        (this.isFullTracking() && cohort.remainingPileCount > cohort.candidateIdentityIDs.size)
-      ) {
-        issues.push({
-          context,
-          reason: 'cohort-cardinality-out-of-range',
-          expected: cohort.candidateIdentityIDs.size,
-          actual: cohort.remainingPileCount
-        })
-      }
-
-      cohort.candidateIdentityIDs.forEach((cardID) => {
-        if (seen.has(cardID)) issues.push({ context, reason: 'duplicate-cohort-identity', cardID })
-        if (!this.identityUniverse.has(cardID)) {
-          issues.push({ context, reason: 'cohort-identity-missing-from-universe', cardID })
-        }
-        if (this.locatedIdentityIDs.has(cardID)) {
-          issues.push({ context, reason: 'located-identity-in-cohort', cardID })
-        }
-        if (this.knownPileIdentityIDs.has(cardID)) {
-          issues.push({ context, reason: 'known-pile-identity-in-cohort', cardID })
-        }
-        if (roomPartition && !roomPartition.deckIdentityIDs.has(cardID)) {
-          issues.push({ context, reason: 'cohort-identity-missing-from-room-universe', cardID })
-        }
-        if (roomPartition) {
-          const isUnlocated = roomPartition.unlocatedIdentityIDs.has(cardID)
-          const isSuspended = roomPartition.suspendedIdentityIDs.has(cardID)
-          if (!isUnlocated && !isSuspended) {
-            issues.push({
-              context,
-              reason: 'cohort-identity-missing-from-room-partition',
-              cardID
-            })
-          }
-          if (isUnlocated && isSuspended) {
-            issues.push({
-              context,
-              reason: 'cohort-identity-duplicated-in-room-partition',
-              cardID
-            })
-          }
-        }
-        seen.add(cardID)
-      })
-    })
-
-    if (roomPartition) {
-      this.locatedIdentityIDs.forEach((cardID) => {
-        if (!roomPartition.unlocatedIdentityIDs.has(cardID)) return
-        issues.push({ context, reason: 'located-identity-still-unlocated', cardID })
-      })
-    }
-
-    const expectedPileCount = normalizeCount(pileCount)
-    const actualPileCount = this.getAccountedPileCount()
-    if (expectedPileCount !== actualPileCount) {
-      issues.push({
-        context,
-        reason: 'pile-count-mismatch',
-        expected: expectedPileCount,
-        actual: actualPileCount
-      })
-    }
-
-    return issues
-  }
-
   private commit(reason: string, update: () => void): boolean {
-    // 对外原子操作共享事务边界；规则实现抛错时恢复集合和基数，避免留下半更新状态。
-    const previous = this.captureState()
+    if (import.meta.env.DEV) {
+      // DEV / Vitest 环境下保留完整快照回滚与内部守恒校验；规则实现抛错时恢复集合和基数。
+      const previous = captureState(this)
+      try {
+        update()
+        assertInternalState(this, reason)
+        this.revision += 1
+        return true
+      } catch (error) {
+        restoreState(this, previous)
+        this.warn('transaction-rollback', { reason, error })
+        return false
+      }
+    }
+
     try {
       update()
-      this.assertInternalState(reason)
       this.revision += 1
       return true
     } catch (error) {
-      this.restoreState(previous)
       this.warn('transaction-rollback', { reason, error })
       return false
     }
   }
 
-  private assertInternalState(context: string): void {
-    const issues = this.collectConsistencyIssues(this.getAccountedPileCount(), context).filter(
-      (issue) => issue.reason !== 'pile-count-mismatch'
-    )
-    if (issues.length > 0) throw new Error(JSON.stringify(issues))
-  }
-
-  private captureState(): PileIdentityLedgerState {
-    return {
-      revision: this.revision,
-      generation: this.generation,
-      identityUniverse: new Set(this.identityUniverse),
-      locatedIdentityIDs: new Set(this.locatedIdentityIDs),
-      knownPileIdentityIDs: new Set(this.knownPileIdentityIDs),
-      knownDiscardIdentityIDs: new Set(this.knownDiscardIdentityIDs),
-      previousDiscardCount: this.previousDiscardCount,
-      cohorts: this.cohorts.map(cloneCohort)
-    }
-  }
-
-  private restoreState(state: PileIdentityLedgerState): void {
-    this.revision = state.revision
-    this.generation = state.generation
-    this.identityUniverse = state.identityUniverse
-    this.locatedIdentityIDs = state.locatedIdentityIDs
-    this.knownPileIdentityIDs = state.knownPileIdentityIDs
-    this.knownDiscardIdentityIDs = state.knownDiscardIdentityIDs
-    this.previousDiscardCount = state.previousDiscardCount
-    this.cohorts = state.cohorts
-  }
-
-  private warnForIssues(issues: readonly PileIdentityConsistencyIssue[]): void {
-    issues.forEach((issue) => this.warn(issue.reason, { ...issue }))
-  }
-
-  private warn(reason: string, detail: Record<string, unknown>): void {
-    if (!this.isFullTracking() && HISTORY_DEPENDENT_WARNINGS.has(reason)) return
+  warn(reason: string, detail: Record<string, unknown>): void {
+    if (HISTORY_DEPENDENT_WARNINGS.has(reason) && !this.isFullTracking()) return
     trackerLogger.warn('牌堆身份账本异常', { reason, ...detail })
   }
+}
+
+/**
+ * 检查账本内部基数，并在 Room 提供身份分区时启用最终目标态断言。
+ *
+ * cohort 身份有两种合法的 Room 表达：未物化身份留在 `unlocatedIdentities`；旧世代失效
+ * 后，为了继续向用户展示而创建的身份则进入 `suspendedKnownCards`。suspended 实体只有
+ * 展示身份，没有物理位置，牌堆基数与集合归属仍以本 ledger 为权威。
+ *
+ * 该断言必须放在 Room 物理移动和 ledger 事件都完成之后运行，事务中途的短暂状态不参与
+ * 判断。
+ */
+export function assertPileIdentityConsistency(
+  ledger: PileIdentityLedger,
+  pileCount: number,
+  context: string,
+  roomPartition?: PileIdentityRoomPartition
+): PileIdentityConsistencyIssue[] {
+  const issues = collectConsistencyIssues(ledger, pileCount, context, roomPartition)
+  warnForIssues(ledger, issues)
+  return issues
+}
+
+export function getPileIdentitySnapshot(ledger: PileIdentityLedger): PileIdentityLedgerSnapshot {
+  const cohort = projectCohorts(ledger)
+  return {
+    revision: ledger.revision,
+    identityUniverseIDs: normalizeIDs(Array.from(ledger.identityUniverse)),
+    locatedIdentityIDs: normalizeIDs(Array.from(ledger.locatedIdentityIDs)),
+    knownPileIdentityIDs: normalizeIDs(Array.from(ledger.knownPileIdentityIDs)),
+    knownDiscardIdentityIDs: normalizeIDs(Array.from(ledger.knownDiscardIdentityIDs)),
+    hiddenPileSlotCount: ledger.getHiddenPileSlotCount(),
+    accountedPileCount: ledger.getAccountedPileCount(),
+    cohort
+  }
+}
+
+function projectCohorts(ledger: PileIdentityLedger): PileIdentityCohortSnapshot {
+  const groups: PileIdentityCohortProjectionGroup[] = []
+  const definitelyInPileIDs = new Set<CardID>(ledger.knownPileIdentityIDs)
+  const definitelyOutsidePileIDs = new Set<CardID>()
+  let flatCandidateWidth = 0
+
+  ledger.cohorts.forEach((cohort) => {
+    const cardIDs = normalizeIDs(Array.from(cohort.candidateIdentityIDs))
+    if (cardIDs.length === 0) return
+
+    const kind: PileIdentityCohortKind = !ledger.isFullTracking()
+      ? 'partial'
+      : cohort.remainingPileCount === 0
+        ? 'none-in-pile'
+        : cohort.remainingPileCount === cardIDs.length
+          ? 'all-in-pile'
+          : 'partial'
+    groups.push({
+      generation: cohort.generation,
+      kind,
+      cardIDs,
+      remainingPileCount: cohort.remainingPileCount
+    })
+
+    if (kind === 'all-in-pile') {
+      cardIDs.forEach((cardID) => definitelyInPileIDs.add(cardID))
+      return
+    }
+    if (kind === 'none-in-pile') {
+      cardIDs.forEach((cardID) => definitelyOutsidePileIDs.add(cardID))
+      return
+    }
+
+    // 扁平候选宽度只统计 partial 组；确定在堆/堆外的组无需逐卡作为“可能”展示。
+    flatCandidateWidth += cardIDs.length
+  })
+
+  return {
+    generation: ledger.generation,
+    groups,
+    definitelyInPileIDs: normalizeIDs(Array.from(definitelyInPileIDs)),
+    definitelyOutsidePileIDs: normalizeIDs(Array.from(definitelyOutsidePileIDs)),
+    flatCandidateWidth
+  }
+}
+
+function collectConsistencyIssues(
+  ledger: PileIdentityLedger,
+  pileCount: number,
+  context: string,
+  roomPartition?: PileIdentityRoomPartition
+): PileIdentityConsistencyIssue[] {
+  const issues: PileIdentityConsistencyIssue[] = []
+  const seen = new Set<CardID>()
+
+  // cohort 身份必须互斥，且不能同时出现在任何精确位置集合中。
+  ledger.cohorts.forEach((cohort) => {
+    if (
+      cohort.remainingPileCount < 0 ||
+      (ledger.isFullTracking() && cohort.remainingPileCount > cohort.candidateIdentityIDs.size)
+    ) {
+      issues.push({
+        context,
+        reason: 'cohort-cardinality-out-of-range',
+        expected: cohort.candidateIdentityIDs.size,
+        actual: cohort.remainingPileCount
+      })
+    }
+
+    cohort.candidateIdentityIDs.forEach((cardID) => {
+      if (seen.has(cardID)) issues.push({ context, reason: 'duplicate-cohort-identity', cardID })
+      if (!ledger.identityUniverse.has(cardID)) {
+        issues.push({ context, reason: 'cohort-identity-missing-from-universe', cardID })
+      }
+      if (ledger.locatedIdentityIDs.has(cardID)) {
+        issues.push({ context, reason: 'located-identity-in-cohort', cardID })
+      }
+      if (ledger.knownPileIdentityIDs.has(cardID)) {
+        issues.push({ context, reason: 'known-pile-identity-in-cohort', cardID })
+      }
+      if (roomPartition && !roomPartition.deckIdentityIDs.has(cardID)) {
+        issues.push({ context, reason: 'cohort-identity-missing-from-room-universe', cardID })
+      }
+      if (roomPartition) {
+        const isUnlocated = roomPartition.unlocatedIdentityIDs.has(cardID)
+        const isSuspended = roomPartition.suspendedIdentityIDs.has(cardID)
+        if (!isUnlocated && !isSuspended) {
+          issues.push({
+            context,
+            reason: 'cohort-identity-missing-from-room-partition',
+            cardID
+          })
+        }
+        if (isUnlocated && isSuspended) {
+          issues.push({
+            context,
+            reason: 'cohort-identity-duplicated-in-room-partition',
+            cardID
+          })
+        }
+      }
+      seen.add(cardID)
+    })
+  })
+
+  if (roomPartition) {
+    ledger.locatedIdentityIDs.forEach((cardID) => {
+      if (!roomPartition.unlocatedIdentityIDs.has(cardID)) return
+      issues.push({ context, reason: 'located-identity-still-unlocated', cardID })
+    })
+  }
+
+  const expectedPileCount = normalizeCount(pileCount)
+  const actualPileCount = ledger.getAccountedPileCount()
+  if (expectedPileCount !== actualPileCount) {
+    issues.push({
+      context,
+      reason: 'pile-count-mismatch',
+      expected: expectedPileCount,
+      actual: actualPileCount
+    })
+  }
+
+  return issues
+}
+
+function assertInternalState(ledger: PileIdentityLedger, context: string): void {
+  const issues = collectConsistencyIssues(ledger, ledger.getAccountedPileCount(), context).filter(
+    (issue) => issue.reason !== 'pile-count-mismatch'
+  )
+  if (issues.length > 0) throw new Error(JSON.stringify(issues))
+}
+
+function captureState(ledger: PileIdentityLedger): PileIdentityLedgerState {
+  return {
+    revision: ledger.revision,
+    generation: ledger.generation,
+    identityUniverse: new Set(ledger.identityUniverse),
+    locatedIdentityIDs: new Set(ledger.locatedIdentityIDs),
+    knownPileIdentityIDs: new Set(ledger.knownPileIdentityIDs),
+    knownDiscardIdentityIDs: new Set(ledger.knownDiscardIdentityIDs),
+    previousDiscardCount: ledger.previousDiscardCount,
+    cohorts: ledger.cohorts.map(cloneCohort)
+  }
+}
+
+function restoreState(ledger: PileIdentityLedger, state: PileIdentityLedgerState): void {
+  ledger.revision = state.revision
+  ledger.generation = state.generation
+  ledger.identityUniverse = state.identityUniverse
+  ledger.locatedIdentityIDs = state.locatedIdentityIDs
+  ledger.knownPileIdentityIDs = state.knownPileIdentityIDs
+  ledger.knownDiscardIdentityIDs = state.knownDiscardIdentityIDs
+  ledger.previousDiscardCount = state.previousDiscardCount
+  ledger.cohorts = state.cohorts
+}
+
+function warnForIssues(
+  ledger: PileIdentityLedger,
+  issues: readonly PileIdentityConsistencyIssue[]
+): void {
+  issues.forEach((issue) => ledger.warn(issue.reason, { ...issue }))
 }

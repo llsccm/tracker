@@ -27,16 +27,6 @@ export function redefine(obj, prop, value) {
 }
 
 /**
- * 获取当前页面的 window 对象（兼容 GM/Tampermonkey 脚本环境下的 unsafeWindow）
- *
- * @returns {Window & typeof globalThis}
- */
-function getPageWindow() {
-  if (typeof unsafeWindow == 'object') return unsafeWindow
-  return window
-}
-
-/**
  * 辅助工具函数：根据事件名称在监听者列表中检索对应的 caller 对象
  *
  * @param {any} emitter 事件派发器
@@ -114,16 +104,6 @@ function findInStage(stage, key) {
  * @type {Object<string, (runtime: GameRuntime) => any>}
  */
 const classResolvers = {
-  GameContext(_runtime) {
-    const page = getPageWindow()
-    const ctx = page?.GameContext || window.Laya?.Browser?.window?.GameContext || window.GameContext
-    if (ctx && typeof ctx.GetModeType == 'function' && typeof ctx.GetGroupID == 'function') {
-      return ctx
-    }
-  },
-  GetGoodsByID(runtime) {
-    return runtime.get('SgxFPreviewWindow', null, 0)?.getGoodConfig
-  },
   SgsText(runtime) {
     return runtime.scene?.topMenu?.timeLabel?.constructor
   },
@@ -236,9 +216,9 @@ export class GameRuntime {
   /**
    * 获取或注册一个类
    * 如果传入 value 则注册该类；如果 value 是函数则注册其返回值。
-   * 若无 value，则根据预设规则（如 GameContext 等）在页面 window 或 Laya 下自动寻找并注册。
+   * 若无 value，则根据预设规则在页面 window 或 Laya 下自动寻找并注册。
    *
-   * @param {string} name 类的唯一命名（如 'GameContext', 'SgsText' 等）
+   * @param {string} name 类的唯一命名（如 'SgsText' 等）
    * @param {boolean} [anew=false] 是否强制重新解析/注册
    * @param {any} [value] 注册的类定义或生成类的函数
    * @returns {any} 返回注册成功的类（构造函数）
@@ -483,7 +463,7 @@ export class GameRuntime {
   ShowWindow(name) {
     const GameEventDispatcher = this.ged
     if (!GameEventDispatcher) return
-    GameEventDispatcher.i?.(name)
+    GameEventDispatcher.A?.(name)
   }
 
   // 不能使用 WindowManager.GetWindow 此方法会找不到窗口会创建一个 造成污染
@@ -498,12 +478,6 @@ export class GameRuntime {
     const foundWindow = this.find('WindowLayer', name)
     if (Array.isArray(foundWindow)) return foundWindow.find(Boolean) ?? null
     return foundWindow ?? null
-  }
-
-  HideStartLoadingListener() {
-    const GameEventDispatcher = this.ged
-    if (!GameEventDispatcher) return
-    GameEventDispatcher.on('HIDE_CHALLENGE_GAME_START', this, this.showName)
   }
 
   async showName() {

@@ -1,8 +1,19 @@
-import { AmbiguousKnownIndex } from '@/tracker/projection/AmbiguousKnownIndex'
+import {
+  AmbiguousKnownIndex,
+  toComparableAmbiguousIndex
+} from '@/tracker/projection/AmbiguousKnownIndex'
 import { Card } from '@/tracker/model/Card'
-import { CardLocationIndex } from '@/tracker/projection/CardLocationIndex'
+import {
+  assertPileIdentityConsistency,
+  getPileIdentitySnapshot
+} from '@/tracker/PileIdentityLedger'
+import {
+  CardLocationIndex,
+  toComparableLocationIndex
+} from '@/tracker/projection/CardLocationIndex'
+import { getPublicZoneConsistencyIssues } from '@/tracker/room/publicZones'
 import type { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
-import type { GameState } from '@/tracker/Game'
+import { type GameState, getSpellStateSnapshot } from '@/tracker/Game'
 import type { Player } from '@/tracker/model/Player'
 import type { Room } from '@/tracker/Room'
 import { snapshotLocationSlots } from './constraintSlots'
@@ -14,6 +25,7 @@ import type {
   TrackerReplaySnapshot,
   TrackerReplayZoneSnapshot
 } from './types'
+import { getPlayerCardsSnapshot } from '@/tracker/projection/playerSnapshot'
 
 export function createTrackerReplaySnapshot(
   gameState: GameState,
@@ -32,7 +44,7 @@ export function createTrackerReplaySnapshot(
       round: gameState.round,
       phase: gameState.phase,
       currentSeatID: gameState.currentID ?? null,
-      spellState: normalizeJsonValue(gameState.getSpellStateSnapshot())
+      spellState: normalizeJsonValue(getSpellStateSnapshot(gameState))
     },
     room: room ? createRoomSnapshot(room) : null
   }
@@ -53,14 +65,14 @@ export function assertTrackerReplayConsistency(
       Array.from(room.suspendedKnownCards, (card) => card.id).filter((cardID) => cardID > 0)
     )
     issues.push(
-      ...room.pileIdentityLedger.assertConsistency(pileCount, context, {
+      ...assertPileIdentityConsistency(room.pileIdentityLedger, pileCount, context, {
         deckIdentityIDs: room.deckIdentities,
         unlocatedIdentityIDs: room.unlocatedIdentities,
         suspendedIdentityIDs
       })
     )
   }
-  issues.push(...room.publicZones.getPublicZoneConsistencyIssues())
+  issues.push(...getPublicZoneConsistencyIssues(room))
   collectIdentityIssues(room, issues)
   if (options.checkIndexes !== false) collectIndexIssues(room, issues, metrics)
   collectPlayerSnapshotIssues(room, issues)
@@ -116,7 +128,7 @@ function createRoomSnapshot(room: Room): TrackerReplayRoomSnapshot {
     suspendedIdentityIDs: sortNumbers(
       Array.from(room.suspendedKnownCards, (card) => card.id).filter((cardID) => cardID > 0)
     ),
-    pileIdentityLedger: room.isDeckReady ? room.pileIdentityLedger.getSnapshot() : null
+    pileIdentityLedger: room.isDeckReady ? getPileIdentitySnapshot(room.pileIdentityLedger) : null
   }
 }
 
@@ -221,8 +233,8 @@ function collectIndexIssues(room: Room, issues: unknown[], metrics: ReplayMetric
   const locationShadow = new CardLocationIndex()
   locationShadow.rebuild(room, { record: false })
   if (
-    JSON.stringify(room.locationIndex.toComparable(room)) !==
-    JSON.stringify(locationShadow.toComparable(room))
+    JSON.stringify(toComparableLocationIndex(room.locationIndex, room)) !==
+    JSON.stringify(toComparableLocationIndex(locationShadow, room))
   ) {
     issues.push({ type: 'location-index-mismatch' })
   }
@@ -230,8 +242,8 @@ function collectIndexIssues(room: Room, issues: unknown[], metrics: ReplayMetric
   const ambiguousShadow = new AmbiguousKnownIndex(room)
   ambiguousShadow.rebuild(Array.from(room.constraintGroups.values()), { record: false })
   if (
-    JSON.stringify(room.ambiguousKnownIndex.toComparable(room)) !==
-    JSON.stringify(ambiguousShadow.toComparable(room))
+    JSON.stringify(toComparableAmbiguousIndex(room.ambiguousKnownIndex, room)) !==
+    JSON.stringify(toComparableAmbiguousIndex(ambiguousShadow, room))
   ) {
     issues.push({ type: 'ambiguous-known-index-mismatch' })
   }
@@ -241,7 +253,7 @@ function collectIndexIssues(room: Room, issues: unknown[], metrics: ReplayMetric
 }
 
 function collectPlayerSnapshotIssues(room: Room, issues: unknown[]): void {
-  const snapshot = room.playerCardsSnapshot
+  const snapshot = getPlayerCardsSnapshot(room)
   const current = room.cards.filter((card) => card.location === 'player')
   const matches =
     snapshot.length === current.length && snapshot.every((card, index) => card === current[index])

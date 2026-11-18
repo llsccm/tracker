@@ -5,6 +5,7 @@ import { getPositiveIDs } from '../helper/cardIDs'
 import type { Room } from '../Room'
 import type { CardID, SeatID } from '../types'
 import { getCount, patchEvent, type MoveEventDraft } from './moveEventUtils'
+import { defineSkillState } from './skillState'
 
 /** 狂魔 */
 export const DUO_QI_GAIN_ALL_SPELL_ID = 3730
@@ -66,9 +67,11 @@ interface DuoQiRoleDataTargetMessage {
   SeatID: SeatID
 }
 
+const duoQiState = defineSkillState<DuoQiState>(DUO_QI_STATE_KEY)
+
 /** 只读获取当前 Room 的夺炁推断状态，不存在时不创建。 */
 export function getDuoQiState(room: Room): DuoQiState | undefined {
-  const state = room.readSkillState<DuoQiState>(DUO_QI_STATE_KEY)
+  const state = duoQiState.read(room)
   return state?.active === true ? state : undefined
 }
 
@@ -156,7 +159,7 @@ export function initializeDuoQiState(
   })
 
   convergeInitialSeats(state)
-  room.setSkillState(DUO_QI_STATE_KEY, state)
+  duoQiState.set(room, state)
   return state
 }
 

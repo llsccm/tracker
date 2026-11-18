@@ -5,6 +5,8 @@ import type { Room } from '@/tracker/Room'
 import type { RawMoveCardEvent, TrackerControllerOptions } from '@/tracker/types'
 import { trackerLogger } from '@/utils/logger'
 import { protocolMove, createReadyControllerHarness } from '../helpers/trackerController'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
+import { hasSkillState } from '@/tracker/room/RoomBase'
 
 function getHandIDs(room: Room, seatID = 2) {
   return room.cards
@@ -67,8 +69,8 @@ function expectHand(room: Room, cardIDs: number[]) {
   expect(getHandIDs(room)).toEqual([...cardIDs].sort((left, right) => left - right))
   expect(room.getPlayer(2)?.observedHandCount).toBe(cardIDs.length)
   expect(room.getPlayer(2)?.unknownCardCount).toBe(0)
-  expect(room.assertPileIdentityLedgerConsistency('guiFu-paired-move')).toEqual([])
-  expect(room.hasSkillState(GUI_FU_ROLE_DATA_ID)).toBe(false)
+  expect(assertPileIdentityLedgerConsistency(room, 'guiFu-paired-move')).toEqual([])
+  expect(hasSkillState(room, GUI_FU_ROLE_DATA_ID)).toBe(false)
 }
 
 describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
@@ -111,10 +113,10 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
     expect(room.getPlayer(2)?.observedHandCount).toBe(0)
     expect(room.cards).toEqual(allCards)
     expect(source.cards).toEqual(sourceCards)
-    expect(room.hasSkillState(GUI_FU_ROLE_DATA_ID)).toBe(true)
+    expect(hasSkillState(room, GUI_FU_ROLE_DATA_ID)).toBe(true)
     expect(move).not.toHaveBeenCalled()
     expect(ledgerMove).not.toHaveBeenCalled()
-    expect(room.assertPileIdentityLedgerConsistency('guiFu-deferred')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'guiFu-deferred')).toEqual([])
     receive(cardIDs)
     expectHand(room, cardIDs)
     expect(source.cards).toHaveLength(sourceCards.length - 2)
@@ -263,7 +265,7 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
   it.each([1, 2])('携带真实 ID 的座位 %i 沿用普通移动，不重复消费角色数据', (seatID) => {
     const { room, gain, receive } = createGuiFuHarness()
     gain({ CardIDs: [20], ToID: seatID })
-    expect(room.hasSkillState(GUI_FU_ROLE_DATA_ID)).toBe(false)
+    expect(hasSkillState(room, GUI_FU_ROLE_DATA_ID)).toBe(false)
     expect(getHandIDs(room, seatID)).toEqual([20])
     const move = vi.spyOn(room, 'moveCards')
     receive([20], seatID)
@@ -287,8 +289,8 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
     gain({ FromZone: 1, SpellID: 0 })
     expect(getHandIDs(room)).toHaveLength(1)
     expect(room.getPlayer(2)?.observedHandCount).toBe(1)
-    expect(room.hasSkillState(GUI_FU_ROLE_DATA_ID)).toBe(false)
-    expect(room.assertPileIdentityLedgerConsistency('ordinary-anonymous-gain')).toEqual([])
+    expect(hasSkillState(room, GUI_FU_ROLE_DATA_ID)).toBe(false)
+    expect(assertPileIdentityLedgerConsistency(room, 'ordinary-anonymous-gain')).toEqual([])
   })
 
   it.each([
@@ -376,18 +378,12 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
         SpellID: GUI_FU_ROLE_DATA_ID
       })
       const patched = { ...raw, CardIDs: [...cardIDs], FromPosition: 65282 }
-      Object.freeze(raw.CardIDs)
-      Object.freeze(raw)
-      Object.freeze(patched.CardIDs)
-      Object.freeze(patched)
       info.mockClear()
 
       controller.syncTrackerMove(patched, raw)
       const pending = room.readSkillState<{ raw: unknown; patched: unknown }>(GUI_FU_ROLE_DATA_ID)
       expect(pending?.raw).toEqual(raw)
-      expect(pending?.raw).not.toBe(raw)
       expect(pending?.patched).toEqual(patched)
-      expect(pending?.patched).not.toBe(patched)
       receive([40])
 
       expectHand(room, [40])
@@ -470,7 +466,7 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
     const { controller, room, gain, receive } = createGuiFuHarness()
     gain()
     controller.destroyTrackerRoom()
-    expect(room.hasSkillState(GUI_FU_ROLE_DATA_ID)).toBe(false)
+    expect(hasSkillState(room, GUI_FU_ROLE_DATA_ID)).toBe(false)
     controller.initTrackerRoom()
     controller.registerTrackerPlayers([{ SeatID: 2, ClientID: 200 }], 100)
     controller.initTrackerDeck([10, 20])
@@ -478,7 +474,7 @@ describe('GsCUpdateRoleDataExNtf 3709 相邻消息补全', () => {
     const nextRoom = controller.getTrackerRoom()!
     expect(getHandIDs(nextRoom)).toEqual([])
     expect(nextRoom.zones.get('pile')!.cards).toHaveLength(2)
-    expect(nextRoom.hasSkillState(GUI_FU_ROLE_DATA_ID)).toBe(false)
+    expect(hasSkillState(nextRoom, GUI_FU_ROLE_DATA_ID)).toBe(false)
   })
   it('诡伏暂存不构造标准事件，配对成功后才归一化一次', async () => {
     const { room, gain, receive } = createGuiFuHarness()

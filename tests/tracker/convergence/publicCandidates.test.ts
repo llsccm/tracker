@@ -1,3 +1,4 @@
+import { getPublicZoneConsistencyIssues } from '@/tracker/room/publicZones'
 import { describe, expect, it } from 'vitest'
 import { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
@@ -81,7 +82,7 @@ describe('公共候选传播', () => {
     })
 
     expect(affectedCards).toEqual([first, second])
-    expect(room.publicZones.getPublicZoneConsistencyIssues()).toEqual([])
+    expect(getPublicZoneConsistencyIssues(room)).toEqual([])
     ;[first, second].forEach((card) => {
       expect(card.location).toBe('player')
       expect(room.getPublicZone('pile').cards).not.toContain(card)

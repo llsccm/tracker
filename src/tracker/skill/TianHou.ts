@@ -20,6 +20,8 @@ import type { Room } from '../Room'
 import { recordTraversal } from '../traversalStats'
 import type { PlayerLocationCandidate, SeatID } from '../types'
 import { getCount, hasPositiveID, type MoveEventDraft, patchEvent } from './moveEventUtils'
+import { defineSkillState } from './skillState'
+import { clearExchangeBatches, splitExchangeCards } from './exchangeCards'
 
 export const TIAN_HOU_SPELL_ID = 3903
 export const TIAN_HOU_STATE_KEY = 'tianHouExchange'
@@ -48,29 +50,22 @@ type TianHouRoomState = {
   batch: TianHouBatch | null
 }
 
-function getTianHouState(room: Room): TianHouRoomState | null {
-  return room.readSkillState<TianHouRoomState>(TIAN_HOU_STATE_KEY) ?? null
-}
-
-function ensureTianHouState(room: Room): TianHouRoomState {
-  return room.ensureSkillState(TIAN_HOU_STATE_KEY, () => ({ batch: null }))
-}
+const tianHouState = defineSkillState<TianHouRoomState>(TIAN_HOU_STATE_KEY, (room, state) => {
+  if (state.batch) {
+    clearExchangeBatches(room, [state.batch.pileBatchKey, state.batch.handBatchKey])
+  }
+})
 
 function clearBatch(room: Room, cleanupTemporaryCandidates = false): void {
-  const state = getTianHouState(room)
+  const state = tianHouState.read(room)
   const batch = state?.batch
-  if (batch) {
-    room.publicZones.deleteExchangeBatch(batch.pileBatchKey)
-    room.publicZones.deleteExchangeBatch(batch.handBatchKey)
-  }
+  tianHouState.clear(room)
   // 中途失配时撤销尚在交换区的临时候选；结算后的牌堆候选必须继续保留。
   if (cleanupTemporaryCandidates && batch && batch.phase !== 'awaiting-reveal') {
     batch.knownHandCards.forEach((card) => {
       card.removePublicCandidates((candidate) => candidate?.zone === 'exchange')
     })
   }
-
-  room.deleteSkillState(TIAN_HOU_STATE_KEY)
 }
 
 function isOtherView(room: Room, actorSeat: SeatID): boolean {
@@ -152,7 +147,7 @@ function decoratePileStage(event: MoveEventDraft, room: Room, actorSeat: SeatID)
   const pileBatchKey = `${TIAN_HOU_SPELL_ID}:pile:${actorSeat}`
   const handBatchKey = `${TIAN_HOU_SPELL_ID}:seat:${actorSeat}`
   room.publicZones.getExchangeBatch(pileBatchKey).stage(selectedPileCards)
-  ensureTianHouState(room).batch = {
+  tianHouState.ensure(room, () => ({ batch: null })).batch = {
     actorSeat,
     count,
     pileBatchKey,
@@ -171,7 +166,7 @@ function decoratePileStage(event: MoveEventDraft, room: Room, actorSeat: SeatID)
 }
 
 function decorateHandStage(event: MoveEventDraft, room: Room, actorSeat: SeatID): MoveEventDraft {
-  const state = getTianHouState(room)
+  const state = tianHouState.read(room)
   const batch = state?.batch
   const count = getCount(event)
   if (
@@ -228,7 +223,7 @@ function decorateExchangeReorder(
   room: Room,
   actorSeat: SeatID
 ): MoveEventDraft {
-  const batch = getTianHouState(room)?.batch
+  const batch = tianHouState.read(room)?.batch
   if (
     !batch ||
     batch.phase !== 'hand-staged' ||
@@ -247,7 +242,7 @@ function decorateReturnToHand(
   room: Room,
   actorSeat: SeatID
 ): MoveEventDraft {
-  const batch = getTianHouState(room)?.batch
+  const batch = tianHouState.read(room)?.batch
   if (
     !batch ||
     batch.phase !== 'hand-staged' ||
@@ -263,17 +258,14 @@ function decorateReturnToHand(
     return event
   }
 
-  const knownIDs = selectedPileCards
-    .filter((card) => card.isKnown === true && card.id > 0)
-    .map((card) => card.id)
+  const { knownIDs, unknownCards } = splitExchangeCards(selectedPileCards)
   // 明确身份走 cardIDs，匿名实体走 sourceCards，二者合计仍为本轮交换张数。
-  const sourceCards = selectedPileCards.filter((card) => !knownIDs.includes(card.id))
   batch.phase = 'hand-returned'
 
   return patchEvent(event, {
     cardIDs: knownIDs,
     options: {
-      sourceCards
+      sourceCards: unknownCards
     }
   })
 }
@@ -283,7 +275,7 @@ function decorateReturnToPile(
   room: Room,
   actorSeat: SeatID
 ): MoveEventDraft {
-  const batch = getTianHouState(room)?.batch
+  const batch = tianHouState.read(room)?.batch
   if (
     !batch ||
     batch.phase !== 'hand-returned' ||
@@ -333,7 +325,7 @@ function decorateFinalReveal(event: MoveEventDraft, room: Room): MoveEventDraft 
   const cardID = event.cardIDs[0]
   if (!(cardID > 0)) return event
 
-  const state = getTianHouState(room)
+  const state = tianHouState.read(room)
   const batch = state?.batch?.phase === 'awaiting-reveal' ? state.batch : null
   // 没有可配对批次且身份已精确位于牌顶三张时，保留更强的既有位置事实。
   if (!batch && isKnownExactPileTopThree(room, cardID)) return event

@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { CardLocationIndex } from '@/tracker/projection/CardLocationIndex'
+import { AmbiguousKnownIndex } from '@/tracker/projection/AmbiguousKnownIndex'
 import { createTestRoom } from '../helpers/room'
 
 afterEach(() => {
@@ -11,64 +13,85 @@ function createRoomWithDebugAssert(search = '') {
   return createTestRoom({ cardIDs: [1, 2, 3], seatIDs: [1, 2] }).room
 }
 
-function spyOnShadowIndexAssertions(room: ReturnType<typeof createRoomWithDebugAssert>) {
-  const locationIndex = vi
-    .spyOn(room, 'assertLocationIndexConsistency')
-    .mockImplementation(() => undefined)
-  const ambiguousKnownIndex = vi
-    .spyOn(room, 'assertAmbiguousKnownIndexConsistency')
-    .mockImplementation(() => undefined)
+function spyOnIndexRebuilds() {
+  return {
+    locationIndex: vi.spyOn(CardLocationIndex.prototype, 'rebuild'),
+    ambiguousKnownIndex: vi.spyOn(AmbiguousKnownIndex.prototype, 'rebuild')
+  }
+}
 
-  return { locationIndex, ambiguousKnownIndex }
+// 主索引初始化也使用 record:false；影子检查使用独立的索引实例。
+function getShadowRebuildCounts(
+  rebuilds: ReturnType<typeof spyOnIndexRebuilds>,
+  room: ReturnType<typeof createRoomWithDebugAssert>
+) {
+  return {
+    locationIndex: rebuilds.locationIndex.mock.contexts.filter(
+      (instance) => instance !== room.locationIndex
+    ).length,
+    ambiguousKnownIndex: rebuilds.ambiguousKnownIndex.mock.contexts.filter(
+      (instance) => instance !== room.ambiguousKnownIndex
+    ).length
+  }
 }
 
 describe('Room DEV 影子索引断言门控', () => {
   it('默认在首次及每 32 次收敛时成对抽样', () => {
     const room = createRoomWithDebugAssert()
-    const assertions = spyOnShadowIndexAssertions(room)
+    const rebuilds = spyOnIndexRebuilds()
 
     for (let index = 0; index < 31; index += 1) room.resolveConstraints()
-    expect(assertions.locationIndex).toHaveBeenCalledTimes(1)
-    expect(assertions.ambiguousKnownIndex).toHaveBeenCalledTimes(1)
+    expect(getShadowRebuildCounts(rebuilds, room)).toEqual({
+      locationIndex: 1,
+      ambiguousKnownIndex: 1
+    })
 
     room.resolveConstraints()
-    expect(assertions.locationIndex).toHaveBeenCalledTimes(2)
-    expect(assertions.ambiguousKnownIndex).toHaveBeenCalledTimes(2)
+    expect(getShadowRebuildCounts(rebuilds, room)).toEqual({
+      locationIndex: 2,
+      ambiguousKnownIndex: 2
+    })
   })
 
   it('debugAssert=1 时每次收敛都成对检查', () => {
     const room = createRoomWithDebugAssert('?debugAssert=1')
-    const assertions = spyOnShadowIndexAssertions(room)
+    const rebuilds = spyOnIndexRebuilds()
 
     room.resolveConstraints()
     room.resolveConstraints()
     room.resolveConstraints()
 
-    expect(assertions.locationIndex).toHaveBeenCalledTimes(3)
-    expect(assertions.ambiguousKnownIndex).toHaveBeenCalledTimes(3)
+    expect(getShadowRebuildCounts(rebuilds, room)).toEqual({
+      locationIndex: 3,
+      ambiguousKnownIndex: 3
+    })
   })
 
   it('debugAssert=0 时关闭收敛尾部的影子索引检查', () => {
     const room = createRoomWithDebugAssert('?debugAssert=0')
-    const assertions = spyOnShadowIndexAssertions(room)
+    const rebuilds = spyOnIndexRebuilds()
 
     room.resolveConstraints()
     room.resolveConstraints()
 
-    expect(assertions.locationIndex).not.toHaveBeenCalled()
-    expect(assertions.ambiguousKnownIndex).not.toHaveBeenCalled()
+    expect(getShadowRebuildCounts(rebuilds, room)).toEqual({
+      locationIndex: 0,
+      ambiguousKnownIndex: 0
+    })
   })
 
   it('重新初始化牌堆后从首次抽样重新计数', () => {
     const room = createRoomWithDebugAssert()
-    const assertions = spyOnShadowIndexAssertions(room)
+    const rebuilds = spyOnIndexRebuilds()
 
     room.resolveConstraints()
     room.resolveConstraints()
     room.initDeck([1, 2, 3])
     room.resolveConstraints()
 
-    expect(assertions.locationIndex).toHaveBeenCalledTimes(2)
-    expect(assertions.ambiguousKnownIndex).toHaveBeenCalledTimes(2)
+    expect(getShadowRebuildCounts(rebuilds, room)).toEqual({
+      locationIndex: 2,
+      ambiguousKnownIndex: 2
+    })
   })
 })

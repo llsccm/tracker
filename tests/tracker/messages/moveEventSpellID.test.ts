@@ -8,6 +8,7 @@ import {
   protocolMove,
   createReadyControllerHarness
 } from '../helpers/trackerController'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
 
 const returnMove = protocolMove({
   CardCount: 1,
@@ -76,7 +77,7 @@ describe('移动事件技能 ID', () => {
       ])
       expect(room.getPlayer(3)!.observedHandCount).toBe(0)
       expect(room.getPlayer(1)!.observedHandCount).toBe(1)
-      expect(room.assertPileIdentityLedgerConsistency('moveEventSpellID')).toEqual([])
+      expect(assertPileIdentityLedgerConsistency(room, 'moveEventSpellID')).toEqual([])
       controller.destroyTrackerRoom()
     }
   )

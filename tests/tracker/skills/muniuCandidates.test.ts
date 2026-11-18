@@ -1,3 +1,4 @@
+import { getPublicZoneConsistencyIssues } from '@/tracker/room/publicZones'
 import { POSITION_TOP } from '@/tracker/candidate/cardPositions'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
@@ -13,6 +14,7 @@ import {
   moveKnownCardsToHand,
   moveUnknownCardsToHand
 } from '../helpers/hiddenMarks'
+import { getPlayerCardsSnapshot } from '@/tracker/projection/playerSnapshot'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -66,7 +68,7 @@ describe('木牛流马候选与收敛', () => {
         count: 1,
         spellID: 700
       })
-      const hiddenCard = room.playerCardsSnapshot.find(
+      const hiddenCard = getPlayerCardsSnapshot(room).find(
         (card) => card.isAnonymous && card.subZone === 'mark'
       )!
 
@@ -220,7 +222,7 @@ describe('木牛流马候选与收敛', () => {
         count: 1,
         spellID: 700
       })
-      const placeholderCard = room.playerCardsSnapshot.find(
+      const placeholderCard = getPlayerCardsSnapshot(room).find(
         (card) => card.isAnonymous && card.subZone === 'mark'
       )!
 
@@ -258,7 +260,7 @@ describe('木牛流马候选与收敛', () => {
         count: 1,
         spellID: 700
       })
-      const placeholderCard = room.playerCardsSnapshot.find(
+      const placeholderCard = getPlayerCardsSnapshot(room).find(
         (card) => card.isAnonymous && card.subZone === 'mark'
       )!
 
@@ -299,7 +301,7 @@ describe('木牛流马候选与收敛', () => {
         count: 1,
         spellID: 700
       })
-      const placeholderCard = room.playerCardsSnapshot.find(
+      const placeholderCard = getPlayerCardsSnapshot(room).find(
         (card) => card.isAnonymous && card.subZone === 'mark'
       )!
 
@@ -622,7 +624,7 @@ describe('木牛流马候选与收敛', () => {
         count: 2,
         spellID: 700
       })
-      const placeholders = room.playerCardsSnapshot.filter(
+      const placeholders = getPlayerCardsSnapshot(room).filter(
         (card) => card.isAnonymous && card.subZone === 'mark'
       )
       const entityCountBefore = room.cards.length
@@ -649,7 +651,7 @@ describe('木牛流马候选与收敛', () => {
       const revealedCard = room.cardIndex.get(153)!
       expect(placeholders).toContain(revealedCard)
       expect(room.cards).toHaveLength(entityCountBefore)
-      const remainingHand = room.playerCardsSnapshot.filter((card) => card.subZone === 'hand')
+      const remainingHand = getPlayerCardsSnapshot(room).filter((card) => card.subZone === 'hand')
       expect(remainingHand).toHaveLength(1)
       expect(remainingHand.every((card) => card.isAnonymous)).toBe(true)
       ;[candidateCard, revealedCard].forEach((card) => {
@@ -705,7 +707,7 @@ describe('木牛流马候选与收敛', () => {
             card.seats.has(7)
         )
       ).toHaveLength(0)
-      expect(room.publicZones.getPublicZoneConsistencyIssues()).toEqual([])
+      expect(getPublicZoneConsistencyIssues(room)).toEqual([])
     })
 
     it('整手离场揭示 [29,50,113] 时应收敛 141 进木马且不产生实体缺口', () => {

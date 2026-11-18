@@ -346,10 +346,9 @@ describe('重连协议回放', () => {
     expect(report.failure).toBeUndefined()
     const room = replayer.controller.getReadyTrackerRoom()
     if (!room) throw new Error('测试预期重连后 Room 仍可用')
-    const ledgerSpy = vi.spyOn(room.pileIdentityLedger, 'assertConsistency')
+    room.pileIdentityLedger.reconcilePileCount(999)
 
     expect(() => assertTrackerReplayConsistency(room, 'degraded')).not.toThrow()
-    expect(ledgerSpy).not.toHaveBeenCalled()
     room.cardIndex.delete(122)
     expect(() => assertTrackerReplayConsistency(room, 'degraded-index')).toThrow(
       'card-index-mismatch'

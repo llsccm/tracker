@@ -38,6 +38,8 @@ import type {
 import { recordTraversal } from '../traversalStats'
 import { getPositiveIDs } from '../helper/cardIDs'
 import { getCount, type MoveEventDraft, nextGroupID, patchEvent } from './moveEventUtils'
+import { defineSkillState, deleteSpellState } from './skillState'
+import { splitExchangeCards } from './exchangeCards'
 
 /**
  * 当前一局 tracker 状态的共享 key。
@@ -87,6 +89,8 @@ type HandExchangeRoomState = {
   nextBatchSeq: number
 }
 
+const handExchangeState = defineSkillState<HandExchangeRoomState>(HAND_EXCHANGE_STATE_KEY)
+
 function resolveSpellID(event: MoveEventDraft): number {
   const move = event.protocol
   const spellID = move.SpellID
@@ -95,18 +99,10 @@ function resolveSpellID(event: MoveEventDraft): number {
 
 /** 可写读取：进区登记时才创建房间账本。 */
 function ensureRoomExchangeState(room: Room): HandExchangeRoomState {
-  return room.ensureSkillState(HAND_EXCHANGE_STATE_KEY, () => ({
+  return handExchangeState.ensure(room, () => ({
     bySpell: {},
     nextBatchSeq: 0
   }))
-}
-
-/**
- * 只读读取：不存在则返回 undefined，避免查询路径留下空 skillState。
- * 回手 / 清理 都应走这条路径。
- */
-function readRoomExchangeState(room: Room): HandExchangeRoomState | undefined {
-  return room.readSkillState<HandExchangeRoomState>(HAND_EXCHANGE_STATE_KEY)
 }
 
 /** 可写读取：确保指定 SpellID 的批次字典存在。 */
@@ -122,7 +118,7 @@ function ensureSpellExchangeState(room: Room, spellID: number): HandExchangeSpel
 
 /** 只读读取：未登记过该 SpellID 时不创建空字典。 */
 function readSpellExchangeState(room: Room, spellID: number): HandExchangeSpellState | undefined {
-  return readRoomExchangeState(room)?.bySpell[String(spellID)]
+  return handExchangeState.read(room)?.bySpell[String(spellID)]
 }
 
 /**
@@ -131,17 +127,14 @@ function readSpellExchangeState(room: Room, spellID: number): HandExchangeSpellS
  * 过早删除该技能账本会连带丢失尚未回手的候选令牌。
  */
 function clearSpellExchangeStateIfEmpty(room: Room, spellID: number): void {
-  const roomState = readRoomExchangeState(room)
+  const roomState = handExchangeState.read(room)
   if (!roomState) return
 
   const state = roomState.bySpell[String(spellID)]
-  if (state && Object.keys(state.batches).length === 0 && state.candidateRecords.size === 0) {
-    delete roomState.bySpell[String(spellID)]
+  if (state && (Object.keys(state.batches).length > 0 || state.candidateRecords.size > 0)) {
+    return
   }
-
-  if (Object.keys(roomState.bySpell).length === 0) {
-    room.deleteSkillState(HAND_EXCHANGE_STATE_KEY)
-  }
+  deleteSpellState(room, HAND_EXCHANGE_STATE_KEY, spellID)
 }
 
 /**
@@ -404,29 +397,6 @@ function alignProtocolKnownCards(event: MoveEventDraft, cards: Card[]): void {
 }
 
 /**
- * 把批次拆成 Room.moveCards 可消费的两路：
- * - knownIDs -> cardIDs（按正 ID 搬走明牌）
- * - unknownCards -> options.sourceCards（按实体搬走暗牌）
- */
-function splitKnownAndUnknownCards(cards: Card[]): {
-  knownIDs: number[]
-  unknownCards: Card[]
-} {
-  const knownIDs: number[] = []
-  const unknownCards: Card[] = []
-
-  cards.forEach((card) => {
-    if (card.isKnown === true && card.id > 0) {
-      knownIDs.push(card.id)
-      return
-    }
-    unknownCards.push(card)
-  })
-
-  return { knownIDs, unknownCards }
-}
-
-/**
  * 生成进区/回手补丁。
  * 明暗同批不能共用 combinationID：Room 会把 known 组与 unknown 组合并，
  * ConstraintGroup.known 被 OR 为 true 后会 confirmKnown 整组暗牌。
@@ -441,7 +411,7 @@ function buildExchangePatch(
   logicallyResolvedKnownIDs: Set<number> = new Set(),
   moveOnlyStagedCards = false
 ): MoveEventDraft {
-  const { knownIDs: stagedKnownIDs, unknownCards } = splitKnownAndUnknownCards(cards)
+  const { knownIDs: stagedKnownIDs, unknownCards } = splitExchangeCards(cards)
   // 回到可见手牌时，协议正 ID 可能对应 exchange 中的匿名占位；
   // 保留这些 ID 让 Room 的公共区身份置换把占位替换为真实已知实体。
   const protocolKnownIDs = getPositiveIDs(event.cardIDs ?? []).filter(

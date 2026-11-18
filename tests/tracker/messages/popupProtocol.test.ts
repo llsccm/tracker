@@ -4,6 +4,9 @@ import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import { getPopupSpaceCards } from '@/tracker/room/movement/popupSpaces'
 import { getUnknownPlayerSourceCards } from '@/tracker/room/movement/sourceQueries'
 import { protocolMove, createReadyControllerHarness } from '../helpers/trackerController'
+import { getCandidateHandSlotCount } from '@/tracker/model/Player'
+import { hasSkillState } from '@/tracker/room/RoomBase'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
 
 function setup(ids: number[]) {
   const { controller } = createReadyControllerHarness({
@@ -61,7 +64,7 @@ describe('玩家标记与弹窗协议边界', () => {
         .candidateHandCards.map((card) => card.id)
         .sort((a, b) => a - b)
     ).toEqual([40, 43, 96])
-    expect(room.getPlayer(3)!.getCandidateHandSlotCount()).toBe(1)
+    expect(getCandidateHandSlotCount(room.getPlayer(3)!)).toBe(1)
     expect(getPopupSpaceCards(room, 3657).map((card) => card.id)).toEqual([37])
     controller.syncTrackerMove(
       protocolMove({
@@ -178,8 +181,8 @@ describe('玩家标记与弹窗协议边界', () => {
     expect(room.zones.get('pile')!.cards[0]).toBe(remaining)
     expect(new Set(room.zones.get('pile')!.cards)).toEqual(new Set(before))
     expect(room.cards).toHaveLength(7)
-    expect(room.hasSkillState('popupSpaces')).toBe(false)
-    expect(room.assertPileIdentityLedgerConsistency('popup:35')).toEqual([])
+    expect(hasSkillState(room, 'popupSpaces')).toBe(false)
+    expect(assertPileIdentityLedgerConsistency(room, 'popup:35')).toEqual([])
   })
 
   it('414 混合装备与暗手牌整区返回，3389 不作为来源空间别名', () => {
@@ -244,6 +247,6 @@ describe('玩家标记与弹窗协议边界', () => {
     expect(getPopupSpaceCards(room, 3544).map((card) => card.id)).toEqual([37, 92])
     expect(room.cards).toHaveLength(2)
     expect(room.getPlayer(3544)).toBeUndefined()
-    expect(room.assertPileIdentityLedgerConsistency('popup:reveal')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'popup:reveal')).toEqual([])
   })
 })

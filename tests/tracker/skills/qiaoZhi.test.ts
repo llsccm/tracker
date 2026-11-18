@@ -1,7 +1,9 @@
+import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { describe, expect, it } from 'vitest'
 import { getPopupSpaceCards } from '@/tracker/room/movement/popupSpaces'
 
 import { protocolMove, createReadyControllerHarness } from '../helpers/trackerController'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
 
 describe('巧织默认协议管线', () => {
   it('明弃未选牌后由通用数量约束确认暗取牌身份', () => {
@@ -271,13 +273,13 @@ describe('巧织默认协议管线', () => {
           SpellID: 3544
         })
       )
-      const revision = room.pileIdentityLedger.getSnapshot().revision
+      const revision = getPileIdentitySnapshot(room.pileIdentityLedger).revision
       notifyRoleData()
       controller.dispatchSkillProtocolEvent({
         type: 'roleData',
         message: { DataID: 3544, SeatID: 3, Datas: [0, 0] }
       })
-      expect(room.pileIdentityLedger.getSnapshot().revision).toBe(revision)
+      expect(getPileIdentitySnapshot(room.pileIdentityLedger).revision).toBe(revision)
       expect(player.observedHandCount).toBe(1)
       expect(player.knownHandCards.map((card) => card.id)).toEqual([37])
       expect(player.candidateHandCards).toEqual([])
@@ -287,7 +289,7 @@ describe('巧织默认协议管线', () => {
       ])
       expect(room.cards).toHaveLength(2)
       expect(getPopupSpaceCards(room, 3544)).toEqual([])
-      expect(room.assertPileIdentityLedgerConsistency('qiaoZhi:roleData')).toEqual([])
+      expect(assertPileIdentityLedgerConsistency(room, 'qiaoZhi:roleData')).toEqual([])
     }
   )
 })

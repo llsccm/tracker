@@ -40,8 +40,9 @@
   这些字段仍属于同一个 Room 实例；玩家注册、视图脏通知、GameState 绑定和销毁协调保留在 Room。
 - `RoomMovement`、`RoomConstraints`、`RoomPublicZones` 与 `RoomIdentity` 只持有 Room 引用并执行分阶段行为，
   不拥有另一套独立推断状态。`PlayerSnapshot` 独占玩家区派生缓存，`RoomMoveEvents` 独占处理器注册表。
-- `RoomDiagnostics` 仅在 DEV 环境挂载，集中执行只读断言与收敛告警；仅维护诊断抽样状态，
-  不参与牌局状态写入。Room 保留公开断言薄入口，生产环境保持空操作。
+- `RoomDiagnostics` 仅在 DEV 环境挂载，维护诊断抽样状态并报告收敛轮数异常；只读断言由
+  `room/diagnostics.ts` 的独立函数执行，不参与牌局状态写入。Room 与行为模块在 DEV 分支
+  直接调用独立断言函数，生产构建移除这些检查，不保留原型转发入口。
 - `resolveConstraints()` 是稳定投影边界：候选与物理状态写入后，经它收敛并同步索引、玩家视图组、
   计数器和一致性检查。
 
@@ -107,7 +108,7 @@ Controller 每次创建 Room 后、注册座位前调用 `Game.beginPlayback()`�
 | 位置投影     | `locationIndex`                                                  | `resolveConstraints()` 消费卡牌脏事件和公共区脏集合，断档时全量重建                        |
 | 模糊明牌反查 | `ambiguousKnownIndex`                                            | 按脏事件增量更新；约束组结构变化只刷新存量条目的分组描述，游标断档时全量重建                |
 | 计数查询     | `counter`                                                        | `initDeck()` 后创建，收敛尾部按脏牌增量更新                                                |
-| 玩家区快照   | `PlayerSnapshot` 内部数组、成员集合、游标与创建顺序              | Room 保留 `playerCardsSnapshot` 只读 getter；按 `dirtyCardEvents` 增量刷新，断档时回退全量 |
+| 玩家区快照   | `PlayerSnapshot` 内部数组、成员集合、游标与创建顺序              | `getPlayerCardsSnapshot(room)` 提供只读查询；按 `dirtyCardEvents` 增量刷新，断档时回退全量 |
 | View 脏状态  | `viewDirty`、`dirtyCards`、`dirtyCardEvents`、`dirtyPublicZones` | 由卡牌/Zone 变更入口记录，供索引和视图各自按游标消费                                       |
 
 派生数组、索引桶和快照都不是写入事实。不要直接修改 `locationIndex`、
@@ -279,10 +280,10 @@ cohort 身份到匿名实体的投影，并协调洗回身份匿名化和物理�
 | 公共区查询、牌序读面、物理槽校准和一致性诊断             | `room/publicZones.ts`                                   | 避免在 Room 重复实现 Zone 遍历                                                |
 | 重连残局快照恢复与初始化前暂存                         | `room/reconnect.ts`                                     | 不补造移动协议，不把重连计数当作洗牌 |
 | 座位/视角字段与查询、GameState 上下文、技能状态访问      | `room/RoomBase.ts`                                      | 单层基础类，不依赖完整 Room；不创建独立技能状态仓库                           |
-| 玩家区快照、事件游标、实体创建顺序                       | `projection/playerSnapshot.ts`                          | 唯一派生缓存，Room 保留查询和刷新入口                                         |
+| 玩家区快照、事件游标、实体创建顺序                       | `projection/playerSnapshot.ts`                          | 唯一派生缓存，独立函数提供只读查询，Room 保留刷新入口                          |
 | 插件注册、阶段分发及输入类型                             | `room/moveEvents.ts`、`skill/protocolEvents.ts`         | 注册表按局隔离，移动与非移动事实使用各自的类型契约                            |
 | 身份物化、匿名化、外部/suspended 实体创建与世代身份投影  | `room/identity.ts`                                      | Room 保留状态所有权、账本事务协调、公开原语及成功解绑后的诊断；不复制身份账本 |
-| DEV 身份/槽位守恒、玩家快照、影子索引断言与收敛告警      | `room/diagnostics.ts`                                   | 只读检查，保留 Room 公开薄入口；抽样计数随初始化/销毁重置                     |
+| DEV 身份/槽位守恒、玩家快照、影子索引断言与收敛告警      | `room/diagnostics.ts`                                   | 只读检查；测试直接调用独立断言函数，Room 原型不保留诊断包装；抽样计数随初始化/销毁重置 |
 | 稳定且高频的单局公开入口                                 | `Room.ts` 的薄门面                                      | 便于调用方检索与引用追踪                                                      |
 | 技能专属事件装饰与临时账本                               | `src/tracker/skill/` + GameState `tracker` 状态         | 技能状态按局隔离，Room 仅提供领域访问入口                                     |
 | 牌实体、玩家事实或公共区模型语义                         | `model/Card.ts` / `model/Player.ts` / `model/Zone.ts`   | 由对应模型维护自身不变量                                                      |

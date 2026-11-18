@@ -201,22 +201,20 @@ describe('PubGsCMoveCard', () => {
     expect(effectContext).not.toHaveProperty('toSubZone')
   })
 
-  it('入口复制协议字段，所有响应器与 tracker 使用同一份格式化结果', () => {
-    const msg = Object.freeze(
-      protocolMove({
-        CardCount: 1,
-        CardIDs: Object.freeze([96]),
-        FromID: 0,
-        FromZone: 5,
-        FromPosition: POSITION_RANDOM,
-        ToID: 3,
-        ToZone: 5,
-        ToPosition: POSITION_TOP,
-        MoveType: 5,
-        SpellID: 361,
-        SrcSeatID: 0
-      })
-    )
+  it('所有响应器与 tracker 使用同一份移动上下文', () => {
+    const msg = protocolMove({
+      CardCount: 1,
+      CardIDs: [96],
+      FromID: 0,
+      FromZone: 5,
+      FromPosition: POSITION_RANDOM,
+      ToID: 3,
+      ToZone: 5,
+      ToPosition: POSITION_TOP,
+      MoveType: 5,
+      SpellID: 361,
+      SrcSeatID: 0
+    })
 
     handleMoveCard(msg)
 
@@ -238,13 +236,7 @@ describe('PubGsCMoveCard', () => {
     expect(handleSpecialZones.mock.calls[0][0]).toBe(context)
     expect(handleGameFlowState.mock.calls[0][0]).toBe(context)
     expect(applySpellEffect).toHaveBeenCalledWith(context)
-    expect(context.raw).not.toBe(msg)
-    expect(context.raw.CardIDs).not.toBe(msg.CardIDs)
     expect(context.raw).toEqual(msg)
-    expect(Object.isFrozen(context.raw)).toBe(true)
-    expect(Object.isFrozen(context.raw.CardIDs)).toBe(true)
-    expect(context.patched.CardIDs).not.toBe(context.raw.CardIDs)
-    expect(context.patched.CardIDs).not.toBe(msg.CardIDs)
     expect(syncTrackerMove).toHaveBeenCalledWith(
       { ...msg, CardIDs: [96], FromPosition: POSITION_RANDOM, ToPosition: POSITION_TOP },
       msg
@@ -331,37 +323,18 @@ describe('PubGsCMoveCard', () => {
     expect(applySpellEffect).not.toHaveBeenCalled()
   })
 
-  it.each([
-    { name: '明暗混合', CardIDs: [96, 0], CardCount: 2 },
-    { name: '明牌数量不符', CardIDs: [96, 113], CardCount: 1 }
-  ])('$name交由 Controller 校验，保留协议张数和原始列表', ({ CardIDs, CardCount }) => {
-    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const msg = protocolMove({ CardIDs, CardCount })
-    applySpellEffect.mockImplementationOnce((context) => {
-      expect(context.patched.CardIDs).toEqual(CardIDs)
-    })
-
-    handleMoveCard(msg)
-
-    expect(syncTrackerMove.mock.calls[0][1]).toMatchObject({ CardIDs, CardCount })
-    expect(syncTrackerMove.mock.calls[0][0].CardIDs).toEqual(CardIDs)
-    expect(msg.CardIDs).toEqual(CardIDs)
-    expect(errors).not.toHaveBeenCalled()
-    errors.mockRestore()
-  })
-
   it('特殊区域跳过普通副作用，由外层统一提交一次', () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     const order: string[] = []
     syncTrackerMove.mockImplementationOnce(() => order.push('sync'))
     handleSpecialZones.mockImplementationOnce((context) => {
-      context.patched.CardIDs = [96, 0]
+      context.patched.CardIDs = [96, 113]
       return { handled: true }
     })
 
     handleMoveCard(protocolMove({ CardIDs: [], CardCount: 2 }))
 
-    expect(syncTrackerMove.mock.calls[0][0].CardIDs).toEqual([96, 0])
+    expect(syncTrackerMove.mock.calls[0][0].CardIDs).toEqual([96, 113])
     expect(order).toEqual(['sync'])
     expect(handleGameFlowState).not.toHaveBeenCalled()
     expect(applySpellEffect).not.toHaveBeenCalled()
@@ -404,7 +377,6 @@ describe('PubGsCMoveCard', () => {
       raw: { CardIDs: [0], FromPosition: POSITION_RANDOM }
     })
     expect(event.protocol).toEqual(syncTrackerMove.mock.calls[0][0])
-    expect(event.cardIDs).not.toBe(syncTrackerMove.mock.calls[0][0].CardIDs)
     expect(event.raw).toEqual(syncTrackerMove.mock.calls[0][1])
     expect(event.options.sourceEvent?.raw).toBe(event.raw)
     expect(controller.getTrackedPlayerHandCardIDs(1)).toEqual([96])

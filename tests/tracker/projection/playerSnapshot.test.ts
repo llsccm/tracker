@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { collectTraversalStats } from '@/tracker/traversalStats'
 import { createTestRoom } from '../helpers/room'
+import { getPlayerCardsSnapshot } from '@/tracker/projection/playerSnapshot'
 
 function createRoom() {
   return createTestRoom({ cardIDs: [1, 2, 3], materializeDeckIdentities: false }).room
@@ -19,7 +20,7 @@ describe('玩家快照与实体创建顺序', () => {
 
     const { result, stats } = collectTraversalStats(() => room.refreshPlayerSnapshot())
     expect(result).toEqual([first, second, third])
-    expect(room.playerCardsSnapshot).toBe(result)
+    expect(getPlayerCardsSnapshot(room)).toBe(result)
     expect(indexOf).not.toHaveBeenCalled()
     expect(stats.sites.get('resolveConstraints:playerSnapshot')).toBeUndefined()
 
@@ -74,11 +75,11 @@ describe('玩家快照与实体创建顺序', () => {
     room.refreshPlayerSnapshot()
 
     room.initDeck([4, 5, 6])
-    expect(room.playerCardsSnapshot).toEqual([])
+    expect(getPlayerCardsSnapshot(room)).toEqual([])
     const [first, second] = room.createExternalCards([], 2)
     second.bindCandidates([1], 'hand', null, { known: false })
     first.bindCandidates([1], 'hand', null, { known: false })
     expect(room.refreshPlayerSnapshot()).toEqual([first, second])
-    expect(room.playerCardsSnapshot).not.toContain(oldCard)
+    expect(getPlayerCardsSnapshot(room)).not.toContain(oldCard)
   })
 })

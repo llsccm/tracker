@@ -12,6 +12,14 @@ import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
 import { getPositiveIDs } from '../helper/cardIDs'
 import { getCount, type MoveEventDraft, patchEvent } from './moveEventUtils'
+import { defineSkillState, deleteSpellState } from './skillState'
+import {
+  clearExchangeBatches,
+  commitExchangeKnownCards,
+  getExchangeSourceCards,
+  planExchangeKnownCards,
+  type ExchangeKnownCardPlan
+} from './exchangeCards'
 
 export const GUAN_XU_STATE_KEY = 'guanXuExchange'
 
@@ -33,54 +41,26 @@ type GuanXuRoomState = {
   bySpell: Record<string, GuanXuBatch>
 }
 
-type ProtocolKnownCardCommit =
-  | {
-      type: 'confirm'
-      card: Card
-      cardID: number
-    }
-  | {
-      type: 'materialize'
-      cardID: number
-      target: Card
-    }
-
-type ProtocolKnownCardResolution = {
-  cards: Card[]
-  commits: ProtocolKnownCardCommit[]
-}
-
 type KnownMoveSelection = {
   cards: Card[]
-  knownResolution: ProtocolKnownCardResolution
+  knownResolution: ExchangeKnownCardPlan
 }
 
-function ensureGuanXuState(room: Room): GuanXuRoomState {
-  return room.ensureSkillState(GUAN_XU_STATE_KEY, () => ({
-    bySpell: {}
-  }))
-}
-
-function getGuanXuState(room: Room): GuanXuRoomState | undefined {
-  return room.readSkillState<GuanXuRoomState>(GUAN_XU_STATE_KEY)
-}
+const guanXuState = defineSkillState<GuanXuRoomState>(GUAN_XU_STATE_KEY)
 
 function getBatch(room: Room, spellID: number): GuanXuBatch | undefined {
-  return getGuanXuState(room)?.bySpell[String(spellID)]
+  return guanXuState.read(room)?.bySpell[String(spellID)]
 }
 
 function clearBatch(room: Room, spellID: number): void {
-  const state = getGuanXuState(room)
+  const state = guanXuState.read(room)
   if (!state) return
 
-  Object.values(state.bySpell[String(spellID)]?.buckets ?? {}).forEach((bucket) =>
-    room.publicZones.deleteExchangeBatch(bucket.batchKey)
+  clearExchangeBatches(
+    room,
+    Object.values(state.bySpell[String(spellID)]?.buckets ?? {}).map((bucket) => bucket.batchKey)
   )
-
-  delete state.bySpell[String(spellID)]
-  if (Object.keys(state.bySpell).length === 0) {
-    room.deleteSkillState(GUAN_XU_STATE_KEY)
-  }
+  deleteSpellState(room, GUAN_XU_STATE_KEY, spellID)
 }
 
 function clearBatchIfEmpty(room: Room, spellID: number, batch: GuanXuBatch): void {
@@ -93,76 +73,6 @@ function getHandCards(room: Room, seatID: number): Card[] {
     .filter((card) => card.subZone === 'hand' && card.seats.has(seatID))
 }
 
-/**
- * 只读解析协议明牌与候选实体的对应关系。
- *
- * 校验阶段只记录 confirm/materialize 计划；调用方确认整批张数与分桶都有效后才能提交，
- * 否则错误消息会把部分 CardID 提前固化到实体和身份账本。
- */
-function resolveProtocolKnownCards(
-  event: MoveEventDraft,
-  room: Room,
-  candidates: Card[]
-): ProtocolKnownCardResolution {
-  const selected: Card[] = []
-  const selectedSet = new Set<Card>()
-  const anonymousTargets = candidates.filter((card) => card.isAnonymous)
-  const plannedCardsByID = new Map<number, Card>()
-  const commits: ProtocolKnownCardCommit[] = []
-
-  getPositiveIDs(event.cardIDs ?? []).forEach((cardID) => {
-    let card =
-      candidates.find((candidate) => candidate.id === cardID) ??
-      plannedCardsByID.get(cardID) ??
-      null
-    let commit: ProtocolKnownCardCommit | null = null
-
-    if (!card) {
-      // 先只窥探队首匿名槽，探测失败（null 或落在候选之外）时保留它给后续 CardID。
-      const target = anonymousTargets[0] ?? null
-      const probedCard = room.probeMaterialize(cardID, target)
-      if (probedCard && candidates.includes(probedCard)) {
-        card = probedCard
-        if (probedCard === target) {
-          anonymousTargets.shift()
-          plannedCardsByID.set(cardID, probedCard)
-          commit = { type: 'materialize', cardID, target: probedCard }
-        } else {
-          commit = { type: 'confirm', cardID, card: probedCard }
-        }
-      }
-    } else {
-      const isPlannedCard = plannedCardsByID.get(cardID) === card
-      if (!isPlannedCard) commit = { type: 'confirm', cardID, card }
-    }
-
-    if (!card || selectedSet.has(card)) return
-    selectedSet.add(card)
-    selected.push(card)
-    if (commit) commits.push(commit)
-  })
-
-  return { cards: selected, commits }
-}
-
-function commitProtocolKnownCards(room: Room, resolution: ProtocolKnownCardResolution): boolean {
-  // 提交前统一复核物化目标，避免未来调用者在探测与提交之间改动 Room 后产生半提交。
-  const canCommit = resolution.commits.every((commit) => {
-    if (commit.type === 'confirm') return commit.card.id === commit.cardID
-    return room.probeMaterialize(commit.cardID, commit.target) === commit.target
-  })
-  if (!canCommit) return false
-
-  resolution.commits.forEach((commit) => {
-    if (commit.type === 'confirm') {
-      commit.card.confirmKnown()
-      return
-    }
-    room.materialize(commit.cardID, commit.target)
-  })
-  return true
-}
-
 function selectCardsForKnownMove(
   event: MoveEventDraft,
   room: Room,
@@ -170,7 +80,7 @@ function selectCardsForKnownMove(
 ): KnownMoveSelection {
   const count = getCount(event)
   const protocolKnownCount = getPositiveIDs(event.cardIDs ?? []).length
-  const knownResolution = resolveProtocolKnownCards(event, room, candidates)
+  const knownResolution = planExchangeKnownCards(room, event.cardIDs, candidates)
   const selected = [...knownResolution.cards]
   if (selected.length !== protocolKnownCount) return { cards: [], knownResolution }
 
@@ -188,11 +98,6 @@ function selectCardsForKnownMove(
   }
 }
 
-function splitProtocolKnownAndUnknown(event: MoveEventDraft, cards: Card[]): Card[] {
-  const protocolKnownIDs = new Set(getPositiveIDs(event.cardIDs))
-  return cards.filter((card) => !protocolKnownIDs.has(card.id))
-}
-
 function stagePileToExchange(event: MoveEventDraft, room: Room, spellID: number): MoveEventDraft {
   const move = event.protocol
   const count = getCount(event)
@@ -206,10 +111,10 @@ function stagePileToExchange(event: MoveEventDraft, room: Room, spellID: number)
     return event
   }
 
-  const knownResolution = resolveProtocolKnownCards(event, room, selectedCards)
+  const knownResolution = planExchangeKnownCards(room, event.cardIDs, selectedCards)
   if (
     knownResolution.cards.length !== getPositiveIDs(event.cardIDs).length ||
-    !commitProtocolKnownCards(room, knownResolution)
+    !commitExchangeKnownCards(room, knownResolution)
   ) {
     clearBatch(room, spellID)
     return event
@@ -218,7 +123,7 @@ function stagePileToExchange(event: MoveEventDraft, room: Room, spellID: number)
   clearBatch(room, spellID)
   const batchKey = `${spellID}:pile:${pileBucketID}`
   room.publicZones.getExchangeBatch(batchKey).stage(selectedCards)
-  ensureGuanXuState(room).bySpell[String(spellID)] = {
+  guanXuState.ensure(room, () => ({ bySpell: {} })).bySpell[String(spellID)] = {
     buckets: {
       [String(pileBucketID)]: {
         batchKey,
@@ -232,7 +137,7 @@ function stagePileToExchange(event: MoveEventDraft, room: Room, spellID: number)
 
   return patchEvent(event, {
     from: event.from.type === 'public' ? { ...event.from, position: POSITION_TOP } : event.from,
-    options: { sourceCards: splitProtocolKnownAndUnknown(event, selectedCards) }
+    options: { sourceCards: getExchangeSourceCards(event.cardIDs, selectedCards) }
   })
 }
 
@@ -246,7 +151,7 @@ function stageHandToExchange(event: MoveEventDraft, room: Room, spellID: number)
   const selection = selectCardsForKnownMove(event, room, getHandCards(room, fromSeat))
   if (
     selection.cards.length !== getCount(event) ||
-    !commitProtocolKnownCards(room, selection.knownResolution)
+    !commitExchangeKnownCards(room, selection.knownResolution)
   ) {
     clearBatch(room, spellID)
     return event
@@ -260,7 +165,7 @@ function stageHandToExchange(event: MoveEventDraft, room: Room, spellID: number)
     expectedCount: getCount(event)
   }
 
-  const sourceCards = splitProtocolKnownAndUnknown(event, selectedCards)
+  const sourceCards = getExchangeSourceCards(event.cardIDs, selectedCards)
   return patchEvent(event, {
     options: {
       ...(sourceCards.length > 0 ? { sourceCards } : {})
@@ -287,7 +192,7 @@ function transferExchangeBucket(
   const selection = selectCardsForKnownMove(event, room, exchangeCards)
   if (
     selection.cards.length !== getCount(event) ||
-    !commitProtocolKnownCards(room, selection.knownResolution)
+    !commitExchangeKnownCards(room, selection.knownResolution)
   ) {
     return event
   }
@@ -315,7 +220,7 @@ function transferExchangeBucket(
     })
   }
 
-  const sourceCards = splitProtocolKnownAndUnknown(event, selectedCards)
+  const sourceCards = getExchangeSourceCards(event.cardIDs, selectedCards)
   return patchEvent(event, {
     options: {
       ...(sourceCards.length > 0 ? { sourceCards } : {})
@@ -361,7 +266,7 @@ function returnBucketToPile(event: MoveEventDraft, room: Room, spellID: number):
   return patchEvent(event, {
     to: event.to.type === 'public' ? { ...event.to, position: POSITION_TOP } : event.to,
     options: {
-      sourceCards: splitProtocolKnownAndUnknown(event, cardsBottomFirst),
+      sourceCards: getExchangeSourceCards(event.cardIDs, cardsBottomFirst),
       ...(postMovePublicCandidates.length > 0 ? { postMovePublicCandidates } : {})
     }
   })

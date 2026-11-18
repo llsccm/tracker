@@ -1,3 +1,4 @@
+import { getPublicZoneConsistencyIssues } from '@/tracker/room/publicZones'
 import { describe, expect, it } from 'vitest'
 import { ConstraintGroup } from '@/tracker/constraint/ConstraintGroup'
 import { collectTraversalStats } from '@/tracker/traversalStats'
@@ -48,18 +49,6 @@ describe('完整位置候选回归', () => {
     expect(card.getPossibleLocations()).toEqual([
       { type: 'public', zone: 'pile', position: 'any', count: null, label: null }
     ])
-  })
-
-  it('可变输入重新生成位置键，冻结候选的查询不受输入后续修改影响', () => {
-    const { room } = createTestRoom({ cardIDs: [1], seatIDs: [0, 3] })
-    const card = getCard(room, 1)!
-    const input = playerLocation(0, 'hand')
-    expect(createLocationCandidateKey(input)).toBe('player:0:hand:none')
-    card.setLocationCandidates([input, playerLocation(3, 'hand')])
-    input.seatID = 3
-    expect(createLocationCandidateKey(input)).toBe('player:3:hand:none')
-    expect(card.hasLocationCandidate('player:0:hand:none')).toBe(true)
-    expect(card.hasLocationCandidate(input)).toBe(true)
   })
 
   it('确定位置缓存随座位、子区、标记空间、弹窗和公共区切换刷新', () => {
@@ -235,7 +224,7 @@ describe('完整位置候选回归', () => {
     expect(card.location).toBe('player')
     expect(room.getPublicZone('pile').cards).not.toContain(card)
     expect(card.hasLocationCandidate(pileTop)).toBe(true)
-    expect(room.publicZones.getPublicZoneConsistencyIssues()).toEqual([])
+    expect(getPublicZoneConsistencyIssues(room)).toEqual([])
     card.setLocationCandidates([hand, mark])
     expect(room.getPublicZone('pile').cards).not.toContain(card)
     expect(card.hasLocationCandidate(hand)).toBe(true)

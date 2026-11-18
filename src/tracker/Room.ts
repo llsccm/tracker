@@ -13,7 +13,6 @@ import { Card, Player, Zone } from './model'
 import {
   PileIdentityLedger,
   type AmbiguousDiscardRecycleGroup,
-  type PileIdentityConsistencyIssue,
   type PileIdentityLedgerMove,
   type PileIdentityRevealLocation,
   type PileIdentityShuffleTransition
@@ -30,7 +29,10 @@ import {
   RoomMoveEvents,
   RoomMovement,
   RoomPublicZones,
-  RoomReconnect
+  RoomReconnect,
+  assertIdentityReleased,
+  assertPileIdentityLedgerConsistency,
+  assertPublicZoneConsistency
 } from './room/index'
 import { shouldRevealAsFullHand } from './protocol/protocolRules'
 import type {
@@ -147,7 +149,7 @@ export class Room extends RoomBase {
   declare counter: CardCounter
   /** 仅在 DEV 分支挂载；生产环境不创建诊断实例。 */
   declare private readonly diagnostics: RoomDiagnostics
-  private readonly playerSnapshot = new PlayerSnapshot(this)
+  readonly playerSnapshot = new PlayerSnapshot(this)
   private readonly identity = new RoomIdentity(this)
   private readonly moveEvents = new RoomMoveEvents(this)
   private readonly reconnection = new RoomReconnect(this)
@@ -158,11 +160,6 @@ export class Room extends RoomBase {
 
   get moveEventHandlers(): ReadonlyMap<SpellID | '*', readonly MoveEventHandler[]> {
     return this.moveEvents.moveEventHandlers
-  }
-
-  /** 玩家区快照的兼容只读入口；缓存仅由 PlayerSnapshot 维护。 */
-  get playerCardsSnapshot(): readonly Card[] {
-    return this.playerSnapshot.cards
   }
 
   /**
@@ -269,7 +266,9 @@ export class Room extends RoomBase {
 
     pile.replaceAll(deckCards)
     this.pileIdentityLedger.initialize(cardIDs)
-    this.assertPileIdentityLedgerConsistency('initDeck')
+    if (import.meta.env.DEV) {
+      assertPileIdentityLedgerConsistency(this, 'initDeck')
+    }
 
     this.locationIndex.rebuild(this)
     this.ambiguousKnownIndex.rebuild(Array.from(this.constraintGroups.values()))
@@ -283,7 +282,9 @@ export class Room extends RoomBase {
     // 关联计数器实例
     this.counter = new CardCounter(this)
     this.isDeckReady = true
-    this.publicZones.assertPublicZoneConsistency('initDeck')
+    if (import.meta.env.DEV) {
+      assertPublicZoneConsistency(this, 'initDeck')
+    }
     this.moveEvents.onDeckInitialized()
     this.reconnection.onDeckInitialized()
   }
@@ -301,7 +302,9 @@ export class Room extends RoomBase {
       })
 
       this.identity.anonymizePileCohortIdentityEntities(context)
-      this.assertPileIdentityLedgerConsistency(context)
+      if (import.meta.env.DEV) {
+        assertPileIdentityLedgerConsistency(this, context)
+      }
     } catch (error) {
       trackerLogger.warn('牌堆身份账本移动更新失败', { error, move })
     }
@@ -358,23 +361,13 @@ export class Room extends RoomBase {
           discardCountAfter: this.getZone('discard').cards.length
         })
 
-        this.assertPileIdentityLedgerConsistency(`reveal:${revealLocation}`)
+        if (import.meta.env.DEV) {
+          assertPileIdentityLedgerConsistency(this, `reveal:${revealLocation}`)
+        }
       }
     } catch (error) {
       trackerLogger.warn('牌堆身份账本揭示更新失败', { error, cardIDs, location })
     }
-  }
-
-  /**
-   * 在物理 Room 与身份 ledger 都完成一次协议事务后检查最终目标态。
-   *
-   * 低层物化与揭示允许分阶段写入，因此在 init / move / reveal 事务完成后调用，而不对
-   * 任意手工收敛检查未提交的身份事实。账本与实体同步后，要求每个
-   * cohort 身份恰好由未定位池或 suspended 展示实体承载，并禁止牌堆继续承载正 ID 暗实体。
-   */
-  assertPileIdentityLedgerConsistency(context = ''): PileIdentityConsistencyIssue[] {
-    if (!import.meta.env.DEV || this.trackingMode === 'degraded') return []
-    return this.diagnostics.assertPileIdentityLedgerConsistency(context)
   }
 
   /**
@@ -548,19 +541,10 @@ export class Room extends RoomBase {
     options: AnonymizeLocatedIdentityOptions = {}
   ): CardID | null {
     const releasedIdentityID = this.identity.anonymizeLocatedIdentity(card, reason, options)
-    if (releasedIdentityID !== null) this.assertIdentityReleased(releasedIdentityID, reason)
+    if (import.meta.env.DEV && releasedIdentityID !== null) {
+      assertIdentityReleased(this, releasedIdentityID, reason)
+    }
     return releasedIdentityID
-  }
-
-  /**
-   * 身份解绑后的分区守恒断言（开发期，生产零成本）。
-   *
-   * 解绑完成时该身份必须恰好处于「未定位」一侧：既不能仍被 cardIndex 认为已定位，
-   * 也不能从 deckIdentities 中消失。这两种漏出都会让后续洗牌再也找不到该身份。
-   */
-  private assertIdentityReleased(cardID: CardID, reason: string): void {
-    if (!import.meta.env.DEV) return
-    this.diagnostics.assertIdentityReleased(cardID, reason)
   }
 
   /**
@@ -784,7 +768,9 @@ export class Room extends RoomBase {
       discardCountAfter: this.getZone('discard').cards.length
     })
     this.resolveConstraints()
-    this.assertPileIdentityLedgerConsistency('revealPublicCandidate')
+    if (import.meta.env.DEV) {
+      assertPileIdentityLedgerConsistency(this, 'revealPublicCandidate')
+    }
     return cards
   }
 
@@ -952,7 +938,9 @@ export class Room extends RoomBase {
       )
     })
     this.resolveConstraints()
-    this.assertPileIdentityLedgerConsistency(identityContext)
+    if (import.meta.env.DEV) {
+      assertPileIdentityLedgerConsistency(this, identityContext)
+    }
   }
 
   private applyPileIdentityShuffleBeforePhysicalMove(
@@ -1014,41 +1002,6 @@ export class Room extends RoomBase {
    */
   refreshPlayerSnapshot(): Card[] {
     return this.playerSnapshot.refresh()
-  }
-
-  /**
-   * 开发期 A2 等价性检查：收敛循环退出时，增量维护的 player 快照
-   * 必须与全量过滤结果（含顺序）一致。生产环境零成本。
-   */
-  /**
-   * 开发期身份与槽位守恒观测：阶段 0 只告警，不抛错、不自愈。
-   * I1 检查真实身份与 cardIndex 的唯一性；I2 复用公共区实体槽位一致性检查。
-   */
-  assertConservation(context = ''): void {
-    if (!import.meta.env.DEV) return
-    this.diagnostics.assertConservation(context)
-  }
-
-  assertPlayerSnapshotConsistency(playerCards: Card[]): void {
-    if (!import.meta.env.DEV) return
-    this.diagnostics.assertPlayerSnapshotConsistency(playerCards)
-  }
-
-  /**
-   * 开发期一致性检查：增量维护后的 locationIndex 必须与全量 rebuild 影子结果逐桶一致。
-   * 仅告警不自愈，便于集成测试在收敛后用同一比对暴露分歧；生产环境零成本。
-   */
-  assertLocationIndexConsistency(): void {
-    if (!import.meta.env.DEV) return
-    this.diagnostics.assertLocationIndexConsistency()
-  }
-
-  /**
-   * 开发期一致性检查：增量维护后的 ambiguousKnownIndex 必须与全量 rebuild 影子结果一致。
-   */
-  assertAmbiguousKnownIndexConsistency(): void {
-    if (!import.meta.env.DEV) return
-    this.diagnostics.assertAmbiguousKnownIndexConsistency()
   }
 
   resumeSuspendedKnownCard(card: Card) {
@@ -1142,7 +1095,9 @@ export class Room extends RoomBase {
     // 账本投影也可能匿名化实体，必须先提交，再统一同步稳定索引和计数器。
     this.identity.commitPileIdentityForMove(context, pileSnapshot)
     this.resolveConstraints()
-    this.assertPileIdentityLedgerConsistency('moveCards')
+    if (import.meta.env.DEV) {
+      assertPileIdentityLedgerConsistency(this, 'moveCards')
+    }
 
     trackerLogger.info('moveCards 完成', {
       ...summarizeMoveContext(context, { includeKnownCardIDs: true }),

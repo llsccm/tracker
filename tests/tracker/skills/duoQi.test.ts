@@ -1,3 +1,4 @@
+import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { bindTestHand } from '../helpers/room'
 import { describe, expect, it, vi } from 'vitest'
 import { trackerLogger } from '@/utils/logger'
@@ -160,7 +161,7 @@ describe('夺炁初始牌身份', () => {
       'player',
       'player'
     ])
-    expect(room.pileIdentityLedger.getSnapshot().knownDiscardIdentityIDs).toEqual([])
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownDiscardIdentityIDs).toEqual([])
   })
 
   it('3731 其它视角从弃牌堆暗取时确认后进入的目标夺炁牌', () => {

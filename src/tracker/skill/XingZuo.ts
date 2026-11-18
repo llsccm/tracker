@@ -6,6 +6,13 @@ import type { Room } from '../Room'
 import type { SeatID } from '../types'
 import { getPositiveIDs } from '../helper/cardIDs'
 import { getCount, hasPositiveID, type MoveEventDraft, patchEvent } from './moveEventUtils'
+import { defineSkillState } from './skillState'
+import {
+  clearExchangeBatches,
+  commitExchangeKnownCards,
+  planExchangeKnownCards,
+  splitExchangeCards
+} from './exchangeCards'
 
 const XING_ZUO_SPELL_ID = 3776
 
@@ -19,6 +26,10 @@ interface XingZuoBatch {
   returnedToHand: boolean
 }
 
+const xingZuoState = defineSkillState<XingZuoBatch>(XING_ZUO_SPELL_ID, (room, batch) => {
+  clearExchangeBatches(room, [batch.pileBatchKey, batch.handBatchKey])
+})
+
 /** 兴作：牌底整批与目标全部手牌置换，原手牌整批回牌底。 */
 export default function decorateXingZuo(event: MoveEventDraft, room: Room): MoveEventDraft {
   const move = event.protocol
@@ -27,11 +38,12 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
   }
 
   if (move.FromZone === 1 && move.ToZone === 10) {
+    // 看牌前牌堆不足会先自动洗牌，此处的牌底张数已由协议时序保证。
     const pileCards = room.getPublicEndpointCards('pile', getCount(event), POSITION_BOTTOM)
-    clearBatch(room)
+    xingZuoState.clear(room)
     const pileBatchKey = `${XING_ZUO_SPELL_ID}:pile:${move.ToID}`
     room.publicZones.getExchangeBatch(pileBatchKey).stage(pileCards)
-    room.setSkillState<XingZuoBatch>(XING_ZUO_SPELL_ID, {
+    xingZuoState.set(room, {
       actorSeat: move.ToID,
       pileBatchKey,
       pileCount: pileCards.length,
@@ -46,7 +58,7 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
     })
   }
 
-  const batch = room.readSkillState<XingZuoBatch>(XING_ZUO_SPELL_ID)
+  const batch = xingZuoState.read(room)
   if (!batch) return event
 
   if (move.FromZone === 5 && move.ToZone === 10 && move.ToID === batch.actorSeat) {
@@ -86,7 +98,7 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
   }
 
   if (move.ToZone === 1 && getCount(event) === batch.handCount && batch.returnedToHand) {
-    clearBatch(room)
+    xingZuoState.clear(room)
     const candidate = createPublicCandidate('pile', POSITION_BOTTOM, batch.handCount)
     const hasCompleteOrder = getPositiveIDs(event.cardIDs).length === batch.handCount
     return patchEvent(patchBatchCards(event, room, handCards), {
@@ -102,40 +114,24 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
   return event
 }
 
-function clearBatch(room: Room): void {
-  const batch = room.readSkillState<XingZuoBatch>(XING_ZUO_SPELL_ID)
-  if (batch) {
-    room.publicZones.deleteExchangeBatch(batch.pileBatchKey)
-    if (batch.handBatchKey) room.publicZones.deleteExchangeBatch(batch.handBatchKey)
-  }
-  room.deleteSkillState(XING_ZUO_SPELL_ID)
-}
-
 function patchBatchCards(event: MoveEventDraft, room: Room, cards: Card[]): MoveEventDraft {
   const protocolIDs = getPositiveIDs(event.cardIDs)
-  const anonymousCards = cards.filter((card) => card.isAnonymous)
-  const targets = protocolIDs.map(
-    (id) => cards.find((card) => card.id === id) ?? anonymousCards.shift()
-  )
   // 显式 ID 必须在本批匿名槽上物化，不能误用同处 exchange 的另一批手牌。
-  // 先整批探测，失败时不对身份做半提交。
-  if (
-    targets.some(
-      (target, index) => !target || room.probeMaterialize(protocolIDs[index], target) !== target
-    )
-  ) {
-    clearBatch(room)
+  const plan = planExchangeKnownCards(room, protocolIDs, cards)
+  if (plan.cards.length !== protocolIDs.length || !commitExchangeKnownCards(room, plan)) {
+    xingZuoState.clear(room)
     return event
   }
-  targets.forEach((target, index) => room.materialize(protocolIDs[index], target!))
 
-  const knownCards = cards.filter((card) => card.id > 0 && card.isKnown === true)
-  const cardIDs = [...new Set([...protocolIDs, ...knownCards.map((card) => card.id)])]
-  const knownSet = new Set(knownCards)
+  const { knownIDs, unknownCards } = splitExchangeCards(cards)
+  const cardIDs = [...new Set([...protocolIDs, ...knownIDs])]
+  const returnsToHand = event.to.type === 'player' && event.to.subZone === 'hand'
   return patchEvent(event, {
     cardIDs,
     options: {
-      sourceCards: cards.filter((card) => !knownSet.has(card)),
+      sourceCards: unknownCards,
+      // 回手只移动本批现存实体，协议张数差额交给手牌数量对账。
+      ...(returnsToHand ? { cardCount: cards.length, handMoveCount: getCount(event) } : {}),
       // Controller 默认使用原始 CardIDs；这里补入技能已经确定移动的明牌身份。
       pileIdentityCardIDs: cardIDs
     }

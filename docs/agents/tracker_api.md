@@ -138,15 +138,19 @@ normalizeMoveEndpoints 只在玩家区域创建 player 端点并原样写入协�
 | 高频读取的增量投影             | `room.locationIndex.knownHandBySeat.get(seatID) ?? []`                             | `Card[]`；索引维护的确定手牌桶                                                  | 视图/高频派生计算；只读，不要直接修改数组          |
 | 高频读取手牌候选投影           | `room.locationIndex.candidateHandBySeat.get(seatID) ?? []`                         | `Card[]`；索引维护的候选手牌桶                                                  | 候选按钮或局部重绘                                 |
 | 一致的全玩家区快照             | `room.refreshPlayerSnapshot()`                                                     | 所有 `location === 'player'` 的 `Card[]`                                        | 一次性批处理；返回后再按座位/子区归组              |
+| 只读当前玩家区快照             | `getPlayerCardsSnapshot(room)`                                                      | `readonly Card[]`；不主动刷新缓存                                                | 诊断与回归断言                                     |
 
 ### 计数与“已知”不要混淆
 
 - `player.observedHandCount` 是协议或移动事件给出的手牌总数，不是从现有 `Card` 反推的结果。
 - `player.unknownCardCount` 是观测总数扣除确定明牌和候选明牌容量上界后的未知额度，可能已由暗实体覆盖。
-- `player.getKnownHandSlotCount()` 返回确定明牌数量；`player.getCandidateHandSlotCount()` 返回单座位候选
+- `getCandidateHandSlotCount(player)` 返回单座位候选
   明牌容量上界，同一身份在该座位最多计一次，不能把各座位上界相加当作全局确定身份数。
+  它从 `src/tracker/model/Player.ts` 导入；`getPlayerCardsSnapshot(room)` 从
+  `src/tracker/projection/playerSnapshot.ts` 导入。这些只读入口是独立函数，不属于类原型。
 - `computeHandSlotAllocation(room)`（`src/tracker/constraint/handSlotUsage.ts`）一次返回各座位的确定明暗占用、
   候选容量、暗实体覆盖、展示额度和匿名补缺；匿名补位使用它的结果，不再另写数量算法。
+  确定普通明牌槽位数读取该座位分配结果的 `exactKnownCount`。
   未观测总数或无法安全对账时，匿名补缺为 `null`，以 `canReconcileAnonymous` 判断是否可以补位。
 - `knownHandCards`、`candidateHandCards` 和 `locationIndex` 会在 `resolveConstraints()` 后同步。刚调用底层
   `bindCandidates()` 后若要立即读取稳定投影，应显式调用 `room.resolveConstraints()`。

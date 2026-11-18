@@ -97,29 +97,10 @@ export class Player {
    */
   refreshUnknownCardCount(allocation?: HandSlotAllocation): boolean {
     if (!this.hasObservedHandCount) return false
-    const nextUnknownCount = (allocation ?? this.getHandSlotAllocation()).unknownCardCount!
+    const nextUnknownCount = (allocation ?? getHandSlotAllocation(this)).unknownCardCount!
     const changed = this.unknownCardCount !== nextUnknownCount
     this.unknownCardCount = nextUnknownCount
     return changed
-  }
-
-  private getHandSlotAllocation(): HandSlotAllocation {
-    return computeHandSlotAllocation(this.room, [this.seatID]).get(this.seatID)!
-  }
-
-  /**
-   * 计算当前玩家确定普通明牌占用的手牌槽位数量。
-   */
-  getKnownHandSlotCount(): number {
-    return this.getHandSlotAllocation().exactKnownCount
-  }
-
-  /**
-   * 计算当前玩家手牌中由模糊明牌占用的期望槽位数量。
-   * 使用各组扣除确定牌后的剩余名额；未被数量约束覆盖的候选不补造槽位。
-   */
-  getCandidateHandSlotCount(): number {
-    return this.getHandSlotAllocation().candidateKnownUpperBound
   }
 
   /**
@@ -129,13 +110,6 @@ export class Player {
     return this.room.cards.filter(
       (card) => card.location === 'player' && card.seats.has(this.seatID)
     )
-  }
-
-  /**
-   * 根据具体技能获取该技能对应的标记牌实体列表
-   */
-  getMarkCardsBySpell(spellID: number): Card[] {
-    return this.markCards.get(spellID) ?? []
   }
 
   /**
@@ -155,4 +129,23 @@ export class Player {
     this.markCards.clear()
     this.generals.length = 0
   }
+}
+
+function getHandSlotAllocation(player: Player): HandSlotAllocation {
+  return computeHandSlotAllocation(player.room, [player.seatID]).get(player.seatID)!
+}
+
+/**
+ * 计算当前玩家手牌中由模糊明牌占用的期望槽位数量。
+ * 使用各组扣除确定牌后的剩余名额；未被数量约束覆盖的候选不补造槽位。
+ */
+export function getCandidateHandSlotCount(player: Player): number {
+  return getHandSlotAllocation(player).candidateKnownUpperBound
+}
+
+/**
+ * 根据具体技能获取该技能对应的标记牌实体列表
+ */
+export function getMarkCardsBySpell(player: Player, spellID: number): Card[] {
+  return player.markCards.get(spellID) ?? []
 }

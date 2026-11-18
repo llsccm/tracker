@@ -7,6 +7,8 @@ import { getPlayerHandCardsBySeat } from '@/tracker/room/movement/sourceQueries'
 import { createTestRoom, getCard } from '../helpers/room'
 import { protocolMove, createReadyControllerHarness } from '../helpers/trackerController'
 import { trackerLogger } from '@/utils/logger'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
+import { getCandidateHandSlotCount } from '@/tracker/model/Player'
 
 /** 复现“第三视角观测标记区暗牌进入手牌”的原始协议。 */
 function moveHiddenMarkToHand(
@@ -140,7 +142,7 @@ describe('标记区暗牌进入手牌', () => {
             ?.get(3657)
             ?.map((card) => card.id)
         ).toEqual([97])
-        expect(room.assertPileIdentityLedgerConsistency('test:mark-to-hand-discard')).toEqual([])
+        expect(assertPileIdentityLedgerConsistency(room, 'test:mark-to-hand-discard')).toEqual([])
         expect(warnSpy).not.toHaveBeenCalled()
       } finally {
         warnSpy.mockRestore()
@@ -428,5 +430,5 @@ it('旧组只移除部分牌时先按原位置扣名额，再扩展目标候选'
   expect(oldGroup.expectedSlotsByLocation.get(otherKey)).toEqual({ min: 1, max: 1 })
   expect(otherMark.owner).toBe(1)
   expect(otherMark.subZone).toBe('mark')
-  expect(room.getPlayer(3)!.getCandidateHandSlotCount()).toBe(1)
+  expect(getCandidateHandSlotCount(room.getPlayer(3)!)).toBe(1)
 })

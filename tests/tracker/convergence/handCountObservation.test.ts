@@ -8,6 +8,7 @@ import type { RoomMoveContext } from '@/tracker/room/index'
 import { createTestRoom, getCard, takeAnonymousCard } from '../helpers/room'
 import { playerLocation, publicLocation } from '../helpers/locationCandidates'
 import { getPlayerHandCardsBySeat } from '@/tracker/room/movement/sourceQueries'
+import { getPlayerCardsSnapshot } from '@/tracker/projection/playerSnapshot'
 
 describe('玩家手牌数观测', () => {
   it.each([
@@ -90,7 +91,7 @@ describe('玩家手牌数观测', () => {
       anonymousExcessCount: 0
     })
     room.resolveConstraints()
-    expect(room.playerCardsSnapshot).toHaveLength(4)
+    expect(getPlayerCardsSnapshot(room)).toHaveLength(4)
     expect(room.cards.filter((card) => card.isAnonymous)).toHaveLength(2)
   })
 
@@ -117,7 +118,7 @@ describe('玩家手牌数观测', () => {
       })
     )
     room.resolveConstraints()
-    expect(room.playerCardsSnapshot).toHaveLength(1)
+    expect(getPlayerCardsSnapshot(room)).toHaveLength(1)
     expect(card.seats).toEqual(new Set([1, 2]))
   })
 
@@ -172,7 +173,7 @@ describe('玩家手牌数观测', () => {
     expect(player.unknownCardCount).toBe(allocation.unknownCardCount)
     expect(cards.slice(2).every((card) => card.locationCandidates.length === 2)).toBe(true)
     room.resolveConstraints()
-    expect(room.playerCardsSnapshot).toHaveLength(6)
+    expect(getPlayerCardsSnapshot(room)).toHaveLength(6)
     expect(
       room.cards.filter((card) => card.isAnonymous && card.location === 'player')
     ).toHaveLength(4)

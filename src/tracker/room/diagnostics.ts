@@ -1,7 +1,11 @@
-import { AmbiguousKnownIndex } from '../projection/AmbiguousKnownIndex'
+import { AmbiguousKnownIndex, toComparableAmbiguousIndex } from '../projection/AmbiguousKnownIndex'
 import type { Card } from '../model/Card'
-import { CardLocationIndex } from '../projection/CardLocationIndex'
-import type { PileIdentityConsistencyIssue } from '../PileIdentityLedger'
+import { CardLocationIndex, toComparableLocationIndex } from '../projection/CardLocationIndex'
+import {
+  assertPileIdentityConsistency,
+  type PileIdentityConsistencyIssue
+} from '../PileIdentityLedger'
+import { getPublicZoneConsistencyIssues } from './publicZones'
 import type { Room } from '../Room'
 import type { CardID } from '../types'
 import { trackerLogger } from '@/utils/logger'
@@ -25,8 +29,8 @@ function readShadowIndexAssertionMode(): ShadowIndexAssertionMode {
 }
 
 /**
- * Room 的开发期只读诊断。由 Room 在 DEV 分支中创建和调用，生产构建不挂载。
- * 仅持有诊断抽样状态，不参与牌局事实写入或约束推断。
+ * Room 的开发期诊断抽样状态与收敛轮数告警，生产构建不挂载。
+ * 其余只读检查由本模块的独立函数执行，不参与牌局事实写入或约束推断。
  */
 export class RoomDiagnostics {
   private readonly shadowIndexAssertionMode = readShadowIndexAssertionMode()
@@ -58,203 +62,217 @@ export class RoomDiagnostics {
       constraintGroupCount: this.room.constraintGroups.size
     })
   }
+}
 
-  assertPileIdentityLedgerConsistency(context = ''): PileIdentityConsistencyIssue[] {
-    const room = this.room
-    const pile = room.getZone('pile')
-    const suspendedIdentityIDs = new Set(
-      Array.from(room.suspendedKnownCards, (card) => card.id).filter((cardID) => cardID > 0)
-    )
-    const issues = room.pileIdentityLedger.assertConsistency(pile.cards.length, context, {
+/**
+ * 仅在 Room 物理状态与身份账本都完成事务后检查最终分区。
+ * 低层物化和揭示允许分阶段写入，不应在尚未提交账本时调用。
+ * 每个 cohort 身份必须恰好由未定位池或 suspended 展示实体承载，牌堆不得保留正 ID 暗实体。
+ */
+export function assertPileIdentityLedgerConsistency(
+  room: Room,
+  context = ''
+): PileIdentityConsistencyIssue[] {
+  if (!import.meta.env.DEV || room.trackingMode === 'degraded') return []
+
+  const pile = room.getZone('pile')
+  const suspendedIdentityIDs = new Set(
+    Array.from(room.suspendedKnownCards, (card) => card.id).filter((cardID) => cardID > 0)
+  )
+  const issues = assertPileIdentityConsistency(
+    room.pileIdentityLedger,
+    pile.cards.length,
+    context,
+    {
       deckIdentityIDs: room.deckIdentities,
       unlocatedIdentityIDs: room.unlocatedIdentities,
       suspendedIdentityIDs
-    })
-    const hiddenPileIdentityIDs = pile.cards
-      .filter((card) => card.id > 0 && card.isKnown !== true)
-      .map((card) => card.id)
-
-    hiddenPileIdentityIDs.forEach((cardID) => {
-      issues.push({ context, reason: 'hidden-pile-identity', cardID })
-    })
-
-    if (hiddenPileIdentityIDs.length > 0) {
-      trackerLogger.warn('牌堆仍存在正 ID 暗实体', {
-        context,
-        cardIDs: hiddenPileIdentityIDs
-      })
     }
+  )
+  const hiddenPileIdentityIDs = pile.cards
+    .filter((card) => card.id > 0 && card.isKnown !== true)
+    .map((card) => card.id)
 
-    return issues
+  hiddenPileIdentityIDs.forEach((cardID) => {
+    issues.push({ context, reason: 'hidden-pile-identity', cardID })
+  })
+
+  if (hiddenPileIdentityIDs.length > 0) {
+    trackerLogger.warn('牌堆仍存在正 ID 暗实体', {
+      context,
+      cardIDs: hiddenPileIdentityIDs
+    })
   }
 
-  assertIdentityReleased(cardID: CardID, reason: string): void {
-    const room = this.room
-    const issues: string[] = []
-    if (room.cardIndex.has(cardID)) issues.push('still-in-card-index')
-    if (!room.unlocatedIdentities.has(cardID)) issues.push('missing-from-unlocated')
-    if (!room.deckIdentities.has(cardID)) issues.push('missing-from-deck-identities')
+  return issues
+}
 
-    if (issues.length > 0) {
-      trackerLogger.warn('身份解绑后分区守恒被破坏', {
-        reason,
-        cardID,
-        issues
-      })
-    }
+export function assertIdentityReleased(room: Room, cardID: CardID, reason: string): void {
+  if (!import.meta.env.DEV) return
+
+  const issues: string[] = []
+  if (room.cardIndex.has(cardID)) issues.push('still-in-card-index')
+  if (!room.unlocatedIdentities.has(cardID)) issues.push('missing-from-unlocated')
+  if (!room.deckIdentities.has(cardID)) issues.push('missing-from-deck-identities')
+
+  if (issues.length > 0) {
+    trackerLogger.warn('身份解绑后分区守恒被破坏', {
+      reason,
+      cardID,
+      issues
+    })
   }
+}
 
-  assertConservation(context = ''): void {
-    const room = this.room
-    const cardsSet = new Set(room.trackedCards)
-    const entityOwnerByID = new Map<number, Card>()
-    const realCardsByID = new Map<number, Card[]>()
-    const identityIssues: Record<string, unknown>[] = []
+export function assertConservation(room: Room, context = ''): void {
+  if (!import.meta.env.DEV) return
 
-    room.trackedCards.forEach((card) => {
-      const previousEntity = entityOwnerByID.get(card.entityID)
-      if (previousEntity) {
+  const cardsSet = new Set(room.trackedCards)
+  const entityOwnerByID = new Map<number, Card>()
+  const realCardsByID = new Map<number, Card[]>()
+  const identityIssues: Record<string, unknown>[] = []
+
+  room.trackedCards.forEach((card) => {
+    const previousEntity = entityOwnerByID.get(card.entityID)
+    if (previousEntity) {
+      identityIssues.push({
+        type: 'duplicated-entity-id',
+        entityID: card.entityID,
+        cardIDs: [previousEntity.id, card.id]
+      })
+    } else {
+      entityOwnerByID.set(card.entityID, card)
+    }
+
+    if (card.hasRealIdentity) {
+      const realCards = realCardsByID.get(card.id) ?? []
+      realCards.push(card)
+      realCardsByID.set(card.id, realCards)
+
+      if (card.entityID !== card.id) {
         identityIssues.push({
-          type: 'duplicated-entity-id',
-          entityID: card.entityID,
-          cardIDs: [previousEntity.id, card.id]
-        })
-      } else {
-        entityOwnerByID.set(card.entityID, card)
-      }
-
-      if (card.hasRealIdentity) {
-        const realCards = realCardsByID.get(card.id) ?? []
-        realCards.push(card)
-        realCardsByID.set(card.id, realCards)
-
-        if (card.entityID !== card.id) {
-          identityIssues.push({
-            type: 'real-card-entity-mismatch',
-            cardID: card.id,
-            entityID: card.entityID
-          })
-        }
-
-        if (room.cardIndex.get(card.id) !== card) {
-          identityIssues.push({
-            type: 'card-index-mismatch',
-            cardID: card.id,
-            cardEntityID: card.entityID
-          })
-        }
-        return
-      }
-
-      if (card.id !== card.entityID || card.entityID >= 0) {
-        identityIssues.push({
-          type: 'anonymous-card-identity-mismatch',
+          type: 'real-card-entity-mismatch',
           cardID: card.id,
           entityID: card.entityID
         })
       }
-    })
 
-    realCardsByID.forEach((cards, cardID) => {
-      if (cards.length <= 1) return
+      if (room.cardIndex.get(card.id) !== card) {
+        identityIssues.push({
+          type: 'card-index-mismatch',
+          cardID: card.id,
+          cardEntityID: card.entityID
+        })
+      }
+      return
+    }
+
+    if (card.id !== card.entityID || card.entityID >= 0) {
       identityIssues.push({
-        type: 'duplicated-real-id',
+        type: 'anonymous-card-identity-mismatch',
+        cardID: card.id,
+        entityID: card.entityID
+      })
+    }
+  })
+
+  realCardsByID.forEach((cards, cardID) => {
+    if (cards.length <= 1) return
+    identityIssues.push({
+      type: 'duplicated-real-id',
+      cardID,
+      entityIDs: cards.map((card) => card.entityID)
+    })
+  })
+
+  room.cardIndex.forEach((card, cardID) => {
+    if (card.isAnonymous || card.id !== cardID || !cardsSet.has(card) || card.entityID !== cardID) {
+      identityIssues.push({
+        type: 'invalid-card-index-entry',
         cardID,
-        entityIDs: cards.map((card) => card.entityID)
-      })
-    })
-
-    room.cardIndex.forEach((card, cardID) => {
-      if (
-        card.isAnonymous ||
-        card.id !== cardID ||
-        !cardsSet.has(card) ||
-        card.entityID !== cardID
-      ) {
-        identityIssues.push({
-          type: 'invalid-card-index-entry',
-          cardID,
-          entityID: card.entityID,
-          cardIsTracked: cardsSet.has(card)
-        })
-      }
-    })
-
-    room.deckIdentities.forEach((cardID) => {
-      const located = room.cardIndex.has(cardID)
-      const unlocated = room.unlocatedIdentities.has(cardID)
-      if (located === unlocated) {
-        identityIssues.push({
-          type: located ? 'identity-both-located-and-unlocated' : 'identity-missing',
-          cardID
-        })
-      }
-    })
-
-    room.unlocatedIdentities.forEach((cardID) => {
-      if (cardID <= 0 || !room.deckIdentities.has(cardID)) {
-        identityIssues.push({
-          type: 'invalid-unlocated-identity',
-          cardID
-        })
-      }
-    })
-
-    const slotIssues = room.publicZones.getPublicZoneConsistencyIssues()
-    const issues = [
-      ...identityIssues.map((issue) => ({ domain: 'identity', ...issue })),
-      ...slotIssues.map((issue) => ({ domain: 'slot', ...issue }))
-    ]
-
-    if (issues.length > 0) {
-      trackerLogger.warn('Room 身份/槽位守恒观测发现不一致', {
-        context,
-        issues
+        entityID: card.entityID,
+        cardIsTracked: cardsSet.has(card)
       })
     }
-  }
+  })
 
-  assertPlayerSnapshotConsistency(playerCards: Card[]): void {
-    const room = this.room
-    const freshPlayerCards = room.trackedCards.filter((card) => card.location === 'player')
-    const consistent =
-      freshPlayerCards.length === playerCards.length &&
-      freshPlayerCards.every((card, index) => playerCards[index] === card)
-
-    if (!consistent) {
-      trackerLogger.warn('resolveConstraints player 快照与全量过滤结果不一致', {
-        snapshotCardIDs: playerCards.map((card) => card.id),
-        freshCardIDs: freshPlayerCards.map((card) => card.id)
+  room.deckIdentities.forEach((cardID) => {
+    const located = room.cardIndex.has(cardID)
+    const unlocated = room.unlocatedIdentities.has(cardID)
+    if (located === unlocated) {
+      identityIssues.push({
+        type: located ? 'identity-both-located-and-unlocated' : 'identity-missing',
+        cardID
       })
     }
-  }
+  })
 
-  assertLocationIndexConsistency(): void {
-    const room = this.room
-    const shadow = new CardLocationIndex()
-    shadow.rebuild(room, { record: false })
-
-    const live = JSON.stringify(room.locationIndex.toComparable(room))
-    const expected = JSON.stringify(shadow.toComparable(room))
-
-    if (live !== expected) {
-      /* prettier-ignore */
-      trackerLogger.warn('locationIndex 增量结果与全量 rebuild 不一致', { reason: 'resolveConstraints:incrementalLocationIndex' })
+  room.unlocatedIdentities.forEach((cardID) => {
+    if (cardID <= 0 || !room.deckIdentities.has(cardID)) {
+      identityIssues.push({
+        type: 'invalid-unlocated-identity',
+        cardID
+      })
     }
+  })
+
+  const slotIssues = getPublicZoneConsistencyIssues(room)
+  const issues = [
+    ...identityIssues.map((issue) => ({ domain: 'identity', ...issue })),
+    ...slotIssues.map((issue) => ({ domain: 'slot', ...issue }))
+  ]
+
+  if (issues.length > 0) {
+    trackerLogger.warn('Room 身份/槽位守恒观测发现不一致', {
+      context,
+      issues
+    })
   }
+}
 
-  assertAmbiguousKnownIndexConsistency(): void {
-    const room = this.room
-    const groups = Array.from(room.constraintGroups.values())
-    const shadow = new AmbiguousKnownIndex(room)
-    shadow.rebuild(groups, { record: false })
+export function assertPlayerSnapshotConsistency(room: Room, playerCards: Card[]): void {
+  if (!import.meta.env.DEV) return
 
-    const live = JSON.stringify(room.ambiguousKnownIndex.toComparable(room))
-    const expected = JSON.stringify(shadow.toComparable(room))
+  const freshPlayerCards = room.trackedCards.filter((card) => card.location === 'player')
+  const consistent =
+    freshPlayerCards.length === playerCards.length &&
+    freshPlayerCards.every((card, index) => playerCards[index] === card)
 
-    if (live !== expected) {
-      /* prettier-ignore */
-      trackerLogger.warn('ambiguousKnownIndex 增量结果与全量 rebuild 不一致', { reason: 'resolveConstraints:incrementalAmbiguousKnownIndex' })
-    }
+  if (!consistent) {
+    trackerLogger.warn('resolveConstraints player 快照与全量过滤结果不一致', {
+      snapshotCardIDs: playerCards.map((card) => card.id),
+      freshCardIDs: freshPlayerCards.map((card) => card.id)
+    })
+  }
+}
+
+export function assertLocationIndexConsistency(room: Room): void {
+  if (!import.meta.env.DEV) return
+
+  const shadow = new CardLocationIndex()
+  shadow.rebuild(room, { record: false })
+
+  const live = JSON.stringify(toComparableLocationIndex(room.locationIndex, room))
+  const expected = JSON.stringify(toComparableLocationIndex(shadow, room))
+
+  if (live !== expected) {
+    /* prettier-ignore */
+    trackerLogger.warn('locationIndex 增量结果与全量 rebuild 不一致', { reason: 'resolveConstraints:incrementalLocationIndex' })
+  }
+}
+
+export function assertAmbiguousKnownIndexConsistency(room: Room): void {
+  if (!import.meta.env.DEV) return
+
+  const groups = Array.from(room.constraintGroups.values())
+  const shadow = new AmbiguousKnownIndex(room)
+  shadow.rebuild(groups, { record: false })
+
+  const live = JSON.stringify(toComparableAmbiguousIndex(room.ambiguousKnownIndex, room))
+  const expected = JSON.stringify(toComparableAmbiguousIndex(shadow, room))
+
+  if (live !== expected) {
+    /* prettier-ignore */
+    trackerLogger.warn('ambiguousKnownIndex 增量结果与全量 rebuild 不一致', { reason: 'resolveConstraints:incrementalAmbiguousKnownIndex' })
   }
 }

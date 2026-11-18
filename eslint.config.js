@@ -11,7 +11,6 @@ const browserRuntimeGlobals = {
   Laya: 'readonly',
   JSZipUtils: 'readonly',
   CtrUtil: 'readonly',
-  SystemContext: 'readonly',
   ChannelUtils: 'readonly',
   JSZip: 'readonly',
   Zlib: 'readonly',

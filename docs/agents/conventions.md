@@ -15,7 +15,7 @@
 
 - 项目使用 JavaScript/TypeScript ESM；`package.json` 中设置了 `type: module`。
 - Vite 配置了 `@` 路径别名指向 `src/` 目录；`jsconfig.json` 同步配置了 IDE 路径映射。
-- 代码会依赖目标页面提供的全局对象，例如 `Laya`、`JSZip`、`CtrUtil`、`SystemContext` 等。
+- 代码会依赖目标页面提供的全局对象，例如 `Laya`、`JSZip`、`CtrUtil` 等；场景尺寸与缩放通过 `src/runtime/gameAdapter.js` 的 `laya.scene` 读取。
 - `globalConfig` 由 `src/tracker/state.ts` 中的配置列表和 Proxy 驱动，当前活跃配置项以 `ACTIVE_CONFIG_ENTRIES` 为准；修改配置项时需要同步考虑 localStorage 与 `xc:config-change` 事件分发。
 - `src/tracker/index.ts` 仅作为共享运行时状态聚合入口；`Room`、`Card`、`Player`、`Zone`、`ConstraintGroup` 等底层对象请从 `src/tracker/` 对应子模块直接导入。
 - 远端配置通过 `src/config/ConfigManager.js` 从 `Config_w.sgs` 加载并分发到各配置解析器，解析结果通过单例模式全局共享。
@@ -163,6 +163,14 @@ function readMetadata(input) {
 - helper 放在它所支撑的主导出附近，通常位于主函数下方。
 - 只在 helper 能命名真实概念时提取，例如 `requireConfig`、`readMetadata`；不要把简单表达式拆成大量一次性函数。
 - 同步的解析、校验、options 组装保持同步；不要仅为统一签名而把纯计算包装成异步或 effectful API。
+
+### 诊断日志
+
+- tracker 的 `info` / `debug` 调用放在 `import.meta.env.DEV` 与日志对象 `enabled` 的联合分支内，
+  让发布构建裁剪日志文案、摘要函数及参数求值。
+- `warn` / `error` 保留用于异常定位，在调用前检查 `enabled`；纯日志快照、数组映射和校验也必须
+  延迟到开关开启后执行，不能只在 logger 内判断。
+- 注入的 `TrackerLogger.enabled` 可省略（默认启用），也可使用 getter；装配时保持 getter 动态读取。
 
 ### Comments
 

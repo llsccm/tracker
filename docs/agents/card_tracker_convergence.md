@@ -128,7 +128,7 @@ DP 按层缓存混合基数整数状态，并原地修改、恢复容量。状�
 
 收敛循环使用三类增量机制：
 
-- **A2：玩家区增量快照**。`Room.refreshPlayerSnapshot()` 委托 `projection/playerSnapshot.ts` 按 `dirtyCardEvents` 游标维护快照；数组、成员集合、游标和顺序表只在该模块内保存，Room 的 `playerCardsSnapshot` 是只读 getter。事件断档时回退全量重建，开发构建由 `assertPlayerSnapshotConsistency()` 校验。新实体通过 `Room.registerCardEntity()` 预先登记创建顺序，首次入手无需 `Room.cards.indexOf()`。
+- **A2：玩家区增量快照**。`Room.refreshPlayerSnapshot()` 委托 `projection/playerSnapshot.ts` 按 `dirtyCardEvents` 游标维护快照；数组、成员集合、游标和顺序表只在该模块内保存，`getPlayerCardsSnapshot(room)` 提供只读查询。事件断档时回退全量重建，DEV 环境由 `assertPlayerSnapshotConsistency(room, playerCards)` 校验。新实体通过 `Room.registerCardEntity()` 预先登记创建顺序，首次入手无需 `Room.cards.indexOf()`。
 - **手牌分配缓存**。首轮批量计算有观测手牌数的座位，后续轮次沿共享约束组传播上次分配之后的触碰座位，批量重算依赖闭包；缓存只在单次 `resolveConstraints()` 内有效。
 - **受影响座位筛选**。`pendingAllocationTouchedSeats` 累计上次分配之后的卡牌变更，分配完成后清空；约束三排他和匿名对账产生的新触碰留到下一轮。首轮处理全部已观测玩家，后续轮次跳过待重算座位依赖闭包以外的玩家；待重算集合为空时，稳定末轮不再计算分配或组依赖闭包。暗实体匹配仍消费完整组集合，不能因本轮只重算部分座位而改变结果。
 
@@ -137,7 +137,7 @@ DP 按层缓存混合基数整数状态，并原地修改、恢复容量。状�
 
 两套增量索引的影子全量重建只用于 DEV 诊断：默认在每个 Room 的首次收敛及之后每 32 次收敛时成对抽样；
 URL 参数 `debugAssert=1` 会恢复逐次检查，`debugAssert=0` 会关闭收敛尾部的影子索引检查。显式调用
-`assertLocationIndexConsistency()` / `assertAmbiguousKnownIndexConsistency()` 仍会立即执行完整比对。
+`assertLocationIndexConsistency(room)` / `assertAmbiguousKnownIndexConsistency(room)` 在 DEV 环境仍会立即执行完整比对；两者从 `room/diagnostics.ts` 导入。
 
 `Room.notifyCardChanged()` 会把变更后的 `card.seats`、事件中的 `previousSeats`，以及前后 owner / resolved seat 加入 `resolveTouchedSeats`。候选缩小时，被删除的座位只能从 `previousSeats` 恢复，因此新增候选变更路径必须保留这一事件信息。
 

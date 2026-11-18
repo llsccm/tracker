@@ -5,6 +5,7 @@ import { normalizeMoveEvent } from '@/tracker/protocol/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
 import { registerDefaultMoveEventHandlers } from '@/tracker/skill/registerHandlers'
 import { createTestRoom, getCard, seedDiscardCards } from '../helpers/room'
+import { assertPileIdentityLedgerConsistency } from '@/tracker/room/diagnostics'
 
 function createRoomWithDiscard(cardNames: string[]) {
   const cardIDs = cardNames.map((_, index) => index + 1)
@@ -161,6 +162,6 @@ describe('佐练弃牌堆取牌', () => {
     expect(pile.cards).toHaveLength(1)
     expect(pile.cards.at(-1)).toMatchObject({ id: 113, isKnown: true })
     expect(new Set(exchange.cards.map((card) => card.id))).toEqual(new Set([39, 112]))
-    expect(room.assertPileIdentityLedgerConsistency('test:zuolian-random-known')).toEqual([])
+    expect(assertPileIdentityLedgerConsistency(room, 'test:zuolian-random-known')).toEqual([])
   })
 })

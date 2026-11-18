@@ -38,7 +38,7 @@ function hasCardsAtPublicPosition(
   return false
 }
 
-interface PublicZoneIssue {
+export interface PublicZoneIssue {
   type: string
   cardID?: CardID
   cardName?: string
@@ -198,86 +198,6 @@ export class RoomPublicZones {
   }
 
   /**
-   * 检查 Card.location 与公共区有序关系是否一致。
-   * outside/exile 允许仅通过 Card.location 表达，不做反向强制检查。
-   */
-  getPublicZoneConsistencyIssues(): PublicZoneIssue[] {
-    const issues: PublicZoneIssue[] = []
-    const orderedZoneByCard = new Map<Card, { zoneID: PublicZoneName; index: number }>()
-
-    this.room.zones.forEach((zone, zoneID) => {
-      zone.cards.forEach((card, index) => {
-        if (!card) {
-          issues.push({
-            type: 'empty-zone-slot',
-            zoneID,
-            index
-          })
-          return
-        }
-
-        const previous = orderedZoneByCard.get(card)
-        if (previous) {
-          issues.push({
-            type: 'duplicated-public-zone-card',
-            cardID: card.id,
-            cardName: card.name,
-            zoneID,
-            previousZoneID: previous.zoneID,
-            index,
-            previousIndex: previous.index
-          })
-        } else {
-          orderedZoneByCard.set(card, { zoneID, index })
-        }
-
-        if (card.location !== zoneID) {
-          issues.push({
-            type: 'zone-card-location-mismatch',
-            cardID: card.id,
-            cardName: card.name,
-            zoneID,
-            index,
-            location: card.location
-          })
-        }
-      })
-    })
-
-    this.room.cards.forEach((card) => {
-      if (!ORDERED_PUBLIC_ZONE_IDS.has(card.location)) return
-
-      const zone = this.room.getZone(card.location)
-      if (!zone.cards.includes(card)) {
-        issues.push({
-          type: 'missing-public-zone-order',
-          cardID: card.id,
-          cardName: card.name,
-          location: card.location
-        })
-      }
-    })
-
-    return issues
-  }
-
-  /**
-   * 开发期公共区一致性检查。生产环境仅返回空数组，不影响运行。
-   */
-  assertPublicZoneConsistency(context = ''): PublicZoneIssue[] {
-    if (!import.meta.env.DEV) return []
-
-    const issues = this.getPublicZoneConsistencyIssues()
-    if (issues.length > 0) {
-      trackerLogger.warn('公共区顺序关系不一致', {
-        context,
-        issues
-      })
-    }
-    return issues
-  }
-
-  /**
    * 获取指定玩家手牌中的物理牌 ID。
    */
   getPlayerHandCardIDs(seatID: SeatID, options: PlayerHandCardIDOptions = {}): CardID[] {
@@ -307,4 +227,84 @@ export class RoomPublicZones {
       .map((card) => card.id)
       .filter((id) => id > 0)
   }
+}
+
+/**
+ * 开发期公共区一致性检查。生产环境仅返回空数组，不影响运行。
+ */
+export function assertPublicZoneConsistency(room: Room, context = ''): PublicZoneIssue[] {
+  if (!import.meta.env.DEV) return []
+
+  const issues = getPublicZoneConsistencyIssues(room)
+  if (issues.length > 0) {
+    trackerLogger.warn('公共区顺序关系不一致', {
+      context,
+      issues
+    })
+  }
+  return issues
+}
+
+/**
+ * 检查 Card.location 与公共区有序关系是否一致。
+ * outside/exile 允许仅通过 Card.location 表达，不做反向强制检查。
+ */
+export function getPublicZoneConsistencyIssues(room: Room): PublicZoneIssue[] {
+  const issues: PublicZoneIssue[] = []
+  const orderedZoneByCard = new Map<Card, { zoneID: PublicZoneName; index: number }>()
+
+  room.zones.forEach((zone, zoneID) => {
+    zone.cards.forEach((card, index) => {
+      if (!card) {
+        issues.push({
+          type: 'empty-zone-slot',
+          zoneID,
+          index
+        })
+        return
+      }
+
+      const previous = orderedZoneByCard.get(card)
+      if (previous) {
+        issues.push({
+          type: 'duplicated-public-zone-card',
+          cardID: card.id,
+          cardName: card.name,
+          zoneID,
+          previousZoneID: previous.zoneID,
+          index,
+          previousIndex: previous.index
+        })
+      } else {
+        orderedZoneByCard.set(card, { zoneID, index })
+      }
+
+      if (card.location !== zoneID) {
+        issues.push({
+          type: 'zone-card-location-mismatch',
+          cardID: card.id,
+          cardName: card.name,
+          zoneID,
+          index,
+          location: card.location
+        })
+      }
+    })
+  })
+
+  room.cards.forEach((card) => {
+    if (!ORDERED_PUBLIC_ZONE_IDS.has(card.location)) return
+
+    const zone = room.getZone(card.location)
+    if (!zone.cards.includes(card)) {
+      issues.push({
+        type: 'missing-public-zone-order',
+        cardID: card.id,
+        cardName: card.name,
+        location: card.location
+      })
+    }
+  })
+
+  return issues
 }

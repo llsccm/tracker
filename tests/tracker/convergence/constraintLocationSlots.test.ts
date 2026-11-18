@@ -8,6 +8,7 @@ import {
 } from '@/tracker/candidate/locationCandidate'
 import { createTestRoom, getCard } from '../helpers/room'
 import { equipmentContainer, playerLocation, publicLocation } from '../helpers/locationCandidates'
+import { getCandidateHandSlotCount } from '@/tracker/model/Player'
 
 describe('区间名额', () => {
   it.each([
@@ -104,7 +105,7 @@ describe('区间名额', () => {
       expectedSlotsByLocation: ranges
     })
     expect(group.resolve()).toBe(false)
-    expect(room.getPlayer(1)!.getCandidateHandSlotCount()).toBe(2)
+    expect(getCandidateHandSlotCount(room.getPlayer(1)!)).toBe(2)
     room.constraintGroupsDirty = false
     room.createConstraintGroup({ id: 'range', expectedSlotsByLocation: ranges })
     expect(room.constraintGroupsDirty).toBe(false)
@@ -232,7 +233,7 @@ describe('完整位置名额生命周期', () => {
       expectedSlotsByLocation: new Map([[createLocationCandidateKey(hand), 2]])
     })
     const player = room.getPlayer(1)!
-    expect(player.getCandidateHandSlotCount()).toBe(1)
+    expect(getCandidateHandSlotCount(player)).toBe(1)
     player.syncObservedHandCount(3)
     room.resolveConstraints()
     expect(player.unknownCardCount).toBe(1)
@@ -253,7 +254,7 @@ describe('完整位置名额生命周期', () => {
       cards,
       expectedSlotsByLocation: new Map([[createLocationCandidateKey(hand), 1]])
     })
-    expect(room.getPlayer(1)!.getCandidateHandSlotCount()).toBe(1)
+    expect(getCandidateHandSlotCount(room.getPlayer(1)!)).toBe(1)
   })
 
   it.each([false, true])('重叠组同时限制明牌槽位，不重复累计身份（逆序建组：%s）', (reverse) => {
@@ -273,7 +274,7 @@ describe('完整位置名额生命周期', () => {
       })
     )
     // 三对身份分别最多一张在 1 号手牌，三个身份中同时在手牌的最多只能有一张。
-    expect(room.getPlayer(1)!.getCandidateHandSlotCount()).toBe(1)
+    expect(getCandidateHandSlotCount(room.getPlayer(1)!)).toBe(1)
   })
 
   it('相交与不相交组的候选容量上界符合小规模穷举', () => {
@@ -301,7 +302,7 @@ describe('完整位置名额生命周期', () => {
           expected = Math.max(expected, countBits(selection))
         }
       }
-      expect(room.getPlayer(1)!.getCandidateHandSlotCount(), `scenario ${scenario}`).toBe(expected)
+      expect(getCandidateHandSlotCount(room.getPlayer(1)!), `scenario ${scenario}`).toBe(expected)
     }
   })
 
@@ -336,7 +337,7 @@ describe('完整位置名额生命周期', () => {
           expected = Math.max(expected, countBits(selection))
         }
       }
-      expect(room.getPlayer(1)!.getCandidateHandSlotCount()).toBe(expected)
+      expect(getCandidateHandSlotCount(room.getPlayer(1)!)).toBe(expected)
     }
   )
 
@@ -467,7 +468,7 @@ describe('完整位置名额生命周期', () => {
       expectedSlotsByLocation: new Map(reverse ? slots.reverse() : slots)
     })
 
-    expect(room.getPlayer(1)!.getCandidateHandSlotCount()).toBe(1)
+    expect(getCandidateHandSlotCount(room.getPlayer(1)!)).toBe(1)
   })
 
   it('随机转移清除来源和目标手牌名额，保留第三方、标记、容器与公共位置', () => {

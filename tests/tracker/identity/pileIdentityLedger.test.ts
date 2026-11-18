@@ -1,13 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { trackerLogger } from '@/utils/logger'
 import { POSITION_BOTTOM, POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { PileIdentityLedger, type PileIdentityLedgerMove } from '@/tracker/PileIdentityLedger'
+import {
+  PileIdentityLedger,
+  type PileIdentityLedgerMove,
+  assertPileIdentityConsistency,
+  getPileIdentitySnapshot
+} from '@/tracker/PileIdentityLedger'
 
 type SharedMove = Omit<PileIdentityLedgerMove, 'discardCountAfter'>
 
 function applyMove(ledger: PileIdentityLedger, move: SharedMove, discardCountAfter = 0): void {
   ledger.applyMove({ ...move, discardCountAfter })
-  expect(ledger.assertConsistency(move.pileCountAfter, move.eventType)).toEqual([])
+  expect(assertPileIdentityConsistency(ledger, move.pileCountAfter, move.eventType)).toEqual([])
 }
 
 function createTwoCohortLedger(): PileIdentityLedger {
@@ -47,45 +52,65 @@ function createTwoCohortLedger(): PileIdentityLedger {
 
 describe('PileIdentityLedger', () => {
   afterEach(() => {
+    vi.unstubAllEnvs()
     vi.restoreAllMocks()
   })
 
   it('牌堆明牌匿名化只放弃指定身份定位，保留总数与其它明牌', () => {
     const ledger = new PileIdentityLedger()
     ledger.initialize([1, 2, 3, 4, 5])
-    for (const cardID of [1, 2, 3]) ledger.revealIdentity(cardID, 'pile', 'test:known-top', true)
+    ledger.applyReveal({
+      cardIDs: [1, 2, 3],
+      location: 'pile',
+      pileCountAfter: 5,
+      discardCountAfter: 0
+    })
 
     // 4 已在匿名批次中，不得重复增加它的暗槽数量。
     ledger.anonymizeKnownPileIdentities([1, 2, 4], 'test:ambiguous-source')
 
-    expect(ledger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(ledger)).toMatchObject({
       identityUniverseIDs: [1, 2, 3, 4, 5],
       locatedIdentityIDs: [3],
       knownPileIdentityIDs: [3],
       hiddenPileSlotCount: 4,
       accountedPileCount: 5
     })
-    expect(ledger.assertConsistency(5, 'test:anonymized')).toEqual([])
-    const snapshot = ledger.getSnapshot()
+    expect(assertPileIdentityConsistency(ledger, 5, 'test:anonymized')).toEqual([])
+    const snapshot = getPileIdentitySnapshot(ledger)
     ledger.anonymizeKnownPileIdentities([1, 2], 'test:repeat')
-    expect(ledger.getSnapshot()).toEqual(snapshot)
+    expect(getPileIdentitySnapshot(ledger)).toEqual(snapshot)
 
-    ledger.consumeAnonymous(1, POSITION_RANDOM, 'test:gain')
-    expect(ledger.getSnapshot()).toMatchObject({
+    applyMove(ledger, {
+      eventType: 'drawUnknown',
+      fromZone: 1,
+      toZone: 5,
+      cardIDs: [],
+      cardCount: 1,
+      fromPosition: POSITION_RANDOM,
+      pileCountAfter: 4
+    })
+    expect(getPileIdentitySnapshot(ledger)).toMatchObject({
       knownPileIdentityIDs: [3],
       hiddenPileSlotCount: 3,
       accountedPileCount: 4
     })
-    expect(ledger.assertConsistency(4, 'test:after-gain')).toEqual([])
+    expect(assertPileIdentityConsistency(ledger, 4, 'test:after-gain')).toEqual([])
   })
 
-  it('初始化一致性按归一化身份数校验', () => {
+  it('初始化按开局牌池建立身份全集和匿名槽数量', () => {
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
     const ledger = new PileIdentityLedger()
 
-    ledger.initialize([1, 1, 2, 0, -1])
+    ledger.initialize([1, 2])
 
-    expect(ledger.getSnapshot().accountedPileCount).toBe(2)
+    expect(getPileIdentitySnapshot(ledger)).toMatchObject({
+      identityUniverseIDs: [1, 2],
+      locatedIdentityIDs: [],
+      knownPileIdentityIDs: [],
+      hiddenPileSlotCount: 2,
+      accountedPileCount: 2
+    })
     expect(warnSpy).not.toHaveBeenCalled()
   })
 
@@ -94,7 +119,15 @@ describe('PileIdentityLedger', () => {
     const ledger = new PileIdentityLedger()
     ledger.initialize([1, 2])
 
-    ledger.revealIdentity(3, 'pile', 'test:reveal')
+    ledger.applyMove({
+      eventType: 'drawKnown',
+      fromZone: 1,
+      toZone: 5,
+      cardIDs: [3],
+      cardCount: 1,
+      pileCountAfter: 2,
+      discardCountAfter: 0
+    })
 
     expect(warnSpy).toHaveBeenCalledExactlyOnceWith('牌堆身份账本异常', {
       reason: 'revealed-pile-identity-without-cohort',
@@ -107,7 +140,7 @@ describe('PileIdentityLedger', () => {
     const ledger = new PileIdentityLedger()
     ledger.initialize([1, 2])
 
-    const issues = ledger.assertConsistency(1, 'test:count-mismatch')
+    const issues = assertPileIdentityConsistency(ledger, 1, 'test:count-mismatch')
 
     expect(issues).toEqual([
       {
@@ -154,7 +187,7 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 4
     })
 
-    expect(ledger.getSnapshot().accountedPileCount).toBe(4)
+    expect(getPileIdentitySnapshot(ledger).accountedPileCount).toBe(4)
     expect(warnSpy).not.toHaveBeenCalled()
   })
 
@@ -183,7 +216,7 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 4
     })
 
-    expect(ledger.getSnapshot().cohort).toMatchObject({
+    expect(getPileIdentitySnapshot(ledger).cohort).toMatchObject({
       generation: 0,
       groups: [
         {
@@ -323,7 +356,7 @@ describe('PileIdentityLedger', () => {
       applyMove(ledger, move, discardCountAfter)
     })
 
-    expect(ledger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(ledger)).toMatchObject({
       revision: events.length + 1,
       knownPileIdentityIDs: [7],
       hiddenPileSlotCount: 4,
@@ -347,7 +380,7 @@ describe('PileIdentityLedger', () => {
     ledger.initialize([1, 2, 3])
 
     expect(
-      ledger.assertConsistency(3, 'test:target-partition', {
+      assertPileIdentityConsistency(ledger, 3, 'test:target-partition', {
         deckIdentityIDs: new Set([1, 2, 3]),
         unlocatedIdentityIDs: new Set([1]),
         suspendedIdentityIDs: new Set([2])
@@ -383,7 +416,7 @@ describe('PileIdentityLedger', () => {
       discardCountAfter: 0
     })
 
-    expect(ledger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(ledger)).toMatchObject({
       knownPileIdentityIDs: [1, 2],
       hiddenPileSlotCount: 1,
       accountedPileCount: 3
@@ -412,7 +445,7 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 2,
       discardCountAfter: 1
     })
-    expect(ledger.getSnapshot().knownDiscardIdentityIDs).toEqual([1])
+    expect(getPileIdentitySnapshot(ledger).knownDiscardIdentityIDs).toEqual([1])
 
     ledger.applyReveal({
       cardIDs: [1],
@@ -420,7 +453,7 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 2,
       discardCountAfter: 0
     })
-    expect(ledger.getSnapshot().knownDiscardIdentityIDs).toEqual([])
+    expect(getPileIdentitySnapshot(ledger).knownDiscardIdentityIDs).toEqual([])
   })
 
   it('常规匿名摸牌分别扣除牌顶明牌身份与暗槽', () => {
@@ -452,12 +485,12 @@ describe('PileIdentityLedger', () => {
       moveType: 1
     })
 
-    expect(ledger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(ledger)).toMatchObject({
       knownPileIdentityIDs: [],
       hiddenPileSlotCount: 0,
       accountedPileCount: 0
     })
-    expect(ledger.getSnapshot().cohort.groups).toEqual([
+    expect(getPileIdentitySnapshot(ledger).cohort.groups).toEqual([
       {
         generation: 0,
         kind: 'none-in-pile',
@@ -480,7 +513,7 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 4
     })
 
-    const snapshot = ledger.getSnapshot()
+    const snapshot = getPileIdentitySnapshot(ledger)
     expect(snapshot.cohort.groups).toHaveLength(1)
     expect(snapshot.cohort.groups[0]).toMatchObject({
       cardIDs: [1, 2, 3, 4, 4400],
@@ -502,7 +535,7 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 4
     })
 
-    expect(ledger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(ledger)).toMatchObject({
       knownPileIdentityIDs: [4],
       cohort: {
         groups: [{ cardIDs: [1, 2, 3], remainingPileCount: 3 }]
@@ -525,7 +558,7 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 4
     })
 
-    expect(ledger.getSnapshot().cohort.groups).toEqual([
+    expect(getPileIdentitySnapshot(ledger).cohort.groups).toEqual([
       {
         generation: 1,
         kind: 'all-in-pile',
@@ -568,7 +601,10 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 3
     })
 
-    expect(ledger.getSnapshot().cohort.groups.map((group) => group.cardIDs)).toEqual([[1], [2, 3]])
+    expect(getPileIdentitySnapshot(ledger).cohort.groups.map((group) => group.cardIDs)).toEqual([
+      [1],
+      [2, 3]
+    ])
 
     applyMove(ledger, {
       eventType: 'returnToPile',
@@ -580,7 +616,7 @@ describe('PileIdentityLedger', () => {
       moveType: 15,
       pileCountAfter: 4
     })
-    expect(ledger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(ledger)).toMatchObject({
       knownPileIdentityIDs: [4],
       cohort: {
         groups: [
@@ -620,7 +656,9 @@ describe('PileIdentityLedger', () => {
     })
 
     expect(result.committed).toBe(true)
-    expect(ledger.getSnapshot().cohort.groups.find((group) => group.generation === 1)).toEqual({
+    expect(
+      getPileIdentitySnapshot(ledger).cohort.groups.find((group) => group.generation === 1)
+    ).toEqual({
       generation: 1,
       kind: 'all-in-pile',
       cardIDs: [1, 2, 3, 4],
@@ -640,7 +678,7 @@ describe('PileIdentityLedger', () => {
       spellID: 3101,
       pileCountAfter: 2
     })
-    expect(bottomLedger.getSnapshot().cohort.groups[0].remainingPileCount).toBe(1)
+    expect(getPileIdentitySnapshot(bottomLedger).cohort.groups[0].remainingPileCount).toBe(1)
 
     const topLedger = createTwoCohortLedger()
     applyMove(topLedger, {
@@ -653,7 +691,7 @@ describe('PileIdentityLedger', () => {
       spellID: 3208,
       pileCountAfter: 2
     })
-    expect(topLedger.getSnapshot().cohort.groups.at(-1)?.remainingPileCount).toBe(0)
+    expect(getPileIdentitySnapshot(topLedger).cohort.groups.at(-1)?.remainingPileCount).toBe(0)
   })
 
   it('B11/B15 匿名任意位置取牌统一合并未决身份且不依赖 SpellID', () => {
@@ -671,7 +709,7 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 2
     })
 
-    expect(ledger.getSnapshot().cohort.groups).toEqual([
+    expect(getPileIdentitySnapshot(ledger).cohort.groups).toEqual([
       {
         generation: 1,
         kind: 'partial',
@@ -709,12 +747,12 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 3
     })
 
-    expect(ledger.getSnapshot()).toMatchObject({
+    expect(getPileIdentitySnapshot(ledger)).toMatchObject({
       knownPileIdentityIDs: [1, 2],
       hiddenPileSlotCount: 1,
       accountedPileCount: 3
     })
-    expect(ledger.getSnapshot().cohort.groups).toEqual([
+    expect(getPileIdentitySnapshot(ledger).cohort.groups).toEqual([
       {
         generation: 0,
         kind: 'partial',
@@ -733,7 +771,7 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 3
     })
 
-    expect(ledger.getSnapshot().cohort.groups).toEqual([
+    expect(getPileIdentitySnapshot(ledger).cohort.groups).toEqual([
       {
         generation: 0,
         kind: 'all-in-pile',
@@ -741,12 +779,12 @@ describe('PileIdentityLedger', () => {
         remainingPileCount: 2
       }
     ])
-    expect(ledger.getSnapshot().knownPileIdentityIDs).toEqual([1])
+    expect(getPileIdentitySnapshot(ledger).knownPileIdentityIDs).toEqual([1])
   })
 
   it('B12 回收区 noop 不改变批次状态', () => {
     const ledger = createTwoCohortLedger()
-    const before = ledger.getSnapshot().cohort
+    const before = getPileIdentitySnapshot(ledger).cohort
 
     applyMove(ledger, {
       eventType: 'noop',
@@ -757,7 +795,7 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 3
     })
 
-    expect(ledger.getSnapshot().cohort).toEqual(before)
+    expect(getPileIdentitySnapshot(ledger).cohort).toEqual(before)
   })
 
   it('B13 任意位置给出 CardID 时只扣该身份所属批次', () => {
@@ -775,7 +813,7 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 2
     })
 
-    expect(ledger.getSnapshot().cohort.groups).toEqual([
+    expect(getPileIdentitySnapshot(ledger).cohort.groups).toEqual([
       {
         generation: 1,
         kind: 'partial',
@@ -808,8 +846,8 @@ describe('PileIdentityLedger', () => {
       discardCountAfter: 0
     })
     expect(warnSpy).not.toHaveBeenCalled()
-    expect(singleLedger.getSnapshot().cohort.groups).toHaveLength(1)
-    expect(singleLedger.getSnapshot().cohort.groups[0].remainingPileCount).toBe(2)
+    expect(getPileIdentitySnapshot(singleLedger).cohort.groups).toHaveLength(1)
+    expect(getPileIdentitySnapshot(singleLedger).cohort.groups[0].remainingPileCount).toBe(2)
 
     const ledger = createTwoCohortLedger()
     applyMove(ledger, {
@@ -824,8 +862,8 @@ describe('PileIdentityLedger', () => {
       pileCountAfter: 2
     })
 
-    expect(ledger.getSnapshot().cohort.groups).toHaveLength(1)
-    expect(ledger.getSnapshot().cohort.groups[0]).toMatchObject({
+    expect(getPileIdentitySnapshot(ledger).cohort.groups).toHaveLength(1)
+    expect(getPileIdentitySnapshot(ledger).cohort.groups[0]).toMatchObject({
       cardIDs: [1, 2, 3, 4],
       remainingPileCount: 2
     })
@@ -843,9 +881,17 @@ describe('PileIdentityLedger', () => {
     })
     expect(ledger.getUnresolvedIdentityIDs()).toEqual([2, 3, 4])
 
-    ledger.consumeAnonymous(3, POSITION_TOP, 'test:consume-all-hidden-slots')
+    applyMove(ledger, {
+      eventType: 'drawUnknown',
+      fromZone: 1,
+      toZone: 5,
+      cardIDs: [],
+      cardCount: 3,
+      fromPosition: POSITION_TOP,
+      pileCountAfter: 1
+    })
 
-    expect(ledger.getSnapshot().cohort.groups).toEqual([
+    expect(getPileIdentitySnapshot(ledger).cohort.groups).toEqual([
       {
         generation: 0,
         kind: 'none-in-pile',
@@ -854,5 +900,52 @@ describe('PileIdentityLedger', () => {
       }
     ])
     expect(ledger.getUnresolvedIdentityIDs()).toEqual([2, 3, 4])
+  })
+
+  it('DEV 事务异常回滚恢复状态，非 DEV 环境直接提交且异常不递增 revision', () => {
+    const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
+    let shouldThrow = false
+    const devLedger = new PileIdentityLedger(() => {
+      if (shouldThrow) {
+        shouldThrow = false
+        throw new Error('boom')
+      }
+      return true
+    })
+    devLedger.initialize([1, 2])
+    const before = getPileIdentitySnapshot(devLedger)
+
+    shouldThrow = true
+    devLedger.reconcilePileCount(1)
+    expect(getPileIdentitySnapshot(devLedger)).toEqual(before)
+    expect(warnSpy).toHaveBeenCalledWith(
+      '牌堆身份账本异常',
+      expect.objectContaining({ reason: 'reconcile:pileCount', error: expect.any(Error) })
+    )
+
+    warnSpy.mockClear()
+    vi.stubEnv('DEV', false)
+    shouldThrow = false
+    const prodLedger = new PileIdentityLedger(() => {
+      if (shouldThrow) {
+        shouldThrow = false
+        throw new Error('boom')
+      }
+      return true
+    })
+    prodLedger.initialize([1, 2])
+    prodLedger.reconcilePileCount(1)
+    expect(getPileIdentitySnapshot(prodLedger)).toMatchObject({
+      revision: 2,
+      accountedPileCount: 1
+    })
+
+    shouldThrow = true
+    prodLedger.reconcilePileCount(0)
+    expect(getPileIdentitySnapshot(prodLedger).revision).toBe(2)
+    expect(warnSpy).toHaveBeenCalledWith(
+      '牌堆身份账本异常',
+      expect.objectContaining({ reason: 'reconcile:pileCount', error: expect.any(Error) })
+    )
   })
 })

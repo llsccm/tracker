@@ -33,6 +33,7 @@ const {
   }
 })
 
+vi.mock('@/dom', () => ({ getSeatUIs: vi.fn() }))
 vi.mock('@/tracker', () => ({ Game, UI }))
 vi.mock('@/tracker/runtime/browser', () => ({
   tracker: { scheduleTrackerRender }

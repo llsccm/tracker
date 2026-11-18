@@ -1,3 +1,4 @@
+import { getSeatUIs } from '@/dom'
 import { Game, UI } from '@/tracker'
 import { tracker } from '@/tracker/runtime/browser'
 import { laya } from '@/runtime/gameAdapter'
@@ -22,6 +23,7 @@ export function handleGameTurn(msg) {
     // 战法实例映射
     laya.zhanfaRegister()
     // 此时已具备座位信息
+    getSeatUIs()
     hideSelfOrderContainer(Game.myDisplayID)
     if (UI.firstUpdateSeatUI) showOrderContainers()
   }
