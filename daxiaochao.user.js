@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         三国杀小抄 Lite
 // @namespace    https://greasyfork.org/scripts/448004
-// @version      0.20.2
+// @version      0.21.0
 // @author       三国杀小抄
 // @description  三国杀记牌器
 // @license      GPL-3.0-or-later
@@ -1730,6 +1730,7 @@
 		currentGameKey = null;
 		recordMatchName = null;
 		stateStore = new Map();
+		stateStoreView = this.stateStore;
 		needShowName = false;
 		myGenerals = [];
 		camps = [];
@@ -1806,24 +1807,21 @@
 		setGeneralChangeListener(listener) {
 			this.generalChangeListener = listener;
 		}
-		hasState(scope, stateKey) {
-			return this.stateStore.has(this.getStateStoreKey(scope, stateKey));
-		}
 		readState(scope, stateKey) {
-			return this.stateStore.get(this.getStateStoreKey(scope, stateKey));
+			return this.stateStore.get(getStateStoreKey(scope, stateKey));
 		}
 		ensureState(scope, stateKey, createState) {
-			const storeKey = this.getStateStoreKey(scope, stateKey);
+			const storeKey = getStateStoreKey(scope, stateKey);
 			if (this.stateStore.has(storeKey)) return this.stateStore.get(storeKey);
 			const state = createState();
 			this.stateStore.set(storeKey, state);
 			return state;
 		}
 		setState(scope, stateKey, state) {
-			this.stateStore.set(this.getStateStoreKey(scope, stateKey), state);
+			this.stateStore.set(getStateStoreKey(scope, stateKey), state);
 		}
 		deleteState(scope, stateKey) {
-			this.stateStore.delete(this.getStateStoreKey(scope, stateKey));
+			this.stateStore.delete(getStateStoreKey(scope, stateKey));
 		}
 		getSpellState(spellID) {
 			return this.readState("spell", spellID);
@@ -1836,12 +1834,6 @@
 		}
 		deleteSpellState(spellID) {
 			this.deleteState("spell", spellID);
-		}
-		getSpellStateSnapshot() {
-			const spellPrefix = "spell:";
-			const snapshot = {};
-			for (const [key, value] of this.stateStore) if (key.startsWith(spellPrefix)) snapshot[key.slice(6)] = structuredClone(value);
-			return snapshot;
 		}
 		syncRoomSeats(room = this.room) {
 			if (!room) return;
@@ -1945,14 +1937,14 @@
 			this.resetRoomState();
 			this.resetGameInfo();
 		}
-		getStateStoreKey(scope, stateKey) {
-			const numericKey = Number(stateKey);
-			return `${scope}:${Number.isNaN(numericKey) ? String(stateKey) : String(numericKey)}`;
-		}
 		clearStateStore() {
 			this.stateStore.clear();
 		}
 	};
+	function getStateStoreKey(scope, stateKey) {
+		const numericKey = Number(stateKey);
+		return `${scope}:${Number.isNaN(numericKey) ? String(stateKey) : String(numericKey)}`;
+	}
 	var Game = new GameState({ orderLabels: UI.ORDER_LABELS });
 	var POSITION_TOP = 65280;
 	var POSITION_RANDOM = 65282;
@@ -3463,25 +3455,13 @@
 		}
 		refreshUnknownCardCount(allocation) {
 			if (!this.hasObservedHandCount) return false;
-			const nextUnknownCount = (allocation ?? this.getHandSlotAllocation()).unknownCardCount;
+			const nextUnknownCount = (allocation ?? getHandSlotAllocation(this)).unknownCardCount;
 			const changed = this.unknownCardCount !== nextUnknownCount;
 			this.unknownCardCount = nextUnknownCount;
 			return changed;
 		}
-		getHandSlotAllocation() {
-			return computeHandSlotAllocation(this.room, [this.seatID]).get(this.seatID);
-		}
-		getKnownHandSlotCount() {
-			return this.getHandSlotAllocation().exactKnownCount;
-		}
-		getCandidateHandSlotCount() {
-			return this.getHandSlotAllocation().candidateKnownUpperBound;
-		}
 		get cards() {
 			return this.room.cards.filter((card) => card.location === "player" && card.seats.has(this.seatID));
-		}
-		getMarkCardsBySpell(spellID) {
-			return this.markCards.get(spellID) ?? [];
 		}
 		reset() {
 			this.isShown = true;
@@ -3498,6 +3478,9 @@
 			this.generals.length = 0;
 		}
 	};
+	function getHandSlotAllocation(player) {
+		return computeHandSlotAllocation(player.room, [player.seatID]).get(player.seatID);
+	}
 	var ExchangeBatch = class {
 		key;
 		zone;
@@ -3658,13 +3641,6 @@
 		const normalizedDeckCardCount = normalizeCount(deckCardCount);
 		return normalizedDiscardCount === 0 || normalizedDeckCardCount > 0 && normalizedDiscardCount === normalizedDeckCardCount;
 	}
-	function cloneCohort(cohort) {
-		return {
-			generation: cohort.generation,
-			candidateIdentityIDs: new Set(cohort.candidateIdentityIDs),
-			remainingPileCount: cohort.remainingPileCount
-		};
-	}
 	var HISTORY_DEPENDENT_WARNINGS = new Set([
 		"unexplained-pile-consumption",
 		"revealed-pile-identity-without-cohort",
@@ -3704,7 +3680,6 @@
 				candidateIdentityIDs: new Set(identities),
 				remainingPileCount: identities.length
 			}];
-			this.warnForIssues(this.collectConsistencyIssues(identities.length, "initialize"));
 		}
 		registerAmbiguousOutsideGroup(cardIDs) {
 			const identities = normalizeIDs(cardIDs);
@@ -3770,7 +3745,6 @@
 				this.reconcilePileCountInternal(move.pileCountAfter);
 				this.previousDiscardCount = normalizeCount(move.discardCountAfter);
 			});
-			this.warnForIssues(this.collectConsistencyIssues(move.pileCountAfter, `move:${move.eventType}`));
 			return committed && shuffleTransition ? {
 				committed,
 				shuffleTransition
@@ -3793,17 +3767,6 @@
 				this.reconcilePileCountInternal(reveal.pileCountAfter);
 				this.previousDiscardCount = normalizeCount(reveal.discardCountAfter);
 			});
-			this.warnForIssues(this.collectConsistencyIssues(reveal.pileCountAfter, `reveal:${reveal.location}`));
-		}
-		consumeAnonymous(count, position, reason) {
-			this.commit(reason, () => this.consumeAnonymousInternal(count, position));
-		}
-		revealIdentity(cardID, source, reason, staysInPile = false) {
-			this.commit(reason, () => {
-				if (source === "pile" && staysInPile) this.revealIdentityInPileInternal(cardID);
-				else if (source === "pile") this.revealIdentityFromPileInternal(cardID);
-				else this.revealIdentityOutsidePileInternal(cardID);
-			});
 		}
 		insertKnown(cardIDs, count, position, reason) {
 			this.commit(reason, () => this.insertKnownInternal(cardIDs, count, position));
@@ -3812,35 +3775,6 @@
 			const identities = normalizeIDs(cardIDs).filter((cardID) => this.knownPileIdentityIDs.has(cardID));
 			if (identities.length === 0) return;
 			this.commit(reason, () => this.insertKnownInternal(identities, identities.length, POSITION_RANDOM));
-		}
-		insertAnonymous(count, position, reason) {
-			this.commit(reason, () => this.insertAnonymousInternal(count, position));
-		}
-		mergeAll(reason) {
-			this.commit(reason, () => {
-				this.mergeAllCohortsInternal();
-			});
-		}
-		rotateFromDiscard(cardIDs, reason) {
-			this.commit(reason, () => this.rotateFromDiscardInternal(cardIDs));
-		}
-		assertConsistency(pileCount, context, roomPartition) {
-			const issues = this.collectConsistencyIssues(pileCount, context, roomPartition);
-			this.warnForIssues(issues);
-			return issues;
-		}
-		getSnapshot() {
-			const cohort = this.projectCohorts();
-			return {
-				revision: this.revision,
-				identityUniverseIDs: normalizeIDs(Array.from(this.identityUniverse)),
-				locatedIdentityIDs: normalizeIDs(Array.from(this.locatedIdentityIDs)),
-				knownPileIdentityIDs: normalizeIDs(Array.from(this.knownPileIdentityIDs)),
-				knownDiscardIdentityIDs: normalizeIDs(Array.from(this.knownDiscardIdentityIDs)),
-				hiddenPileSlotCount: this.getHiddenPileSlotCount(),
-				accountedPileCount: this.getAccountedPileCount(),
-				cohort
-			};
 		}
 		getUnresolvedIdentityIDs() {
 			const identityIDs = new Set();
@@ -4111,119 +4045,12 @@
 		getAccountedPileCount() {
 			return this.knownPileIdentityIDs.size + this.getHiddenPileSlotCount();
 		}
-		projectCohorts() {
-			const groups = [];
-			const definitelyInPileIDs = new Set(this.knownPileIdentityIDs);
-			const definitelyOutsidePileIDs = new Set();
-			let flatCandidateWidth = 0;
-			this.cohorts.forEach((cohort) => {
-				const cardIDs = normalizeIDs(Array.from(cohort.candidateIdentityIDs));
-				if (cardIDs.length === 0) return;
-				const kind = !this.isFullTracking() ? "partial" : cohort.remainingPileCount === 0 ? "none-in-pile" : cohort.remainingPileCount === cardIDs.length ? "all-in-pile" : "partial";
-				groups.push({
-					generation: cohort.generation,
-					kind,
-					cardIDs,
-					remainingPileCount: cohort.remainingPileCount
-				});
-				if (kind === "all-in-pile") {
-					cardIDs.forEach((cardID) => definitelyInPileIDs.add(cardID));
-					return;
-				}
-				if (kind === "none-in-pile") {
-					cardIDs.forEach((cardID) => definitelyOutsidePileIDs.add(cardID));
-					return;
-				}
-				flatCandidateWidth += cardIDs.length;
-			});
-			return {
-				generation: this.generation,
-				groups,
-				definitelyInPileIDs: normalizeIDs(Array.from(definitelyInPileIDs)),
-				definitelyOutsidePileIDs: normalizeIDs(Array.from(definitelyOutsidePileIDs)),
-				flatCandidateWidth
-			};
-		}
-		collectConsistencyIssues(pileCount, context, roomPartition) {
-			const issues = [];
-			const seen = new Set();
-			this.cohorts.forEach((cohort) => {
-				if (cohort.remainingPileCount < 0 || this.isFullTracking() && cohort.remainingPileCount > cohort.candidateIdentityIDs.size) issues.push({
-					context,
-					reason: "cohort-cardinality-out-of-range",
-					expected: cohort.candidateIdentityIDs.size,
-					actual: cohort.remainingPileCount
-				});
-				cohort.candidateIdentityIDs.forEach((cardID) => {
-					if (seen.has(cardID)) issues.push({
-						context,
-						reason: "duplicate-cohort-identity",
-						cardID
-					});
-					if (!this.identityUniverse.has(cardID)) issues.push({
-						context,
-						reason: "cohort-identity-missing-from-universe",
-						cardID
-					});
-					if (this.locatedIdentityIDs.has(cardID)) issues.push({
-						context,
-						reason: "located-identity-in-cohort",
-						cardID
-					});
-					if (this.knownPileIdentityIDs.has(cardID)) issues.push({
-						context,
-						reason: "known-pile-identity-in-cohort",
-						cardID
-					});
-					if (roomPartition && !roomPartition.deckIdentityIDs.has(cardID)) issues.push({
-						context,
-						reason: "cohort-identity-missing-from-room-universe",
-						cardID
-					});
-					if (roomPartition) {
-						const isUnlocated = roomPartition.unlocatedIdentityIDs.has(cardID);
-						const isSuspended = roomPartition.suspendedIdentityIDs.has(cardID);
-						if (!isUnlocated && !isSuspended) issues.push({
-							context,
-							reason: "cohort-identity-missing-from-room-partition",
-							cardID
-						});
-						if (isUnlocated && isSuspended) issues.push({
-							context,
-							reason: "cohort-identity-duplicated-in-room-partition",
-							cardID
-						});
-					}
-					seen.add(cardID);
-				});
-			});
-			if (roomPartition) this.locatedIdentityIDs.forEach((cardID) => {
-				if (!roomPartition.unlocatedIdentityIDs.has(cardID)) return;
-				issues.push({
-					context,
-					reason: "located-identity-still-unlocated",
-					cardID
-				});
-			});
-			const expectedPileCount = normalizeCount(pileCount);
-			const actualPileCount = this.getAccountedPileCount();
-			if (expectedPileCount !== actualPileCount) issues.push({
-				context,
-				reason: "pile-count-mismatch",
-				expected: expectedPileCount,
-				actual: actualPileCount
-			});
-			return issues;
-		}
 		commit(reason, update) {
-			const previous = this.captureState();
 			try {
 				update();
-				this.assertInternalState(reason);
 				this.revision += 1;
 				return true;
 			} catch (error) {
-				this.restoreState(previous);
 				this.warn("transaction-rollback", {
 					reason,
 					error
@@ -4231,37 +4058,8 @@
 				return false;
 			}
 		}
-		assertInternalState(context) {
-			const issues = this.collectConsistencyIssues(this.getAccountedPileCount(), context).filter((issue) => issue.reason !== "pile-count-mismatch");
-			if (issues.length > 0) throw new Error(JSON.stringify(issues));
-		}
-		captureState() {
-			return {
-				revision: this.revision,
-				generation: this.generation,
-				identityUniverse: new Set(this.identityUniverse),
-				locatedIdentityIDs: new Set(this.locatedIdentityIDs),
-				knownPileIdentityIDs: new Set(this.knownPileIdentityIDs),
-				knownDiscardIdentityIDs: new Set(this.knownDiscardIdentityIDs),
-				previousDiscardCount: this.previousDiscardCount,
-				cohorts: this.cohorts.map(cloneCohort)
-			};
-		}
-		restoreState(state) {
-			this.revision = state.revision;
-			this.generation = state.generation;
-			this.identityUniverse = state.identityUniverse;
-			this.locatedIdentityIDs = state.locatedIdentityIDs;
-			this.knownPileIdentityIDs = state.knownPileIdentityIDs;
-			this.knownDiscardIdentityIDs = state.knownDiscardIdentityIDs;
-			this.previousDiscardCount = state.previousDiscardCount;
-			this.cohorts = state.cohorts;
-		}
-		warnForIssues(issues) {
-			issues.forEach((issue) => this.warn(issue.reason, { ...issue }));
-		}
 		warn(reason, detail) {
-			if (!this.isFullTracking() && HISTORY_DEPENDENT_WARNINGS.has(reason)) return;
+			if (HISTORY_DEPENDENT_WARNINGS.has(reason) && !this.isFullTracking()) return;
 			trackerLogger.warn("牌堆身份账本异常", {
 				reason,
 				...detail
@@ -4320,18 +4118,6 @@
 			if (item) this.items.set(card.id, item);
 			if (this.hasContainerLocationCandidates(card)) this.containerDependentCards.add(card);
 			else this.containerDependentCards.delete(card);
-		}
-		toComparable(room = this.room) {
-			const order = new Map();
-			room.cards.forEach((card, index) => order.set(card, index));
-			const token = (card) => order.get(card) ?? -card.id;
-			return Array.from(this.items.entries()).sort((a, b) => Number(a[0]) - Number(b[0])).map(([cardID, item]) => [
-				cardID,
-				token(item.card),
-				item.candidateSeats.map(Number),
-				item.groups.map((group) => String(group.id)).sort(),
-				item.description
-			]);
 		}
 		get(cardID) {
 			return this.items.get(cardID) ?? null;
@@ -4659,22 +4445,6 @@
 		refreshPublicZones(room, zoneIDs) {
 			for (const zoneID of zoneIDs) if (room.zones.has(zoneID)) this.publicByZone.set(zoneID, [...room.getZone(zoneID).cards]);
 		}
-		toComparable(room) {
-			const order = new Map();
-			room.cards.forEach((card, index) => order.set(card, index));
-			const token = (card) => order.get(card) ?? -card.id;
-			const bySeat = (map) => Array.from(map.entries()).sort((a, b) => Number(a[0]) - Number(b[0])).map(([seat, cards]) => [Number(seat), cards.map(token)]);
-			const mark = Array.from(this.markBySeatAndSpell.entries()).sort((a, b) => Number(a[0]) - Number(b[0])).map(([seat, spellMap]) => [Number(seat), Array.from(spellMap.entries()).sort((a, b) => Number(a[0]) - Number(b[0])).map(([spellID, cards]) => [spellID, cards.map(token)])]);
-			const publicByZone = Array.from(this.publicByZone.entries()).sort((a, b) => String(a[0]).localeCompare(String(b[0]))).map(([zoneID, cards]) => [String(zoneID), cards.map(token)]);
-			return {
-				knownHand: bySeat(this.knownHandBySeat),
-				candidateHand: bySeat(this.candidateHandBySeat),
-				equip: bySeat(this.equipBySeat),
-				judge: bySeat(this.judgeBySeat),
-				mark,
-				public: publicByZone
-			};
-		}
 		cardHasContainerCandidates(card) {
 			if (!card.hasLocationCandidates()) return false;
 			return getContainerLocationCandidates(card.locationCandidates).length > 0;
@@ -4789,18 +4559,15 @@
 	};
 	var PlayerSnapshot = class {
 		room;
-		snapshot = [];
+		cards = [];
 		members = new Set();
 		order = new Map();
 		lastConsumedSeq = -1;
 		constructor(room) {
 			this.room = room;
 		}
-		get cards() {
-			return this.snapshot;
-		}
 		reset() {
-			this.snapshot = [];
+			this.cards = [];
 			this.members.clear();
 			this.order.clear();
 			this.lastConsumedSeq = -1;
@@ -4808,7 +4575,7 @@
 		registerCard(card, index) {
 			this.order.set(card, index);
 			if (this.members.has(card)) {
-				this.snapshot.splice(this.snapshot.indexOf(card), 1);
+				this.cards.splice(this.cards.indexOf(card), 1);
 				this.insertOrdered(card);
 			}
 		}
@@ -4819,12 +4586,12 @@
 			room.trackedCards.forEach((card, index) => {
 				this.registerCard(card, room.getDetachedCardOrder(card) ?? index);
 				if (card.location === "player") {
-					this.snapshot.push(card);
+					this.cards.push(card);
 					this.members.add(card);
 				}
 			});
 			this.lastConsumedSeq = room.dirtyCardSeq;
-			return this.snapshot;
+			return this.cards;
 		}
 		refresh() {
 			const room = this.room;
@@ -4844,19 +4611,19 @@
 					this.insertOrdered(card);
 				} else if (!isPlayer && inSnapshot) {
 					this.members.delete(card);
-					const index = this.snapshot.indexOf(card);
-					if (index >= 0) this.snapshot.splice(index, 1);
+					const index = this.cards.indexOf(card);
+					if (index >= 0) this.cards.splice(index, 1);
 				}
 			});
 			recordTraversal("resolveConstraints:playerSnapshotIncremental", affectedCards.size);
 			this.lastConsumedSeq = room.dirtyCardSeq;
-			return this.snapshot;
+			return this.cards;
 		}
 		insertOrdered(card) {
 			const key = this.order.get(card);
-			let index = this.snapshot.length;
-			while (index > 0 && this.order.get(this.snapshot[index - 1]) > key) index -= 1;
-			this.snapshot.splice(index, 0, card);
+			let index = this.cards.length;
+			while (index > 0 && this.order.get(this.cards[index - 1]) > key) index -= 1;
+			this.cards.splice(index, 0, card);
 		}
 	};
 	var RoomBase = class {
@@ -4884,9 +4651,6 @@
 		}
 		getMyDisplayID() {
 			return this.mySeatID === void 0 ? void 0 : this.getDisplayID(this.mySeatID);
-		}
-		getMyPlayer() {
-			return this.mySeatID === void 0 ? void 0 : this.getPlayer(this.mySeatID);
 		}
 		setFirstHand(firstID) {
 			this.firstID = firstID;
@@ -4916,29 +4680,25 @@
 			return (targetIndex - originIndex + shownSeatIDs.length) % shownSeatIDs.length;
 		}
 		readSkillState(stateKey) {
-			if (!this.isCurrentGameRoom()) return void 0;
+			if (!isCurrentGameRoom(this)) return void 0;
 			return this.game.readState("tracker", stateKey);
 		}
-		hasSkillState(stateKey) {
-			if (!this.isCurrentGameRoom()) return false;
-			return this.game.hasState("tracker", stateKey);
-		}
 		ensureSkillState(stateKey, createState) {
-			if (!this.isCurrentGameRoom()) return createState();
+			if (!isCurrentGameRoom(this)) return createState();
 			return this.game.ensureState("tracker", stateKey, createState);
 		}
 		setSkillState(stateKey, state) {
-			if (!this.isCurrentGameRoom()) return;
+			if (!isCurrentGameRoom(this)) return;
 			this.game.setState("tracker", stateKey, state);
 		}
 		deleteSkillState(stateKey) {
-			if (!this.isCurrentGameRoom()) return;
+			if (!isCurrentGameRoom(this)) return;
 			this.game.deleteState("tracker", stateKey);
 		}
-		isCurrentGameRoom() {
-			return Object.is(this.game.room, this);
-		}
 	};
+	function isCurrentGameRoom(room) {
+		return Object.is(room.game.room, room);
+	}
 	var ConstraintGroup = class {
 		expectedLocations = new WeakMap();
 		constructor(options = {}) {
@@ -5028,6 +4788,109 @@
 			return changed;
 		}
 	};
+	var PLAYER_HAND_CARD_STATUSES = [CARD_INSTANCE_STATUS.UNKNOWN, CARD_INSTANCE_STATUS.APPEARED];
+	function hasCardsAtPublicPosition(zoneCards, cards, position) {
+		if (cards.length === 0 || zoneCards.length < cards.length) return false;
+		if (position === 65280) {
+			const offset = zoneCards.length - cards.length;
+			return cards.every((card, index) => zoneCards[offset + index] === card);
+		}
+		if (position === 0) {
+			const len = cards.length;
+			return cards.every((_, index) => zoneCards[index] === cards[len - 1 - index]);
+		}
+		return false;
+	}
+	var RoomPublicZones = class {
+		constructor(room) {
+			this.room = room;
+		}
+		getExchangeBatch(batchKey) {
+			return this.room.getZone("exchange").getExchangeBatch(batchKey);
+		}
+		deleteExchangeBatch(batchKey) {
+			this.room.getZone("exchange").deleteExchangeBatch(batchKey);
+		}
+		placePublicRevealCards(knownCards, zoneName, options = {}, logger = trackerLogger) {
+			const room = this.room;
+			const position = options.position ?? 65280;
+			const targetZone = room.zones.get(zoneName);
+			const placeableCards = [];
+			const skippedCards = [];
+			knownCards.forEach((card) => {
+				if (card.location === "player") {
+					skippedCards.push(card);
+					return;
+				}
+				if (targetZone?.cards.includes(card) || card.location === zoneName) {
+					placeableCards.push(card);
+					return;
+				}
+				if (card.location === "outside" || card.location === "suspended") {
+					placeableCards.push(card);
+					return;
+				}
+				if (!room.zones.has(card.location)) {
+					placeableCards.push(card);
+					return;
+				}
+				skippedCards.push(card);
+			});
+			if (skippedCards.length > 0) logger.info("公共区展示跳过无法回收的实体", {
+				zoneName,
+				skippedIDs: skippedCards.map((card) => card.id),
+				skippedLocations: skippedCards.map((card) => card.location)
+			});
+			placeableCards.forEach((card) => {
+				room.removeCardsFromConstraintGroups([card]);
+				card.confirmKnown();
+			});
+			const missingCards = placeableCards.filter((card) => !targetZone?.cards.includes(card));
+			const repositionCards = options.cardIDsTopFirst === true && position === 65280 ? [...placeableCards].reverse() : placeableCards;
+			const cardsToPlace = options.reposition === true && targetZone !== void 0 && placeableCards.length > 0 && !hasCardsAtPublicPosition(targetZone.cards, repositionCards, position) ? repositionCards : missingCards;
+			if (cardsToPlace.length > 0) targetZone?.add(cardsToPlace, position);
+			room.resolveConstraints();
+		}
+		restorePileCount(cardCount) {
+			const pile = this.room.getZone("pile");
+			const knownCards = pile.cards.filter((card) => card.id > 0 && card.isKnown);
+			this.room.pileIdentityLedger.registerAmbiguousOutsideGroup(knownCards.map((card) => card.id));
+			knownCards.forEach((card) => {
+				this.room.anonymizeLocatedIdentity(card, "reconnect:pileCount");
+			});
+			pile.replaceAll(this.resizeShuffledPile([...pile.cards], cardCount, "reconnect:pileCount"));
+			this.room.pileIdentityLedger.reconcilePileCount(cardCount);
+		}
+		resizeShuffledPile(cards, cardCount, reason = "shufflePile:protocolCount") {
+			const missingCount = cardCount - cards.length;
+			if (missingCount >= 0) return missingCount === 0 ? cards : [...this.room.createExternalCards([], missingCount), ...cards];
+			const retiredCards = [];
+			let excessCount = -missingCount;
+			const retainedCards = cards.filter((card) => {
+				if (excessCount === 0 || card.isKnown === true) return true;
+				retiredCards.push(card);
+				excessCount -= 1;
+				return false;
+			});
+			this.clearCardsFromPublicZones(retiredCards);
+			retiredCards.forEach((card) => {
+				this.room.releaseUnknownPlaceholderToOutside(card, reason);
+			});
+			return retainedCards;
+		}
+		clearCardsFromPublicZones(cards = []) {
+			cards.forEach((card) => {
+				this.room.zones.forEach((zone) => zone.removeCard(card));
+			});
+		}
+		getPlayerHandCardIDs(seatID, options = {}) {
+			const { includeCandidates = false, knownOnly = true } = options;
+			const normalizedSeat = Number(seatID);
+			const cardsByStatus = this.room.counter?.cardsByStatus;
+			const appearedCards = cardsByStatus?.[CARD_INSTANCE_STATUS.APPEARED];
+			return (knownOnly ? appearedCards ? Array.from(appearedCards) : this.room.cards : cardsByStatus ? PLAYER_HAND_CARD_STATUSES.flatMap((status) => Array.from(cardsByStatus[status] ?? [])) : this.room.cards).filter((card) => card.location === "player" && card.subZone === "hand" && (includeCandidates || !card.locationCandidates.some((candidate) => candidate.type === "player")) && card.seats.has(normalizedSeat) && (!knownOnly || card.isKnown === true)).map((card) => card.id).filter((id) => id > 0);
+		}
+	};
 	var MAX_TRACKED_CANDIDATE_SEATS = 4;
 	function areNumberSetsEqual(left, right) {
 		if (left.size !== right.size) return false;
@@ -5112,7 +4975,6 @@
 			}
 			room.lastResolveRounds = rounds;
 			if (rounds > room.maxResolveRounds) room.maxResolveRounds = rounds;
-			room.assertPlayerSnapshotConsistency(playerCards);
 			if (changed) this.suspendOverbroadKnownCards();
 			else this.suspendOverbroadKnownCards(overbroadKnownCards);
 			const affectedSeats = new Set();
@@ -5129,7 +4991,6 @@
 				room.constraintGroupsDirty = false;
 			}
 			room.counter.update();
-			room.assertConservation("resolveConstraints");
 		}
 		collectAffectedHandAllocationSeats(observedSeatIDs, touchedSeats) {
 			if (touchedSeats === null) return observedSeatIDs;
@@ -5573,7 +5434,7 @@
 			if (!(normalizedCardID > 0)) return null;
 			const existing = room.cardIndex.get(normalizedCardID);
 			if (existing) {
-				if (room.detachedKnownCards.has(existing) && !target?.isAnonymous) return null;
+				if (room.detachedKnownCards.has(existing)) return target?.isAnonymous ? target : null;
 				return existing;
 			}
 			if (!target || target.hasRealIdentity) return null;
@@ -5899,166 +5760,6 @@
 			this.skills.clear();
 			this.plugins.clear();
 			this.legacySequence = 0;
-		}
-	};
-	var ORDERED_PUBLIC_ZONE_IDS = new Set([
-		"pile",
-		"discard",
-		"process",
-		"exchange"
-	]);
-	var PLAYER_HAND_CARD_STATUSES = [CARD_INSTANCE_STATUS.UNKNOWN, CARD_INSTANCE_STATUS.APPEARED];
-	function hasCardsAtPublicPosition(zoneCards, cards, position) {
-		if (cards.length === 0 || zoneCards.length < cards.length) return false;
-		if (position === 65280) {
-			const offset = zoneCards.length - cards.length;
-			return cards.every((card, index) => zoneCards[offset + index] === card);
-		}
-		if (position === 0) {
-			const len = cards.length;
-			return cards.every((_, index) => zoneCards[index] === cards[len - 1 - index]);
-		}
-		return false;
-	}
-	var RoomPublicZones = class {
-		constructor(room) {
-			this.room = room;
-		}
-		getExchangeBatch(batchKey) {
-			return this.room.getZone("exchange").getExchangeBatch(batchKey);
-		}
-		deleteExchangeBatch(batchKey) {
-			this.room.getZone("exchange").deleteExchangeBatch(batchKey);
-		}
-		placePublicRevealCards(knownCards, zoneName, options = {}, logger = trackerLogger) {
-			const room = this.room;
-			const position = options.position ?? 65280;
-			const targetZone = room.zones.get(zoneName);
-			const placeableCards = [];
-			const skippedCards = [];
-			knownCards.forEach((card) => {
-				if (card.location === "player") {
-					skippedCards.push(card);
-					return;
-				}
-				if (targetZone?.cards.includes(card) || card.location === zoneName) {
-					placeableCards.push(card);
-					return;
-				}
-				if (card.location === "outside" || card.location === "suspended") {
-					placeableCards.push(card);
-					return;
-				}
-				if (!room.zones.has(card.location)) {
-					placeableCards.push(card);
-					return;
-				}
-				skippedCards.push(card);
-			});
-			if (skippedCards.length > 0) logger.info("公共区展示跳过无法回收的实体", {
-				zoneName,
-				skippedIDs: skippedCards.map((card) => card.id),
-				skippedLocations: skippedCards.map((card) => card.location)
-			});
-			placeableCards.forEach((card) => {
-				room.removeCardsFromConstraintGroups([card]);
-				card.confirmKnown();
-			});
-			const missingCards = placeableCards.filter((card) => !targetZone?.cards.includes(card));
-			const repositionCards = options.cardIDsTopFirst === true && position === 65280 ? [...placeableCards].reverse() : placeableCards;
-			const cardsToPlace = options.reposition === true && targetZone !== void 0 && placeableCards.length > 0 && !hasCardsAtPublicPosition(targetZone.cards, repositionCards, position) ? repositionCards : missingCards;
-			if (cardsToPlace.length > 0) targetZone?.add(cardsToPlace, position);
-			room.resolveConstraints();
-		}
-		restorePileCount(cardCount) {
-			const pile = this.room.getZone("pile");
-			const knownCards = pile.cards.filter((card) => card.id > 0 && card.isKnown);
-			this.room.pileIdentityLedger.registerAmbiguousOutsideGroup(knownCards.map((card) => card.id));
-			knownCards.forEach((card) => {
-				this.room.anonymizeLocatedIdentity(card, "reconnect:pileCount");
-			});
-			pile.replaceAll(this.resizeShuffledPile([...pile.cards], cardCount, "reconnect:pileCount"));
-			this.room.pileIdentityLedger.reconcilePileCount(cardCount);
-		}
-		resizeShuffledPile(cards, cardCount, reason = "shufflePile:protocolCount") {
-			const missingCount = cardCount - cards.length;
-			if (missingCount >= 0) return missingCount === 0 ? cards : [...this.room.createExternalCards([], missingCount), ...cards];
-			const retiredCards = [];
-			let excessCount = -missingCount;
-			const retainedCards = cards.filter((card) => {
-				if (excessCount === 0 || card.isKnown === true) return true;
-				retiredCards.push(card);
-				excessCount -= 1;
-				return false;
-			});
-			this.clearCardsFromPublicZones(retiredCards);
-			retiredCards.forEach((card) => {
-				this.room.releaseUnknownPlaceholderToOutside(card, reason);
-			});
-			return retainedCards;
-		}
-		clearCardsFromPublicZones(cards = []) {
-			cards.forEach((card) => {
-				this.room.zones.forEach((zone) => zone.removeCard(card));
-			});
-		}
-		getPublicZoneConsistencyIssues() {
-			const issues = [];
-			const orderedZoneByCard = new Map();
-			this.room.zones.forEach((zone, zoneID) => {
-				zone.cards.forEach((card, index) => {
-					if (!card) {
-						issues.push({
-							type: "empty-zone-slot",
-							zoneID,
-							index
-						});
-						return;
-					}
-					const previous = orderedZoneByCard.get(card);
-					if (previous) issues.push({
-						type: "duplicated-public-zone-card",
-						cardID: card.id,
-						cardName: card.name,
-						zoneID,
-						previousZoneID: previous.zoneID,
-						index,
-						previousIndex: previous.index
-					});
-					else orderedZoneByCard.set(card, {
-						zoneID,
-						index
-					});
-					if (card.location !== zoneID) issues.push({
-						type: "zone-card-location-mismatch",
-						cardID: card.id,
-						cardName: card.name,
-						zoneID,
-						index,
-						location: card.location
-					});
-				});
-			});
-			this.room.cards.forEach((card) => {
-				if (!ORDERED_PUBLIC_ZONE_IDS.has(card.location)) return;
-				if (!this.room.getZone(card.location).cards.includes(card)) issues.push({
-					type: "missing-public-zone-order",
-					cardID: card.id,
-					cardName: card.name,
-					location: card.location
-				});
-			});
-			return issues;
-		}
-		assertPublicZoneConsistency(context = "") {
-			return [];
-		}
-		getPlayerHandCardIDs(seatID, options = {}) {
-			const { includeCandidates = false, knownOnly = true } = options;
-			const normalizedSeat = Number(seatID);
-			const cardsByStatus = this.room.counter?.cardsByStatus;
-			const appearedCards = cardsByStatus?.[CARD_INSTANCE_STATUS.APPEARED];
-			return (knownOnly ? appearedCards ? Array.from(appearedCards) : this.room.cards : cardsByStatus ? PLAYER_HAND_CARD_STATUSES.flatMap((status) => Array.from(cardsByStatus[status] ?? [])) : this.room.cards).filter((card) => card.location === "player" && card.subZone === "hand" && (includeCandidates || !card.locationCandidates.some((candidate) => candidate.type === "player")) && card.seats.has(normalizedSeat) && (!knownOnly || card.isKnown === true)).map((card) => card.id).filter((id) => id > 0);
 		}
 	};
 	var RoomReconnect = class {
@@ -8403,9 +8104,6 @@
 		get moveEventHandlers() {
 			return this.moveEvents.moveEventHandlers;
 		}
-		get playerCardsSnapshot() {
-			return this.playerSnapshot.cards;
-		}
 		constructor({ gameState = new GameState() } = {}) {
 			super(gameState);
 			this.zones = new Map([
@@ -8485,7 +8183,6 @@
 			}
 			pile.replaceAll(deckCards);
 			this.pileIdentityLedger.initialize(cardIDs);
-			this.assertPileIdentityLedgerConsistency("initDeck");
 			this.locationIndex.rebuild(this);
 			this.ambiguousKnownIndex.rebuild(Array.from(this.constraintGroups.values()));
 			this.constraints.syncViewGroups();
@@ -8494,7 +8191,6 @@
 			this.dirtyPublicZones.clear();
 			this.counter = new CardCounter(this);
 			this.isDeckReady = true;
-			this.publicZones.assertPublicZoneConsistency("initDeck");
 			this.moveEvents.onDeckInitialized();
 			this.reconnection.onDeckInitialized();
 		}
@@ -8507,7 +8203,6 @@
 					discardCountAfter: this.getZone("discard").cards.length
 				});
 				this.identity.anonymizePileCohortIdentityEntities(context);
-				this.assertPileIdentityLedgerConsistency(context);
 			} catch (error) {
 				trackerLogger.warn("牌堆身份账本移动更新失败", {
 					error,
@@ -8540,7 +8235,6 @@
 						pileCountAfter: this.getZone("pile").cards.length,
 						discardCountAfter: this.getZone("discard").cards.length
 					});
-					this.assertPileIdentityLedgerConsistency(`reveal:${revealLocation}`);
 				}
 			} catch (error) {
 				trackerLogger.warn("牌堆身份账本揭示更新失败", {
@@ -8549,9 +8243,6 @@
 					location
 				});
 			}
-		}
-		assertPileIdentityLedgerConsistency(context = "") {
-			return [];
 		}
 		registerPlayers(infos, currentUserID) {
 			this.seatIDs = [];
@@ -8634,11 +8325,8 @@
 			return cards.slice(-count).reverse();
 		}
 		anonymizeLocatedIdentity(card, reason = "anonymizeLocatedIdentity", options = {}) {
-			const releasedIdentityID = this.identity.anonymizeLocatedIdentity(card, reason, options);
-			if (releasedIdentityID !== null) this.assertIdentityReleased(releasedIdentityID, reason);
-			return releasedIdentityID;
+			return this.identity.anonymizeLocatedIdentity(card, reason, options);
 		}
-		assertIdentityReleased(cardID, reason) {}
 		releaseUnknownPlaceholderToOutside(card, reason) {
 			return this.identity.releaseUnknownPlaceholderToOutside(card, reason);
 		}
@@ -8754,7 +8442,6 @@
 				discardCountAfter: this.getZone("discard").cards.length
 			});
 			this.resolveConstraints();
-			this.assertPileIdentityLedgerConsistency("revealPublicCandidate");
 			return cards;
 		}
 		markViewDirty(_reason = "view-dirty") {
@@ -8845,7 +8532,6 @@
 				card.removePublicCandidates((candidate) => candidate.zone === "pile" || candidate.zone === "discard");
 			});
 			this.resolveConstraints();
-			this.assertPileIdentityLedgerConsistency(identityContext);
 		}
 		applyPileIdentityShuffleBeforePhysicalMove(move, pileCountAfter, discardCountBefore, knownDiscardIdentityIDsBefore) {
 			try {
@@ -8887,10 +8573,6 @@
 		refreshPlayerSnapshot() {
 			return this.playerSnapshot.refresh();
 		}
-		assertConservation(context = "") {}
-		assertPlayerSnapshotConsistency(playerCards) {}
-		assertLocationIndexConsistency() {}
-		assertAmbiguousKnownIndexConsistency() {}
 		resumeSuspendedKnownCard(card) {
 			return this.constraints.resumeSuspendedKnownCard(card);
 		}
@@ -8926,7 +8608,6 @@
 			}
 			this.identity.commitPileIdentityForMove(context, pileSnapshot);
 			this.resolveConstraints();
-			this.assertPileIdentityLedgerConsistency("moveCards");
 			trackerLogger.info("moveCards 完成", {
 				...summarizeMoveContext(context, { includeKnownCardIDs: true }),
 				publicMovedCardIDs: context.publicMovedCards.map((card) => card.id),
@@ -9006,7 +8687,31 @@
 	function getTopFirstCards(cards = []) {
 		return cards.slice().reverse();
 	}
-	var CHENG_LIE_DISCARD_QUEUE = "chengLieDiscardQueue";
+	function defineSkillState(key, dispose) {
+		return {
+			read(room) {
+				return room.readSkillState(key);
+			},
+			ensure(room, create) {
+				return room.ensureSkillState(key, create);
+			},
+			set(room, state) {
+				room.setSkillState(key, state);
+			},
+			clear(room) {
+				const state = room.readSkillState(key);
+				if (state !== void 0) dispose?.(room, state);
+				room.deleteSkillState(key);
+			}
+		};
+	}
+	function deleteSpellState(room, key, spellID) {
+		const state = room.readSkillState(key);
+		if (!state) return;
+		delete state.bySpell[String(spellID)];
+		if (Object.keys(state.bySpell).length === 0) room.deleteSkillState(key);
+	}
+	var chengLieDiscardQueue = defineSkillState("chengLieDiscardQueue");
 	function decorateChengLieMove(event, room) {
 		const move = event.protocol;
 		if (event.type === "noop" || move.SpellID !== 3208) return event;
@@ -9014,11 +8719,11 @@
 		const toZone = move.ToZone;
 		const fromZoneParam = move.FromZoneParam;
 		const moveType = move.MoveType;
-		const pendingIDs = room.readSkillState(CHENG_LIE_DISCARD_QUEUE);
+		const pendingIDs = chengLieDiscardQueue.read(room);
 		if (hasPositiveID(event.cardIDs)) {
 			if (pendingIDs) {
 				const ids = new Set(getPositiveIDs(event.cardIDs));
-				room.setSkillState(CHENG_LIE_DISCARD_QUEUE, pendingIDs.filter((id) => !ids.has(id)));
+				chengLieDiscardQueue.set(room, pendingIDs.filter((id) => !ids.has(id)));
 			}
 			return event;
 		}
@@ -9026,8 +8731,8 @@
 			const availableIDs = pendingIDs.filter((id) => room.cardIndex.get(id)?.location === "outside");
 			const cardIDs = availableIDs.slice(0, getCount(event));
 			const remainingIDs = availableIDs.slice(cardIDs.length);
-			if (remainingIDs.length > 0) room.setSkillState(CHENG_LIE_DISCARD_QUEUE, remainingIDs);
-			else room.deleteSkillState(CHENG_LIE_DISCARD_QUEUE);
+			if (remainingIDs.length > 0) chengLieDiscardQueue.set(room, remainingIDs);
+			else chengLieDiscardQueue.clear(room);
 			return patchEvent(event, {
 				cardIDs,
 				options: { pileIdentityCardIDs: cardIDs }
@@ -9053,7 +8758,7 @@
 		const cards = room.getPublicEndpointCards("pile", getCount(event), POSITION_TOP);
 		const knownCards = new Set(cards.filter((card) => card.id > 0 && card.isKnown === true));
 		const cardIDs = Array.from(knownCards, (card) => card.id);
-		room.setSkillState(CHENG_LIE_DISCARD_QUEUE, [...new Set([...pendingIDs ?? [], ...cardIDs])]);
+		chengLieDiscardQueue.set(room, [...new Set([...pendingIDs ?? [], ...cardIDs])]);
 		return patchEvent(event, {
 			cardIDs,
 			from: event.from.type === "public" ? {
@@ -9091,91 +8796,91 @@
 			combinationID: nextGroupID(room, FEN_CHAO_SPELL_ID, "fenchao_discard_candidate")
 		} });
 	}
+	function planExchangeKnownCards(room, cardIDs, candidates) {
+		const cards = [];
+		const selected = new Set();
+		const anonymousTargets = candidates.filter((card) => card.isAnonymous);
+		const plannedCardsByID = new Map();
+		const commits = [];
+		for (const cardID of getPositiveIDs(cardIDs)) {
+			const existing = candidates.find((card) => card.id === cardID);
+			const planned = plannedCardsByID.get(cardID);
+			const target = anonymousTargets[0] ?? null;
+			const card = existing ?? planned ?? room.probeMaterialize(cardID, target);
+			if (!card || !candidates.includes(card) || selected.has(card)) continue;
+			const materialize = !existing && !planned && card === target;
+			if (materialize) {
+				anonymousTargets.shift();
+				plannedCardsByID.set(cardID, card);
+			}
+			selected.add(card);
+			cards.push(card);
+			commits.push({
+				card,
+				cardID,
+				materialize
+			});
+		}
+		return {
+			cards,
+			commits
+		};
+	}
+	function commitExchangeKnownCards(room, plan) {
+		if (!plan.commits.every(({ card, cardID, materialize }) => materialize ? room.probeMaterialize(cardID, card) === card : card.id === cardID)) return false;
+		plan.commits.forEach(({ card, cardID, materialize }) => {
+			if (materialize) {
+				room.materialize(cardID, card);
+				return;
+			}
+			card.confirmKnown();
+		});
+		return true;
+	}
+	function splitExchangeCards(cards) {
+		const knownIDs = [];
+		const unknownCards = [];
+		cards.forEach((card) => {
+			if (card.isKnown === true && card.id > 0) {
+				knownIDs.push(card.id);
+				return;
+			}
+			unknownCards.push(card);
+		});
+		return {
+			knownIDs,
+			unknownCards
+		};
+	}
+	function getExchangeSourceCards(cardIDs, cards) {
+		const knownIDs = new Set(getPositiveIDs(cardIDs));
+		return cards.filter((card) => !knownIDs.has(card.id));
+	}
+	function clearExchangeBatches(room, keys) {
+		for (const key of keys) if (key !== null) room.publicZones.deleteExchangeBatch(key);
+	}
 	var GUAN_XU_STATE_KEY = "guanXuExchange";
 	var GUAN_XU_SPELL_IDS = new Set([987, 988]);
-	function ensureGuanXuState(room) {
-		return room.ensureSkillState(GUAN_XU_STATE_KEY, () => ({ bySpell: {} }));
-	}
-	function getGuanXuState(room) {
-		return room.readSkillState(GUAN_XU_STATE_KEY);
-	}
+	var guanXuState = defineSkillState(GUAN_XU_STATE_KEY);
 	function getBatch$1(room, spellID) {
-		return getGuanXuState(room)?.bySpell[String(spellID)];
+		return guanXuState.read(room)?.bySpell[String(spellID)];
 	}
-	function clearBatch$2(room, spellID) {
-		const state = getGuanXuState(room);
+	function clearBatch$1(room, spellID) {
+		const state = guanXuState.read(room);
 		if (!state) return;
-		Object.values(state.bySpell[String(spellID)]?.buckets ?? {}).forEach((bucket) => room.publicZones.deleteExchangeBatch(bucket.batchKey));
-		delete state.bySpell[String(spellID)];
-		if (Object.keys(state.bySpell).length === 0) room.deleteSkillState(GUAN_XU_STATE_KEY);
+		clearExchangeBatches(room, Object.values(state.bySpell[String(spellID)]?.buckets ?? {}).map((bucket) => bucket.batchKey));
+		deleteSpellState(room, GUAN_XU_STATE_KEY, spellID);
 	}
 	function clearBatchIfEmpty(room, spellID, batch) {
-		if (Object.keys(batch.buckets).length === 0) clearBatch$2(room, spellID);
+		if (Object.keys(batch.buckets).length === 0) clearBatch$1(room, spellID);
 	}
 	function getHandCards$1(room, seatID) {
 		return room.refreshPlayerSnapshot().filter((card) => card.subZone === "hand" && card.seats.has(seatID));
 	}
-	function resolveProtocolKnownCards(event, room, candidates) {
-		const selected = [];
-		const selectedSet = new Set();
-		const anonymousTargets = candidates.filter((card) => card.isAnonymous);
-		const plannedCardsByID = new Map();
-		const commits = [];
-		getPositiveIDs(event.cardIDs ?? []).forEach((cardID) => {
-			let card = candidates.find((candidate) => candidate.id === cardID) ?? plannedCardsByID.get(cardID) ?? null;
-			let commit = null;
-			if (!card) {
-				const target = anonymousTargets[0] ?? null;
-				const probedCard = room.probeMaterialize(cardID, target);
-				if (probedCard && candidates.includes(probedCard)) {
-					card = probedCard;
-					if (probedCard === target) {
-						anonymousTargets.shift();
-						plannedCardsByID.set(cardID, probedCard);
-						commit = {
-							type: "materialize",
-							cardID,
-							target: probedCard
-						};
-					} else commit = {
-						type: "confirm",
-						cardID,
-						card: probedCard
-					};
-				}
-			} else if (!(plannedCardsByID.get(cardID) === card)) commit = {
-				type: "confirm",
-				cardID,
-				card
-			};
-			if (!card || selectedSet.has(card)) return;
-			selectedSet.add(card);
-			selected.push(card);
-			if (commit) commits.push(commit);
-		});
-		return {
-			cards: selected,
-			commits
-		};
-	}
-	function commitProtocolKnownCards(room, resolution) {
-		if (!resolution.commits.every((commit) => {
-			if (commit.type === "confirm") return commit.card.id === commit.cardID;
-			return room.probeMaterialize(commit.cardID, commit.target) === commit.target;
-		})) return false;
-		resolution.commits.forEach((commit) => {
-			if (commit.type === "confirm") {
-				commit.card.confirmKnown();
-				return;
-			}
-			room.materialize(commit.cardID, commit.target);
-		});
-		return true;
-	}
 	function selectCardsForKnownMove(event, room, candidates) {
 		const count = getCount(event);
 		const protocolKnownCount = getPositiveIDs(event.cardIDs ?? []).length;
-		const knownResolution = resolveProtocolKnownCards(event, room, candidates);
+		const knownResolution = planExchangeKnownCards(room, event.cardIDs, candidates);
 		const selected = [...knownResolution.cards];
 		if (selected.length !== protocolKnownCount) return {
 			cards: [],
@@ -9192,28 +8897,24 @@
 			knownResolution
 		};
 	}
-	function splitProtocolKnownAndUnknown(event, cards) {
-		const protocolKnownIDs = new Set(getPositiveIDs(event.cardIDs));
-		return cards.filter((card) => !protocolKnownIDs.has(card.id));
-	}
 	function stagePileToExchange$1(event, room, spellID) {
 		const move = event.protocol;
 		const count = getCount(event);
 		const pileBucketID = move.ToID;
 		const selectedCards = room.getZone("pile").cards.slice(-count);
 		if (!(count > 0) || !Number.isFinite(pileBucketID) || selectedCards.length !== count) {
-			clearBatch$2(room, spellID);
+			clearBatch$1(room, spellID);
 			return event;
 		}
-		const knownResolution = resolveProtocolKnownCards(event, room, selectedCards);
-		if (knownResolution.cards.length !== getPositiveIDs(event.cardIDs).length || !commitProtocolKnownCards(room, knownResolution)) {
-			clearBatch$2(room, spellID);
+		const knownResolution = planExchangeKnownCards(room, event.cardIDs, selectedCards);
+		if (knownResolution.cards.length !== getPositiveIDs(event.cardIDs).length || !commitExchangeKnownCards(room, knownResolution)) {
+			clearBatch$1(room, spellID);
 			return event;
 		}
-		clearBatch$2(room, spellID);
+		clearBatch$1(room, spellID);
 		const batchKey = `${spellID}:pile:${pileBucketID}`;
 		room.publicZones.getExchangeBatch(batchKey).stage(selectedCards);
-		ensureGuanXuState(room).bySpell[String(spellID)] = {
+		guanXuState.ensure(room, () => ({ bySpell: {} })).bySpell[String(spellID)] = {
 			buckets: { [String(pileBucketID)]: {
 				batchKey,
 				expectedCount: count
@@ -9227,7 +8928,7 @@
 				...event.from,
 				position: POSITION_TOP
 			} : event.from,
-			options: { sourceCards: splitProtocolKnownAndUnknown(event, selectedCards) }
+			options: { sourceCards: getExchangeSourceCards(event.cardIDs, selectedCards) }
 		});
 	}
 	function stageHandToExchange$1(event, room, spellID) {
@@ -9237,8 +8938,8 @@
 		const bucketID = move.ToID;
 		if (!batch || !Number.isFinite(fromSeat) || !Number.isFinite(bucketID)) return event;
 		const selection = selectCardsForKnownMove(event, room, getHandCards$1(room, fromSeat));
-		if (selection.cards.length !== getCount(event) || !commitProtocolKnownCards(room, selection.knownResolution)) {
-			clearBatch$2(room, spellID);
+		if (selection.cards.length !== getCount(event) || !commitExchangeKnownCards(room, selection.knownResolution)) {
+			clearBatch$1(room, spellID);
 			return event;
 		}
 		const selectedCards = selection.cards;
@@ -9248,7 +8949,7 @@
 			batchKey,
 			expectedCount: getCount(event)
 		};
-		const sourceCards = splitProtocolKnownAndUnknown(event, selectedCards);
+		const sourceCards = getExchangeSourceCards(event.cardIDs, selectedCards);
 		return patchEvent(event, { options: { ...sourceCards.length > 0 ? { sourceCards } : {} } });
 	}
 	function transferExchangeBucket(event, room, spellID) {
@@ -9263,7 +8964,7 @@
 		const targetBatch = room.publicZones.getExchangeBatch(targetBucket.batchKey);
 		const exchangeCards = sourceBatch.cards;
 		const selection = selectCardsForKnownMove(event, room, exchangeCards);
-		if (selection.cards.length !== getCount(event) || !commitProtocolKnownCards(room, selection.knownResolution)) return event;
+		if (selection.cards.length !== getCount(event) || !commitExchangeKnownCards(room, selection.knownResolution)) return event;
 		const selectedCards = selection.cards;
 		const targetIsPileBucket = move.ToID === batch.pileBucketID;
 		const insertedAtExactPosition = sourceBatch.transferTo(targetBatch, selectedCards, targetIsPileBucket ? move.ToPosition : POSITION_RANDOM);
@@ -9275,7 +8976,7 @@
 			}
 			batch.pileRangeCards.add(card);
 		});
-		const sourceCards = splitProtocolKnownAndUnknown(event, selectedCards);
+		const sourceCards = getExchangeSourceCards(event.cardIDs, selectedCards);
 		return patchEvent(event, { options: { ...sourceCards.length > 0 ? { sourceCards } : {} } });
 	}
 	function returnBucketToPile(event, room, spellID) {
@@ -9303,7 +9004,7 @@
 				position: POSITION_TOP
 			} : event.to,
 			options: {
-				sourceCards: splitProtocolKnownAndUnknown(event, cardsBottomFirst),
+				sourceCards: getExchangeSourceCards(event.cardIDs, cardsBottomFirst),
 				...postMovePublicCandidates.length > 0 ? { postMovePublicCandidates } : {}
 			}
 		});
@@ -9341,18 +9042,16 @@
 		return event;
 	}
 	var HAND_EXCHANGE_STATE_KEY = "handExchangeBatches";
+	var handExchangeState = defineSkillState(HAND_EXCHANGE_STATE_KEY);
 	function resolveSpellID(event) {
 		const spellID = event.protocol.SpellID;
 		return Number.isFinite(spellID) ? spellID : 0;
 	}
 	function ensureRoomExchangeState(room) {
-		return room.ensureSkillState(HAND_EXCHANGE_STATE_KEY, () => ({
+		return handExchangeState.ensure(room, () => ({
 			bySpell: {},
 			nextBatchSeq: 0
 		}));
-	}
-	function readRoomExchangeState(room) {
-		return room.readSkillState(HAND_EXCHANGE_STATE_KEY);
 	}
 	function ensureSpellExchangeState(room, spellID) {
 		const roomState = ensureRoomExchangeState(room);
@@ -9364,14 +9063,14 @@
 		return roomState.bySpell[key];
 	}
 	function readSpellExchangeState(room, spellID) {
-		return readRoomExchangeState(room)?.bySpell[String(spellID)];
+		return handExchangeState.read(room)?.bySpell[String(spellID)];
 	}
 	function clearSpellExchangeStateIfEmpty(room, spellID) {
-		const roomState = readRoomExchangeState(room);
+		const roomState = handExchangeState.read(room);
 		if (!roomState) return;
 		const state = roomState.bySpell[String(spellID)];
-		if (state && Object.keys(state.batches).length === 0 && state.candidateRecords.size === 0) delete roomState.bySpell[String(spellID)];
-		if (Object.keys(roomState.bySpell).length === 0) room.deleteSkillState(HAND_EXCHANGE_STATE_KEY);
+		if (state && (Object.keys(state.batches).length > 0 || state.candidateRecords.size > 0)) return;
+		deleteSpellState(room, HAND_EXCHANGE_STATE_KEY, spellID);
 	}
 	function getPlayerHandCards(room, seatID) {
 		const playerCards = room.refreshPlayerSnapshot();
@@ -9486,23 +9185,8 @@
 			if (protocolKnownIDs.has(card.id) && card.isKnown !== true) card.confirmKnown();
 		});
 	}
-	function splitKnownAndUnknownCards(cards) {
-		const knownIDs = [];
-		const unknownCards = [];
-		cards.forEach((card) => {
-			if (card.isKnown === true && card.id > 0) {
-				knownIDs.push(card.id);
-				return;
-			}
-			unknownCards.push(card);
-		});
-		return {
-			knownIDs,
-			unknownCards
-		};
-	}
 	function buildExchangePatch(event, room, cards, spellID, label, hasCandidateAlternatives = false, logicallyResolvedKnownIDs = new Set(), moveOnlyStagedCards = false) {
-		const { knownIDs: stagedKnownIDs, unknownCards } = splitKnownAndUnknownCards(cards);
+		const { knownIDs: stagedKnownIDs, unknownCards } = splitExchangeCards(cards);
 		const protocolKnownIDs = getPositiveIDs(event.cardIDs ?? []).filter((id) => !logicallyResolvedKnownIDs.has(id));
 		const knownIDs = Array.from(new Set([...stagedKnownIDs, ...protocolKnownIDs]));
 		const protocolCardCount = getCount(event);
@@ -9572,20 +9256,15 @@
 		return event;
 	}
 	var JIE_LI_SPELL_ID = 3483;
-	function ensureJieLiState(room) {
-		return room.ensureSkillState(JIE_LI_SPELL_ID, () => ({}));
-	}
-	function getJieLiState(room) {
-		return room.readSkillState(JIE_LI_SPELL_ID);
-	}
+	var jieLiState = defineSkillState(JIE_LI_SPELL_ID);
 	function getBatch(room) {
-		return getJieLiState(room)?.batch;
+		return jieLiState.read(room)?.batch;
 	}
 	function clearJieLiState(room) {
-		room.deleteSkillState(JIE_LI_SPELL_ID);
+		jieLiState.clear(room);
 	}
 	function recordJieLiContext(room, data) {
-		const state = ensureJieLiState(room);
+		const state = jieLiState.ensure(room, () => ({}));
 		state.context = data;
 		delete state.batch;
 		delete state.observerBatch;
@@ -9644,7 +9323,7 @@
 		});
 	}
 	function resolveViewMode(room, eventActorSeat) {
-		const context = getJieLiState(room)?.context;
+		const context = jieLiState.read(room)?.context;
 		const actorSeat = eventActorSeat != null && eventActorSeat !== 255 ? eventActorSeat : context?.actorSeat ?? null;
 		if (actorSeat !== null && room.mySeatID === actorSeat) return "default";
 		if (context && actorSeat === context.actorSeat && room.mySeatID === context.targetSeat) return "target-limited";
@@ -9682,11 +9361,11 @@
 	}
 	function stageObserverPile(event, room) {
 		const move = event.protocol;
-		const context = getJieLiState(room)?.context;
+		const context = jieLiState.read(room)?.context;
 		const count = getCount(event);
 		const actorSeat = move.ToID;
 		if (!context || context.actorSeat !== actorSeat || context.pileCount !== count || !(count > 0)) return failObserverInference(event, room);
-		ensureJieLiState(room).observerBatch = {
+		jieLiState.ensure(room, () => ({})).observerBatch = {
 			actorSeat,
 			targetSeat: context.targetSeat,
 			pileCount: count,
@@ -9698,7 +9377,7 @@
 	}
 	function stageObserverTargetHand(event, room) {
 		const move = event.protocol;
-		const batch = getJieLiState(room)?.observerBatch;
+		const batch = jieLiState.read(room)?.observerBatch;
 		const count = getCount(event);
 		if (!batch || batch.phase !== "pile-staged" || move.ToID !== batch.actorSeat || move.FromID !== batch.targetSeat || !(count > 0) || count > batch.pileCount) return failObserverInference(event, room);
 		batch.exchangeCount = count;
@@ -9708,14 +9387,14 @@
 	}
 	function returnObserverCardsToPile(event, room) {
 		const move = event.protocol;
-		const batch = getJieLiState(room)?.observerBatch;
+		const batch = jieLiState.read(room)?.observerBatch;
 		if (!batch || batch.phase !== "hand-staged" || move.FromID !== batch.actorSeat || move.ToID !== 255 || getCount(event) !== batch.pileCount) return failObserverInference(event, room);
 		batch.phase = "pile-returned";
 		return noOp(event);
 	}
 	function returnObserverCardsToTargetHand(event, room) {
 		const move = event.protocol;
-		const batch = getJieLiState(room)?.observerBatch;
+		const batch = jieLiState.read(room)?.observerBatch;
 		if (!batch || batch.phase !== "pile-returned" || move.FromID !== batch.actorSeat || move.ToID !== batch.targetSeat || getCount(event) !== batch.exchangeCount) return failObserverInference(event, room);
 		const pileCandidate = createPublicCandidate("pile", POSITION_TOP, batch.pileCount);
 		let changed = false;
@@ -9735,7 +9414,7 @@
 	}
 	function stagePileToExchange(event, room, informationMode) {
 		const move = event.protocol;
-		const context = getJieLiState(room)?.context;
+		const context = jieLiState.read(room)?.context;
 		const count = getCount(event);
 		const pileProtocolCardIDs = getPositiveIDs(event.cardIDs);
 		const actorSeat = move.ToID;
@@ -9752,7 +9431,7 @@
 				if (pileSlots.length !== count) return failTargetInference(event, room, informationMode);
 			}
 		}
-		ensureJieLiState(room).batch = {
+		jieLiState.ensure(room, () => ({})).batch = {
 			actorSeat,
 			targetSeat: context.targetSeat,
 			informationMode,
@@ -9887,15 +9566,18 @@
 		}
 	};
 	var XING_ZUO_SPELL_ID = 3776;
+	var xingZuoState = defineSkillState(XING_ZUO_SPELL_ID, (room, batch) => {
+		clearExchangeBatches(room, [batch.pileBatchKey, batch.handBatchKey]);
+	});
 	function decorateXingZuo(event, room) {
 		const move = event.protocol;
 		if (move.SpellID !== XING_ZUO_SPELL_ID || move.MoveType !== MOVE_TYPE.EXCHANGE) return event;
 		if (move.FromZone === 1 && move.ToZone === 10) {
 			const pileCards = room.getPublicEndpointCards("pile", getCount(event), 0);
-			clearBatch$1(room);
+			xingZuoState.clear(room);
 			const pileBatchKey = `${XING_ZUO_SPELL_ID}:pile:${move.ToID}`;
 			room.publicZones.getExchangeBatch(pileBatchKey).stage(pileCards);
-			room.setSkillState(XING_ZUO_SPELL_ID, {
+			xingZuoState.set(room, {
 				actorSeat: move.ToID,
 				pileBatchKey,
 				pileCount: pileCards.length,
@@ -9909,7 +9591,7 @@
 				position: 0
 			} : event.from });
 		}
-		const batch = room.readSkillState(XING_ZUO_SPELL_ID);
+		const batch = xingZuoState.read(room);
 		if (!batch) return event;
 		if (move.FromZone === 5 && move.ToZone === 10 && move.ToID === batch.actorSeat) {
 			batch.handSeat = move.FromID;
@@ -9929,7 +9611,7 @@
 			return patchBatchCards(event, room, room.publicZones.getExchangeBatch(batch.pileBatchKey).cards);
 		}
 		if (move.ToZone === 1 && getCount(event) === batch.handCount && batch.returnedToHand) {
-			clearBatch$1(room);
+			xingZuoState.clear(room);
 			const candidate = createPublicCandidate("pile", 0, batch.handCount);
 			const hasCompleteOrder = getPositiveIDs(event.cardIDs).length === batch.handCount;
 			return patchEvent(patchBatchCards(event, room, handCards), { options: { postMovePublicCandidates: hasCompleteOrder ? [] : handCards.filter((card) => card.isKnown === true).map((card) => ({
@@ -9939,30 +9621,23 @@
 		}
 		return event;
 	}
-	function clearBatch$1(room) {
-		const batch = room.readSkillState(XING_ZUO_SPELL_ID);
-		if (batch) {
-			room.publicZones.deleteExchangeBatch(batch.pileBatchKey);
-			if (batch.handBatchKey) room.publicZones.deleteExchangeBatch(batch.handBatchKey);
-		}
-		room.deleteSkillState(XING_ZUO_SPELL_ID);
-	}
 	function patchBatchCards(event, room, cards) {
 		const protocolIDs = getPositiveIDs(event.cardIDs);
-		const anonymousCards = cards.filter((card) => card.isAnonymous);
-		const targets = protocolIDs.map((id) => cards.find((card) => card.id === id) ?? anonymousCards.shift());
-		if (targets.some((target, index) => !target || room.probeMaterialize(protocolIDs[index], target) !== target)) {
-			clearBatch$1(room);
+		const plan = planExchangeKnownCards(room, protocolIDs, cards);
+		if (plan.cards.length !== protocolIDs.length || !commitExchangeKnownCards(room, plan)) {
+			xingZuoState.clear(room);
 			return event;
 		}
-		targets.forEach((target, index) => room.materialize(protocolIDs[index], target));
-		const knownCards = cards.filter((card) => card.id > 0 && card.isKnown === true);
-		const cardIDs = [...new Set([...protocolIDs, ...knownCards.map((card) => card.id)])];
-		const knownSet = new Set(knownCards);
+		const { knownIDs, unknownCards } = splitExchangeCards(cards);
+		const cardIDs = [...new Set([...protocolIDs, ...knownIDs])];
 		return patchEvent(event, {
 			cardIDs,
 			options: {
-				sourceCards: cards.filter((card) => !knownSet.has(card)),
+				sourceCards: unknownCards,
+				...event.to.type === "player" && event.to.subZone === "hand" ? {
+					cardCount: cards.length,
+					handMoveCount: getCount(event)
+				} : {},
 				pileIdentityCardIDs: cardIDs
 			}
 		});
@@ -9993,22 +9668,15 @@
 	var TIAN_HOU_SPELL_ID = 3903;
 	var TIAN_HOU_STATE_KEY = "tianHouExchange";
 	var TIAN_HOU_VIEW_COUNT = 3;
-	function getTianHouState(room) {
-		return room.readSkillState("tianHouExchange") ?? null;
-	}
-	function ensureTianHouState(room) {
-		return room.ensureSkillState(TIAN_HOU_STATE_KEY, () => ({ batch: null }));
-	}
+	var tianHouState = defineSkillState(TIAN_HOU_STATE_KEY, (room, state) => {
+		if (state.batch) clearExchangeBatches(room, [state.batch.pileBatchKey, state.batch.handBatchKey]);
+	});
 	function clearBatch(room, cleanupTemporaryCandidates = false) {
-		const batch = getTianHouState(room)?.batch;
-		if (batch) {
-			room.publicZones.deleteExchangeBatch(batch.pileBatchKey);
-			room.publicZones.deleteExchangeBatch(batch.handBatchKey);
-		}
+		const batch = tianHouState.read(room)?.batch;
+		tianHouState.clear(room);
 		if (cleanupTemporaryCandidates && batch && batch.phase !== "awaiting-reveal") batch.knownHandCards.forEach((card) => {
 			card.removePublicCandidates((candidate) => candidate?.zone === "exchange");
 		});
-		room.deleteSkillState(TIAN_HOU_STATE_KEY);
 	}
 	function isOtherView(room, actorSeat) {
 		return room.mySeatID === void 0 || room.mySeatID !== actorSeat;
@@ -10059,7 +9727,7 @@
 		const pileBatchKey = `${TIAN_HOU_SPELL_ID}:pile:${actorSeat}`;
 		const handBatchKey = `${TIAN_HOU_SPELL_ID}:seat:${actorSeat}`;
 		room.publicZones.getExchangeBatch(pileBatchKey).stage(selectedPileCards);
-		ensureTianHouState(room).batch = {
+		tianHouState.ensure(room, () => ({ batch: null })).batch = {
 			actorSeat,
 			count,
 			pileBatchKey,
@@ -10072,7 +9740,7 @@
 		return patchEvent(event, { options: { sourceCards: selectedPileCards } });
 	}
 	function decorateHandStage(event, room, actorSeat) {
-		const batch = getTianHouState(room)?.batch;
+		const batch = tianHouState.read(room)?.batch;
 		const count = getCount(event);
 		if (!batch || batch.phase !== "pile-staged" || batch.actorSeat !== actorSeat || batch.count !== count) {
 			clearBatch(room, true);
@@ -10103,28 +9771,27 @@
 		return patchEvent(event, { options: { sourceCards: outgoingCards } });
 	}
 	function decorateExchangeReorder(event, room, actorSeat) {
-		const batch = getTianHouState(room)?.batch;
+		const batch = tianHouState.read(room)?.batch;
 		if (!batch || batch.phase !== "hand-staged" || batch.actorSeat !== actorSeat || batch.count !== getCount(event)) return event;
 		return patchEvent(event, { type: "noop" });
 	}
 	function decorateReturnToHand(event, room, actorSeat) {
-		const batch = getTianHouState(room)?.batch;
+		const batch = tianHouState.read(room)?.batch;
 		if (!batch || batch.phase !== "hand-staged" || batch.actorSeat !== actorSeat || batch.count !== getCount(event)) return event;
 		const selectedPileCards = room.publicZones.getExchangeBatch(batch.pileBatchKey).cards;
 		if (selectedPileCards.length !== batch.count) {
 			clearBatch(room, true);
 			return event;
 		}
-		const knownIDs = selectedPileCards.filter((card) => card.isKnown === true && card.id > 0).map((card) => card.id);
-		const sourceCards = selectedPileCards.filter((card) => !knownIDs.includes(card.id));
+		const { knownIDs, unknownCards } = splitExchangeCards(selectedPileCards);
 		batch.phase = "hand-returned";
 		return patchEvent(event, {
 			cardIDs: knownIDs,
-			options: { sourceCards }
+			options: { sourceCards: unknownCards }
 		});
 	}
 	function decorateReturnToPile(event, room, actorSeat) {
-		const batch = getTianHouState(room)?.batch;
+		const batch = tianHouState.read(room)?.batch;
 		if (!batch || batch.phase !== "hand-returned" || batch.actorSeat !== actorSeat || batch.count !== getCount(event)) return event;
 		const outgoingCards = room.publicZones.getExchangeBatch(batch.handBatchKey).cards;
 		if (outgoingCards.length !== batch.count) {
@@ -10154,7 +9821,7 @@
 	function decorateFinalReveal(event, room) {
 		const cardID = event.cardIDs[0];
 		if (!(cardID > 0)) return event;
-		const state = getTianHouState(room);
+		const state = tianHouState.read(room);
 		const batch = state?.batch?.phase === "awaiting-reveal" ? state.batch : null;
 		if (!batch && isKnownExactPileTopThree(room, cardID)) return event;
 		const candidateCount = (batch?.knownHandCards.find((card) => card.id === cardID) ?? null) && batch ? batch.count : TIAN_HOU_VIEW_COUNT;
@@ -10294,9 +9961,9 @@
 	}
 	var DUO_QI_GAIN_ALL_SPELL_ID = 3730;
 	var DUO_QI_RANDOM_GAIN_SPELL_ID = 3731;
-	var DUO_QI_STATE_KEY = "duoQi";
+	var duoQiState = defineSkillState("duoQi");
 	function getDuoQiState(room) {
-		const state = room.readSkillState(DUO_QI_STATE_KEY);
+		const state = duoQiState.read(room);
 		return state?.active === true ? state : void 0;
 	}
 	function getHandCards(room, seatID) {
@@ -10364,7 +10031,7 @@
 			});
 		});
 		convergeInitialSeats(state);
-		room.setSkillState(DUO_QI_STATE_KEY, state);
+		duoQiState.set(room, state);
 		return state;
 	}
 	function recordDuoQiActivation(game, msg) {
@@ -12366,6 +12033,7 @@
 		getSeatUIs: () => readSeatUIs(),
 		logger: trackerLogger
 	});
+	var boundPenetrationDocs = new WeakSet();
 	function addDragHint() {
 		var sidebarHint = document.createElement("div");
 		sidebarHint.id = "sidebarHint";
@@ -12376,76 +12044,64 @@
 		return document.documentElement.clientWidth || window.innerWidth;
 	}
 	function initDragElement(globalConfig, globalState, refreshSidebarViewport) {
-		let mousePressed = false;
-		document.addEventListener("mousedown", function(e) {
-			if (!mousePressed) {
-				mousePressed = true;
-				const clickedSorderBody = e.target.closest(".sorder-body");
-				if (clickedSorderBody) {
-					document.body.classList.add("mouse-pressed");
-					e.preventDefault();
-					e.stopImmediatePropagation();
-					setTimeout(() => {
-						const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
-						if (elementBelow && elementBelow !== clickedSorderBody) elementBelow.dispatchEvent(new MouseEvent("mousedown", {
-							bubbles: true,
-							cancelable: true,
-							clientX: e.clientX,
-							clientY: e.clientY,
-							button: e.button,
-							buttons: e.buttons
-						}));
-					}, 0);
-				} else document.body.classList.add("mouse-pressed");
-			}
-		}, true);
-		document.addEventListener("mouseup", () => {
-			if (mousePressed) {
-				mousePressed = false;
-				document.body.classList.remove("mouse-pressed");
-			}
-		});
+		bindSorderPenetration();
 		const draggable = document.getElementById("header");
 		const container = document.getElementById("tracker-shell");
 		const sidebarHint = document.getElementById("sidebarHint");
-		let isDragging = false;
-		let startX = 0, startY = 0;
-		let translateX = 0, translateY = 0;
+		if (!draggable || !container) return;
+		let activePointerId = null;
+		let hasMoved = false;
+		let startX = 0;
+		let startY = 0;
+		let originTranslateX = 0;
+		let originTranslateY = 0;
+		let baseLeft = 0;
+		let baseTop = 0;
+		let containerWidth = 230;
+		let translateX = 0;
+		let translateY = 0;
 		let pendingFrame = false;
+		let rafId = 0;
+		const dockToSidebar = () => {
+			if (globalConfig.padding) return;
+			if (globalState.closeIframe) document.getElementById("toggle-me")?.click();
+			globalConfig.padding = 232;
+			refreshSidebarViewport();
+			translateX = 0;
+			translateY = 0;
+			container.style.transform = "translate(0px, 0px)";
+		};
 		const startDrag = (e) => {
+			if (activePointerId !== null || e.isPrimary === false) return;
+			if (e.button !== void 0 && e.button !== 0) return;
+			if (e.target?.closest?.("#toggle-me")) return;
+			const current = readTranslate(container);
+			translateX = current.x;
+			translateY = current.y;
+			originTranslateX = current.x;
+			originTranslateY = current.y;
+			const rect = container.getBoundingClientRect();
+			baseLeft = rect.left - current.x;
+			baseTop = rect.top - current.y;
+			containerWidth = rect.width || 230;
+			activePointerId = e.pointerId ?? 0;
+			hasMoved = false;
+			startX = e.clientX ?? 0;
+			startY = e.clientY ?? 0;
 			draggable.style.cursor = "grabbing";
-			isDragging = true;
-			startX = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
-			startY = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
 			container.style.userSelect = "none";
 			container.style.willChange = "transform";
-			document.addEventListener("mousemove", onDrag);
-			document.addEventListener("mouseup", stopDrag);
-			document.addEventListener("touchmove", onDrag);
-			document.addEventListener("touchend", stopDrag);
+			draggable.setPointerCapture?.(activePointerId);
 		};
-		draggable.addEventListener("mousedown", startDrag);
-		draggable.addEventListener("touchstart", startDrag);
-		function onDrag(e) {
-			if (!isDragging) return;
-			sidebarHint.style.display = "flex";
-			const clientX = e.clientX ?? e.touches?.[0]?.clientX ?? startX;
-			const clientY = e.clientY ?? e.touches?.[0]?.clientY ?? startY;
-			const deltaX = clientX - startX;
-			const deltaY = clientY - startY;
-			const rect = container.getBoundingClientRect();
-			const left0 = rect.left - translateX;
-			const top0 = rect.top - translateY;
-			const width = rect.width || 230;
+		const onDrag = (e) => {
+			if ((e.pointerId ?? 0) !== activePointerId) return;
+			hasMoved = true;
+			if (sidebarHint) sidebarHint.style.display = "flex";
+			const clientX = e.clientX ?? startX;
+			const clientY = e.clientY ?? startY;
 			const viewportWidth = getLayoutViewportWidth();
-			translateX += deltaX;
-			translateY += deltaY;
-			const minX = -left0;
-			const maxX = viewportWidth - width - left0;
-			const minY = -top0;
-			const maxY = window.innerHeight - 30 - top0;
-			translateX = Math.max(minX, Math.min(maxX, translateX));
-			translateY = Math.max(minY, Math.min(maxY, translateY));
+			translateX = clamp$1(originTranslateX + (clientX - startX), -baseLeft, viewportWidth - containerWidth - baseLeft);
+			translateY = clamp$1(originTranslateY + (clientY - startY), -baseTop, window.innerHeight - 30 - baseTop);
 			if (globalConfig.padding) {
 				globalConfig.padding = 0;
 				container.style.height = "500px";
@@ -12453,37 +12109,91 @@
 			}
 			if (!pendingFrame) {
 				pendingFrame = true;
-				requestAnimationFrame(() => {
-					container.style.transform = `translate(${translateX}px, ${translateY}px)`;
+				rafId = requestAnimationFrame(() => {
 					pendingFrame = false;
+					rafId = 0;
+					container.style.transform = `translate(${translateX}px, ${translateY}px)`;
 				});
 			}
-			if (viewportWidth - clientX < 25) sidebarHint.style.backgroundColor = "rgba(55, 40, 32, 1)";
-			else sidebarHint.style.backgroundColor = "rgba(55, 40, 32, 0.8)";
-			startX = clientX;
-			startY = clientY;
-		}
-		function stopDrag(e) {
-			sidebarHint.style.display = "none";
+			if (sidebarHint) sidebarHint.style.backgroundColor = viewportWidth - clientX < 25 ? "rgba(55, 40, 32, 1)" : "rgba(55, 40, 32, 0.8)";
+		};
+		const stopDrag = (e) => {
+			if ((e.pointerId ?? 0) !== activePointerId) return;
+			const pointerId = activePointerId;
+			activePointerId = null;
+			if (pendingFrame) {
+				if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(rafId);
+				pendingFrame = false;
+				rafId = 0;
+			}
+			if (sidebarHint) sidebarHint.style.display = "none";
 			draggable.style.cursor = "grab";
-			isDragging = false;
-			document.removeEventListener("mousemove", onDrag);
-			document.removeEventListener("mouseup", stopDrag);
-			document.removeEventListener("touchmove", onDrag);
-			document.removeEventListener("touchend", stopDrag);
+			container.style.userSelect = "";
 			container.style.willChange = "auto";
-			const finalClientX = e.clientX ?? e.changedTouches?.[0]?.clientX ?? e.touches?.[0]?.clientX ?? startX;
-			if (getLayoutViewportWidth() - finalClientX < 25 && draggable.id === "header") {
-				if (!globalConfig.padding) {
-					if (globalState.closeIframe) document.getElementById("toggle-me").click();
-					globalConfig.padding = 232;
-					refreshSidebarViewport();
-					translateX = 0;
-					translateY = 0;
-					container.style.transform = `translate(${translateX}px, ${translateY}px)`;
+			if (draggable.hasPointerCapture?.(pointerId)) draggable.releasePointerCapture?.(pointerId);
+			if (e.type !== "pointercancel" && e.type !== "lostpointercapture") {
+				const finalClientX = e.clientX ?? startX;
+				if (hasMoved && getLayoutViewportWidth() - finalClientX < 25 && draggable.id === "header") {
+					dockToSidebar();
+					return;
 				}
 			}
-		}
+			if (hasMoved) container.style.transform = `translate(${translateX}px, ${translateY}px)`;
+		};
+		draggable.addEventListener("pointerdown", startDrag);
+		draggable.addEventListener("pointermove", onDrag);
+		draggable.addEventListener("pointerup", stopDrag);
+		draggable.addEventListener("pointercancel", stopDrag);
+		draggable.addEventListener("lostpointercapture", stopDrag);
+	}
+	function bindSorderPenetration() {
+		if (boundPenetrationDocs.has(document)) return;
+		boundPenetrationDocs.add(document);
+		let mousePressed = false;
+		document.addEventListener("mousedown", function(e) {
+			if (mousePressed) return;
+			mousePressed = true;
+			document.body.classList.add("mouse-pressed");
+			const clickedSorderBody = e.target.closest(".sorder-body");
+			if (!clickedSorderBody) return;
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			setTimeout(() => {
+				const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
+				if (!elementBelow || elementBelow === clickedSorderBody) return;
+				elementBelow.dispatchEvent(new MouseEvent("mousedown", {
+					bubbles: true,
+					cancelable: true,
+					clientX: e.clientX,
+					clientY: e.clientY,
+					button: e.button,
+					buttons: e.buttons
+				}));
+			}, 0);
+		}, true);
+		const clearMousePressed = () => {
+			if (!mousePressed) return;
+			mousePressed = false;
+			document.body.classList.remove("mouse-pressed");
+		};
+		document.addEventListener("mouseup", clearMousePressed);
+		document.addEventListener("pointerup", clearMousePressed);
+		document.addEventListener("pointercancel", clearMousePressed);
+		window.addEventListener?.("blur", clearMousePressed);
+	}
+	function readTranslate(element) {
+		const match = element.style.transform?.match(/translate\(\s*([+-]?[\d.]+)(?:px)?\s*,\s*([+-]?[\d.]+)(?:px)?\s*\)/);
+		if (!match) return {
+			x: 0,
+			y: 0
+		};
+		return {
+			x: Number(match[1]) || 0,
+			y: Number(match[2]) || 0
+		};
+	}
+	function clamp$1(value, min, max) {
+		return Math.max(min, Math.min(max, value));
 	}
 	var windowStates = new Map();
 	function createDraggableWindow({ id, styleId, styleText, markup, handleSelector }) {
@@ -12547,6 +12257,7 @@
       align-items: center;
       justify-content: space-between;
       background: #7b292d;
+      touch-action: none;
       cursor: grab;
     }
     #${id}.is-dragging .draggable-window-header { cursor: grabbing; }
@@ -12571,10 +12282,10 @@
 			if (event.pointerId !== pointerId) return;
 			pointerId = null;
 			element.classList.remove("is-dragging");
-			handle.releasePointerCapture?.(event.pointerId);
+			if (handle.hasPointerCapture?.(event.pointerId)) handle.releasePointerCapture?.(event.pointerId);
 		};
 		const start = (event) => {
-			if (event.button !== 0) return;
+			if (pointerId !== null || event.isPrimary === false || event.button !== 0) return;
 			const rect = element.getBoundingClientRect();
 			pointerId = event.pointerId;
 			offsetX = event.clientX - rect.left;
@@ -12586,11 +12297,16 @@
 		handle.addEventListener("pointermove", move);
 		handle.addEventListener("pointerup", stop);
 		handle.addEventListener("pointercancel", stop);
+		handle.addEventListener("lostpointercapture", stop);
 		state.cleanupDrag = () => {
+			if (pointerId !== null && handle.hasPointerCapture?.(pointerId)) handle.releasePointerCapture?.(pointerId);
+			pointerId = null;
+			element.classList.remove("is-dragging");
 			handle.removeEventListener("pointerdown", start);
 			handle.removeEventListener("pointermove", move);
 			handle.removeEventListener("pointerup", stop);
 			handle.removeEventListener("pointercancel", stop);
+			handle.removeEventListener("lostpointercapture", stop);
 			state.cleanupDrag = null;
 		};
 	}
@@ -13482,10 +13198,6 @@
 		});
 		return true;
 	}
-	function getPageWindow() {
-		if (typeof unsafeWindow == "object") return unsafeWindow;
-		return window;
-	}
 	function getCallerFromEvent(emitter, eventName, propKey = null) {
 		const handlers = emitter?._events?.[eventName];
 		if (!handlers) return void 0;
@@ -13515,13 +13227,6 @@
 		return Array.isArray(result) && result.length == 1 ? result[0] : result;
 	}
 	var classResolvers = {
-		GameContext(_runtime) {
-			const ctx = getPageWindow()?.GameContext || window.Laya?.Browser?.window?.GameContext || window.GameContext;
-			if (ctx && typeof ctx.GetModeType == "function" && typeof ctx.GetGroupID == "function") return ctx;
-		},
-		GetGoodsByID(runtime) {
-			return runtime.get("SgxFPreviewWindow", null, 0)?.getGoodConfig;
-		},
 		SgsText(runtime) {
 			return runtime.scene?.topMenu?.timeLabel?.constructor;
 		},
@@ -13690,7 +13395,7 @@
 		ShowWindow(name) {
 			const GameEventDispatcher = this.ged;
 			if (!GameEventDispatcher) return;
-			GameEventDispatcher.i?.(name);
+			GameEventDispatcher.A?.(name);
 		}
 		GetWindow(name) {
 			const manager = this.class("WindowManager");
@@ -13700,11 +13405,6 @@
 			const foundWindow = this.find("WindowLayer", name);
 			if (Array.isArray(foundWindow)) return foundWindow.find(Boolean) ?? null;
 			return foundWindow ?? null;
-		}
-		HideStartLoadingListener() {
-			const GameEventDispatcher = this.ged;
-			if (!GameEventDispatcher) return;
-			GameEventDispatcher.on("HIDE_CHALLENGE_GAME_START", this, this.showName);
 		}
 		async showName() {
 			const seatUIs = await wait(() => this.gamescene?.seatContainer?.seatUIs);
@@ -15216,74 +14916,17 @@
 	var DATABASE_NAME = "dxc-tracker-protocol-recording";
 	var DATABASE_VERSION = 2;
 	var RECORD_STORE_NAME = "records";
-	var DOWNLOAD_FILE_NAME = "tracker-protocols.jsonl";
-	var MAX_PROTOCOL_RECORDS = 1e4;
 	var active = false;
 	var sequence = 0;
 	var limitReached = false;
 	var currentSession;
-	var lastSessionStartedAt = 0;
 	var records = [];
 	var pendingRecords = [];
 	var flushScheduled = false;
-	var loadGeneration = 0;
 	var databasePromise = null;
 	var storageQueue = Promise.resolve();
 	var statusNotificationScheduled = false;
 	var statusListeners = new Set();
-	function startProtocolRecording() {
-		loadGeneration++;
-		active = true;
-		sequence = 0;
-		limitReached = false;
-		currentSession = createRecordingSession();
-		records = [];
-		pendingRecords = [];
-		flushScheduled = false;
-		enqueueStorage(clearStoredRecords);
-		notifyStatusListeners();
-		return getProtocolRecordingStatus();
-	}
-	async function stopProtocolRecording() {
-		active = false;
-		flushPendingRecords();
-		notifyStatusListeners();
-		await storageQueue;
-		return getProtocolRecordingStatus();
-	}
-	async function clearProtocolRecording() {
-		loadGeneration++;
-		active = false;
-		sequence = 0;
-		limitReached = false;
-		currentSession = null;
-		records = [];
-		pendingRecords = [];
-		flushScheduled = false;
-		const clearOperation = enqueueStorage(clearStoredRecords);
-		notifyStatusListeners();
-		await clearOperation;
-		return getProtocolRecordingStatus();
-	}
-	async function initializeProtocolRecording() {
-		if (currentSession === null) return getProtocolRecordingStatus();
-		const expectedGeneration = loadGeneration;
-		await storageQueue;
-		const storedRecording = await readStoredRecordingSafely(currentSession?.id);
-		if (expectedGeneration !== loadGeneration || active || records.length > 0) return getProtocolRecordingStatus();
-		if (storedRecording === void 0) return getProtocolRecordingStatus();
-		if (storedRecording === null) {
-			if (currentSession === void 0) currentSession = null;
-			return getProtocolRecordingStatus();
-		}
-		currentSession = storedRecording.session;
-		lastSessionStartedAt = Math.max(lastSessionStartedAt, currentSession.startedAt);
-		records = storedRecording.records.slice(0, MAX_PROTOCOL_RECORDS);
-		sequence = records[records.length - 1]?.seq ?? 0;
-		limitReached = storedRecording.records.length >= MAX_PROTOCOL_RECORDS;
-		notifyStatusListeners();
-		return getProtocolRecordingStatus();
-	}
 	function recordTrackerProtocol(message, context = {}) {
 		if (!active || !shouldRecordTrackerProtocol(message, context)) return;
 		try {
@@ -15305,37 +14948,12 @@
 			console.warn("[protocol-recorder] 协议录制失败，已跳过当前消息", error);
 		}
 	}
-	async function exportProtocolRecording() {
-		flushPendingRecords();
-		await storageQueue;
-		let exportRecords = records;
-		if (exportRecords.length === 0 && currentSession !== null) {
-			const storedRecording = await readStoredRecordingSafely(currentSession?.id);
-			if (storedRecording && currentSession === void 0) {
-				currentSession = storedRecording.session;
-				lastSessionStartedAt = Math.max(lastSessionStartedAt, currentSession.startedAt);
-			}
-			exportRecords = storedRecording?.records ?? [];
-		}
-		if (exportRecords.length === 0) return false;
-		downloadRecording(serializeProtocolRecording(exportRecords));
-		return true;
-	}
-	function serializeProtocolRecording(recording) {
-		if (recording.length === 0) return "";
-		return recording.map((record) => JSON.stringify(record)).join("\n") + "\n";
-	}
 	function getProtocolRecordingStatus() {
 		return {
 			active,
 			count: records.length,
 			limitReached
 		};
-	}
-	function subscribeProtocolRecordingStatus(listener) {
-		statusListeners.add(listener);
-		listener(getProtocolRecordingStatus());
-		return () => statusListeners.delete(listener);
 	}
 	function schedulePendingRecordFlush() {
 		if (flushScheduled) return;
@@ -15380,85 +14998,6 @@
 			store.put(storedRecord);
 		});
 		await waitForTransaction(transaction);
-	}
-	async function clearStoredRecords() {
-		const database = await openDatabase();
-		if (!database) return;
-		const transaction = database.transaction(RECORD_STORE_NAME, "readwrite");
-		transaction.objectStore(RECORD_STORE_NAME).clear();
-		await waitForTransaction(transaction);
-	}
-	async function readStoredRecording(sessionId) {
-		const database = await openDatabase();
-		if (!database) return null;
-		return new Promise((resolve, reject) => {
-			const request = database.transaction(RECORD_STORE_NAME, "readonly").objectStore(RECORD_STORE_NAME).getAll();
-			request.onsuccess = () => {
-				const storedRecords = request.result.filter(isStoredTrackerProtocol);
-				const selectedSessionId = sessionId ?? findLatestSessionId(storedRecords);
-				if (!selectedSessionId) {
-					resolve(null);
-					return;
-				}
-				const sessionRecords = storedRecords.filter((record) => record.sessionId === selectedSessionId).sort((left, right) => left.seq - right.seq);
-				const firstRecord = sessionRecords[0];
-				if (!firstRecord) {
-					resolve(null);
-					return;
-				}
-				resolve({
-					session: {
-						id: firstRecord.sessionId,
-						startedAt: firstRecord.sessionStartedAt
-					},
-					records: sessionRecords.slice(0, MAX_PROTOCOL_RECORDS).map(toRecordedTrackerProtocol)
-				});
-			};
-			request.onerror = () => reject(request.error);
-		});
-	}
-	async function readStoredRecordingSafely(sessionId) {
-		try {
-			return await readStoredRecording(sessionId);
-		} catch (error) {
-			console.warn("[protocol-recorder] IndexedDB 读取失败", error);
-			return;
-		}
-	}
-	function createRecordingSession() {
-		const startedAt = Math.max(Date.now(), lastSessionStartedAt + 1);
-		lastSessionStartedAt = startedAt;
-		return {
-			id: `${startedAt}-${createSessionIdSuffix()}`,
-			startedAt
-		};
-	}
-	function createSessionIdSuffix() {
-		const cryptoApi = globalThis.crypto;
-		if (typeof cryptoApi?.randomUUID === "function") return cryptoApi.randomUUID();
-		if (typeof cryptoApi?.getRandomValues !== "function") throw new Error("当前环境不支持安全随机数");
-		const randomBytes = new Uint8Array(16);
-		cryptoApi.getRandomValues(randomBytes);
-		return Array.from(randomBytes, (value) => value.toString(16).padStart(2, "0")).join("");
-	}
-	function findLatestSessionId(records) {
-		return records.reduce((current, record) => {
-			if (!current || record.sessionStartedAt > current.sessionStartedAt) return record;
-			if (record.sessionStartedAt === current.sessionStartedAt && record.sessionId > current.sessionId) return record;
-			return current;
-		}, null)?.sessionId ?? null;
-	}
-	function isStoredTrackerProtocol(value) {
-		if (!value || typeof value !== "object") return false;
-		const record = value;
-		return typeof record.sessionId === "string" && Number.isFinite(record.sessionStartedAt) && Number.isInteger(record.seq) && typeof record.className === "string" && Boolean(record.payload) && typeof record.payload === "object" && !Array.isArray(record.payload);
-	}
-	function toRecordedTrackerProtocol(record) {
-		return {
-			seq: record.seq,
-			className: record.className,
-			payload: record.payload
-		};
 	}
 	function openDatabase() {
 		if (databasePromise) return databasePromise;
@@ -15506,18 +15045,6 @@
 			transaction.onerror = () => reject(transaction.error);
 			transaction.onabort = () => reject(transaction.error);
 		});
-	}
-	function downloadRecording(content) {
-		if (typeof document === "undefined" || typeof URL === "undefined") return;
-		const blob = new Blob([content], { type: "application/x-ndjson;charset=utf-8" });
-		const url = URL.createObjectURL(blob);
-		const link = document.createElement("a");
-		link.href = url;
-		link.download = DOWNLOAD_FILE_NAME;
-		document.body.appendChild(link);
-		link.click();
-		link.remove();
-		setTimeout(() => URL.revokeObjectURL(url), 0);
 	}
 	var tooltipDelegationBound = false;
 	var activeTooltipTarget = null;
@@ -15642,6 +15169,11 @@
 		});
 		window.addEventListener("resize", resize, true);
 	}
+	function observeDomResize(onResize) {
+		const viewport = window.visualViewport;
+		viewport?.addEventListener("resize", onResize);
+		return () => viewport?.removeEventListener("resize", onResize);
+	}
 	function removeInjectedDom(globalState) {
 		unbindPeiXiuHandSuitColorRefresh();
 		unbindTrackerVisibilityShortcut();
@@ -15652,10 +15184,9 @@
 		document.getElementById("peixiu-map-style")?.remove();
 		globalState.isFrameAdd = false;
 	}
-	function cleanupLifecycle({ resize, scheduleSetGameSize, SGSresize, globalState }) {
+	function cleanupLifecycle({ resize, scheduleSetGameSize, globalState }) {
 		window.removeEventListener("resize", resize, true);
 		window.removeEventListener("resize", scheduleSetGameSize);
-		window.removeEventListener("SGSresize", SGSresize);
 		removeInjectedDom(globalState);
 		return true;
 	}
@@ -15664,7 +15195,7 @@
 			function checkLibraries() {
 				return new Promise((libResolve) => {
 					function checkLibs() {
-						if (typeof JSZipUtils !== "undefined" && typeof CtrUtil !== "undefined" && typeof CtrUtil?.Ctr?.Ofb_Dec !== "undefined" && typeof SystemContext !== "undefined" && document.getElementById("bgDiv")) initFrame(true).then(libResolve);
+						if (typeof JSZipUtils !== "undefined" && typeof CtrUtil !== "undefined" && typeof CtrUtil?.Ctr?.Ofb_Dec !== "undefined" && typeof ChannelUtils !== "undefined" && document.getElementById("bgDiv")) initFrame(true).then(libResolve);
 						else if (typeof PUERTS_JS_RESOURCES !== "undefined") libResolve(true);
 						else setTimeout(checkLibs, 1e3);
 					}
@@ -15672,32 +15203,6 @@
 				});
 			}
 			Promise.all([checkLibraries()]).then(resolve).catch(reject);
-		});
-	}
-	function installSystemContextResizeDispatchers() {
-		SystemContext._gameScreenType = SystemContext.gameScreenType;
-		SystemContext._gameScale = SystemContext.gameScale;
-		Object.defineProperty(SystemContext, "gameScreenType", {
-			get: function() {
-				return this._gameScreenType;
-			},
-			set: function(value) {
-				if (this._gameScreenType !== value) {
-					this._gameScreenType = value;
-					window.dispatchEvent(new Event("SGSresize"));
-				}
-			}
-		});
-		Object.defineProperty(SystemContext, "gameScale", {
-			get: function() {
-				return this._gameScale;
-			},
-			set: function(value) {
-				if (this._gameScale !== value) {
-					this._gameScale = value;
-					window.dispatchEvent(new Event("SGSresize"));
-				}
-			}
 		});
 	}
 	function addSeatUI(globalConfig) {
@@ -15803,6 +15308,7 @@
     #tracker-shell .header {
       margin: 1px;
       user-select: none;
+      touch-action: none;
       cursor: grab;
       display: flex;
       align-items: center;
@@ -15872,81 +15378,6 @@
 			iframe
 		};
 	}
-	var recordingSwitch = null;
-	var exportButton = null;
-	var clearButton = null;
-	var statusElement = null;
-	var unsubscribeStatus = null;
-	function bindProtocolRecorderControls() {
-		unbindProtocolRecorderControls();
-		recordingSwitch = document.getElementById("protocolRecordSwitch");
-		exportButton = document.getElementById("protocolRecordExport");
-		clearButton = document.getElementById("protocolRecordClear");
-		statusElement = document.getElementById("protocolRecordStatus");
-		if (!recordingSwitch || !exportButton || !clearButton || !statusElement) return;
-		recordingSwitch.onchange = handleRecordingSwitchChange;
-		exportButton.onclick = handleExportClick;
-		clearButton.onclick = handleClearClick;
-		unsubscribeStatus = subscribeProtocolRecordingStatus(renderProtocolRecordingStatus);
-		initializeProtocolRecording();
-	}
-	function unbindProtocolRecorderControls() {
-		if (recordingSwitch) recordingSwitch.onchange = null;
-		if (exportButton) exportButton.onclick = null;
-		if (clearButton) clearButton.onclick = null;
-		unsubscribeStatus?.();
-		recordingSwitch = null;
-		exportButton = null;
-		clearButton = null;
-		statusElement = null;
-		unsubscribeStatus = null;
-	}
-	function handleRecordingSwitchChange() {
-		if (!recordingSwitch) return;
-		if (recordingSwitch.checked) {
-			startProtocolRecording();
-			addTooltip("已开始录制记牌协议，新的录制会覆盖上一次记录", "acTooltip", 4e3);
-			return;
-		}
-		stopProtocolRecording().then(({ count }) => {
-			addTooltip(`已停止协议录制，共保存 ${count} 条`, "acTooltip", 4e3);
-		}).catch((error) => {
-			console.warn("[protocol-recorder] 停止协议录制失败", error);
-			try {
-				addTooltip("停止协议录制失败，请查看控制台", "acTooltip", 4e3);
-			} catch (tooltipError) {
-				console.warn("[protocol-recorder] 停止录制失败提示未能显示", tooltipError);
-			}
-		});
-	}
-	async function handleExportClick() {
-		try {
-			addTooltip(await exportProtocolRecording() ? "记牌协议已导出" : "没有可导出的协议记录", "acTooltip", 4e3);
-		} catch (error) {
-			console.warn("[protocol-recorder] 协议导出失败", error);
-			addTooltip("协议导出失败，请查看控制台", "acTooltip", 4e3);
-		}
-	}
-	async function handleClearClick() {
-		await clearProtocolRecording();
-		addTooltip("已清空协议记录", "acTooltip", 4e3);
-	}
-	function renderProtocolRecordingStatus(status) {
-		if (!recordingSwitch || !exportButton || !clearButton || !statusElement) return;
-		recordingSwitch.checked = status.active;
-		exportButton.disabled = status.active || status.count === 0;
-		clearButton.disabled = status.active || status.count === 0;
-		statusElement.dataset.recording = String(status.active);
-		if (status.active) {
-			statusElement.textContent = `录制中：${status.count} 条`;
-			return;
-		}
-		if (status.limitReached) {
-			statusElement.textContent = `已达上限：${status.count} 条`;
-			return;
-		}
-		statusElement.textContent = status.count > 0 ? `已保存：${status.count} 条` : "未录制";
-	}
 	var INTERFACE_HTML_URL = "https://www.desuwa.link/tracker/iframe.html";
 	async function loadInterfaceHtml(force = false) {
 		const response = await fetch(INTERFACE_HTML_URL, { cache: force ? "reload" : "default" });
@@ -15954,7 +15385,7 @@
 		return response.text();
 	}
 	var iframe = null;
-	var version = "0.20.2";
+	var version = "0.21.0";
 	function getTrackedHandNumbers(seatID) {
 		const config = CardConfig.GetInstance();
 		return tracker.getTrackedPlayerHandCardIDs(seatID).map((id) => config.getCardNumber(id)).filter((number) => number > 0);
@@ -15965,12 +15396,10 @@
 		return waitForLegacyFrameReady(initFrame);
 	}
 	function Exit() {
-		unbindProtocolRecorderControls();
-		stopProtocolRecording();
+		stopGameSizeUpdates();
 		return cleanupLifecycle({
 			resize,
 			scheduleSetGameSize,
-			SGSresize,
 			globalState
 		});
 	}
@@ -15981,24 +15410,27 @@
 		resize();
 		window.dispatchEvent(new Event("resize"));
 	}
-	function SGSresize() {
-		window.dispatchEvent(new Event("resize"));
-	}
 	var updateTimeout;
+	var stopDomResize = null;
+	function stopGameSizeUpdates() {
+		stopDomResize?.();
+		stopDomResize = null;
+		if (updateTimeout) clearTimeout(updateTimeout);
+		updateTimeout = null;
+	}
 	function scheduleSetGameSize() {
 		if (updateTimeout) clearTimeout(updateTimeout);
 		updateTimeout = setTimeout(() => {
-			setGameSize();
 			updateTimeout = null;
+			setGameSize();
 		}, 500);
 	}
 	async function initFrame(force = false) {
-		if (typeof SystemContext == "undefined") return;
 		if (force) removeInjectedDom(globalState);
 		if (!globalState.isFrameAdd) {
+			stopGameSizeUpdates();
 			window.addEventListener("resize", scheduleSetGameSize);
-			installSystemContextResizeDispatchers();
-			window.addEventListener("SGSresize", SGSresize);
+			stopDomResize = observeDomResize(scheduleSetGameSize);
 			try {
 				document.getElementById("bgDiv").firstElementChild.draggable = false;
 				document.querySelector("link[rel=stylesheet]")?.remove();
@@ -16007,23 +15439,33 @@
 			}
 			addSeatUI(globalConfig);
 			await addFrame();
+			setGameSize();
 			bindPeiXiuHandSuitColorRefresh();
 			globalState.isFrameAdd = true;
 			return ConfigManager.GetInstance().loadAndParseConfigs();
 		}
 	}
 	function setGameSize() {
-		if (!SystemContext) return;
-		UI.width = SystemContext.gameWidth * SystemContext.gameScale >> 0;
-		UI.height = SystemContext.gameHeight * SystemContext.gameScale >> 0;
-		UI.scale = SystemContext.gameScale;
+		if (!syncGameSize()) return;
 		if (UI.seatUIs?.length > 0) {
 			getSeatUiPos();
-			if (UI.firstUpdateSeatUI) drawSeatUIs();
+			drawSeatUIs();
 		}
+	}
+	function syncGameSize() {
+		const scene = laya.scene;
+		if (!scene) return false;
+		const seatUI = document.getElementById("seatUI");
+		if (!seatUI) return false;
+		const { width, height, globalScaleX } = scene;
+		if (!width || !height) return false;
+		const scaledHeight = height * globalScaleX;
+		UI.width = Math.trunc(width * globalScaleX);
+		UI.height = Math.trunc(scaledHeight);
+		UI.scale = globalScaleX;
 		const app = {
-			width: (SystemContext.gameWidth * SystemContext.gameScale >> 0) / window.devicePixelRatio,
-			height: (SystemContext.gameHeight * SystemContext.gameScale >> 0) / window.devicePixelRatio
+			width: UI.width / window.devicePixelRatio,
+			height: UI.height / window.devicePixelRatio
 		};
 		if (globalConfig.padding && document.getElementById("tracker-shell")) {
 			document.getElementById("bgDiv").style.width = document.documentElement.clientWidth + "px";
@@ -16031,8 +15473,7 @@
 			document.getElementById("tracker-shell").style.right = "0px";
 			document.getElementById("tracker-shell").style.top = "0px";
 		} else document.getElementById("bgDiv").style.width = document.documentElement.clientWidth + "px";
-		const seatUI = document.getElementById("seatUI");
-		const top = ((window.innerHeight * window.devicePixelRatio - SystemContext.gameScale * SystemContext.gameHeight) / (2 * window.devicePixelRatio) + SystemContext.gameScale * SystemContext.gameHeight / 2) / window.devicePixelRatio;
+		const top = ((window.innerHeight * window.devicePixelRatio - scaledHeight) / (2 * window.devicePixelRatio) + scaledHeight / 2) / window.devicePixelRatio;
 		seatUI.style.width = `${app.width}px`;
 		seatUI.style.height = `${app.height}px`;
 		seatUI.style.left = window.innerWidth / 2 + "px";
@@ -16040,6 +15481,7 @@
 		UI.centerX = window.innerWidth > app.width ? app.width / 2 : window.innerWidth / 2;
 		UI.centerY = app.height / 2;
 		document.documentElement.style.setProperty("--sgs-center-x", `${UI.centerX}px`);
+		return true;
 	}
 	function getSeatUiPos() {
 		const list = UI.seatUIs || [];
@@ -16159,8 +15601,8 @@
 	function setSeatPosition(seatUI, displayLocation, x, y, dpr) {
 		if (!seatUI) return;
 		seatUI.DisplayLocation = displayLocation;
-		seatUI.posX = (x >> 0) / dpr;
-		seatUI.posY = (y >> 0) / dpr;
+		seatUI.posX = Math.trunc(x) / dpr;
+		seatUI.posY = Math.trunc(y) / dpr;
 	}
 	function resetSeatUIs() {
 		UI.seatUIs = [];
@@ -16181,6 +15623,7 @@
 				fixedViewId: players.get(Number(seatID))?.fixedViewId
 			};
 		}).filter((seat, index) => index === 0 || players.get(seat.seatID)?.isShown);
+		if (!syncGameSize()) return;
 		getSeatUiPos();
 		if (trackerRoom.firstID !== void 0) drawSeatUIs();
 	}
@@ -16281,7 +15724,7 @@
 			} else {
 				container.classList.remove("collapsed");
 				toggle.innerText = "-";
-				document.getElementById("title").innerText = "三国杀小抄0.20.2";
+				document.getElementById("title").innerText = "三国杀小抄0.21.0";
 				expandJiePanel({ defer: true });
 			}
 		};
@@ -16327,7 +15770,10 @@
 				if (event.target === blockEffectDialog) blockEffectDialog.close();
 			};
 		}
-		bindProtocolRecorderControls();
+		const protocolRecordSwitch = document.getElementById("protocolRecordSwitch");
+		const protocolRecorderControls = document.getElementById("protocolRecorderControls");
+		protocolRecordSwitch?.closest(".switch-container")?.style.setProperty("display", "none");
+		protocolRecorderControls?.style.setProperty("display", "none");
 	}
 	function expandJiePanel(options = {}) {
 		const { defer = false } = options;
@@ -16403,6 +15849,7 @@
 		if (typeof TurnCnt !== "number" || !Number.isFinite(TurnCnt)) return;
 		if (TurnCnt === 1) {
 			laya.zhanfaRegister();
+			getSeatUIs();
 			hideSelfOrderContainer(Game.myDisplayID);
 			if (UI.firstUpdateSeatUI) showOrderContainers();
 		}
