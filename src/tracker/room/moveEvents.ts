@@ -118,8 +118,8 @@ export class RoomMoveEvents {
             spellIDs,
             event: import.meta.env.DEV ? summarizeMoveEvent(nextEvent) : nextEvent.protocol
           })
+          console.error('[Refactor] 移动事件装饰失败:', error)
         }
-        console.error('[Refactor] 移动事件装饰失败:', error, nextEvent)
         return nextEvent
       }
     }, event)
