@@ -32,8 +32,9 @@
 - `planExchangeKnownCards` / `commitExchangeKnownCards` 供观虚和兴作共用批次内身份匹配、匿名槽
   预检与提交。计划可能只匹配部分 ID；调用者必须先确认协议张数和桶容量，再提交，不能借用
   其它批次的实体。诫厉开发视角按协议位置物化，生产视角保持匿名，不套用该匹配规则。
-- `splitExchangeCards` 拆分本地明牌与匿名实体，`getExchangeSourceCards` 仅排除协议明确声明的
-  身份；两者用途不同，调用方决定是否将本地已知身份加入移动 ID。
+- `splitExchangeCards` 拆分本地明牌与其余实体（包括已有正 ID 的暗牌）；`unknownCards` 不代表
+  可物化的匿名槽位列表。`getExchangeSourceCards` 仅排除协议明确声明的身份；两者用途不同，
+  调用方决定是否将本地已知身份加入移动 ID。
 - `ExchangeBatch` 继续负责物理成员、候选引用与桶间移动；整手交换的嵌套栈、天候数量区间、
   骋烈近似弃置和夺炁初始归属推断保留在各技能中。
 

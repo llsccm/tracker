@@ -90,6 +90,7 @@ describe('交换批次身份预检', () => {
     const plan = planExchangeKnownCards(room, [3, 1], [target])
 
     expect(plan.cards).toEqual([target])
+    expect(plan.commits).toEqual([{ card: target, cardID: 1, materialize: true }])
     expect(plan.cards).not.toContain(otherBatchCard)
     expect(target.isAnonymous).toBe(true)
     expect(room.cardIndex.has(1)).toBe(false)

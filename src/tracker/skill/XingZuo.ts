@@ -38,6 +38,7 @@ export default function decorateXingZuo(event: MoveEventDraft, room: Room): Move
   }
 
   if (move.FromZone === 1 && move.ToZone === 10) {
+    // 看牌前牌堆不足会先自动洗牌，此处的牌底张数已由协议时序保证。
     const pileCards = room.getPublicEndpointCards('pile', getCount(event), POSITION_BOTTOM)
     xingZuoState.clear(room)
     const pileBatchKey = `${XING_ZUO_SPELL_ID}:pile:${move.ToID}`
@@ -124,10 +125,13 @@ function patchBatchCards(event: MoveEventDraft, room: Room, cards: Card[]): Move
 
   const { knownIDs, unknownCards } = splitExchangeCards(cards)
   const cardIDs = [...new Set([...protocolIDs, ...knownIDs])]
+  const returnsToHand = event.to.type === 'player' && event.to.subZone === 'hand'
   return patchEvent(event, {
     cardIDs,
     options: {
       sourceCards: unknownCards,
+      // 回手只移动本批现存实体，协议张数差额交给手牌数量对账。
+      ...(returnsToHand ? { cardCount: cards.length, handMoveCount: getCount(event) } : {}),
       // Controller 默认使用原始 CardIDs；这里补入技能已经确定移动的明牌身份。
       pileIdentityCardIDs: cardIDs
     }

@@ -41,6 +41,7 @@ describe('黄承彦观虚目标视角交换', () => {
     const originalTopFive = pile.cards.slice(-5)
     const candidate = fromPublicCandidate(createPublicCandidate('pile', POSITION_TOP, 5))!
     const identities = room.revealPublicCandidates([1, 2, 3, 4, 5], candidate)
+    expect(identities.map((card) => card.id)).toEqual([1, 2, 3, 4, 5])
     expect(identities.every((card) => room.detachedKnownCards.has(card))).toBe(true)
 
     const moves = [

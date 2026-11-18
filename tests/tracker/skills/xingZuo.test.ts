@@ -58,6 +58,7 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
     const remainingPile = pile.cards.slice(3)
     const candidate = fromPublicCandidate(createPublicCandidate('pile', POSITION_BOTTOM, 3))!
     const identities = room.revealPublicCandidates([1, 2, 3], candidate)
+    expect(identities.map((card) => card.id)).toEqual([1, 2, 3])
     expect(identities.every((card) => room.detachedKnownCards.has(card))).toBe(true)
     const moves = exchangeMoves()
     moves[revealStep - 1].CardIDs = [1, 2, 3]
@@ -195,6 +196,62 @@ describe('兴作：牌堆底部经交换区换入手牌', () => {
     expect(assertPileIdentityLedgerConsistency(room, '3776:other-batch')).toEqual([])
     expect(errorSpy).not.toHaveBeenCalled()
   })
+
+  it.each([
+    { bottomIDs: [1, 2, 3], departedCount: 1 },
+    { bottomIDs: [1], departedCount: 1 },
+    { bottomIDs: [], departedCount: 1 },
+    { bottomIDs: [], departedCount: 3 }
+  ])(
+    '牌底 $bottomIDs 的 $departedCount 个成员提前离区后，回手不借用其它批次',
+    ({ bottomIDs, departedCount }) => {
+      const { controller, room, errorSpy } = setupExchange(bottomIDs)
+      controller.syncTrackerMove(protocolMove({ ToZone: 10, ToID: 1, CardIDs: [10] }))
+      const otherCard = room.cardIndex.get(10)!
+      const originalBottom = room.getZone('pile').cards.slice(0, 3)
+      const moves = exchangeMoves()
+      moves.slice(0, 4).forEach((move) => controller.syncTrackerMove(move))
+      const handCards = room.publicZones.getExchangeBatch('3776:seat:4').cards
+      const departedCards = originalBottom.slice(0, departedCount)
+      const remainingCards = originalBottom.slice(departedCount)
+
+      room.moveCards([], {
+        from: { type: 'public', zone: 'exchange', position: POSITION_TOP },
+        to: { type: 'public', zone: 'discard', position: POSITION_TOP },
+        sourceCards: departedCards,
+        cardCount: departedCount,
+        sourceEvent: { type: 'test:xing-zuo-interrupted-member' }
+      })
+      expect(room.publicZones.getExchangeBatch('3776:pile:7').cards).toEqual(remainingCards)
+      const remainingKnownIDs = remainingCards
+        .filter((card) => card.isKnown)
+        .map((card) => card.id)
+        .sort((a, b) => a - b)
+
+      controller.syncTrackerMove(moves[4])
+
+      expect(departedCards.every((card) => card.location === 'discard')).toBe(true)
+      expect(remainingCards.every((card) => card.location === 'player' && card.owner === 4)).toBe(
+        true
+      )
+      expect(
+        room
+          .getPlayer(4)!
+          .knownHandCards.map((card) => card.id)
+          .sort((a, b) => a - b)
+      ).toEqual(remainingKnownIDs)
+      expect(room.getPlayer(4)!.observedHandCount).toBe(3)
+      expect(room.getPlayer(4)!.unknownCardCount).toBe(3 - remainingKnownIDs.length)
+      expect(room.getZone('exchange').cards).toEqual([otherCard, ...handCards])
+
+      controller.syncTrackerMove(moves[5])
+
+      expect(room.getZone('exchange').cards).toEqual([otherCard])
+      expect(hasSkillState(room, 3776)).toBe(false)
+      expect(assertPileIdentityLedgerConsistency(room, '3776:interrupted-return')).toEqual([])
+      expect(errorSpy).not.toHaveBeenCalled()
+    }
+  )
 
   it('目标视角手牌带正 ID，回手揭示只物化原牌底批次', () => {
     const { controller, room, errorSpy } = setupExchange([1])
