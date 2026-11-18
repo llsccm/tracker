@@ -18,6 +18,13 @@ export function bindInitialResize(globalConfig, resize) {
   window.addEventListener('resize', resize, true)
 }
 
+export function observeDomResize(onResize) {
+  const viewport = window.visualViewport
+  viewport?.addEventListener('resize', onResize)
+
+  return () => viewport?.removeEventListener('resize', onResize)
+}
+
 export function removeInjectedDom(globalState) {
   unbindPeiXiuHandSuitColorRefresh()
   unbindTrackerVisibilityShortcut()
@@ -30,10 +37,9 @@ export function removeInjectedDom(globalState) {
   globalState.isFrameAdd = false
 }
 
-export function cleanupLifecycle({ resize, scheduleSetGameSize, SGSresize, globalState }) {
+export function cleanupLifecycle({ resize, scheduleSetGameSize, globalState }) {
   window.removeEventListener('resize', resize, true)
   window.removeEventListener('resize', scheduleSetGameSize)
-  window.removeEventListener('SGSresize', SGSresize)
   removeInjectedDom(globalState)
   return true
 }
@@ -48,7 +54,7 @@ export function waitForLegacyFrameReady(initFrame) {
             typeof JSZipUtils !== 'undefined' &&
             typeof CtrUtil !== 'undefined' &&
             typeof CtrUtil?.Ctr?.Ofb_Dec !== 'undefined' &&
-            typeof SystemContext !== 'undefined' &&
+            typeof ChannelUtils !== 'undefined' &&
             document.getElementById('bgDiv')
           ) {
             initFrame(true).then(libResolve)
@@ -67,34 +73,5 @@ export function waitForLegacyFrameReady(initFrame) {
 
     // 并行执行两个异步操作，全部完成后 resolve
     Promise.all([checkLibraries()]).then(resolve).catch(reject)
-  })
-}
-
-export function installSystemContextResizeDispatchers() {
-  SystemContext._gameScreenType = SystemContext.gameScreenType
-  SystemContext._gameScale = SystemContext.gameScale
-
-  Object.defineProperty(SystemContext, 'gameScreenType', {
-    get: function () {
-      return this._gameScreenType
-    },
-    set: function (value) {
-      if (this._gameScreenType !== value) {
-        this._gameScreenType = value
-        window.dispatchEvent(new Event('SGSresize'))
-      }
-    }
-  })
-
-  Object.defineProperty(SystemContext, 'gameScale', {
-    get: function () {
-      return this._gameScale
-    },
-    set: function (value) {
-      if (this._gameScale !== value) {
-        this._gameScale = value
-        window.dispatchEvent(new Event('SGSresize'))
-      }
-    }
   })
 }

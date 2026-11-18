@@ -30,12 +30,12 @@ graph TD
 - **执行时序与入口**：
   1. [`src/index.js`](../../src/index.js) 的 `main('INIT')` 调用 [`src/dom.js`](../../src/dom.js) 的 `Init()`。
   2. `Init()` 调用 [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js) 的 `bindInitialResize()` 绑定窗口缩放。
-  3. `waitForLegacyFrameReady()` 轮询宿主依赖（`JSZipUtils`、`CtrUtil`、`SystemContext`、`#bgDiv`；微端 `PUERTS_JS_RESOURCES` 则直接通过）。
+  3. `waitForLegacyFrameReady()` 轮询宿主依赖（`JSZipUtils`、`CtrUtil`、`#bgDiv`；微端 `PUERTS_JS_RESOURCES` 则直接通过），界面注入不等待 Laya 场景。
   4. 就绪后回调 [`src/dom.js`](../../src/dom.js) 的 `initFrame()`：
      - 清理残留注入 DOM；
-     - 监听 `resize` / `SGSresize`；
-     - `installSystemContextResizeDispatchers()` 代理 `SystemContext.gameScreenType` / `gameScale`；
+     - 监听窗口与 `visualViewport` 的 `resize`，由 `observeDomResize()` 管理视口监听；两个来源共用 `scheduleSetGameSize()` 的 500ms 防抖，触发后重新读取当前 `laya.scene` 的尺寸与缩放；
      - `addSeatUI` + `addFrame()`，经 [`src/utils/htmlResource.js`](../../src/utils/htmlResource.js) 的 `loadInterfaceHtml()` 加载远端 `html/iframe.html`；
+     - DOM 注入完成后立即调用 `setGameSize()`，通过 `syncGameSize()` 将当前可用场景的 `width` / `height` / `globalScaleX` 同步到 `UI` 与外层 `#seatUI`；场景尚未就绪时留待座位更新或首轮消息再次同步；
      - [`src/config/ConfigManager.js`](../../src/config/ConfigManager.js) 的 `loadAndParseConfigs()` 解析远端 `Config_w.sgs`。
   5. `main('INIT')` 的 Promise 成功后，将 `main` 推入 `window.SGSMODULE`。
 
@@ -54,7 +54,7 @@ graph TD
 - **执行时序与入口**：
   1. [`src/index.js`](../../src/index.js) 若发现已有 `SGSMODULE`：将 `console.log` 临时改为 `console.info`，广播 `'EXIT'`，删除 `SGSMODULE`。
   2. [`src/dom.js`](../../src/dom.js) 的 `Exit()` → [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js) 的 `cleanupLifecycle()`。
-  3. 移除 `resize` / `SGSresize` 监听，清空 `SGSMODULE`。
+  3. `stopGameSizeUpdates()` 停止视口监听、取消待执行的尺寸防抖任务，再移除窗口 `resize` 监听，清空 `SGSMODULE`；强制重建界面时也先停止旧视口监听与防抖任务。
   4. `removeInjectedDom()` 清理座位 UI、iframe、裴秀地图窗口与可见性快捷键绑定；山河图城市由 Laya 场景持有，不再注入 DOM 容器。
 
 ---
@@ -178,7 +178,7 @@ Room 重建保留已经收到的对局 ID 和模式信息。
 
 ### 3. 先手与固定视角
 
-- `GsCFirstPhaseRole` → `tracker.setTrackerFirstHand(SeatID)`：写入 `firstID` 并执行 `updateFixedViewIds()`；主视角与先手都确定后计算 `.sorderContainer` 位置，但容器保持隐藏，首轮开始时再显示。
+- `GsCFirstPhaseRole` → `tracker.setTrackerFirstHand(SeatID)`：写入 `firstID` 并执行 `updateFixedViewIds()`；`getSeatUIs()` 在计算座位位置前先调用 `syncGameSize()` 同步当前场景尺寸与外层区域，场景或 DOM 尚未就绪时不提交布局。主视角与先手都确定后计算 `.sorderContainer` 位置，但容器保持隐藏，首轮开始时再显示。
 - `MsgGameShowFigure` 且 `Type == 1 && Figure === 1` 时也会 `setTrackerFirstHand`（身份/地主等）。
 - `MsgGamePlayerShowStatusNtf` 读取 `SeatData` 中的 `[座位号, 状态]`，由
   `setTrackerPlayerShowStatuses` 更新 `Player.isShown`（`0` 隐藏、`1` 显示）。主面板手牌框与
@@ -216,7 +216,7 @@ Room 重建保留已经收到的对局 ID 和模式信息。
   时保留同一 Room 的明确洗牌数量锚点；快照先于牌堆初始化时按局暂存。新 Room 默认恢复 `full`。
   没有先行版本通知的旁观残局仍由此消息降级；录制器保留快照字段及嵌套的 `CardId` / `SpellId`。
 - `PubGsCMoveCard`：[`handleMoveCard()`](../../src/handler/PubGsCMoveCard.js) 做预处理、特殊区域（`specialZones`）、局流状态（`gameFlowState`）、技能辅助（`spellEffects` / `skills/*`），再 `tracker.syncTrackerMove()` → `Room.moveCards()` / `shufflePile()`。
-- `MsgGameTurnNtf`：`handleGameTurn` 在首轮先隐藏主视角，再显示已完成定位的 `.sorderContainer`。随后调用纯状态
+- `MsgGameTurnNtf`：`handleGameTurn` 在首轮先调用 `getSeatUIs()` 同步尺寸并提交布局，再隐藏主视角、显示已完成定位的 `.sorderContainer`。随后调用纯状态
   `Game.setTurn`，重置轮级战法 Laya 状态，最后 `scheduleTrackerRender`；容器重置与超出人数的容器隐藏在开局注册玩家前完成。
 - `GsCGamephaseNtf`：`handleGamePhase` 按 `SeatRoundState` 编排阶段消息，调用纯状态
   `Game.enter`，再处理阶段 DOM、回合结果清理与战法 Laya 状态，最后

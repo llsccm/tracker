@@ -12,7 +12,7 @@ import { getPanelContentInner, initInjectedInterface } from './ui/frameContent'
 import {
   bindInitialResize,
   cleanupLifecycle,
-  installSystemContextResizeDispatchers,
+  observeDomResize,
   removeInjectedDom,
   waitForLegacyFrameReady
 } from './ui/lifecycle'
@@ -45,9 +45,12 @@ export function Init() {
 }
 
 export function Exit() {
-  unbindProtocolRecorderControls()
-  void stopProtocolRecording()
-  return cleanupLifecycle({ resize, scheduleSetGameSize, SGSresize, globalState })
+  stopGameSizeUpdates()
+  if (import.meta.env.DEV) {
+    unbindProtocolRecorderControls()
+    void stopProtocolRecording()
+  }
+  return cleanupLifecycle({ resize, scheduleSetGameSize, globalState })
 }
 
 function resize() {
@@ -59,35 +62,36 @@ function refreshSidebarViewport() {
   window.dispatchEvent(new Event('resize'))
 }
 
-function SGSresize() {
-  window.dispatchEvent(new Event('resize'))
-}
-
 let updateTimeout
+let stopDomResize = null
+
+function stopGameSizeUpdates() {
+  stopDomResize?.()
+  stopDomResize = null
+  if (updateTimeout) clearTimeout(updateTimeout)
+  updateTimeout = null
+}
 
 //防抖
 function scheduleSetGameSize() {
   if (updateTimeout) clearTimeout(updateTimeout)
 
   updateTimeout = setTimeout(() => {
-    setGameSize()
     updateTimeout = null
+    setGameSize()
   }, 500)
 }
 
 export async function initFrame(force = false) {
-  if (typeof SystemContext == 'undefined') return
-
   if (force) {
     removeInjectedDom(globalState)
   }
 
   if (!globalState.isFrameAdd) {
+    stopGameSizeUpdates()
     // 监听变化事件
     window.addEventListener('resize', scheduleSetGameSize)
-
-    installSystemContextResizeDispatchers()
-    window.addEventListener('SGSresize', SGSresize)
+    stopDomResize = observeDomResize(scheduleSetGameSize)
 
     try {
       //禁止拖动背景
@@ -102,6 +106,7 @@ export async function initFrame(force = false) {
     addSeatUI(globalConfig)
     // addDynamicBG()
     await addFrame()
+    setGameSize()
     bindPeiXiuHandSuitColorRefresh()
 
     globalState.isFrameAdd = true
@@ -111,20 +116,32 @@ export async function initFrame(force = false) {
 }
 
 function setGameSize() {
-  if (!SystemContext) return
-
-  UI.width = (SystemContext.gameWidth * SystemContext.gameScale) >> 0
-  UI.height = (SystemContext.gameHeight * SystemContext.gameScale) >> 0
-  UI.scale = SystemContext.gameScale
+  if (!syncGameSize()) return
 
   if (UI.seatUIs?.length > 0) {
     getSeatUiPos()
-    if (UI.firstUpdateSeatUI) drawSeatUIs()
+    drawSeatUIs()
   }
+}
+
+function syncGameSize() {
+  const scene = laya.scene
+  if (!scene) return false
+
+  const seatUI = document.getElementById('seatUI')
+  if (!seatUI) return false
+
+  const { width, height, globalScaleX } = scene
+  if (!width || !height) return false
+
+  const scaledHeight = height * globalScaleX
+  UI.width = Math.trunc(width * globalScaleX)
+  UI.height = Math.trunc(scaledHeight)
+  UI.scale = globalScaleX
 
   const app = {
-    width: ((SystemContext.gameWidth * SystemContext.gameScale) >> 0) / window.devicePixelRatio,
-    height: ((SystemContext.gameHeight * SystemContext.gameScale) >> 0) / window.devicePixelRatio
+    width: UI.width / window.devicePixelRatio,
+    height: UI.height / window.devicePixelRatio
   }
 
   if (globalConfig.padding && document.getElementById('tracker-shell')) {
@@ -139,13 +156,9 @@ function setGameSize() {
   // let cusBGDiv = document.getElementById('cusBGDiv')
   // let sgsBgVideo = document.getElementById('sgsBgVideo')
   // let imgBG = document.getElementById('sgsBgIMG')
-  const seatUI = document.getElementById('seatUI')
-
   const top =
-    ((window.innerHeight * window.devicePixelRatio -
-      SystemContext.gameScale * SystemContext.gameHeight) /
-      (2 * window.devicePixelRatio) +
-      (SystemContext.gameScale * SystemContext.gameHeight) / 2) /
+    ((window.innerHeight * window.devicePixelRatio - scaledHeight) / (2 * window.devicePixelRatio) +
+      scaledHeight / 2) /
     window.devicePixelRatio
 
   // if (cusBGDiv) {
@@ -175,6 +188,7 @@ function setGameSize() {
   UI.centerX = window.innerWidth > app.width ? app.width / 2 : window.innerWidth / 2
   UI.centerY = app.height / 2
   document.documentElement.style.setProperty('--sgs-center-x', `${UI.centerX}px`)
+  return true
 }
 
 function getSeatUiPos() {
@@ -335,8 +349,8 @@ function setSeatPosition(seatUI, displayLocation, x, y, dpr) {
   if (!seatUI) return
 
   seatUI.DisplayLocation = displayLocation
-  seatUI.posX = (x >> 0) / dpr
-  seatUI.posY = (y >> 0) / dpr
+  seatUI.posX = Math.trunc(x) / dpr
+  seatUI.posY = Math.trunc(y) / dpr
 }
 
 /** 重置座位覆盖层状态并清理区域镜像。 */
@@ -366,6 +380,9 @@ export function getSeatUIs() {
     })
     // 主视角保留为布局原点，其余只计算当前显示的座位。
     .filter((seat, index) => index === 0 || players.get(seat.seatID)?.isShown)
+
+  // 场景和 DOM 可晚于座位协议就绪，布局前同步尺寸，不依赖窗口 resize。
+  if (!syncGameSize()) return
 
   // 先手和主视角都确定后提交布局；首轮前保持隐藏，局中显隐变化即时生效。
   getSeatUiPos()
@@ -574,7 +591,11 @@ function buttonClick() {
     }
   }
 
-  bindProtocolRecorderControls()
+  const protocolRecordSwitch = document.getElementById('protocolRecordSwitch')
+  const protocolRecorderControls = document.getElementById('protocolRecorderControls')
+  protocolRecordSwitch?.closest('.switch-container')?.style.setProperty('display', 'none')
+  protocolRecorderControls?.style.setProperty('display', 'none')
+  if (import.meta.env.DEV) bindProtocolRecorderControls()
 }
 
 function expandJiePanel(options = {}) {

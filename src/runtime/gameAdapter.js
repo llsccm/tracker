@@ -463,7 +463,7 @@ export class GameRuntime {
   ShowWindow(name) {
     const GameEventDispatcher = this.ged
     if (!GameEventDispatcher) return
-    GameEventDispatcher._?.(name)
+    GameEventDispatcher.A?.(name)
   }
 
   // 不能使用 WindowManager.GetWindow 此方法会找不到窗口会创建一个 造成污染
