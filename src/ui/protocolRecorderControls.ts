@@ -25,6 +25,8 @@ export function bindProtocolRecorderControls(): void {
 
   if (!recordingSwitch || !exportButton || !clearButton || !statusElement) return
 
+  recordingSwitch.closest<HTMLElement>('.switch-container')?.style.removeProperty('display')
+  document.getElementById('protocolRecorderControls')?.style.removeProperty('display')
   recordingSwitch.onchange = handleRecordingSwitchChange
   exportButton.onclick = handleExportClick
   clearButton.onclick = handleClearClick

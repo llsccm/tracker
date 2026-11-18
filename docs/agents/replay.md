@@ -61,6 +61,10 @@ PowerShell、编码和文件路径写法按 [`commands.md`](commands.md) 与 Ser
 
 ## JSONL 输入约定
 
+协议录制仅在 DEV 脚本中提供：使用开发服务器，或设置 `NODE_ENV=development` 后执行
+`pnpm build`。普通 `pnpm build`、`pnpm build:prod` 和 `pnpm build:cdn` 默认裁剪录制实现并隐藏
+录制控件。DEV 录制仍在消息白名单过滤前捕获原始协议，保留回放所需字段与顺序。
+
 每行是一个对象，至少包含：
 
 ```json

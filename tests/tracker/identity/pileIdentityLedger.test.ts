@@ -903,6 +903,7 @@ describe('PileIdentityLedger', () => {
   })
 
   it('DEV 事务异常回滚恢复状态，非 DEV 环境直接提交且异常不递增 revision', () => {
+    vi.spyOn(trackerLogger, 'enabled', 'get').mockReturnValue(true)
     const warnSpy = vi.spyOn(trackerLogger, 'warn').mockImplementation(() => {})
     let shouldThrow = false
     const devLedger = new PileIdentityLedger(() => {

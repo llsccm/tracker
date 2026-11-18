@@ -29,7 +29,9 @@ export class PlayerSnapshot {
 
   rebuild(): Card[] {
     const room = this.room
-    recordTraversal('resolveConstraints:playerSnapshot', room.trackedCards.length)
+    if (import.meta.env.DEV) {
+      recordTraversal('resolveConstraints:playerSnapshot', room.trackedCards.length)
+    }
     this.reset()
     room.trackedCards.forEach((card, index) => {
       this.registerCard(card, room.getDetachedCardOrder(card) ?? index)
@@ -71,7 +73,9 @@ export class PlayerSnapshot {
       }
     })
 
-    recordTraversal('resolveConstraints:playerSnapshotIncremental', affectedCards.size)
+    if (import.meta.env.DEV) {
+      recordTraversal('resolveConstraints:playerSnapshotIncremental', affectedCards.size)
+    }
     this.lastConsumedSeq = room.dirtyCardSeq
     return this.cards
   }

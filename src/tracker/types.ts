@@ -270,6 +270,8 @@ export interface TrackerView {
 }
 
 export interface TrackerLogger {
+  /** 缺省表示启用；允许注入 getter，以便运行时切换且在调用前跳过参数构造。 */
+  readonly enabled?: boolean
   debug(...args: unknown[]): void
   info(...args: unknown[]): void
   warn(...args: unknown[]): void

@@ -1298,7 +1298,7 @@
         </div>
       </div>
       <div class="switch-container-row">
-        <div class="switch-container" data-tooltip="在浏览器控制台输出记牌器诊断日志">
+        <div class="switch-container" data-tooltip="在浏览器控制台输出记牌器异常日志">
           <span class="explanation">调试日志</span>
           <label class="switch">
             <input id="debugLogSwitch" type="checkbox" />
@@ -1306,7 +1306,7 @@
             <span class="status"></span>
           </label>
         </div>
-        <div class="switch-container" data-tooltip="仅在本次开启；只保存牌局协议">
+        <div class="switch-container" style="display: none" data-tooltip="仅在本次开启；只保存牌局协议">
           <label class="explanation" for="protocolRecordSwitch">协议录制</label>
           <label class="switch">
             <input id="protocolRecordSwitch" type="checkbox" />
@@ -1316,7 +1316,7 @@
         </div>
       </div>
       <!-- 录制 -->
-      <div class="protocol-recorder-controls" id="protocolRecorderControls">
+      <div class="protocol-recorder-controls" id="protocolRecorderControls" style="display: none">
         <div class="protocol-recorder-actions">
           <button class="protocol-recorder-button" id="protocolRecordExport" type="button" disabled>
             导出协议

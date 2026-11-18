@@ -43,7 +43,9 @@ export abstract class RoomBase {
    */
   setMySeatID(seatID: SeatID): void {
     this.mySeatID = seatID
-    trackerLogger.info('Room 设置主视角座位', { mySeatID: this.mySeatID })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('Room 设置主视角座位', { mySeatID: this.mySeatID })
+    }
   }
 
   /** 主视角在牌局中的顺位 */
@@ -59,7 +61,9 @@ export abstract class RoomBase {
   setFirstHand(firstID: SeatID): void {
     this.firstID = firstID
     this.updateFixedViewIds()
-    trackerLogger.info('Room 设置先手', { firstID })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('Room 设置先手', { firstID })
+    }
   }
 
   /**

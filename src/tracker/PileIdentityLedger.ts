@@ -858,7 +858,9 @@ export class PileIdentityLedger {
 
   warn(reason: string, detail: Record<string, unknown>): void {
     if (HISTORY_DEPENDENT_WARNINGS.has(reason) && !this.isFullTracking()) return
-    trackerLogger.warn('牌堆身份账本异常', { reason, ...detail })
+    if (trackerLogger.enabled !== false) {
+      trackerLogger.warn('牌堆身份账本异常', { reason, ...detail })
+    }
   }
 }
 

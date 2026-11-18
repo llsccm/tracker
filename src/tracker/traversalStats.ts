@@ -1,6 +1,7 @@
 /**
  * Room.cards 遍历计数插桩。
- * 默认关闭：没有同步 collect 时，每个采样点只付空判断成本。
+ * 调用点仅在 DEV 环境执行，生产构建连同参数求值和统计实现一起裁剪。
+ * DEV 环境没有同步 collect 时，每个采样点只付空判断成本。
  */
 export interface TraversalSiteStats {
   calls: number

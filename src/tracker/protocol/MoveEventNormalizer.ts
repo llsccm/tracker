@@ -175,10 +175,12 @@ function logMoveEventValidationWarnings(
   event: Readonly<RawMoveCardEvent>
 ): void {
   warnings.forEach((warning) => {
-    trackerLogger.warn('移动协议字段异常，已按降级路径继续', {
-      warning,
-      raw: event
-    })
+    if (trackerLogger.enabled !== false) {
+      trackerLogger.warn('移动协议字段异常，已按降级路径继续', {
+        warning,
+        raw: event
+      })
+    }
   })
 }
 
@@ -343,7 +345,9 @@ export function normalizeMoveEvent(
 ): NormalizedMoveEvent {
   const cardIDs = patched.CardIDs
   // 协议异常只记录并降级处理，避免记牌器阻断宿主消息链。
-  logMoveEventValidationWarnings(validateMoveEvent(patched, cardIDs), raw)
+  if (trackerLogger.enabled) {
+    logMoveEventValidationWarnings(validateMoveEvent(patched, cardIDs), raw)
+  }
   // 暗牌移动的 CardIDs 可以为空，移动张数以协议 CardCount 为准。
   const cardCount = patched.CardCount
   const type = inferEventType(patched, cardIDs)

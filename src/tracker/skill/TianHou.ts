@@ -74,7 +74,9 @@ function isOtherView(room: Room, actorSeat: SeatID): boolean {
 
 function getActorHandCards(room: Room, actorSeat: SeatID): Card[] {
   const playerCards = room.refreshPlayerSnapshot()
-  recordTraversal('tianHou:playerHand', playerCards.length)
+  if (import.meta.env.DEV) {
+    recordTraversal('tianHou:playerHand', playerCards.length)
+  }
   // 已带位置歧义的牌不能再次纳入本轮手牌基数，否则会叠加两套互不相关的候选。
   return playerCards.filter(
     (card) =>
@@ -203,13 +205,15 @@ function decorateHandStage(event: MoveEventDraft, room: Room, actorSeat: SeatID)
       : 0
   batch.phase = 'hand-staged'
 
-  trackerLogger.info('天候记录其他视角换牌候选', {
-    actorSeat,
-    count,
-    knownHandCardIDs: knownHandCards.map((card) => card.id),
-    minKnownOut: batch.minKnownOut,
-    maxKnownOut: batch.maxKnownOut
-  })
+  if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    trackerLogger.info('天候记录其他视角换牌候选', {
+      actorSeat,
+      count,
+      knownHandCardIDs: knownHandCards.map((card) => card.id),
+      minKnownOut: batch.minKnownOut,
+      maxKnownOut: batch.maxKnownOut
+    })
+  }
 
   return patchEvent(event, {
     options: {

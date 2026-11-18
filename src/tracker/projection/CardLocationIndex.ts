@@ -87,7 +87,9 @@ export class CardLocationIndex {
    */
   rebuild(room: Room, options: { record?: boolean } = {}): void {
     const { record = true } = options
-    if (record) recordTraversal('locationIndex:rebuild', room.trackedCards.length)
+    if (import.meta.env.DEV && record) {
+      recordTraversal('locationIndex:rebuild', room.trackedCards.length)
+    }
     this.knownHandBySeat.clear()
     this.candidateHandBySeat.clear()
     this.equipBySeat.clear()
@@ -190,7 +192,9 @@ export class CardLocationIndex {
 
     if (affectedZones.size > 0) this.refreshPublicZones(room, affectedZones)
 
-    recordTraversal('locationIndex:applyDirty', affectedCards.size)
+    if (import.meta.env.DEV) {
+      recordTraversal('locationIndex:applyDirty', affectedCards.size)
+    }
     this.lastConsumedSeq = room.dirtyCardSeq
     return true
   }

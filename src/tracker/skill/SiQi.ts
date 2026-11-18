@@ -47,11 +47,13 @@ export default function decorateSiQi(event: MoveEventDraft, room: Room): MoveEve
     }
   })
 
-  trackerLogger.debug('思泣来源牌推断', {
-    cardCount,
-    selectedCardIDs: selectedCards.map((card) => card.id),
-    fallbackCount: Math.max(0, cardCount - selectedCards.length)
-  })
+  if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    trackerLogger.debug('思泣来源牌推断', {
+      cardCount,
+      selectedCardIDs: selectedCards.map((card) => card.id),
+      fallbackCount: Math.max(0, cardCount - selectedCards.length)
+    })
+  }
 
   return decorated
 }
