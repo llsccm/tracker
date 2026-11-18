@@ -593,9 +593,12 @@ function buttonClick() {
 
   const protocolRecordSwitch = document.getElementById('protocolRecordSwitch')
   const protocolRecorderControls = document.getElementById('protocolRecorderControls')
-  protocolRecordSwitch?.closest('.switch-container')?.style.setProperty('display', 'none')
-  protocolRecorderControls?.style.setProperty('display', 'none')
-  if (import.meta.env.DEV) bindProtocolRecorderControls()
+  if (import.meta.env.DEV) {
+    bindProtocolRecorderControls()
+  } else {
+    protocolRecordSwitch?.closest('.switch-container')?.style.setProperty('display', 'none')
+    protocolRecorderControls?.style.setProperty('display', 'none')
+  }
 }
 
 function expandJiePanel(options = {}) {
