@@ -248,7 +248,7 @@ export class GameState {
   private applyRecordMode(): void {
     const matchName = this.recordMatchName
     if (!matchName) return
-    this.isDouDiZhu = matchName === '斗地主'
+    this.isDouDiZhu = matchName.includes('斗地主')
     this.isRoguelike1v1 = matchName === '单骑无双'
     this.needShowName =
       this.isDouDiZhu ||
