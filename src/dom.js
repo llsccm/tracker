@@ -112,7 +112,7 @@ export async function initFrame(force = false) {
     //injectCSS()
     createSeatOverlay(globalConfig)
     // addDynamicBG()
-    await addFrame()
+    await addFrame(stopCurrentResize)
     // 卸载或重建后，不继续处理旧界面的异步初始化。
     if (stopWindowResize !== stopCurrentResize) return
     setGameSize()
@@ -146,7 +146,7 @@ function setGameSize() {
 
 setTrackerSeatUIReader(() => updateSeatOverlay(tracker.getTrackerRoom()))
 
-export async function addFrame() {
+export async function addFrame(stopCurrentResize = stopWindowResize) {
   if (!document.getElementById('tracker-shell')) {
     const shell = createMainShell(version)
     iframe = shell.iframe
@@ -156,11 +156,15 @@ export async function addFrame() {
       localStorage.setItem('DXCVersion', version)
     }
 
+    let html
     try {
-      iframe.innerHTML = await loadInterfaceHtml()
+      html = await loadInterfaceHtml()
     } catch (error) {
       console.error('Failed to load iframe content:', error)
     }
+
+    if (stopWindowResize !== stopCurrentResize) return
+    if (html !== undefined) iframe.innerHTML = html
 
     initInjectedInterface({
       container: iframe,
