@@ -240,10 +240,13 @@ describe('GsCRoleOptTargetNtf', () => {
     )
   })
 
-  it('诫厉发动者视角可同步完整牌堆顶与目标部分手牌', () => {
+  it.each([
+    { label: '发动者', mySeatID: 3 },
+    { label: '队友', mySeatID: 2 }
+  ])('诫厉$label视角可同步完整牌堆顶与目标部分手牌', ({ mySeatID }) => {
     const room = new Room({ gameState: Game })
     registerDefaultMoveEventHandlers(room)
-    room.setMySeatID(3)
+    room.setMySeatID(mySeatID)
 
     handleRoleOptTargetNtf({
       Param: 1,
@@ -258,7 +261,7 @@ describe('GsCRoleOptTargetNtf', () => {
     })
 
     expect(room.readSkillState(3483)).toEqual({
-      context: { actorSeat: 3, targetSeat: 4, pileCount: 4 }
+      context: { actorSeat: 3, targetSeat: 4, pileCount: 4, hasFullInformation: true }
     })
     expect(revealTrackerCards).toHaveBeenCalledTimes(2)
     expect(revealTrackerCards).toHaveBeenNthCalledWith(
@@ -301,7 +304,7 @@ describe('GsCRoleOptTargetNtf', () => {
 
     expect(revealTrackerCards).not.toHaveBeenCalled()
     expect(room.readSkillState(3483)).toEqual({
-      context: { actorSeat, targetSeat, pileCount: 4 }
+      context: { actorSeat, targetSeat, pileCount: 4, hasFullInformation: false }
     })
     room.destroy()
   })
@@ -326,7 +329,7 @@ describe('GsCRoleOptTargetNtf', () => {
 
     expect(revealTrackerCards).not.toHaveBeenCalled()
     expect(room.readSkillState(3483)).toEqual({
-      context: { actorSeat: 3, targetSeat: 4, pileCount: 4 }
+      context: { actorSeat: 3, targetSeat: 4, pileCount: 4, hasFullInformation: false }
     })
     room.destroy()
   })
@@ -337,7 +340,9 @@ describe('GsCRoleOptTargetNtf', () => {
   ])('诫厉拒绝与声明张数不匹配的完整 Params: %j', ({ Params }) => {
     const room = new Room({ gameState: Game })
     registerDefaultMoveEventHandlers(room)
-    room.setSkillState(3483, { context: { actorSeat: 3, targetSeat: 4, pileCount: 4 } })
+    room.setSkillState(3483, {
+      context: { actorSeat: 3, targetSeat: 4, pileCount: 4, hasFullInformation: false }
+    })
 
     handleRoleOptTargetNtf({
       Param: 1,

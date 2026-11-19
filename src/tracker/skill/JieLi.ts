@@ -7,13 +7,15 @@ import { getMovePosition } from '@/tracker/helper/moveEndpoint'
  * - 开发模式允许目标视角保留协议中的完整牌堆身份，便于调试。
  * - 生产模式的目标视角只利用 Type=53 确定“自己被换走的手牌落在哪个
  *   牌堆槽位”；其它牌堆槽位保持匿名，不把协议泄露的 CardID 物化到牌堆。
- * - 其它明确视角按协议中的 CardID 执行默认移动，同阵营队友可同步完整交换结果。
+ * - 其它视角收到完整观看信息时按协议精确移动；只有观看张数时，在完整交换链
+ *   结算后为目标手牌明牌保留“原位置 / 牌堆顶前 pileCount 张”的弱候选。
  *
  * 目标视角的生产路径会短暂保存“协议牌 ID -> 匿名物理槽”映射，它只用于计算
  * 目标手牌的回堆位置，不进入 Card/cardIndex/PileIdentityLedger，结算后立即清理。
  */
 import type { Card } from '@/tracker/model/Card'
 import { POSITION_TOP } from '../candidate/cardPositions'
+import { createPublicCandidate } from '../candidate/publicCandidate'
 import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
 import type { RoomSkillPlugin } from '../room/moveEvents'
@@ -28,6 +30,7 @@ export type JieLiContextData = {
   actorSeat: number
   targetSeat: number
   pileCount: number
+  hasFullInformation: boolean
 }
 
 export type JieLiSelectionData = {
@@ -61,12 +64,25 @@ type JieLiBatch = {
   returnedToPile: boolean
 }
 
+type JieLiObserverPhase = 'pile-staged' | 'hand-staged' | 'pile-returned'
+
+/** 信息不完整的其它视角只保存张数与目标手牌引用，不移动交换区实体。 */
+type JieLiObserverBatch = {
+  actorSeat: number
+  targetSeat: number
+  pileCount: number
+  exchangeCount: number
+  targetHandCards: Card[]
+  phase: JieLiObserverPhase
+}
+
 type JieLiState = {
   context?: JieLiContextData
   batch?: JieLiBatch
+  observerBatch?: JieLiObserverBatch
 }
 
-type JieLiViewMode = 'default' | 'target-full' | 'target-limited' | 'skip'
+type JieLiViewMode = 'default' | 'target-full' | 'target-limited' | 'observer-limited' | 'skip'
 
 const jieLiState = defineSkillState<JieLiState>(JIE_LI_SPELL_ID)
 
@@ -80,12 +96,14 @@ export function clearJieLiState(room: Room): void {
 
 /**
  * 由 GsCRoleOptTargetNtf 记录发动者/目标座位。
- * 这里不保存任何牌 ID，只为后续移动选择正确的视角策略。
+ * 同时记录通知是否包含完整观看信息，供其它视角选择精确移动或弱候选推断。
+ * 这里不保存任何牌 ID。
  */
 export function recordJieLiContext(room: Room, data: JieLiContextData): void {
   const state = jieLiState.ensure(room, () => ({}))
   state.context = data
   delete state.batch
+  delete state.observerBatch
 }
 
 /**
@@ -150,7 +168,14 @@ export function parseJieLiNotice(msg: {
   if (!Number.isInteger(pileCount) || pileCount <= 0) return null
 
   if (Params.length === 1) {
-    return { actorSeat, targetSeat, pileCount, pileCardIDs: null, handCardIDs: null }
+    return {
+      actorSeat,
+      targetSeat,
+      pileCount,
+      hasFullInformation: false,
+      pileCardIDs: null,
+      handCardIDs: null
+    }
   }
 
   if (
@@ -165,6 +190,7 @@ export function parseJieLiNotice(msg: {
     actorSeat,
     targetSeat,
     pileCount,
+    hasFullInformation: true,
     pileCardIDs: Params.slice(2, 2 + pileCount),
     handCardIDs: Params.slice(2 + pileCount)
   }
@@ -218,8 +244,8 @@ function resolveViewMode(room: Room, eventActorSeat?: number): JieLiViewMode {
     room.mySeatID !== context.actorSeat &&
     room.mySeatID !== context.targetSeat
   ) {
-    // 同阵营队友也可能收到完整身份，按协议执行普通移动。
-    return 'default'
+    // 同阵营队友可收到完整观看信息；只有张数的视角不能据交换 ID 固化身份。
+    return context.hasFullInformation ? 'default' : 'observer-limited'
   }
 
   return 'skip'
@@ -227,6 +253,133 @@ function resolveViewMode(room: Room, eventActorSeat?: number): JieLiViewMode {
 
 function noOp(event: MoveEventDraft): MoveEventDraft {
   return patchEvent(event, { type: 'noop' })
+}
+
+/** 候选提交后用零张移动触发收敛与索引同步，不改变物理区域或手牌张数。 */
+function resolveOnlyMove(event: MoveEventDraft): MoveEventDraft {
+  return patchEvent(event, {
+    cardIDs: [],
+    cardCount: 0,
+    options: {
+      cardCount: 0,
+      handMoveCount: 0,
+      pileIdentityCardIDs: [],
+      sourceCards: []
+    }
+  })
+}
+
+function failObserverInference(event: MoveEventDraft, room: Room): MoveEventDraft {
+  clearJieLiState(room)
+  return noOp(event)
+}
+
+function collectObserverTargetHandCards(room: Room, targetSeat: number): Card[] {
+  const knownHandCards = room.locationIndex.knownHandBySeat.get(targetSeat) ?? []
+  const candidateHandCards = room.locationIndex.candidateHandBySeat.get(targetSeat) ?? []
+
+  return Array.from(new Set([...knownHandCards, ...candidateHandCards])).filter(
+    (card) => card.id > 0 && card.isKnown === true
+  )
+}
+
+/** 后续明确协议可能已经收敛旧快照，结算时仅扩展仍含目标手牌分支的身份。 */
+function hasTargetHandBranch(card: Card, targetSeat: number): boolean {
+  const locationCandidates = card.locationCandidates
+  if (locationCandidates.length > 0) {
+    return locationCandidates.some(
+      (candidate) =>
+        candidate.type === 'player' &&
+        candidate.seatID === targetSeat &&
+        candidate.subZone === 'hand'
+    )
+  }
+
+  return card.location === 'player' && card.subZone === 'hand' && card.seats.has(targetSeat)
+}
+
+function stageObserverPile(event: MoveEventDraft, room: Room): MoveEventDraft {
+  const move = event.protocol
+  const context = jieLiState.read(room)?.context
+  const count = getCount(event)
+  const actorSeat = move.ToID
+
+  if (!context || context.actorSeat !== actorSeat || context.pileCount !== count || !(count > 0)) {
+    return failObserverInference(event, room)
+  }
+
+  jieLiState.ensure(room, () => ({})).observerBatch = {
+    actorSeat,
+    targetSeat: context.targetSeat,
+    pileCount: count,
+    exchangeCount: 0,
+    targetHandCards: [],
+    phase: 'pile-staged'
+  }
+  return noOp(event)
+}
+
+function stageObserverTargetHand(event: MoveEventDraft, room: Room): MoveEventDraft {
+  const move = event.protocol
+  const batch = jieLiState.read(room)?.observerBatch
+  const count = getCount(event)
+  if (
+    !batch ||
+    batch.phase !== 'pile-staged' ||
+    move.ToID !== batch.actorSeat ||
+    move.FromID !== batch.targetSeat ||
+    !(count > 0) ||
+    count > batch.pileCount
+  ) {
+    return failObserverInference(event, room)
+  }
+
+  batch.exchangeCount = count
+  batch.targetHandCards = collectObserverTargetHandCards(room, batch.targetSeat)
+  batch.phase = 'hand-staged'
+  return noOp(event)
+}
+
+function returnObserverCardsToPile(event: MoveEventDraft, room: Room): MoveEventDraft {
+  const move = event.protocol
+  const batch = jieLiState.read(room)?.observerBatch
+  if (
+    !batch ||
+    batch.phase !== 'hand-staged' ||
+    move.FromID !== batch.actorSeat ||
+    move.ToID !== 255 ||
+    getCount(event) !== batch.pileCount
+  ) {
+    return failObserverInference(event, room)
+  }
+
+  batch.phase = 'pile-returned'
+  return noOp(event)
+}
+
+function returnObserverCardsToTargetHand(event: MoveEventDraft, room: Room): MoveEventDraft {
+  const move = event.protocol
+  const batch = jieLiState.read(room)?.observerBatch
+  if (
+    !batch ||
+    batch.phase !== 'pile-returned' ||
+    move.FromID !== batch.actorSeat ||
+    move.ToID !== batch.targetSeat ||
+    getCount(event) !== batch.exchangeCount
+  ) {
+    return failObserverInference(event, room)
+  }
+
+  // 张数不能证明某张已知手牌被换出，只追加牌顶范围并保留原有位置分支。
+  const pileCandidate = createPublicCandidate('pile', POSITION_TOP, batch.pileCount)
+  let changed = false
+  batch.targetHandCards.forEach((card) => {
+    if (!hasTargetHandBranch(card, batch.targetSeat)) return
+    changed = card.addPublicCandidate(pileCandidate) || changed
+  })
+
+  clearJieLiState(room)
+  return changed ? resolveOnlyMove(event) : noOp(event)
 }
 
 function failTargetInference(
@@ -467,8 +620,10 @@ export default function decorateJieLi(event: MoveEventDraft, room: Room): MoveEv
   const viewMode = resolveViewMode(room, eventActorSeat)
 
   if (moveType === MOVE_TYPE.SHOW) {
-    // 生产目标不消费泄露完整牌堆的同区展示。
-    return viewMode === 'target-limited' || viewMode === 'skip' ? noOp(event) : event
+    // 只有观看张数的视角不消费完整牌堆同区展示。
+    return viewMode === 'target-limited' || viewMode === 'observer-limited' || viewMode === 'skip'
+      ? noOp(event)
+      : event
   }
 
   if (moveType !== MOVE_TYPE.EXCHANGE) return event
@@ -482,6 +637,14 @@ export default function decorateJieLi(event: MoveEventDraft, room: Room): MoveEv
     if (isFinalReturn) clearJieLiState(room)
     return noOp(event)
   }
+  if (viewMode === 'observer-limited') {
+    if (fromZone === 1 && toZone === 10) return stageObserverPile(event, room)
+    if (fromZone === 5 && toZone === 10) return stageObserverTargetHand(event, room)
+    if (fromZone === 10 && toZone === 1) return returnObserverCardsToPile(event, room)
+    if (fromZone === 10 && toZone === 5) return returnObserverCardsToTargetHand(event, room)
+    return noOp(event)
+  }
+
   const informationMode: JieLiInformationMode = viewMode === 'target-full' ? 'full' : 'limited'
   if (fromZone === 1 && toZone === 10) {
     return stagePileToExchange(event, room, informationMode)
@@ -523,7 +686,8 @@ export const jieLiPlugin: RoomSkillPlugin = {
         recordJieLiContext(room, {
           actorSeat: notice.actorSeat,
           targetSeat: notice.targetSeat,
-          pileCount: notice.pileCount
+          pileCount: notice.pileCount,
+          hasFullInformation: notice.hasFullInformation
         })
       }
       return

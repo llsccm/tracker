@@ -220,11 +220,11 @@
 - 观看/同区展示的牌堆序列是 **top-first**（例：`[81, 99, 124, 4]`，`81` 为顶）；后续交换 `CardIDs` 可能整段逆序或混合重排（例进交换区 `[4, 124, 99, 81]`），不能跨消息沿用“第一项=牌顶”。
 - 配对 `PubGsCMoveCard` 为牌堆同区展示（`FromZone=ToZone=1`、`MoveType=21`、两端 `255`）；`CardIDs` 即牌堆顶 top-first 序列。
 - 观看通知有完整 `[pileCount, handCount, ...IDs]` 与纯计数 `Params=[pileCount]` 两种形态。`handleRoleOptTargetNtf` 只在消息实际携带 ID 时同步牌面；同阵营队友也已观测到带完整 CardID 的观看与交换链。
-- `handleRoleOptTargetNtf` 在两种 `Params` 形态下都记录 `actorSeat / targetSeat / pileCount` 上下文。生产目标运行槽位推断；`import.meta.env.DEV` 只放开目标视角的完整身份调试。
+- 两种 `Params` 形态都记录 `actorSeat / targetSeat / pileCount` 上下文，并由 `parseJieLiNotice` 的通知布局保存 `hasFullInformation`：完整布局为 `true`，纯计数为 `false`。生产目标运行槽位推断；`import.meta.env.DEV` 只放开目标视角的完整身份调试。
 - 后续交换序列为 `1->10`（牌堆）+ `5->10`（部分手牌）后拆回 `10->1` / `10->5`。
 - 目标手牌进入交换区后，`CGsRoleSpellOptRep Type=53` 的 `Datas` 为 `[actorSeat,targetSeat,handCount,...handToPile,pileCount,...pileToHand]`。仅当 `Room.mySeatID === targetSeat` 时记录；发动者和其它座位不消费该消息。
 - 生产目标视角把牌堆进交换区的泄露 ID 改为匿名物理槽；Type 53 只建立短期 `protocol ID -> slot` 映射，将目标原手牌放回对应槽位。例如 `48` 位于原 `110` 槽位，其它三个槽仍匿名，不展示 `[39,156,118]`。
-- 发动者与具有匹配上下文的其它明确本地视角按协议执行默认移动，不建立 JieLi 推断批次；同阵营队友的完整 CardID 可直接定位回堆与回手结果。缺少上下文或视角无法识别时仍跳过技能事件。`3483` 显式绕过 `HandExchange`。
+- 发动者以及收到完整观看信息的其它明确本地视角按协议执行默认移动，同阵营队友的完整 CardID 可直接定位回堆与回手结果。只有观看张数的其它视角不消费观看/交换 ID，在完整 `1->10`、`5->10`、`10->1`、`10->5` 链结算后，为仍可能位于目标手牌的明牌追加牌顶前 `pileCount` 张弱候选，保留原有位置分支，不建立精确 N 选 K 约束；已被后续明确协议移出目标手牌的身份不再扩展。缺少上下文或视角无法识别时跳过技能事件。`3483` 显式绕过 `HandExchange`。
 - `PILE_SAME_ZONE_SHOW_SPELL_IDS` **不需要**仅为 `3483` 扩展；该白名单只修正权变/观虚的 RANDOM 端点。诫厉应先判断消息本身是否已明确为同区展示。
 - 不走整手交换账本：`HandExchange` 识别门槛会排除诫厉的非整手、回牌堆路径。
 
