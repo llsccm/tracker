@@ -325,7 +325,7 @@ export class TrackerController {
 
     try {
       Object.assign(patched, normalizeTrackerMovePosition(patched))
-      if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+      if (this.controllerLogger.enabled !== false) {
         this.controllerLogger.info(getProtocolMoveSpecialLabel(patched) ?? '移动协议输入', {
           raw: this.summarizeProtocolMove(raw),
           patched: this.summarizeProtocolMove(patched)
@@ -368,7 +368,7 @@ export class TrackerController {
           }
         })
       }
-      if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+      if (this.controllerLogger.enabled !== false) {
         this.controllerLogger.debug(
           '移动事件归一化',
           summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS)
@@ -378,7 +378,7 @@ export class TrackerController {
       // 技能处理器
       const event = readyRoom.decorateMoveEvent(normalizedEvent)
 
-      if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+      if (this.controllerLogger.enabled !== false) {
         this.controllerLogger.debug('移动事件装饰完成', {
           before: summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS),
           after: summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
@@ -386,7 +386,7 @@ export class TrackerController {
       }
 
       if (normalizedEvent.from !== event.from) {
-        if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+        if (this.controllerLogger.enabled !== false) {
           this.controllerLogger.info('移动事件来源修正', {
             cardIDs: event.cardIDs,
             from: normalizedEvent.from,
@@ -396,7 +396,7 @@ export class TrackerController {
       }
 
       if (event.type === 'revealPublicCandidate') {
-        if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+        if (this.controllerLogger.enabled !== false) {
           this.controllerLogger.info(
             '移动事件分支: revealPublicCandidate',
             summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
@@ -404,7 +404,7 @@ export class TrackerController {
         }
         if (!this.revealPublicCandidateCards(readyRoom, event)) return
       } else if (event.type === 'noop') {
-        if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+        if (this.controllerLogger.enabled !== false) {
           this.controllerLogger.info(
             '移动事件跳过',
             summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
@@ -412,7 +412,7 @@ export class TrackerController {
         }
         return
       } else if (event.type === 'showCards') {
-        if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+        if (this.controllerLogger.enabled !== false) {
           this.controllerLogger.info(
             '移动事件分支: showCards',
             summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
@@ -420,7 +420,7 @@ export class TrackerController {
         }
         if (!this.showTrackerCards(readyRoom, event)) return
       } else if (event.type === 'shuffleDiscardIntoPile') {
-        if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+        if (this.controllerLogger.enabled !== false) {
           this.controllerLogger.info(
             '移动事件分支: shuffleDiscardIntoPile',
             summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
@@ -431,7 +431,7 @@ export class TrackerController {
           cardCount: event.cardCount
         })
       } else {
-        if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+        if (this.controllerLogger.enabled !== false) {
           this.controllerLogger.info(
             '移动事件分支: moveCards',
             summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
@@ -489,7 +489,7 @@ export class TrackerController {
 
     const cards = room.revealPublicCandidates(ids, locationCandidate)
 
-    if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+    if (this.controllerLogger.enabled !== false) {
       this.controllerLogger.info('公共区范围揭示完成', {
         ids,
         zone: reveal.zone,
@@ -547,7 +547,7 @@ export class TrackerController {
       this.controllerLogger
     )
 
-    if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+    if (this.controllerLogger.enabled !== false) {
       this.controllerLogger.info('展示明牌进入公共区', {
         ids,
         zoneName,
@@ -617,7 +617,7 @@ export class TrackerController {
     if (ids.length === 0) return
 
     try {
-      if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+      if (this.controllerLogger.enabled !== false) {
         this.controllerLogger.info('明牌同步输入', { target, cardIDs: ids })
       }
 

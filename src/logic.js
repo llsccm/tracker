@@ -225,6 +225,11 @@ export function logic(msg) {
         // if (Game.isGameStart && msg?.userID === user.userID) handleLeaveTable()
         break
 
+      // 旁观退出
+      case 'GsClientLookonTerminationNtf':
+        handleLeaveTable()
+        break
+
       case 'decodeRougeBaseInfoRep':
         //该class 在 MsgGamePlayCardNtf（牌堆初始化） 之前
         UI.friendGeneral = ProtoObj?.friendGeneral?.length ?? UI.friendGeneral

@@ -166,8 +166,10 @@ function readMetadata(input) {
 
 ### 诊断日志
 
-- tracker 的 `info` / `debug` 调用放在 `import.meta.env.DEV` 与日志对象 `enabled` 的联合分支内，
-  让发布构建裁剪日志文案、摘要函数及参数求值。
+- 移动链路的 tracker `info` / `debug` 日志在发布版保留，调用前检查日志对象 `enabled`，
+  确保调试开关关闭时不构造协议与移动上下文的日志摘要或快照。
+- 其余 tracker `info` / `debug` 调用放在 `import.meta.env.DEV` 与日志对象 `enabled` 的联合分支内，
+  让发布构建裁剪对应日志文案、摘要函数及参数求值。
 - `warn` / `error` 保留用于异常定位，在调用前检查 `enabled`；纯日志快照、数组映射和校验也必须
   延迟到开关开启后执行，不能只在 logger 内判断。
 - 注入的 `TrackerLogger.enabled` 可省略（默认启用），也可使用 getter；装配时保持 getter 动态读取。

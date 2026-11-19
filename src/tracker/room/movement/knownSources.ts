@@ -87,7 +87,7 @@ export class RoomMovementKnownSources {
     })
 
     if (confirmedFromUnknownIDs.length > 0) {
-      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      if (trackerLogger.enabled !== false) {
         trackerLogger.info('已知牌解析后补确认明牌', {
           knownIDs,
           confirmedFromUnknownIDs,
@@ -102,7 +102,7 @@ export class RoomMovementKnownSources {
       }
     }
 
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.debug('已知牌解析完成', {
         knownIDs,
         resolvedCardIDs: context.knownCards.map((card) => card.id),
@@ -179,7 +179,7 @@ export class RoomMovementKnownSources {
     // 真实身份的匿名槽。TOP/BOTTOM 仍限于协议端点；RANDOM 没有端点事实，只枚举匿名代表。
     const availableTargets = endpointCards.filter((card) => card.isAnonymous)
     const anonymousTargetCountBefore = availableTargets.length
-    const collectDetails = import.meta.env.DEV && trackerLogger.enabled
+    const collectDetails = trackerLogger.enabled !== false
     const resolveAttempts: Record<string, unknown>[] | undefined = collectDetails ? [] : undefined
 
     context.knownCards = knownIDs
@@ -223,7 +223,7 @@ export class RoomMovementKnownSources {
 
     // 端点无匿名槽可物化时，与 outside/exile 一致：按协议正 ID 补建外部实体，避免 knownCards 静默短少。
     if (missingIDs.length > 0) {
-      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      if (trackerLogger.enabled !== false) {
         trackerLogger.info('known 路径实体缺口，将 createExternal', {
           knownIDs,
           missingIDs,
@@ -319,7 +319,7 @@ export class RoomMovementKnownSources {
       })
     }
 
-    const collectDetails = import.meta.env.DEV && trackerLogger.enabled
+    const collectDetails = trackerLogger.enabled !== false
     const resolveAttempts: Record<string, unknown>[] | undefined = collectDetails ? [] : undefined
     context.knownCards = knownIDs
       .map((cardID) => {
