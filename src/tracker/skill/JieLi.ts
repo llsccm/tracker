@@ -7,16 +7,13 @@ import { getMovePosition } from '@/tracker/helper/moveEndpoint'
  * - 开发模式允许目标视角保留协议中的完整牌堆身份，便于调试。
  * - 生产模式的目标视角只利用 Type=53 确定“自己被换走的手牌落在哪个
  *   牌堆槽位”；其它牌堆槽位保持匿名，不把协议泄露的 CardID 物化到牌堆。
- * - 其它视角不消费协议牌 ID，也不移动任何物理实体；只有观察到完整交换链后，
- *   才把目标手牌明牌扩展为“原候选位置 / 牌堆顶前 pileCount 张”的弱候选。
- *   该分支不反推原牌堆顶身份，也不利用交换张数建立精确 N 选 K 约束。
+ * - 其它明确视角按协议中的 CardID 执行默认移动，同阵营队友可同步完整交换结果。
  *
  * 目标视角的生产路径会短暂保存“协议牌 ID -> 匿名物理槽”映射，它只用于计算
  * 目标手牌的回堆位置，不进入 Card/cardIndex/PileIdentityLedger，结算后立即清理。
  */
 import type { Card } from '@/tracker/model/Card'
 import { POSITION_TOP } from '../candidate/cardPositions'
-import { createPublicCandidate } from '../candidate/publicCandidate'
 import { MOVE_TYPE } from '../protocol/MoveEventNormalizer'
 import type { Room } from '../Room'
 import type { RoomSkillPlugin } from '../room/moveEvents'
@@ -64,31 +61,12 @@ type JieLiBatch = {
   returnedToPile: boolean
 }
 
-type JieLiObserverPhase = 'pile-staged' | 'hand-staged' | 'pile-returned'
-
-/**
- * 第三方视角只保存协议公开的张数事实和目标手牌候选实体引用。
- * 四条物理移动全部保持 noop，因此批次中的 Card 引用不会进入 exchange 区。
- */
-type JieLiObserverBatch = {
-  actorSeat: number
-  targetSeat: number
-  /** GsCRoleOptTargetNtf.Params[0]，也是最终公共候选的牌顶范围。 */
-  pileCount: number
-  /** 目标手牌进入交换区消息的 CardCount；只用于校验结算链完整。 */
-  exchangeCount: number
-  /** 交换开始时确定或可能位于目标手牌的已知牌；匿名牌不参与身份候选。 */
-  targetHandCards: Card[]
-  phase: JieLiObserverPhase
-}
-
 type JieLiState = {
   context?: JieLiContextData
   batch?: JieLiBatch
-  observerBatch?: JieLiObserverBatch
 }
 
-type JieLiViewMode = 'default' | 'target-full' | 'target-limited' | 'observer-limited' | 'skip'
+type JieLiViewMode = 'default' | 'target-full' | 'target-limited' | 'skip'
 
 const jieLiState = defineSkillState<JieLiState>(JIE_LI_SPELL_ID)
 
@@ -108,7 +86,6 @@ export function recordJieLiContext(room: Room, data: JieLiContextData): void {
   const state = jieLiState.ensure(room, () => ({}))
   state.context = data
   delete state.batch
-  delete state.observerBatch
 }
 
 /**
@@ -241,8 +218,8 @@ function resolveViewMode(room: Room, eventActorSeat?: number): JieLiViewMode {
     room.mySeatID !== context.actorSeat &&
     room.mySeatID !== context.targetSeat
   ) {
-    // 只有既非发动者、也非目标角色的明确本地座位才运行弱候选推断。
-    return 'observer-limited'
+    // 同阵营队友也可能收到完整身份，按协议执行普通移动。
+    return 'default'
   }
 
   return 'skip'
@@ -250,161 +227,6 @@ function resolveViewMode(room: Room, eventActorSeat?: number): JieLiViewMode {
 
 function noOp(event: MoveEventDraft): MoveEventDraft {
   return patchEvent(event, { type: 'noop' })
-}
-
-/**
- * 候选已经在装饰阶段写入 Card，但普通 noop 会让 Controller 提前返回，
- * 无法执行 resolveConstraints 和视图刷新。将最终消息改成零张移动，可以只触发
- * 收敛、索引同步与渲染，而不改变手牌数、交换区或牌堆身份账本。
- */
-function resolveOnlyMove(event: MoveEventDraft): MoveEventDraft {
-  return patchEvent(event, {
-    cardIDs: [],
-    cardCount: 0,
-    options: {
-      cardCount: 0,
-      handMoveCount: 0,
-      pileIdentityCardIDs: [],
-      sourceCards: []
-    }
-  })
-}
-
-function failObserverInference(event: MoveEventDraft, room: Room): MoveEventDraft {
-  clearJieLiState(room)
-  return noOp(event)
-}
-
-/**
- * 使用稳定位置索引收集两类已知身份：确定在目标手里的明牌，以及仍包含目标手牌
- * 分支的候选明牌。匿名手牌只承担物理数量，不需要增加身份位置候选。
- */
-function collectObserverTargetHandCards(room: Room, targetSeat: number): Card[] {
-  const knownHandCards = room.locationIndex.knownHandBySeat.get(targetSeat) ?? []
-  const candidateHandCards = room.locationIndex.candidateHandBySeat.get(targetSeat) ?? []
-
-  return Array.from(new Set([...knownHandCards, ...candidateHandCards])).filter(
-    (card) => card.id > 0 && card.isKnown === true
-  )
-}
-
-/**
- * 结算前重新确认目标手牌分支仍然有效，避免交换链期间其它明确协议已经收敛了该牌，
- * 却仍根据旧快照给它追加牌顶范围。
- */
-function hasTargetHandBranch(card: Card, targetSeat: number): boolean {
-  const locationCandidates = card.locationCandidates
-  if (locationCandidates.length > 0) {
-    return locationCandidates.some(
-      (candidate) =>
-        candidate.type === 'player' &&
-        candidate.seatID === targetSeat &&
-        candidate.subZone === 'hand'
-    )
-  }
-
-  return card.location === 'player' && card.subZone === 'hand' && card.seats.has(targetSeat)
-}
-
-/**
- * 第三方视角观察到牌堆侧进入 exchange，只校验发动者与观看张数并启动状态机。
- * 即使消息意外携带正 CardIDs，也不会读取、物化或移动这些身份。
- */
-function stageObserverPile(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const move = event.protocol
-  const context = jieLiState.read(room)?.context
-  const count = getCount(event)
-  const actorSeat = move.ToID
-
-  if (!context || context.actorSeat !== actorSeat || context.pileCount !== count || !(count > 0)) {
-    return failObserverInference(event, room)
-  }
-
-  jieLiState.ensure(room, () => ({})).observerBatch = {
-    actorSeat,
-    targetSeat: context.targetSeat,
-    pileCount: count,
-    exchangeCount: 0,
-    targetHandCards: [],
-    phase: 'pile-staged'
-  }
-  return noOp(event)
-}
-
-/**
- * 手牌侧进入 exchange 证明本次确实发生了交换。此时物理状态尚未被本分支修改，
- * 因而可以安全快照目标手牌的确定明牌与候选明牌。
- */
-function stageObserverTargetHand(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const move = event.protocol
-  const batch = jieLiState.read(room)?.observerBatch
-  const count = getCount(event)
-  if (
-    !batch ||
-    batch.phase !== 'pile-staged' ||
-    move.ToID !== batch.actorSeat ||
-    move.FromID !== batch.targetSeat ||
-    !(count > 0) ||
-    count > batch.pileCount
-  ) {
-    return failObserverInference(event, room)
-  }
-
-  batch.exchangeCount = count
-  batch.targetHandCards = collectObserverTargetHandCards(room, batch.targetSeat)
-  batch.phase = 'hand-staged'
-  return noOp(event)
-}
-
-/**
- * 回牌堆消息只推进状态机：第三方不知道哪些手牌被换出，因此不能在此移动实体、
- * 绑定匿名槽或消费消息中的 CardIDs。
- */
-function returnObserverCardsToPile(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const move = event.protocol
-  const batch = jieLiState.read(room)?.observerBatch
-  if (
-    !batch ||
-    batch.phase !== 'hand-staged' ||
-    move.FromID !== batch.actorSeat ||
-    move.ToID !== 255 ||
-    getCount(event) !== batch.pileCount
-  ) {
-    return failObserverInference(event, room)
-  }
-
-  batch.phase = 'pile-returned'
-  return noOp(event)
-}
-
-/**
- * 完整交换链的提交点。对快照中仍含目标手牌分支的每张明牌，仅追加
- * “牌堆顶前 pileCount 张”这一可能位置，并保留它原有的全部位置分支。
- * exchangeCount 只能证明总交换张数，无法证明其中有几张属于这些候选明牌，
- * 所以这里刻意不创建 ConstraintGroup 的精确数量约束。
- */
-function returnObserverCardsToTargetHand(event: MoveEventDraft, room: Room): MoveEventDraft {
-  const move = event.protocol
-  const batch = jieLiState.read(room)?.observerBatch
-  if (
-    !batch ||
-    batch.phase !== 'pile-returned' ||
-    move.FromID !== batch.actorSeat ||
-    move.ToID !== batch.targetSeat ||
-    getCount(event) !== batch.exchangeCount
-  ) {
-    return failObserverInference(event, room)
-  }
-
-  const pileCandidate = createPublicCandidate('pile', POSITION_TOP, batch.pileCount)
-  let changed = false
-  batch.targetHandCards.forEach((card) => {
-    if (!hasTargetHandBranch(card, batch.targetSeat)) return
-    changed = card.addPublicCandidate(pileCandidate) || changed
-  })
-
-  clearJieLiState(room)
-  return changed ? resolveOnlyMove(event) : noOp(event)
 }
 
 function failTargetInference(
@@ -645,10 +467,8 @@ export default function decorateJieLi(event: MoveEventDraft, room: Room): MoveEv
   const viewMode = resolveViewMode(room, eventActorSeat)
 
   if (moveType === MOVE_TYPE.SHOW) {
-    // 生产目标与第三方视角都不消费泄露完整牌堆的同区展示。
-    return viewMode === 'target-limited' || viewMode === 'observer-limited' || viewMode === 'skip'
-      ? noOp(event)
-      : event
+    // 生产目标不消费泄露完整牌堆的同区展示。
+    return viewMode === 'target-limited' || viewMode === 'skip' ? noOp(event) : event
   }
 
   if (moveType !== MOVE_TYPE.EXCHANGE) return event
@@ -662,15 +482,6 @@ export default function decorateJieLi(event: MoveEventDraft, room: Room): MoveEv
     if (isFinalReturn) clearJieLiState(room)
     return noOp(event)
   }
-  if (viewMode === 'observer-limited') {
-    // 第三方只消费四条消息的座位、方向与张数，所有协议牌 ID 均保持不可见。
-    if (fromZone === 1 && toZone === 10) return stageObserverPile(event, room)
-    if (fromZone === 5 && toZone === 10) return stageObserverTargetHand(event, room)
-    if (fromZone === 10 && toZone === 1) return returnObserverCardsToPile(event, room)
-    if (fromZone === 10 && toZone === 5) return returnObserverCardsToTargetHand(event, room)
-    return noOp(event)
-  }
-
   const informationMode: JieLiInformationMode = viewMode === 'target-full' ? 'full' : 'limited'
   if (fromZone === 1 && toZone === 10) {
     return stagePileToExchange(event, room, informationMode)

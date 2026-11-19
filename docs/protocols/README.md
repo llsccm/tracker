@@ -35,7 +35,7 @@
 | ------------------------------------------------------------ | ------------: | ------------------------------------------------ | ---------------------------------------------------------------------------------- |
 | [`GsCRoleOptTargetNtf-361.md`](GsCRoleOptTargetNtf-361.md)   |         `361` | 下书：展示目标部分手牌后选择取明牌或暗牌        | `targetSeatID` 直接给出目标；暗牌分支在通用转移后确认展示牌留在原座位              |
 | [`GsCRoleOptTargetNtf-987.md`](GsCRoleOptTargetNtf-987.md)   | `987` / `988` | 观虚：观看并交换牌堆顶 + 目标手牌                | 按 `FromID/ToID` 维护 exchange 逻辑桶；桶内复用通用 `ToPosition` 位置语义           |
-| [`GsCRoleOptTargetNtf-3483.md`](GsCRoleOptTargetNtf-3483.md) |        `3483` | 诫厉：观看牌堆顶 + 目标部分手牌，后续交换拆回    | 生产目标只定位自己回堆槽；第三方仅保留目标手牌/牌顶范围弱候选 |
+| [`GsCRoleOptTargetNtf-3483.md`](GsCRoleOptTargetNtf-3483.md) |        `3483` | 诫厉：观看牌堆顶 + 目标部分手牌，后续交换拆回    | 生产目标只定位自己回堆槽；其它明确视角按协议执行默认移动 |
 | [`GsCRoleOptTargetNtf-3876.md`](GsCRoleOptTargetNtf-3876.md) |        `3876` | 界强识：目标全部手牌明牌                         | `Params` 全是手牌 ID，`fullHand`                                                   |
 | [`GsCRoleOptTargetNtf-3903.md`](GsCRoleOptTargetNtf-3903.md) |        `3903` | 天候：发动者私有观看，其他视角匿名换牌及单牌展示 | `Type=28/29` 分别解析；匿名交换建立手牌/牌顶候选；单牌收敛牌顶前三范围             |
 | [`GsCRoleOptTargetNtf-7011.md`](GsCRoleOptTargetNtf-7011.md) |        `7011` | 权变：观看牌堆顶并随后获得一张已展示牌           | `Params` 给出牌堆顶；同区展示 `MoveType=21`，随后 `1 -> 5` 获得明牌 `MoveType=18` |

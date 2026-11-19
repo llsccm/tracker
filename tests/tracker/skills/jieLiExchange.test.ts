@@ -2,11 +2,10 @@ import { getPileIdentitySnapshot } from '@/tracker/PileIdentityLedger'
 import { bindTestHand, getHandCardIDs } from '../helpers/room'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { POSITION_RANDOM, POSITION_TOP } from '@/tracker/candidate/cardPositions'
-import { createLocationCandidateKey } from '@/tracker/candidate/locationCandidate'
 import { MOVE_TYPE } from '@/tracker/protocol/MoveEventNormalizer'
 import type { Room } from '@/tracker/Room'
 import { JIE_LI_SPELL_ID, recordJieLiContext, recordJieLiSelection } from '@/tracker/skill/JieLi'
-import { locationKeys, playerHand, publicLocation } from '../helpers/locationCandidates'
+import { playerHand } from '../helpers/locationCandidates'
 import { createReadyControllerHarness, protocolMove } from '../helpers/trackerController'
 import { hasSkillState } from '@/tracker/room/RoomBase'
 
@@ -227,11 +226,14 @@ describe('族钟繇诫厉视角权限与交换', () => {
     expect(hasSkillState(room, JIE_LI_SPELL_ID)).toBe(false)
   })
 
-  it('发动者视角使用已公开结果走默认移动，不建立推断批次', () => {
+  it.each([
+    { label: '发动者', viewSeat: actorSeat },
+    { label: '其它', viewSeat: observerSeat }
+  ])('$label视角使用已公开结果走默认移动，不建立推断批次', ({ viewSeat }) => {
     const { controller, room, pile, exchange } = setupView(
       [91, 158, 4, 124, 99, 81, 501, 502, 503],
       [91, 158],
-      actorSeat
+      viewSeat
     )
     recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })
     const moves = createJieLiMoves(
@@ -260,35 +262,66 @@ describe('族钟繇诫厉视角权限与交换', () => {
     expect(hasSkillState(room, JIE_LI_SPELL_ID)).toBe(false)
   })
 
-  it.each([false, true])('其它视角在 DEV=%s 时只建立目标手牌/牌顶范围弱候选', (isDev) => {
+  it.each([false, true])('同阵营队友在 DEV=%s 时按完整协议将 30 回堆、14 回手', (isDev) => {
     vi.stubEnv('DEV', isDev)
-    const { controller, room, pile, exchange } = setupView(
-      [91, 158, 4, 124, 99, 81, 601, 602, 603],
-      [91, 158],
-      observerSeat
-    )
-    const trackedHandCards = [91, 158].map((cardID) => room.cardIndex.get(cardID)!)
-    recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })
-    const pileBefore = pile.cards.slice()
-    const handBefore = getHandCardIDs(room, targetSeat)
-    const moves = createJieLiMoves([4, 124, 99, 81], [91, 158], [124, 4])
-
-    moves.forEach((move) => controller.syncTrackerMove(move))
-
-    expect(pile.cards).toEqual(pileBefore)
-    expect(getHandCardIDs(room, targetSeat)).toEqual(handBefore)
-    expect(exchange.cards).toHaveLength(0)
-    trackedHandCards.forEach((card) => {
-      expect(locationKeys(card)).toEqual(
-        [playerHand(targetSeat), publicLocation('pile', 'top', 4)]
-          .map((candidate) => createLocationCandidateKey(candidate))
-          .sort()
-      )
+    const { controller, room } = createReadyControllerHarness({
+      players: [
+        { SeatID: 1, ClientID: 100 },
+        { SeatID: 2, ClientID: 200 }
+      ],
+      currentUserID: 100,
+      cardIDs: [30, 14, 75, 160, 102, 601, 602, 603]
     })
+    bindTestHand(room, 2, { hiddenCount: 1, observeCount: 1 })
+    room.resolveConstraints()
+    const pileCount = room.getZone('pile').cards.length
+    const entityCount = room.cards.length
+    recordJieLiContext(room, { actorSeat: 2, targetSeat: 2, pileCount: 4 })
+
+    const moves = [
+      {
+        CardIDs: [14, 75, 160, 102],
+        FromID: 255,
+        FromZone: 1,
+        FromPosition: POSITION_TOP,
+        MoveType: MOVE_TYPE.SHOW,
+        ToID: 255,
+        ToZone: 1
+      },
+      { CardIDs: [102, 160, 75, 14], FromID: 255, FromZone: 1, ToID: 2, ToZone: 10 },
+      { CardIDs: [30], FromID: 2, FromZone: 5, ToID: 2, ToZone: 10 },
+      { CardIDs: [102, 160, 75, 30], FromID: 2, FromZone: 10, ToID: 255, ToZone: 1 },
+      { CardIDs: [14], FromID: 2, FromZone: 10, ToID: 2, ToZone: 5 }
+    ].map((move) =>
+      protocolMove({
+        FromPosition: POSITION_RANDOM,
+        MoveType: MOVE_TYPE.EXCHANGE,
+        SpellID: JIE_LI_SPELL_ID,
+        ...move
+      })
+    )
+
+    controller.syncTrackerMove(moves[0])
+    controller.revealTrackerCards({ type: 'player', seatID: 2, inferFullHand: true }, [30])
+    moves.slice(1).forEach((move) => controller.syncTrackerMove(move))
+
+    expect(getHandCardIDs(room, 2)).toEqual([14])
+    expect(room.getPlayer(2)!.observedHandCount).toBe(1)
+    expect(getPileTopCards(room, 4).map((card) => card.id)).toEqual([30, 75, 160, 102])
+    expect(room.getZone('pile').cards).toHaveLength(pileCount)
+    expect(room.getZone('exchange').cards).toHaveLength(0)
+    expect(room.cards).toHaveLength(entityCount)
+    expect(getPileIdentitySnapshot(room.pileIdentityLedger).knownPileIdentityIDs).toEqual([
+      30, 75, 102, 160
+    ])
+    for (const cardID of [30, 14, 75, 160, 102]) {
+      expect(room.cardIndex.get(cardID)!.publicCandidates).toEqual([])
+      expect(room.cardIndex.get(cardID)!.locationCandidates).toEqual([])
+    }
     expect(hasSkillState(room, JIE_LI_SPELL_ID)).toBe(false)
   })
 
-  it('其它视角保留目标手牌候选的原有位置分支', () => {
+  it('其它视角按显式回堆结果收敛目标手牌的原有位置候选', () => {
     const { controller, room } = setupView([91, 4, 124, 99, 81, 701, 702, 703], [91], observerSeat)
     const candidateCard = room.cardIndex.get(91)!
     candidateCard.setLocationCandidates(
@@ -298,25 +331,25 @@ describe('族钟繇诫厉视角权限与交换', () => {
     room.resolveConstraints()
 
     recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })
-    createJieLiMoves([4, 124, 99, 81], [91], [124]).forEach((move) =>
+    createJieLiMoves([4, 124, 99, 81], [91], [124], [91, 4, 99, 81]).forEach((move) =>
       controller.syncTrackerMove(move)
     )
 
-    expect(locationKeys(candidateCard)).toEqual(
-      [playerHand(targetSeat), playerHand(observerSeat), publicLocation('pile', 'top', 4)]
-        .map((candidate) => createLocationCandidateKey(candidate))
-        .sort()
-    )
+    expect(candidateCard.location).toBe('pile')
+    expect(candidateCard.publicCandidates).toEqual([])
+    expect(candidateCard.locationCandidates).toEqual([])
+    expect(getHandCardIDs(room, targetSeat)).toEqual([124])
   })
 
-  it('其它视角仅收到观看消息且没有发生交换时不扩展候选', () => {
+  it('其它视角仅收到观看消息时同步牌顶身份，不扩展目标手牌候选', () => {
     const { controller, room } = setupView([91, 4, 124, 99, 81, 801, 802, 803], [91], observerSeat)
     const handCard = room.cardIndex.get(91)!
     recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })
 
-    const [showMove] = createJieLiMoves([4, 124, 99, 81], [91], [124])
+    const [showMove] = createJieLiMoves([4, 124, 99, 81], [91], [124], [], [81, 99, 124, 4])
     controller.syncTrackerMove(showMove)
 
+    expect(getPileTopCards(room, 4).map((card) => card.id)).toEqual([81, 99, 124, 4])
     expect(handCard.locationCandidates).toEqual([])
     expect(handCard.location).toBe('player')
     expect(handCard.subZone).toBe('hand')
@@ -343,46 +376,6 @@ describe('族钟繇诫厉视角权限与交换', () => {
     expect(room.getPlayer(targetSeat)!.observedHandCount).toBe(handCountBefore)
     expect(exchange.cards).toHaveLength(0)
     expect(handCard.locationCandidates).toEqual([])
-    expect(hasSkillState(room, JIE_LI_SPELL_ID)).toBe(false)
-  })
-
-  it('其它视角的半链状态由下一次上下文覆盖且不会污染新批次', () => {
-    const { controller, room } = setupView(
-      [91, 10, 11, 12, 4, 124, 99, 81, 1001, 1002, 1003],
-      [91],
-      observerSeat
-    )
-    const handCard = room.cardIndex.get(91)!
-    recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 4 })
-
-    const firstMoves = createJieLiMoves([4, 124, 99, 81], [91], [124])
-    firstMoves.slice(0, 3).forEach((move) => controller.syncTrackerMove(move))
-
-    expect(room.readSkillState(JIE_LI_SPELL_ID)).toEqual(
-      expect.objectContaining({
-        context: { actorSeat, targetSeat, pileCount: 4 },
-        observerBatch: expect.objectContaining({
-          actorSeat,
-          targetSeat,
-          pileCount: 4,
-          exchangeCount: 1,
-          phase: 'hand-staged'
-        })
-      })
-    )
-
-    recordJieLiContext(room, { actorSeat, targetSeat, pileCount: 3 })
-    expect(room.readSkillState(JIE_LI_SPELL_ID)).toEqual({
-      context: { actorSeat, targetSeat, pileCount: 3 }
-    })
-
-    createJieLiMoves([12, 11, 10], [91], [10]).forEach((move) => controller.syncTrackerMove(move))
-
-    expect(locationKeys(handCard)).toEqual(
-      [playerHand(targetSeat), publicLocation('pile', 'top', 3)]
-        .map((candidate) => createLocationCandidateKey(candidate))
-        .sort()
-    )
     expect(hasSkillState(room, JIE_LI_SPELL_ID)).toBe(false)
   })
 })
