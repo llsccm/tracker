@@ -29,15 +29,21 @@ graph TD
 - **触发条件**：脚本在 `document-start` 注入后执行；若已有 `SGSMODULE` 则先 EXIT，再劫持 `console.log`，最后调用 `main('INIT')`。
 - **执行时序与入口**：
   1. [`src/index.js`](../../src/index.js) 的 `main('INIT')` 调用 [`src/dom.js`](../../src/dom.js) 的 `Init()`。
-  2. `Init()` 调用 [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js) 的 `bindInitialResize()` 绑定窗口缩放。
+  2. `Init()` 调用 [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js) 的 `configureViewport()` 配置布局视口，并通过 `startGameSizeUpdates()` 订阅统一窗口尺寸通知。
   3. `waitForLegacyFrameReady()` 轮询宿主依赖（`JSZipUtils`、`CtrUtil`、`#bgDiv`；微端 `PUERTS_JS_RESOURCES` 则直接通过），界面注入不等待 Laya 场景。
   4. 就绪后回调 [`src/dom.js`](../../src/dom.js) 的 `initFrame()`：
-     - 清理残留注入 DOM；
-     - 监听窗口与 `visualViewport` 的 `resize`，由 `observeDomResize()` 管理视口监听；两个来源共用 `scheduleSetGameSize()` 的 500ms 防抖，触发后重新读取当前 `laya.scene` 的尺寸与缩放；
-     - `addSeatUI` + `addFrame()`，经 [`src/utils/htmlResource.js`](../../src/utils/htmlResource.js) 的 `loadInterfaceHtml()` 加载远端 `html/iframe.html`；
-     - DOM 注入完成后立即调用 `setGameSize()`，通过 `syncGameSize()` 将当前可用场景的 `width` / `height` / `globalScaleX` 同步到 `UI` 与外层 `#seatUI`；场景尚未就绪时留待座位更新或首轮消息再次同步；
+     - 强制重建时先停止旧尺寸更新，再清理残留注入 DOM；
+     - 通过 [`src/ui/windowResize.js`](../../src/ui/windowResize.js) 的 `subscribeWindowResize()` 订阅 `window.resize`；中心位置立即更新，`scheduleSetGameSize()` 保留 500ms 防抖，触发后重新读取当前 `laya.scene` 的尺寸与缩放；
+     - `createSeatOverlay` + `addFrame()`，经 [`src/utils/htmlResource.js`](../../src/utils/htmlResource.js) 的 `loadInterfaceHtml()` 加载远端 `html/iframe.html`；
+     - DOM 注入完成后立即调用 `setGameSize()`：主窗口尺寸由 `dom.js` 调整，座位覆盖层统一交给 [`src/ui/seatOverlay.js`](../../src/ui/seatOverlay.js) 的 `updateSeatOverlay()`，将当前可用场景的 `width` / `height` / `globalScaleX` 同步到 `UI` 与外层 `#seatUI`；场景尚未就绪时留待座位更新或首轮消息再次同步；
      - [`src/config/ConfigManager.js`](../../src/config/ConfigManager.js) 的 `loadAndParseConfigs()` 解析远端 `Config_w.sgs`。
   5. `main('INIT')` 的 Promise 成功后，将 `main` 推入 `window.SGSMODULE`。
+
+整个脚本只注册一个原生 `window.resize` 监听器，尺寸同步和拖拽窗口位置纠正通过订阅共享。
+最后一个订阅取消时移除原生监听；主动触发使用 `requestWindowResize()`，仍通知宿主游戏。
+当前布局只读取 `window` 与 Laya 场景尺寸，不再监听 `visualViewport.resize`。
+牌镜像省略号检查由 `setGameSize()` 在布局更新后的动画帧调用 `refreshZoneMirrorOverflow()`，
+`draw.js` 不自行注册全局事件。拖拽窗口的元素 `ResizeObserver` 继续处理内容或元素自身尺寸变化。
 
 ### 2. 消息分发阶段
 
@@ -54,8 +60,8 @@ graph TD
 - **执行时序与入口**：
   1. [`src/index.js`](../../src/index.js) 若发现已有 `SGSMODULE`：将 `console.log` 临时改为 `console.info`，广播 `'EXIT'`，删除 `SGSMODULE`。
   2. [`src/dom.js`](../../src/dom.js) 的 `Exit()` → [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js) 的 `cleanupLifecycle()`。
-  3. `stopGameSizeUpdates()` 停止视口监听、取消待执行的尺寸防抖任务，再移除窗口 `resize` 监听，清空 `SGSMODULE`；强制重建界面时也先停止旧视口监听与防抖任务。
-  4. `removeInjectedDom()` 清理座位 UI、iframe、裴秀地图窗口与可见性快捷键绑定；山河图城市由 Laya 场景持有，不再注入 DOM 容器。
+  3. `stopGameSizeUpdates()` 取消主界面的窗口订阅、待执行的尺寸防抖任务与省略号检查动画帧；强制重建界面时也先停止这些任务。卸载或重建后，旧界面的异步初始化不再继续提交尺寸更新。
+  4. `removeInjectedDom()` 调用 `destroySeatOverlay()` 清理座位覆盖层，再清理 iframe、裴秀地图窗口、评荐窗口与可见性快捷键绑定。拖拽窗口销毁时取消窗口订阅并断开元素观察器，最后一个订阅取消后统一解绑原生 `resize`；山河图城市由 Laya 场景持有，不再注入 DOM 容器。
 
 ---
 
@@ -68,6 +74,7 @@ sequenceDiagram
     participant Engine as 宿主协议
     participant Logic as logic.js
     participant Handler as handler modules
+    participant Overlay as ui/seatOverlay
     participant Bridge as tracker bridge/controller
     participant Room as tracker/Room.ts
     participant View as tracker/view
@@ -84,7 +91,7 @@ sequenceDiagram
     Note over Engine,View: 单局开始（录像当前主路径）
     Engine ->> Logic: decodeGsClientUserSeatFlagNtf
     Logic ->> Handler: handleRecordStartGame(msg)
-    Handler ->> Handler: resetSeatUIs()
+    Handler ->> Overlay: resetSeatOverlay()
     Handler ->> Bridge: tracker.initTrackerRoom()
     Bridge ->> Room: new Room()
     Bridge ->> Logic: Game.beginPlayback()
@@ -110,7 +117,7 @@ sequenceDiagram
     Engine ->> Logic: GsCFirstPhaseRole / MsgGameShowFigure
     Logic ->> Bridge: tracker.setTrackerFirstHand(SeatID)
     Bridge ->> Room: setFirstHand() / updateFixedViewIds()
-    Bridge ->> Handler: getSeatUIs()
+    Bridge ->> Overlay: updateSeatOverlay(room)（经浏览器回调）
 
     Note over Engine,View: 对局运行
     Engine ->> Logic: PubGsCMoveCard / Turn / Phase / Reveal
@@ -140,15 +147,14 @@ sequenceDiagram
 
 | 协议                            | 处理                                                                             | 说明                                                                                                                   |
 | ------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `decodeGsClientUserSeatFlagNtf` | [`handleRecordStartGame()`](../../src/handler/StartGame.js)                      | **当前主动路径**（录像/座位旗标）；`resetSeatUIs` → `initTrackerRoom` → `registerTrackerPlayers` → 重置/裁剪覆盖层容器 |
+| `decodeGsClientUserSeatFlagNtf` | [`handleRecordStartGame()`](../../src/handler/StartGame.js)                      | **当前主动路径**（录像/座位旗标）；`resetSeatOverlay` → `initTrackerRoom` → `registerTrackerPlayers` |
 | `GsCModifyUserseatNtf`          | `handleStartGame()` 已导出但在 [`logic.js`](../../src/logic.js) 中**注释未调用** | 历史开局入口；`IsGameStart` 时同样走 `initTrackerRoom` + 玩家注册。恢复时需重新接通分发                                |
 
 执行顺序（以 `handleRecordStartGame` / `handleStartGame` 为准）：
 
-1. `resetSeatUIs()`：清理上一局的座位数据与镜像，重置布局提交状态。
+1. `resetSeatOverlay()`：清理上一局的座位数据与镜像，隐藏容器并清空旧布局。骨架跨局复用，不按人数提前显示容器。
 2. `tracker.initTrackerRoom()`（[`TrackerController`](../../src/tracker/runtime/trackerController.ts)）：普通开局销毁旧 Room，创建新 Room，在注册玩家前调用其 GameState 的 `beginPlayback()`，重置本轮运行状态，再注册默认移动事件处理器。若 `SsClientVersionNtf` 已提前创建重连 Room，本次座位通知复用该 Room，不再次清空先手、轮次与牌堆。
-3. 重置并裁剪 `.sorderContainer`，再注册玩家，避免覆盖重连时立即补齐的座位布局。
-4. `tracker.registerTrackerPlayers(infos, user.userID)`：
+3. `tracker.registerTrackerPlayers(infos, user.userID)`：
    - `Room.registerPlayers()` 兼容 `SeatID`/`seat_id`、`ClientID`/`user_temp_id`；
    - 按 `user.userID` 匹配主视角；匹配不到则 `Game.isRecord = true`；
    - `size` / `seatIDs` 由 Room 写入，再 `syncRoomSeats` 到 Game；
@@ -178,7 +184,7 @@ Room 重建保留已经收到的对局 ID 和模式信息。
 
 ### 3. 先手与固定视角
 
-- `GsCFirstPhaseRole` → `tracker.setTrackerFirstHand(SeatID)`：写入 `firstID` 并执行 `updateFixedViewIds()`；`getSeatUIs()` 在计算座位位置前先调用 `syncGameSize()` 同步当前场景尺寸与外层区域，场景或 DOM 尚未就绪时不提交布局。主视角与先手都确定后计算 `.sorderContainer` 位置，但容器保持隐藏，首轮开始时再显示。
+- `GsCFirstPhaseRole` → `tracker.setTrackerFirstHand(SeatID)`：写入 `firstID` 并执行 `updateFixedViewIds()`；浏览器装配层通过 `setTrackerSeatUIReader` 回调调用 `updateSeatOverlay(room)`，统一组织座位、同步场景尺寸、计算坐标和提交布局，场景或 DOM 尚未就绪时不提交。主视角与先手都确定后计算 `.sorderContainer` 位置，首轮前保持隐藏，局中即时刷新。
 - `MsgGameShowFigure` 且 `Type == 1 && Figure === 1` 时也会 `setTrackerFirstHand`（身份/地主等）。
 - `MsgGamePlayerShowStatusNtf` 读取 `SeatData` 中的 `[座位号, 状态]`，由
   `setTrackerPlayerShowStatuses` 更新 `Player.isShown`（`0` 隐藏、`1` 显示）。主面板手牌框与
@@ -208,6 +214,14 @@ Room 重建保留已经收到的对局 ID 和模式信息。
 - **可见性**：[`src/ui/trackerVisibility.ts`](../../src/ui/trackerVisibility.ts) 控制记牌器显隐快捷键；`mount`/`flushRender` 会 `reapplyHiddenTrackerVisibility`。
 - 玩家手牌渲染依赖 `firstID` 与全部 `fixedViewId` 就绪；未解析完座位顺序时不落手牌 DOM。
 
+座位覆盖层由 `src/ui/seatOverlay.js` 统一管理，对外仅提供 `createSeatOverlay`、
+`updateSeatOverlay`、`resetSeatOverlay`、`setSeatOverlayVisible`、`destroySeatOverlay`。
+坐标计算与 DOM 提交均为模块内部实现；提交后保留 `dxc-seat-overlay-layout` 事件，通知 tracker
+重新同步牌内容，内容渲染仍由 `PlayerHandView` 负责。首轮显隐直接使用当前 `Game.turn`，不维护额外的布局提交标记。
+
+牌堆顶/底边缘镜像独立放在 `src/ui/deckEdgeOverlay.js`，节点创建与缓存清理由座位覆盖层委托，
+容器随覆盖层销毁。`drawDeckEdgeUI` 当前未接通渲染调用，保持隐藏。
+
 ### 6. 对局运行
 
 - `SsClientVersionNtf`：已有 Room 时提前创建有限模式 Room，具体初始化顺序见上文；录制器保留消息类名，不记录版本字段。
@@ -216,8 +230,8 @@ Room 重建保留已经收到的对局 ID 和模式信息。
   时保留同一 Room 的明确洗牌数量锚点；快照先于牌堆初始化时按局暂存。新 Room 默认恢复 `full`。
   没有先行版本通知的旁观残局仍由此消息降级；录制器保留快照字段及嵌套的 `CardId` / `SpellId`。
 - `PubGsCMoveCard`：[`handleMoveCard()`](../../src/handler/PubGsCMoveCard.js) 做预处理、特殊区域（`specialZones`）、局流状态（`gameFlowState`）、技能辅助（`spellEffects` / `skills/*`），再 `tracker.syncTrackerMove()` → `Room.moveCards()` / `shufflePile()`。
-- `MsgGameTurnNtf`：`handleGameTurn` 在首轮先调用 `getSeatUIs()` 同步尺寸并提交布局，再隐藏主视角、显示已完成定位的 `.sorderContainer`。随后调用纯状态
-  `Game.setTurn`，重置轮级战法 Laya 状态，最后 `scheduleTrackerRender`；容器重置与超出人数的容器隐藏在开局注册玩家前完成。
+- `MsgGameTurnNtf`：`handleGameTurn` 先调用纯状态 `Game.setTurn` 并重置轮级战法 Laya 状态，首轮再调用
+  `updateSeatOverlay(room)` 同步尺寸、提交布局并显示有效座位，最后 `scheduleTrackerRender`；主视角与无效容器始终由覆盖层模块隐藏。
 - `GsCGamephaseNtf`：`handleGamePhase` 按 `SeatRoundState` 编排阶段消息，调用纯状态
   `Game.enter`，再处理阶段 DOM、回合结果清理与战法 Laya 状态，最后
   `scheduleTrackerRender`。
@@ -233,7 +247,7 @@ Room 重建保留已经收到的对局 ID 和模式信息。
 
 两个入口最终复用 `cleanupGame()` 完成通用清理：隐藏 `.mizhu`、`Game.end()`（立即清空本局
 统一状态仓库）、销毁裴秀地图窗口、
-`resetSeatUIs()`，并由 `tracker.destroyTrackerRoom()` 依次卸载视图、销毁 Room、清空控制器中的
+`resetSeatOverlay()` 清空并隐藏座位覆盖层，骨架保留到脚本卸载；并由 `tracker.destroyTrackerRoom()` 依次卸载视图、销毁 Room、清空控制器中的
 `trackerRoom`。
 
 ---
@@ -243,8 +257,8 @@ Room 重建保留已经收到的对局 ID 和模式信息。
 ### 1. 轮次 (Turn)
 
 - `MsgGameTurnNtf` → `handleGameTurn` → `Game.setTurn(turn)`
-- `Game.setTurn` 只更新轮次状态；handler 清理首轮座位覆盖并重置轮级战法
-  Laya 状态，最后调用 `scheduleTrackerRender`
+- `Game.setTurn` 只更新轮次状态；handler 重置轮级战法 Laya 状态，首轮调用
+  `updateSeatOverlay`，最后调用 `scheduleTrackerRender`
 
 ### 2. 回合与阶段 (Round & Phase)
 

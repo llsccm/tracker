@@ -1,4 +1,4 @@
-import { resetSeatUIs } from '@/dom'
+import { resetSeatOverlay } from '@/ui/seatOverlay'
 import { laya } from '@/runtime/gameAdapter'
 import { Game, globalConfig } from '@/tracker'
 import { tracker } from '@/tracker/runtime/browser'
@@ -72,6 +72,6 @@ function cleanupGame(room = tracker.getTrackerRoom()) {
   destroyPeiXiuMapWindow()
   destroyPingJianWindow()
   // 重置 UI
-  resetSeatUIs()
+  resetSeatOverlay()
   tracker.destroyTrackerRoom()
 }

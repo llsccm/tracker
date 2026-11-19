@@ -246,8 +246,8 @@ export class TrackerController {
 
   /**
    * 主视角和先手协议到达后补齐固定视角座位顺序。
-   * Seat UI 依赖固定视角；setTrackerFirstHand() 调用 getSeatUIs() 后，
-   * 由 drawSeatUIs() 提交实际 DOM 布局，首轮回合只显示已经布局的容器。
+   * Seat UI 依赖固定视角；getSeatUIs() 回调由浏览器装配层接入
+   * updateSeatOverlay()，统一提交布局并按当前轮次控制显隐。
    * 重连手牌协议明确给出视角时，可覆盖此前的兜底推断。
    */
   setTrackerMySeatID(seatID: SeatID, options: { overwrite?: boolean } = {}): void {
