@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         三国杀小抄 Lite
 // @namespace    https://greasyfork.org/scripts/448004
-// @version      0.21.0
+// @version      0.21.1
 // @author       三国杀小抄
 // @description  三国杀记牌器
 // @license      GPL-3.0-or-later
@@ -1600,7 +1600,6 @@
 	};
 	var UI = {
 		seatWidthPercent: .3,
-		firstUpdateSeatUI: false,
 		scoreFrameTotal: 10,
 		scoreFrameIndex: 0,
 		paddingLeft: 10,
@@ -1858,7 +1857,7 @@
 		applyRecordMode() {
 			const matchName = this.recordMatchName;
 			if (!matchName) return;
-			this.isDouDiZhu = matchName === "斗地主";
+			this.isDouDiZhu = matchName.includes("斗地主");
 			this.isRoguelike1v1 = matchName === "单骑无双";
 			this.needShowName = this.isDouDiZhu || this.isRoguelike1v1 || matchName === "新欢乐排位" || matchName.includes("cmk");
 			this.isShanHeTu = !this.needShowName && (/\[\d+\]$/.test(matchName) || matchName.includes("山河图"));
@@ -1874,7 +1873,6 @@
 			this.applyRecordMode();
 			this.isGameStart = true;
 			this.isPassed = false;
-			trackerLogger.info("GameState 游戏已重置并开始");
 			UI.seatUIs = [];
 			UI.friendGeneral = 0;
 		}
@@ -1886,16 +1884,11 @@
 				this.isGameStart = false;
 				this.isPassed = true;
 				this.resetRoomState();
-				trackerLogger.info("GameState 游戏已结束");
 			}
 		}
 		start() {
-			const seatIDs = this.room?.seatIDs ?? [];
-			const mySeatID = this.room?.mySeatID ?? void 0;
-			trackerLogger.info("GameState 游戏开始", {
-				seatIDs,
-				mySeatID
-			});
+			this.room?.seatIDs;
+			this.room?.mySeatID;
 			if (this.isGameStart) return;
 			this.isGameStart = true;
 			this.isPassed = false;
@@ -2235,44 +2228,6 @@
 			label: getPublicCandidateLabel(zone, normalizedPosition, count)
 		};
 	}
-	function summarizeMoveEvent(event, options = {}) {
-		const eventOptions = event.options;
-		const moveType = event.moveType ?? eventOptions.moveType;
-		const label = eventOptions.sourceEvent?.label;
-		return {
-			type: event.type,
-			triggerSpellID: event.protocol.SpellID,
-			cardIDs: options.normalizeCardIDs ? [...event.cardIDs] : event.cardIDs,
-			...moveType !== void 0 ? { moveType } : {},
-			...label ? { label } : {},
-			from: event.from,
-			to: event.to,
-			...options.includeEventCardCount ? { cardCount: event.cardCount } : {},
-			options: {
-				combinationID: eventOptions.combinationID,
-				cardCount: eventOptions.cardCount,
-				moveType: eventOptions.moveType,
-				...options.includeSourceCards ? { sourceCards: eventOptions.sourceCards?.map((card) => card.id) } : {}
-			}
-		};
-	}
-	function summarizeMoveContext(context, options = {}) {
-		return {
-			from: context.from,
-			to: context.to,
-			triggerSpellID: context.triggerSpellID,
-			cardIDs: context.cardIDs,
-			combinationID: context.combinationID,
-			cardCount: context.cardCount,
-			handMoveCount: context.handMoveCount,
-			sourceHandSeat: context.sourceHandSeat,
-			targetHandSeat: context.targetHandSeat,
-			knownIDs: context.knownIDs,
-			...options.includeKnownCardIDs ? { knownCardIDs: context.knownCards?.map((card) => card.id) } : {},
-			unknownCount: context.unknownCount,
-			...options.includeSourceCardIDs ? { sourceCardIDs: context.sourceCards?.map((card) => card.id) } : {}
-		};
-	}
 	var PROTOCOL_ZONE = Object.freeze({
 		OUTSIDE: 0,
 		PILE: 1,
@@ -2371,7 +2326,7 @@
 	}
 	function logMoveEventValidationWarnings(warnings, event) {
 		warnings.forEach((warning) => {
-			trackerLogger.warn("移动协议字段异常，已按降级路径继续", {
+			if (trackerLogger.enabled !== false) trackerLogger.warn("移动协议字段异常，已按降级路径继续", {
 				warning,
 				raw: event
 			});
@@ -2468,7 +2423,7 @@
 	}
 	function normalizeMoveEvent(patched, raw = patched) {
 		const cardIDs = patched.CardIDs;
-		logMoveEventValidationWarnings(validateMoveEvent(patched, cardIDs), raw);
+		if (trackerLogger.enabled) logMoveEventValidationWarnings(validateMoveEvent(patched, cardIDs), raw);
 		const cardCount = patched.CardCount;
 		const type = inferEventType(patched, cardIDs);
 		return {
@@ -3110,24 +3065,7 @@
 		});
 		return slots;
 	}
-	var activeStats = null;
-	function addTraversal(stats, site, visitedCount) {
-		const entry = stats.sites.get(site);
-		if (entry) {
-			entry.calls += 1;
-			entry.visited += visitedCount;
-			return;
-		}
-		stats.sites.set(site, {
-			calls: 1,
-			visited: visitedCount
-		});
-	}
-	function recordTraversal(site, visitedCount) {
-		if (activeStats) addTraversal(activeStats, site, visitedCount);
-	}
 	function collectHandSlotCardsBySeat(cards, seatIDs) {
-		recordTraversal("handSlotCounts:collectBySeat", cards.length);
 		const cardsBySeat = new Map();
 		for (const seatID of seatIDs) cardsBySeat.set(Number(seatID), {
 			knownCards: [],
@@ -4060,7 +3998,7 @@
 		}
 		warn(reason, detail) {
 			if (HISTORY_DEPENDENT_WARNINGS.has(reason) && !this.isFullTracking()) return;
-			trackerLogger.warn("牌堆身份账本异常", {
+			if (trackerLogger.enabled !== false) trackerLogger.warn("牌堆身份账本异常", {
 				reason,
 				...detail
 			});
@@ -4078,7 +4016,6 @@
 		}
 		rebuild(groups = [], options = {}) {
 			const { record = true } = options;
-			if (record) recordTraversal("ambiguousKnownIndex:rebuild", this.room.trackedCards.length);
 			this.items.clear();
 			this.containerDependentCards.clear();
 			this.room.trackedCards.forEach((card) => {
@@ -4100,12 +4037,10 @@
 			if (this.containerDependentCards.size > 0) {
 				for (const card of Array.from(this.containerDependentCards)) if (!affectedCards.has(card)) this.applyCardChange(card, groups);
 			}
-			recordTraversal("ambiguousKnownIndex:applyDirty", affectedCards.size);
 			this.lastConsumedSeq = this.room.dirtyCardSeq;
 			return true;
 		}
 		refreshGroupDescriptions(groups = []) {
-			recordTraversal("ambiguousKnownIndex:refreshGroups", this.items.size);
 			for (const item of this.items.values()) {
 				const relatedGroups = this.getRelatedGroups(item.card, groups);
 				item.groups = relatedGroups;
@@ -4256,7 +4191,6 @@
 			const newRoomCardSet = new Set(newRoomCards);
 			const dirtyCards = Array.from(this.dirtyCards).filter((card) => !newRoomCardSet.has(card));
 			if (newRoomCards.length === 0 && dirtyCards.length === 0) return;
-			recordTraversal("cardCounter:update", newRoomCards.length + dirtyCards.length);
 			newRoomCards.forEach((card) => this.addCard(card));
 			dirtyCards.forEach((card) => {
 				if (this.registeredCards.has(card)) this.syncCardStatus(card);
@@ -4287,7 +4221,7 @@
 		collectNewRoomCards() {
 			if (this.roomCardCursor > this.room.cards.length) this.roomCardCursor = 0;
 			const appendedCards = this.room.cards.slice(this.roomCardCursor);
-			if (appendedCards.length > 0) recordTraversal("cardCounter:collectNewRoomCards", appendedCards.length);
+			if (appendedCards.length > 0) {}
 			const newCards = appendedCards.filter((card) => !this.registeredCards.has(card));
 			this.roomCardCursor = this.room.cards.length;
 			return newCards;
@@ -4356,7 +4290,6 @@
 		}
 		rebuild(room, options = {}) {
 			const { record = true } = options;
-			if (record) recordTraversal("locationIndex:rebuild", room.trackedCards.length);
 			this.knownHandBySeat.clear();
 			this.candidateHandBySeat.clear();
 			this.equipBySeat.clear();
@@ -4420,7 +4353,6 @@
 				for (const card of Array.from(this.containerDependentCards)) if (!affectedCards.has(card)) this.applyCardChange(room, card, options.affectedSeats);
 			}
 			if (affectedZones.size > 0) this.refreshPublicZones(room, affectedZones);
-			recordTraversal("locationIndex:applyDirty", affectedCards.size);
 			this.lastConsumedSeq = room.dirtyCardSeq;
 			return true;
 		}
@@ -4581,7 +4513,6 @@
 		}
 		rebuild() {
 			const room = this.room;
-			recordTraversal("resolveConstraints:playerSnapshot", room.trackedCards.length);
 			this.reset();
 			room.trackedCards.forEach((card, index) => {
 				this.registerCard(card, room.getDetachedCardOrder(card) ?? index);
@@ -4615,7 +4546,6 @@
 					if (index >= 0) this.cards.splice(index, 1);
 				}
 			});
-			recordTraversal("resolveConstraints:playerSnapshotIncremental", affectedCards.size);
 			this.lastConsumedSeq = room.dirtyCardSeq;
 			return this.cards;
 		}
@@ -4647,7 +4577,6 @@
 		}
 		setMySeatID(seatID) {
 			this.mySeatID = seatID;
-			trackerLogger.info("Room 设置主视角座位", { mySeatID: this.mySeatID });
 		}
 		getMyDisplayID() {
 			return this.mySeatID === void 0 ? void 0 : this.getDisplayID(this.mySeatID);
@@ -4655,7 +4584,6 @@
 		setFirstHand(firstID) {
 			this.firstID = firstID;
 			this.updateFixedViewIds();
-			trackerLogger.info("Room 设置先手", { firstID });
 		}
 		updateFixedViewIds() {
 			this.players.forEach((player) => {
@@ -4836,11 +4764,7 @@
 				}
 				skippedCards.push(card);
 			});
-			if (skippedCards.length > 0) logger.info("公共区展示跳过无法回收的实体", {
-				zoneName,
-				skippedIDs: skippedCards.map((card) => card.id),
-				skippedLocations: skippedCards.map((card) => card.location)
-			});
+			if (skippedCards.length > 0) {}
 			placeableCards.forEach((card) => {
 				room.removeCardsFromConstraintGroups([card]);
 				card.confirmKnown();
@@ -4931,7 +4855,6 @@
 					overbroadKnownCards = [];
 					room.resolveTouchedSeats = pendingAllocationTouchedSeats;
 					rounds += 1;
-					recordTraversal("resolveConstraints:constraint1", playerCards.length);
 					for (const card of playerCards) {
 						changed = card.syncOwnerFromSeats("room:resolveOwner") || changed;
 						if (this.isOverbroadKnownCard(card)) overbroadKnownCards.push(card);
@@ -4953,12 +4876,9 @@
 						const allocation = handAllocations.get(seatID);
 						changed = player.refreshUnknownCardCount(allocation) || changed;
 						const lockedKnownCount = allocation.exactKnownCount;
-						if (player.hasObservedHandCount && player.observedHandCount - lockedKnownCount <= 0) {
-							recordTraversal("resolveConstraints:constraint3:exclusion", allocation.candidateKnownCards.length);
-							for (const card of allocation.candidateKnownCards) card.locationCandidates.filter((candidate) => candidate.type === "player" && candidate.seatID === seatID && candidate.subZone === "hand").forEach((candidate) => {
-								changed = card.removeLocationCandidate(candidate, "room:unknownQuotaExclusion") || changed;
-							});
-						}
+						if (player.hasObservedHandCount && player.observedHandCount - lockedKnownCount <= 0) for (const card of allocation.candidateKnownCards) card.locationCandidates.filter((candidate) => candidate.type === "player" && candidate.seatID === seatID && candidate.subZone === "hand").forEach((candidate) => {
+							changed = card.removeLocationCandidate(candidate, "room:unknownQuotaExclusion") || changed;
+						});
 					}
 					const anonymousHandChanges = room.dirtyCardSeq === allocationSeq ? this.reconcileAnonymousHandCards(handAllocations) : {
 						created: [],
@@ -5053,13 +4973,7 @@
 					excessCount -= 1;
 				}
 			});
-			if (created.length > 0 || released.length > 0) trackerLogger.info("匿名手牌实体对账", {
-				created: created.map((card) => ({
-					entityID: card.entityID,
-					seatID: card.resolvedSeat
-				})),
-				released: released.map((card) => ({ entityID: card.entityID }))
-			});
+			if (created.length > 0 || released.length > 0) {}
 			return {
 				created,
 				released
@@ -5215,21 +5129,11 @@
 			card.suspended = true;
 			this.room.markCounterDirty(card);
 			this.room.suspendedKnownCards.add(card);
-			trackerLogger.info("卡牌身份位置发散，暂停追踪", {
-				id: card.id,
-				name: card.name,
-				reason,
-				suspendedCount: this.room.suspendedKnownCards.size
-			});
 		}
 		resumeSuspendedKnownCard(card) {
 			if (!card || card.suspended !== true && !this.room.suspendedKnownCards.has(card)) return;
 			card.suspended = false;
 			this.room.suspendedKnownCards.delete(card);
-			trackerLogger.info("卡牌身份再次出现，恢复追踪", {
-				id: card.id,
-				name: card.name
-			});
 		}
 	};
 	var RoomIdentity = class {
@@ -5295,7 +5199,7 @@
 				const invalidCards = cards.filter((card) => card.isAnonymous || room.cardIndex.get(card.id) !== card);
 				if (invalidCards.length > 0) {
 					invalidCards.forEach((card) => {
-						trackerLogger.warn("模糊来源实体匿名化失败，身份仍被视为已定位", {
+						if (trackerLogger.enabled !== false) trackerLogger.warn("模糊来源实体匿名化失败，身份仍被视为已定位", {
 							reason: "moveCards:ambiguousSource:preflight",
 							cardID: card.id,
 							entityID: card.entityID,
@@ -5316,7 +5220,7 @@
 					if (card.location === "pile") pileIdentityIDs.push(releasedIdentityID);
 					continue;
 				}
-				trackerLogger.warn("模糊来源实体匿名化失败，身份仍被视为已定位", {
+				if (trackerLogger.enabled !== false) trackerLogger.warn("模糊来源实体匿名化失败，身份仍被视为已定位", {
 					reason: "moveCards:ambiguousSource",
 					cardID: card.id,
 					entityID: card.entityID,
@@ -5340,7 +5244,7 @@
 				if (card.id <= 0) return;
 				const previousCardID = this.room.anonymizeLocatedIdentity(card, "moveCards:randomPileReturn");
 				if (previousCardID === null) {
-					trackerLogger.warn("随机入堆匿名化失败：card/index 不一致", {
+					if (trackerLogger.enabled !== false) trackerLogger.warn("随机入堆匿名化失败：card/index 不一致", {
 						cardID: card.id,
 						entityID: card.entityID,
 						sourceEvent: context.sourceEvent
@@ -5392,7 +5296,7 @@
 			const room = this.room;
 			const previousCardID = card.id;
 			if (previousCardID > 0 && card.isKnown === true) {
-				trackerLogger.warn("拒绝将已知正 ID 卡牌按暗占位移出追踪区", {
+				if (trackerLogger.enabled !== false) trackerLogger.warn("拒绝将已知正 ID 卡牌按暗占位移出追踪区", {
 					reason,
 					cardID: previousCardID,
 					entityID: card.entityID,
@@ -5403,7 +5307,7 @@
 			const shouldReleaseIdentity = previousCardID > 0 && card.isKnown !== true;
 			const releasedIdentityID = shouldReleaseIdentity ? room.anonymizeLocatedIdentity(card, `${reason}:releaseIdentity`) : null;
 			if (shouldReleaseIdentity && releasedIdentityID === null) {
-				trackerLogger.warn("正 ID 暗占位移出追踪区前释放身份失败，改为暂停身份", {
+				if (trackerLogger.enabled !== false) trackerLogger.warn("正 ID 暗占位移出追踪区前释放身份失败，改为暂停身份", {
 					reason,
 					cardID: previousCardID,
 					entityID: card.entityID,
@@ -5414,11 +5318,7 @@
 				return null;
 			}
 			card.moveToPublicZone("outside");
-			if (releasedIdentityID !== null) trackerLogger.info("正 ID 暗占位移出追踪区前已释放身份", {
-				reason,
-				releasedIdentityID,
-				replacementEntityID: card.entityID
-			});
+			if (releasedIdentityID !== null) {}
 			return releasedIdentityID;
 		}
 		findPublicZoneEntry(card) {
@@ -5500,11 +5400,13 @@
 			existingCards.forEach((card) => cardMap.set(card.id, card));
 			createdCards.forEach((card) => cardMap.set(card.id, card));
 			const unresolvedIdentityIDs = ids.filter((id) => !cardMap.has(id) && room.unlocatedIdentities.has(id));
-			if (unresolvedIdentityIDs.length > 0) logger.warn("揭示身份未能物化到匿名槽，已从已知牌集合中略过", {
-				reason: "resolveKnownCards:unresolvedUnlocatedIdentity",
-				unresolvedIdentityIDs,
-				target
-			});
+			if (unresolvedIdentityIDs.length > 0) {
+				if (logger.enabled !== false) logger.warn("揭示身份未能物化到匿名槽，已从已知牌集合中略过", {
+					reason: "resolveKnownCards:unresolvedUnlocatedIdentity",
+					unresolvedIdentityIDs,
+					target
+				});
+			}
 			return ids.map((id) => cardMap.get(id)).filter((card) => Boolean(card));
 		}
 		materializeExistingIdentityAtTarget(existing, target) {
@@ -5572,7 +5474,7 @@
 				if (!(cardID > 0) || !cohortIdentityIDs.has(cardID)) return;
 				const releasedIdentityID = room.anonymizeLocatedIdentity(card, `${context}:cohortPileProjection`);
 				if (releasedIdentityID === null) {
-					trackerLogger.warn("牌堆 cohort 身份投影匿名化失败", {
+					if (trackerLogger.enabled !== false) trackerLogger.warn("牌堆 cohort 身份投影匿名化失败", {
 						context,
 						cardID,
 						entityID: card.entityID,
@@ -5582,10 +5484,7 @@
 				}
 				anonymizedIdentityIDs.push(releasedIdentityID);
 			});
-			if (anonymizedIdentityIDs.length > 0) trackerLogger.debug("牌堆 cohort 身份已投影为匿名槽", {
-				context,
-				cardIDs: anonymizedIdentityIDs
-			});
+			if (anonymizedIdentityIDs.length > 0) {}
 			return anonymizedIdentityIDs;
 		}
 		suspendUnresolvedPileIdentitiesForShuffle(identityIDs, recycledIdentityIDs) {
@@ -5599,7 +5498,7 @@
 				if (existing) {
 					const releasedIdentityID = room.anonymizeLocatedIdentity(existing, "shufflePile:expiredCohortIdentity", { preservePlacement: true });
 					if (releasedIdentityID === null) {
-						trackerLogger.warn("洗牌关闭旧牌堆世代时释放暗实体身份失败", {
+						if (trackerLogger.enabled !== false) trackerLogger.warn("洗牌关闭旧牌堆世代时释放暗实体身份失败", {
 							cardID,
 							entityID: existing.entityID,
 							location: existing.location
@@ -5608,11 +5507,11 @@
 					}
 					anonymizedIdentityIDs.push(releasedIdentityID);
 				} else if (!room.unlocatedIdentities.has(cardID)) {
-					trackerLogger.warn("洗牌关闭旧牌堆世代时身份不在 Room 分区中", { cardID });
+					if (trackerLogger.enabled !== false) trackerLogger.warn("洗牌关闭旧牌堆世代时身份不在 Room 分区中", { cardID });
 					return;
 				}
 				if (!this.createDetachedSuspendedIdentity(cardID)) {
-					trackerLogger.warn("洗牌关闭旧牌堆世代时创建 suspended 展示实体失败", { cardID });
+					if (trackerLogger.enabled !== false) trackerLogger.warn("洗牌关闭旧牌堆世代时创建 suspended 展示实体失败", { cardID });
 					return;
 				}
 				suspendedIdentityIDs.push(cardID);
@@ -5716,12 +5615,14 @@
 					const decorated = plugin.decorateMove?.(nextEvent, this.room);
 					return decorated ? decorated : nextEvent;
 				} catch (error) {
-					trackerLogger.warn("移动事件装饰失败", {
-						pluginID: plugin.id,
-						spellIDs,
-						event: summarizeMoveEvent(nextEvent)
-					});
-					console.error("[Refactor] 移动事件装饰失败:", error, nextEvent);
+					if (trackerLogger.enabled !== false) {
+						trackerLogger.warn("移动事件装饰失败", {
+							pluginID: plugin.id,
+							spellIDs,
+							event: nextEvent.protocol
+						});
+						console.error("[Refactor] 移动事件装饰失败:", error);
+					}
 					return nextEvent;
 				}
 			}, event);
@@ -5749,7 +5650,7 @@
 			for (const plugin of plugins) try {
 				notify(plugin);
 			} catch (error) {
-				trackerLogger.warn("技能生命周期通知失败", {
+				if (trackerLogger.enabled !== false) trackerLogger.warn("技能生命周期通知失败", {
 					pluginID: plugin.id,
 					phase,
 					error
@@ -5954,7 +5855,7 @@
 			const ambiguousSourceCards = existingSourceCards.filter((card) => card.seats.size > 1);
 			const sourceTotal = sourceTotalBefore ?? (sourcePlayer?.hasObservedHandCount ? sourcePlayer.observedHandCount : exclusiveSourceCards.length > 0 ? exclusiveSourceCards.length : existingSourceCards.length);
 			if (sourceTotal < count || sourceTotal <= 0) {
-				trackerLogger.warn("随机手牌转移无法建立完整实体候选覆盖", {
+				if (trackerLogger.enabled !== false) trackerLogger.warn("随机手牌转移无法建立完整实体候选覆盖", {
 					fromSeat,
 					targetSeat,
 					count,
@@ -5967,7 +5868,7 @@
 				return [];
 			}
 			if (exclusiveSourceCards.length > sourceTotal) {
-				trackerLogger.warn("随机手牌转移无法建立完整实体候选覆盖", {
+				if (trackerLogger.enabled !== false) trackerLogger.warn("随机手牌转移无法建立完整实体候选覆盖", {
 					fromSeat,
 					targetSeat,
 					count,
@@ -6010,21 +5911,6 @@
 				expectedSlotsByLocation: new Map([[fromHandKey, sourceTotal - count], [targetHandKey, count]]),
 				known: false,
 				sourceEvent: sourceEvent ?? { type: "randomHandTransferCandidates" }
-			});
-			trackerLogger.info("手牌候选传播", {
-				fromSeat,
-				targetSeat,
-				count,
-				sourceTotal,
-				expectedSourceSlots: sourceTotal - count,
-				expectedTargetSlots: count,
-				createdAnonymousCount: fallbackCards.length,
-				cards: sourceCandidateCards.filter((card) => card.isKnown === true).map((card) => ({
-					id: card.id,
-					name: card.name,
-					seats: Array.from(card.seats)
-				})),
-				hiddenEntityCount: sourceCandidateCards.filter((card) => card.isKnown !== true).length
 			});
 			return sourceCandidateCards;
 		}
@@ -6099,16 +5985,6 @@
 				known: previousGroup?.known ?? true,
 				sourceEvent: sourceEvent ?? { type: "markStoredToHandCandidates" }
 			});
-			trackerLogger.info("标记或弹窗空间暗取，建立位置候选", {
-				fromSeat,
-				fromSpellID,
-				toSeat,
-				count,
-				cardIDs: markCards.map((card) => card.id),
-				markSlots: slots.get(markKey)?.min,
-				handSlots: slots.get(handKey),
-				locationCandidates: markCards.map((card) => card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)))
-			});
 			return true;
 		}
 		shouldMarkRandomHandToPublicCandidates(sourceSeat, targetSeat, toZone, unknownCount) {
@@ -6121,18 +5997,6 @@
 			if (sourceCandidateCards.length === 0) return [];
 			const candidate = createPublicCandidate(toZone, position, unknownCount);
 			sourceCandidateCards.forEach((card) => card.addPublicCandidate(candidate));
-			trackerLogger.info("手牌候选进入公共区", {
-				fromSeat,
-				toZone,
-				position,
-				unknownCount,
-				cards: sourceCandidateCards.map((card) => ({
-					id: card.id,
-					name: card.name,
-					seats: Array.from(card.seats),
-					publicCandidates: card.publicCandidates
-				}))
-			});
 			return sourceCandidateCards;
 		}
 		updatePublicCandidatesAfterUnknownPileReturn({ toZone, position, count }) {
@@ -6175,18 +6039,6 @@
 				expectedSlotsByLocation: new Map([[createLocationCandidateKey(targetHandCandidate), Math.min(count, affectedCards.length)]]),
 				known: true,
 				sourceEvent: sourceEvent ?? { type: "publicCandidatesToHand" }
-			});
-			trackerLogger.info("公共候选进入手牌", {
-				fromZone,
-				position,
-				targetSeat,
-				count,
-				cards: affectedCards.map((card) => ({
-					id: card.id,
-					name: card.name,
-					seats: Array.from(card.seats),
-					publicCandidates: card.publicCandidates
-				}))
 			});
 			return affectedCards;
 		}
@@ -6335,32 +6187,19 @@
 				card.setSeats([targetSeat], "moveMuniuMarkSpace");
 				movedMarkCardIDs.push(card.id);
 			});
-			if (records.length > 0 || movedMarkCardIDs.length > 0) trackerLogger.info("木牛流马内部牌按标记空间协议迁移", {
-				spellID,
-				fromSeat,
-				targetSeat,
-				movedMarkCardIDs,
-				retargetedRecordIDs: records.map((record) => record.id)
-			});
+			if (records.length > 0 || movedMarkCardIDs.length > 0) {}
 		}
 		retargetMuniuRecord(record, targetSeat) {
 			if (record.spellID === null) return false;
 			if (!getEquipmentMarkContainerByMarkSpellID(record.spellID)) return false;
 			if (targetSeat === record.targetSeat) return false;
-			const previousTargetSeat = record.targetSeat;
+			record.targetSeat;
 			record.targetSeat = targetSeat;
 			record.placeholderCards.forEach((card) => {
 				if (card.location === "player" && card.subZone === "mark" && card.spellID === record.spellID) card.bindCandidates([targetSeat], "mark", record.spellID, { known: false });
 			});
 			this.removeHiddenMarkConstraint(record);
 			this.applyHiddenMarkProjection(record);
-			trackerLogger.info("木牛流马暗标记账本更新承载座位", {
-				recordID: record.id,
-				sourceSeat: record.sourceSeat,
-				previousTargetSeat,
-				targetSeat,
-				candidateCardIDs: Array.from(record.cards, (card) => card.id)
-			});
 			return true;
 		}
 		getHiddenMarkState() {
@@ -6444,16 +6283,6 @@
 			context.skipUnknownMovement = true;
 			this.applyHiddenMarkProjection(record);
 			this.moveHiddenMarkPlaceholders(context, record);
-			trackerLogger.info("手牌暗置标记区候选记录", {
-				sourceSeat,
-				targetSeat,
-				spellID,
-				hiddenCount: context.unknownCount,
-				candidateCardIDs: candidateCards.map((card) => card.id),
-				knownMarkMin,
-				knownMarkMax,
-				exact: record.knownMarkMin === record.knownMarkMax
-			});
 			return true;
 		}
 		moveHiddenMarkPlaceholders(context, record) {
@@ -6467,13 +6296,6 @@
 				record.placeholderCards.add(card);
 			});
 			context.movedUnknownCards.push(...placeholderCards);
-			trackerLogger.debug("手牌暗置标记区占位移动", {
-				sourceSeat: record.sourceSeat,
-				targetSeat: record.targetSeat,
-				spellID: record.spellID,
-				requestedCount: count,
-				placeholderCardIDs: placeholderCards.map((card) => card.id)
-			});
 			return placeholderCards;
 		}
 		findHiddenMarkSourcePlaceholder(card, sourceCards) {
@@ -6529,15 +6351,7 @@
 					placeholderEntityID: previousEntityID
 				});
 			});
-			if (materialized.length > 0) trackerLogger.info("暗置标记占位物化未定位身份", {
-				reason,
-				spellID: record.spellID,
-				sourceSeat: record.sourceSeat,
-				targetSeat: record.targetSeat,
-				materialized,
-				remainingPlaceholderCount: record.placeholderCards.size,
-				remainingPendingIDs: pendingIDs.filter((id) => !this.room.cardIndex.has(id))
-			});
+			if (materialized.length > 0) {}
 			return materialized;
 		}
 		bindConfirmedMarkCardToMarkSpace(record, card, reason) {
@@ -6567,7 +6381,7 @@
 			const recycledPlaceholderEntityIDs = [];
 			const evictCount = Math.min(overflow, livePlaceholders.length);
 			if (evictCount <= 0) {
-				trackerLogger.warn("mark 空间守恒溢出但无可回收占位", {
+				if (trackerLogger.enabled !== false) trackerLogger.warn("mark 空间守恒溢出但无可回收占位", {
 					reason,
 					spellID: record.spellID,
 					sourceSeat: record.sourceSeat,
@@ -6586,17 +6400,6 @@
 				placeholder.bindCandidates([record.sourceSeat], "hand", null, { known: false });
 				recycledPlaceholderEntityIDs.push(placeholder.entityID);
 			}
-			trackerLogger.debug("mark 空间守恒回收溢出匿名占位", {
-				reason,
-				spellID: record.spellID,
-				sourceSeat: record.sourceSeat,
-				targetSeat: record.targetSeat,
-				hiddenCount: record.hiddenCount,
-				confirmedMarkSlotUsers,
-				overflow,
-				recycledPlaceholderEntityIDs,
-				remainingPlaceholderCount: record.placeholderCards.size
-			});
 			return true;
 		}
 		occupiesHiddenMarkSlot(card, record) {
@@ -6687,15 +6490,6 @@
 					else card.resolveLocationCandidate(candidate, "hiddenMark:fullHandReveal");
 					this.setHiddenMarkConfirmation(record, card, "mark");
 					changed = true;
-					trackerLogger.info("整手完整揭示反向收敛木马候选", {
-						spellID: record.spellID,
-						sourceSeat: record.sourceSeat,
-						targetSeat: record.targetSeat,
-						cardID: card.id,
-						revealedIDs: context.knownIDs,
-						confirmedMarkCount: record.confirmedMarkCards.size,
-						placeholderCount: record.placeholderCards.size
-					});
 				});
 				if (strandedCandidates.length > 0) changed = this.reconcileMarkSpace(record, "hiddenMark:fullHandReveal") || changed;
 				this.settleHiddenMarkRecord(record, "fullHandReveal");
@@ -6726,17 +6520,6 @@
 					changed = this.bindConfirmedMarkCardToMarkSpace(record, card, "hiddenMark:confirmedMark") || changed;
 					if (candidate.type === "container" && card.hasLocationCandidate(candidate)) changed = card.setLocationCandidates([candidate], "hiddenMark:confirmedMark") || changed;
 					else if (card.hasLocationCandidate(candidate)) changed = card.resolveLocationCandidate(candidate, "hiddenMark:confirmedMark") || changed;
-					trackerLogger.info("手牌暗置标记区候选确认进标记", {
-						spellID: record.spellID,
-						sourceSeat: record.sourceSeat,
-						targetSeat: record.targetSeat,
-						cardID: card.id,
-						fromSubZone: getMoveSubZone(context.from),
-						fromSpellID: getMoveMarkSpellID(context.from),
-						confirmedMarkCount: record.confirmedMarkCards.size,
-						confirmedHandCount: record.confirmedHandCards.size,
-						placeholderCount: record.placeholderCards.size
-					});
 				} else if (getMoveSubZone(context.from) === "hand") {
 					const moveHandSeat = getMoveSeat(context.from) !== null ? getMoveSeat(context.from) : record.sourceSeat;
 					if (moveHandSeat !== record.sourceSeat) return;
@@ -6748,16 +6531,6 @@
 					};
 					this.setHiddenMarkConfirmation(record, card, "hand");
 					if (card.hasLocationCandidate(candidate)) changed = card.resolveLocationCandidate(candidate, "hiddenMark:confirmedHand") || changed;
-					trackerLogger.info("手牌暗置标记区候选确认回手牌", {
-						spellID: record.spellID,
-						sourceSeat: record.sourceSeat,
-						targetSeat: record.targetSeat,
-						cardID: card.id,
-						fromSubZone: getMoveSubZone(context.from),
-						confirmedMarkCount: record.confirmedMarkCards.size,
-						confirmedHandCount: record.confirmedHandCards.size,
-						placeholderCount: record.placeholderCards.size
-					});
 				}
 				this.settleHiddenMarkRecord(record, "move");
 			});
@@ -6820,15 +6593,6 @@
 				changed = this.applyHiddenMarkProjection(record) || changed;
 				this.settleHiddenMarkRecord(record, "observedContainerSnapshot");
 			});
-			trackerLogger.info("手牌暗置标记区候选按可见装备容器快照收敛", {
-				spellID: markSpellID,
-				targetSeat: observedSeat,
-				visibleCardIDs: context.knownIDs,
-				resolvedHandCardIDs,
-				clearedPlaceholderIDs,
-				knownCardCount: context.knownCards.length,
-				knownIDs: context.knownIDs
-			});
 			return changed;
 		}
 		setHiddenMarkConfirmation(record, card, subZone) {
@@ -6838,15 +6602,6 @@
 		}
 		settleHiddenMarkRecord(record, reason) {
 			if (record.confirmedHandCards.size + record.confirmedMarkCards.size < record.cards.size) return;
-			trackerLogger.info("手牌暗置标记区候选账本结清", {
-				spellID: record.spellID,
-				sourceSeat: record.sourceSeat,
-				targetSeat: record.targetSeat,
-				reason,
-				confirmedMarkCardIDs: Array.from(record.confirmedMarkCards, (card) => card.id),
-				confirmedHandCardIDs: Array.from(record.confirmedHandCards, (card) => card.id),
-				remainingPlaceholderCount: record.placeholderCards.size
-			});
 			this.getHiddenMarkState().records.delete(record.id);
 		}
 	};
@@ -6967,16 +6722,6 @@
 			const placeholder = this.room.createExternalCards([], 1)[0];
 			if (!placeholder) return null;
 			placeholder.bindCandidates([fromSeat], "hand", null, { known: false });
-			trackerLogger.info("玩家来源明牌缺少可置换实体，已创建瞬时匿名占位", {
-				reason: "moveKnownCardsForContext:knownSourcePlaceholderFallback",
-				knownCardID: card.id,
-				placeholderCardID: placeholder.id,
-				placeholderEntityID: placeholder.entityID,
-				knownCardLocation: card.location,
-				fromSeat,
-				fromSubZone,
-				sourceEvent
-			});
 			return placeholder;
 		}
 		alignVisibleSubZoneTransfer(card, context) {
@@ -6994,16 +6739,6 @@
 				type: "card-bound",
 				subZone: fromSubZone,
 				spellID: card.spellID
-			});
-			trackerLogger.info("可见子区明牌已就地对齐到协议来源", {
-				reason: "alignVisibleSubZoneTransfer",
-				cardID: card.id,
-				entityID: card.entityID,
-				fromSubZone: sourceSubZone,
-				toSeat: fromSeat,
-				toSubZone: fromSubZone,
-				spellID: card.spellID,
-				sourceEvent: context.sourceEvent
 			});
 			return true;
 		}
@@ -7037,18 +6772,20 @@
 				placeholder.setLocationCandidates(oldLocationCandidates, "swapKnownCardWithPlayerSourcePlaceholder:preserveAmbiguousIdentity");
 			} else if (replacementCandidate) {
 				const oldPublicZone = this.room.zones.get(oldLocation);
-				if (oldPublicZone) trackerLogger.warn("来源占位置换跳过公共区回补，占位改为继承其它候选", {
-					knownCardID: card.id,
-					placeholderCardID: placeholder.id,
-					oldLocation,
-					oldPublicZoneCardCount: oldPublicZone.cards.length,
-					oldPublicZoneHasKnownCard: oldPublicZone.cards.includes(card),
-					fromSeat,
-					fromSubZone,
-					spellID: sourceSpellID,
-					replacementCandidate,
-					sourceEvent: context.sourceEvent
-				});
+				if (oldPublicZone) {
+					if (trackerLogger.enabled !== false) trackerLogger.warn("来源占位置换跳过公共区回补，占位改为继承其它候选", {
+						knownCardID: card.id,
+						placeholderCardID: placeholder.id,
+						oldLocation,
+						oldPublicZoneCardCount: oldPublicZone.cards.length,
+						oldPublicZoneHasKnownCard: oldPublicZone.cards.includes(card),
+						fromSeat,
+						fromSubZone,
+						spellID: sourceSpellID,
+						replacementCandidate,
+						sourceEvent: context.sourceEvent
+					});
+				}
 				placeholder.bindCandidates([replacementCandidate.seatID], replacementCandidate.subZone, replacementCandidate.spellID, { known: false });
 			} else if (oldLocation === "popup") placeholder.resolveLocationCandidate({
 				type: "popup",
@@ -7064,15 +6801,8 @@
 			const oldZoneCardCount = zone?.cards.length ?? null;
 			const oldZoneHasKnownCard = zone?.cards.includes(card) ?? false;
 			if (oldLocation === "suspended") {
-				const placeholderCardID = placeholder.id;
-				const releasedIdentityID = this.room.releaseUnknownPlaceholderToOutside(placeholder, "restoreUnknownPlaceholderToPreviousPublicLocation:suspended");
-				trackerLogger.debug("暂停追踪来源占位置换后移出占位", {
-					knownCardID: card.id,
-					placeholderCardID,
-					releasedIdentityID,
-					oldLocation,
-					keepPreviousPosition
-				});
+				placeholder.id;
+				this.room.releaseUnknownPlaceholderToOutside(placeholder, "restoreUnknownPlaceholderToPreviousPublicLocation:suspended");
 				return;
 			}
 			if (zone) {
@@ -7088,7 +6818,7 @@
 			}
 			const placeholderCardID = placeholder.id;
 			const releasedIdentityID = this.room.releaseUnknownPlaceholderToOutside(placeholder, "restoreUnknownPlaceholderToPreviousPublicLocation:missingZone");
-			trackerLogger.warn("占位置换未回补公共区，已将占位移出追踪区", {
+			if (trackerLogger.enabled !== false) trackerLogger.warn("占位置换未回补公共区，已将占位移出追踪区", {
 				knownCardID: card.id,
 				placeholderCardID,
 				releasedIdentityID,
@@ -7134,13 +6864,6 @@
 				replacement.suspended = false;
 				replacement.moveToPublicZone(previousZoneID);
 				previousZone.replaceCard(card, replacement);
-				trackerLogger.debug("公共区已知牌命中其它公共区实体，使用来源占位回填旧槽位", {
-					cardID: card.id,
-					replacementCardID: replacement.id,
-					fromZone,
-					fromPosition,
-					previousZoneID
-				});
 				return replacement;
 			}
 			const oldSubZone = card.subZone;
@@ -7153,14 +6876,6 @@
 				spaceID: card.popupSpaceID
 			});
 			this.hiddenMarks.replaceHiddenMarkPlaceholder(card, replacement);
-			trackerLogger.debug("公共区已知牌命中本地玩家实体，使用公共来源实体替回", {
-				cardID: card.id,
-				replacementCardID: replacement.id,
-				fromZone,
-				fromPosition,
-				oldSubZone,
-				oldSeats: Array.from(oldSeats)
-			});
 			return replacement;
 		}
 		takeSourceCards(count, options) {
@@ -7182,14 +6897,16 @@
 			}
 			if (from.type === "outside") {
 				const externalCards = this.room.createExternalCards([], count);
-				if (externalCards.length > 0) trackerLogger.warn("游戏外来源创建匿名暗占位", {
-					reason: "takeSourceCards:sourceOutside",
-					requestedCount: count,
-					placeholderCardIDs: externalCards.map((card) => card.id),
-					from,
-					to,
-					sourceEvent
-				});
+				if (externalCards.length > 0) {
+					if (trackerLogger.enabled !== false) trackerLogger.warn("游戏外来源创建匿名暗占位", {
+						reason: "takeSourceCards:sourceOutside",
+						requestedCount: count,
+						placeholderCardIDs: externalCards.map((card) => card.id),
+						from,
+						to,
+						sourceEvent
+					});
+				}
 				return externalCards;
 			}
 			if (isDiscardGain) return this.room.createExternalCards([], count);
@@ -7239,9 +6956,9 @@
 		}
 		confirm(context, resolution) {
 			const { knownIDs } = context;
-			const fromZone = getMoveZone(context.from);
-			const fromSeat = getMoveSeat(context.from);
-			const sourceIsOutside = context.from.type === "outside";
+			getMoveZone(context.from);
+			getMoveSeat(context.from);
+			context.from.type;
 			const { missingIDs, createdCards, knownCardCreationReason, isExternalSource } = resolution;
 			const createdCardSet = new Set(createdCards);
 			const resumedCardIDs = [];
@@ -7249,7 +6966,7 @@
 			context.knownCards.forEach((card) => {
 				if (this.room.detachedKnownCards.delete(card)) {
 					this.room.registerCardEntity(card);
-					trackerLogger.warn("已知移动缺少匿名来源槽，范围身份转为物理实体", { cardID: card.id });
+					if (trackerLogger.enabled !== false) trackerLogger.warn("已知移动缺少匿名来源槽，范围身份转为物理实体", { cardID: card.id });
 				}
 				const wasSuspended = card.suspended === true || this.room.suspendedKnownCards.has(card);
 				this.room.resumeSuspendedKnownCard(card);
@@ -7258,34 +6975,7 @@
 				if (card.id > 0 && card.isKnown !== true && !isExpectedExternalCreation) confirmedFromUnknownIDs.push(card.id);
 				if (card.id > 0) card.confirmKnown();
 			});
-			if (confirmedFromUnknownIDs.length > 0) trackerLogger.info("已知牌解析后补确认明牌", {
-				knownIDs,
-				confirmedFromUnknownIDs,
-				createdCardIDs: createdCards.map((card) => card.id),
-				missingIDs,
-				fromZone,
-				fromSeat,
-				sourceIsOutside,
-				isExternalSource,
-				knownCardCreationReason
-			});
-			trackerLogger.debug("已知牌解析完成", {
-				knownIDs,
-				resolvedCardIDs: context.knownCards.map((card) => card.id),
-				knownCardStates: context.knownCards.map((card) => ({
-					id: card.id,
-					entityID: card.entityID,
-					isKnown: card.isKnown === true,
-					location: card.location
-				})),
-				missingIDs,
-				createdCardIDs: createdCards.map((card) => card.id),
-				resumedCardIDs,
-				confirmedFromUnknownIDs,
-				sourceIsOutside,
-				isExternalSource,
-				knownCardCreationReason
-			});
+			if (confirmedFromUnknownIDs.length > 0) {}
 		}
 		resolveOutsideSource(context, isExternalSource) {
 			const { knownIDs } = context;
@@ -7314,65 +7004,17 @@
 			let knownCardCreationReason = isExternalSource ? "external-source" : null;
 			const sourceZone = this.room.zones.get(fromZone);
 			const endpointCount = Math.max(knownIDs.length, Math.max(0, Math.floor(Number(context.cardCount) || 0)));
-			const endpointCards = fromZone === "pile" && normalizePublicPosition(fromPosition) === "random" ? (sourceZone?.cards ?? []).filter((card) => card.isAnonymous).slice(-endpointCount).reverse() : this.room.getPublicEndpointCards(fromZone, endpointCount, fromPosition);
-			const availableTargets = endpointCards.filter((card) => card.isAnonymous);
-			const anonymousTargetCountBefore = availableTargets.length;
-			const resolveAttempts = [];
+			const availableTargets = (fromZone === "pile" && normalizePublicPosition(fromPosition) === "random" ? (sourceZone?.cards ?? []).filter((card) => card.isAnonymous).slice(-endpointCount).reverse() : this.room.getPublicEndpointCards(fromZone, endpointCount, fromPosition)).filter((card) => card.isAnonymous);
+			availableTargets.length;
 			context.knownCards = knownIDs.map((cardID) => {
 				const existing = this.room.cardIndex.get(cardID);
 				const existingInSource = Boolean(existing && sourceZone?.cards.includes(existing));
-				const hadAnonymousTarget = !existingInSource && availableTargets.length > 0;
+				!existingInSource && availableTargets.length;
 				const target = existingInSource ? existing : availableTargets.shift();
-				const ledgerBefore = {
-					inCardIndex: this.room.cardIndex.has(cardID),
-					inUnlocated: this.room.unlocatedIdentities.has(cardID),
-					inDeckIdentities: this.room.deckIdentities.has(cardID),
-					existingLocation: existing?.location ?? null,
-					existingIsKnown: existing?.isKnown === true,
-					existingInSource,
-					tookAnonymousTarget: Boolean(target && target !== existing && target.isAnonymous),
-					targetEntityID: target?.entityID ?? null,
-					remainingAnonymousTargets: availableTargets.length
-				};
-				const resolved = (isExternalSource && existingInSource ? existing : this.room.materialize(cardID, target ?? null)) ?? existing;
-				resolveAttempts.push({
-					cardID,
-					...ledgerBefore,
-					hadAnonymousTarget,
-					materializeOk: Boolean(resolved),
-					afterInCardIndex: this.room.cardIndex.has(cardID)
-				});
-				return resolved;
+				return (isExternalSource && existingInSource ? existing : this.room.materialize(cardID, target ?? null)) ?? existing;
 			}).filter((card) => Boolean(card));
 			missingIDs = knownIDs.filter((id) => !this.room.cardIndex.has(id));
 			if (missingIDs.length > 0) {
-				trackerLogger.info("known 路径实体缺口，将 createExternal", {
-					knownIDs,
-					missingIDs,
-					fromZone,
-					fromPosition,
-					anonymousTargetCountBefore,
-					anonymousTargetCountAfter: availableTargets.length,
-					sourceZoneCards: (sourceZone?.cards ?? []).map((card) => ({
-						id: card.id,
-						entityID: card.entityID,
-						isKnown: card.isKnown === true,
-						isAnonymous: card.isAnonymous
-					})),
-					endpointCards: endpointCards.map((card) => ({
-						id: card.id,
-						entityID: card.entityID,
-						isKnown: card.isKnown === true,
-						isAnonymous: card.isAnonymous
-					})),
-					resolveAttempts,
-					knownIDLedgers: knownIDs.map((cardID) => ({
-						cardID,
-						inCardIndex: this.room.cardIndex.has(cardID),
-						inUnlocated: this.room.unlocatedIdentities.has(cardID),
-						inDeckIdentities: this.room.deckIdentities.has(cardID)
-					}))
-				});
 				knownCardCreationReason = isExternalSource ? "external-source" : "known-fallback";
 				createdCards = this.room.createExternalCards(missingIDs, missingIDs.length);
 				const cardMap = new Map(context.knownCards.map((card) => [card.id, card]));
@@ -7410,35 +7052,15 @@
 					});
 				});
 			}
-			const resolveAttempts = [];
+			const resolveAttempts = void 0;
 			context.knownCards = knownIDs.map((cardID) => {
 				const existing = this.room.cardIndex.get(cardID);
-				const existingInSource = Boolean(existing && !this.room.detachedKnownCards.has(existing) && this.sources.isCardInStoredSource(existing, context));
-				const target = existingInSource ? existing : availableTargets.shift();
-				const ledgerBefore = {
-					inCardIndex: this.room.cardIndex.has(cardID),
-					inUnlocated: this.room.unlocatedIdentities.has(cardID),
-					inDeckIdentities: this.room.deckIdentities.has(cardID),
-					existingLocation: existing?.location ?? null,
-					existingSubZone: existing?.subZone ?? null,
-					existingIsKnown: existing?.isKnown === true,
-					existingInSource,
-					tookAnonymousTarget: Boolean(target && target.isAnonymous),
-					targetSubZone: target?.subZone ?? null,
-					remainingAnonymousTargets: availableTargets.length
-				};
-				const resolved = this.room.materialize(cardID, target ?? null) ?? existing;
-				resolveAttempts.push({
-					cardID,
-					...ledgerBefore,
-					materializeOk: Boolean(resolved),
-					afterInCardIndex: this.room.cardIndex.has(cardID)
-				});
-				return resolved;
+				const target = Boolean(existing && !this.room.detachedKnownCards.has(existing) && this.sources.isCardInStoredSource(existing, context)) ? existing : availableTargets.shift();
+				return this.room.materialize(cardID, target ?? null) ?? existing;
 			}).filter((card) => Boolean(card));
 			missingIDs = knownIDs.filter((id) => !this.room.cardIndex.has(id));
 			if (missingIDs.length > 0) {
-				trackerLogger.warn("玩家来源 known 路径实体缺口，将 createExternal", {
+				if (trackerLogger.enabled !== false) trackerLogger.warn("玩家来源 known 路径实体缺口，将 createExternal", {
 					knownIDs,
 					missingIDs,
 					fromSeat,
@@ -7556,30 +7178,34 @@
 			if (!placeholder && getMoveZone(context.from) !== "popup" && fromSubZone === "hand") {
 				const createdSourcePlaceholder = !(context.sourceHandTotalObserved && context.sourceHandTotalBefore <= context.handMoveCount && toZone !== "player") ? this.sources.createPlayerSourcePlaceholderForKnownCard(card, playerSourceContext) : null;
 				if (createdSourcePlaceholder) fallbackPlaceholder = this.sources.swapKnownCardWithPlayerSourcePlaceholder(card, playerSourceContext);
-				if (!fallbackPlaceholder && createdSourcePlaceholder) trackerLogger.warn("已创建来源瞬时匿名占位但仍未完成置换", {
-					knownCardID: card.id,
-					placeholderCardID: createdSourcePlaceholder.id,
-					placeholderEntityID: createdSourcePlaceholder.entityID,
-					fromSeat,
-					fromSubZone,
-					toZone,
-					sourceEvent
-				});
-				if (!fallbackPlaceholder) trackerLogger.warn("玩家来源明牌未找到可立即置换的手牌占位", {
-					knownCardID: card.id,
-					fromSeat,
-					fromSubZone,
-					toZone,
-					sourceHandCards: (fromSeat === null ? [] : getPlayerHandCardsBySeat(this.room, fromSeat)).map((sourceCard) => ({
-						cardID: sourceCard.id,
-						isKnown: sourceCard.isKnown,
-						suspended: sourceCard.suspended,
-						seats: Array.from(sourceCard.seats, Number),
-						hasLocationCandidates: sourceCard.hasLocationCandidates(),
-						hasPlayerLocationCandidates: sourceCard.locationCandidates.some((candidate) => candidate.type === "player")
-					})),
-					sourceEvent
-				});
+				if (!fallbackPlaceholder && createdSourcePlaceholder) {
+					if (trackerLogger.enabled !== false) trackerLogger.warn("已创建来源瞬时匿名占位但仍未完成置换", {
+						knownCardID: card.id,
+						placeholderCardID: createdSourcePlaceholder.id,
+						placeholderEntityID: createdSourcePlaceholder.entityID,
+						fromSeat,
+						fromSubZone,
+						toZone,
+						sourceEvent
+					});
+				}
+				if (!fallbackPlaceholder) {
+					if (trackerLogger.enabled !== false) trackerLogger.warn("玩家来源明牌未找到可立即置换的手牌占位", {
+						knownCardID: card.id,
+						fromSeat,
+						fromSubZone,
+						toZone,
+						sourceHandCards: (fromSeat === null ? [] : getPlayerHandCardsBySeat(this.room, fromSeat)).map((sourceCard) => ({
+							cardID: sourceCard.id,
+							isKnown: sourceCard.isKnown,
+							suspended: sourceCard.suspended,
+							seats: Array.from(sourceCard.seats, Number),
+							hasLocationCandidates: sourceCard.hasLocationCandidates(),
+							hasPlayerLocationCandidates: sourceCard.locationCandidates.some((candidate) => candidate.type === "player")
+						})),
+						sourceEvent
+					});
+				}
 			}
 			this.registerPopupReplacement(placeholder);
 			this.registerPopupReplacement(fallbackPlaceholder);
@@ -7603,8 +7229,8 @@
 		finishMove(context, placement) {
 			const { combinationID, expectedSlotsByLocation, knownCards, sourceEvent } = context;
 			const position = getMovePosition(context.to);
-			const spellID = getMoveCallbackSpellID(context, context.triggerSpellID);
-			const subZone = getMoveSubZone(context.to);
+			getMoveCallbackSpellID(context, context.triggerSpellID);
+			getMoveSubZone(context.to);
 			const targetSeats = getMoveTargetSeats(context.to);
 			const toZone = getMoveZone(context.to);
 			const { swappedCardIDs, handledSpellCardIDs, resolvedSourceCardIDs } = placement;
@@ -7626,16 +7252,6 @@
 					known: true,
 					sourceEvent: sourceEvent ?? { type: "moveCards" }
 				});
-				trackerLogger.debug("已知牌进入玩家区", {
-					cardIDs: knownCards.map((card) => card.id),
-					targetSeats,
-					subZone,
-					spellID,
-					combinationID,
-					swappedCardIDs,
-					handledSpellCardIDs,
-					resolvedSourceCardIDs
-				});
 				return;
 			}
 			this.repairPublicResidues(context, placement);
@@ -7643,16 +7259,6 @@
 			if (targetZone) targetZone.add(knownCards, position);
 			else knownCards.forEach((card) => card.moveToPublicZone(toZone));
 			context.publicMovedCards.push(...knownCards);
-			trackerLogger.debug("已知牌进入公共区", {
-				cardIDs: knownCards.map((card) => card.id),
-				toZone,
-				position,
-				spellID,
-				swappedCardIDs,
-				handledSpellCardIDs,
-				resolvedSourceCardIDs,
-				targetZoneExists: Boolean(targetZone)
-			});
 		}
 		collectPublicResidues(knownCards) {
 			return knownCards.flatMap((card) => {
@@ -7706,21 +7312,23 @@
 					const createdFallback = !placeholder;
 					if (!placeholder) {
 						placeholder = this.room.createExternalCards([], 1)[0] ?? null;
-						if (placeholder) trackerLogger.warn("公共区残留修复创建匿名回补占位", {
-							reason: "moveKnownCardsForContext:publicResidueFallback",
-							knownCardID: card.id,
-							placeholderCardID: placeholder.id,
-							residue,
-							fromSeat,
-							fromSubZone,
-							toZone,
-							position,
-							sourceHandTotalObserved: context.sourceHandTotalObserved,
-							sourceHandTotalBefore: context.sourceHandTotalBefore,
-							handMoveCount: context.handMoveCount,
-							canUseKnownSourcePlaceholder,
-							sourceEvent
-						});
+						if (placeholder) {
+							if (trackerLogger.enabled !== false) trackerLogger.warn("公共区残留修复创建匿名回补占位", {
+								reason: "moveKnownCardsForContext:publicResidueFallback",
+								knownCardID: card.id,
+								placeholderCardID: placeholder.id,
+								residue,
+								fromSeat,
+								fromSubZone,
+								toZone,
+								position,
+								sourceHandTotalObserved: context.sourceHandTotalObserved,
+								sourceHandTotalBefore: context.sourceHandTotalBefore,
+								handMoveCount: context.handMoveCount,
+								canUseKnownSourcePlaceholder,
+								sourceEvent
+							});
+						}
 					}
 					if (!placeholder) {
 						unrepairedResidues.push(residue);
@@ -7748,7 +7356,7 @@
 						zoneCardCountAfter: zone.cards.length
 					});
 				});
-				trackerLogger.warn("玩家来源明牌残留公共区，已尝试用来源占位回补旧公共区槽位", {
+				if (trackerLogger.enabled !== false) trackerLogger.warn("玩家来源明牌残留公共区，已尝试用来源占位回补旧公共区槽位", {
 					fromSeat,
 					fromSubZone,
 					toZone,
@@ -7770,7 +7378,7 @@
 		const targetHandSeat = getMoveSubZone(to) === "hand" ? getMoveSeat(to) : null;
 		const knownIDs = cardIDs.filter((id) => id > 0);
 		const sourcePlayer = from.type === "player" ? room.getPlayer(from.seatID) : null;
-		const context = {
+		return {
 			from,
 			to,
 			triggerSpellID,
@@ -7801,8 +7409,6 @@
 			publicMovedCards: [],
 			skipUnknownMovement: false
 		};
-		trackerLogger.debug("移动上下文创建", summarizeMoveContext(context, { includeSourceCardIDs: true }));
-		return context;
 	}
 	var RoomMovementUnknownPlacement = class {
 		room;
@@ -7825,17 +7431,7 @@
 			const targetSeats = getMoveTargetSeats(context.to);
 			const toZone = getMoveZone(context.to);
 			if (unknownCount <= 0) return;
-			if (context.skipUnknownMovement) {
-				trackerLogger.debug("未知牌移动已由特殊候选逻辑接管", {
-					requestedCount: unknownCount,
-					fromSeat,
-					fromSubZone,
-					targetSeats,
-					subZone,
-					spellID
-				});
-				return;
-			}
+			if (context.skipUnknownMovement) return;
 			if (toZone === "player") {
 				const movedUnknownCards = this.sources.takeSourceCards(unknownCount, context);
 				if (this.room.trackingMode === "degraded" && movedUnknownCards.length < unknownCount) movedUnknownCards.push(...this.room.createExternalCards([], unknownCount - movedUnknownCards.length));
@@ -7855,18 +7451,6 @@
 					known: false,
 					sourceEvent: sourceEvent ?? { type: "moveCards:unknown" }
 				});
-				trackerLogger.debug("未知牌进入玩家区", {
-					requestedCount: unknownCount,
-					movedCardIDs: movedUnknownCards.map((card) => card.id),
-					fromSeat,
-					fromSubZone,
-					fromZone,
-					targetSeats,
-					subZone,
-					spellID,
-					knownSourceCardIDs: movedUnknownCards.filter((card) => card.isKnown === true).map((card) => card.id),
-					constraintCreated: movedUnknownCards.length > 0 && targetSeats.length > 0
-				});
 				return;
 			}
 			const movedUnknownCards = this.sources.takeSourceCards(unknownCount, context);
@@ -7874,21 +7458,23 @@
 			if (takenCount < unknownCount) {
 				const fallbackCount = unknownCount - takenCount;
 				const fallbackCards = this.room.createExternalCards([], fallbackCount);
-				if (fallbackCards.length > 0 && this.room.trackingMode === "full") trackerLogger.warn("来源实体不足，创建匿名暗占位补足公共区移动", {
-					reason: "moveUnknownCardsForContext:publicFallback",
-					requestedCount: unknownCount,
-					takenCount,
-					createdPlaceholderCount: fallbackCards.length,
-					placeholderCardIDs: fallbackCards.map((card) => card.id),
-					fromSeat,
-					fromSubZone,
-					fromZone,
-					fromPosition,
-					toZone,
-					position,
-					spellID,
-					sourceEvent
-				});
+				if (fallbackCards.length > 0 && this.room.trackingMode === "full") {
+					if (trackerLogger.enabled !== false) trackerLogger.warn("来源实体不足，创建匿名暗占位补足公共区移动", {
+						reason: "moveUnknownCardsForContext:publicFallback",
+						requestedCount: unknownCount,
+						takenCount,
+						createdPlaceholderCount: fallbackCards.length,
+						placeholderCardIDs: fallbackCards.map((card) => card.id),
+						fromSeat,
+						fromSubZone,
+						fromZone,
+						fromPosition,
+						toZone,
+						position,
+						spellID,
+						sourceEvent
+					});
+				}
 				movedUnknownCards.push(...fallbackCards);
 			}
 			context.movedUnknownCards = movedUnknownCards;
@@ -7912,19 +7498,6 @@
 				toZone,
 				position,
 				count: unknownCount
-			});
-			trackerLogger.debug("未知牌进入公共区", {
-				requestedCount: unknownCount,
-				takenCount,
-				createdFallbackCount: Math.max(0, unknownCount - takenCount),
-				movedCardIDs: movedUnknownCards.map((card) => card.id),
-				fromSeat,
-				fromSubZone,
-				fromZone,
-				toZone,
-				position,
-				knownSourceCardIDs: movedUnknownCards.filter((card) => card.isKnown === true).map((card) => card.id),
-				targetZoneExists: Boolean(targetZone)
 			});
 		}
 	};
@@ -8204,7 +7777,7 @@
 				});
 				this.identity.anonymizePileCohortIdentityEntities(context);
 			} catch (error) {
-				trackerLogger.warn("牌堆身份账本移动更新失败", {
+				if (trackerLogger.enabled !== false) trackerLogger.warn("牌堆身份账本移动更新失败", {
 					error,
 					move
 				});
@@ -8237,7 +7810,7 @@
 					});
 				}
 			} catch (error) {
-				trackerLogger.warn("牌堆身份账本揭示更新失败", {
+				if (trackerLogger.enabled !== false) trackerLogger.warn("牌堆身份账本揭示更新失败", {
 					error,
 					cardIDs,
 					location
@@ -8264,11 +7837,6 @@
 				this.locationIndex.rebuild(this);
 				this.constraints.syncViewGroups();
 			}
-			trackerLogger.info("Room 注册玩家", {
-				seatIDs: this.seatIDs,
-				currentUserID,
-				mySeatID: this.mySeatID
-			});
 		}
 		setPlayerShowStatuses(statuses) {
 			let changed = false;
@@ -8514,19 +8082,18 @@
 			const actualPileCount = pile.cards.length;
 			const rebuiltPileCount = rebuiltPileCards.length;
 			const discardCountAfterShuffle = discard.cards.length;
-			if (actualPileCount !== targetPileCount || actualPileCount !== rebuiltPileCount || discardCountAfterShuffle !== 0) trackerLogger.warn("洗牌后实际牌堆实体数量不一致", {
-				reason: "shufflePile:actualPileConsistency",
-				targetPileCount,
-				actualPileCount,
-				rebuiltPileCount,
-				discardCountAfterShuffle,
-				rebuiltPileCardIDs: rebuiltPileCards.map((card) => card.id),
-				actualPileCardIDs: pile.cards.map((card) => card.id)
-			});
-			if (newlySuspendedCardIDs.length > 0) trackerLogger.info("洗牌后暂停追踪旧牌堆世代中尚未出现的身份", {
-				suspendedCardIDs: newlySuspendedCardIDs,
-				activeSuspendedCardIDs: Array.from(this.suspendedKnownCards, (card) => card.id).filter((cardID) => cardID > 0)
-			});
+			if (actualPileCount !== targetPileCount || actualPileCount !== rebuiltPileCount || discardCountAfterShuffle !== 0) {
+				if (trackerLogger.enabled !== false) trackerLogger.warn("洗牌后实际牌堆实体数量不一致", {
+					reason: "shufflePile:actualPileConsistency",
+					targetPileCount,
+					actualPileCount,
+					rebuiltPileCount,
+					discardCountAfterShuffle,
+					rebuiltPileCardIDs: rebuiltPileCards.map((card) => card.id),
+					actualPileCardIDs: pile.cards.map((card) => card.id)
+				});
+			}
+			if (newlySuspendedCardIDs.length > 0) {}
 			this.identity.anonymizePileCohortIdentityEntities(identityContext);
 			this.detachedKnownCards.forEach((card) => {
 				card.removePublicCandidates((candidate) => candidate.zone === "pile" || candidate.zone === "discard");
@@ -8543,14 +8110,14 @@
 					discardCountAfter: 0
 				});
 				if (result.committed && result.shuffleTransition) return result.shuffleTransition;
-				trackerLogger.warn("洗牌前牌堆身份账本事务未提交，已跳过旧世代身份暂停", {
+				if (trackerLogger.enabled !== false) trackerLogger.warn("洗牌前牌堆身份账本事务未提交，已跳过旧世代身份暂停", {
 					move,
 					pileCountAfter,
 					discardCountBefore,
 					knownDiscardIdentityIDsBefore
 				});
 			} catch (error) {
-				trackerLogger.warn("洗牌前牌堆身份账本更新失败，已跳过旧世代身份暂停", {
+				if (trackerLogger.enabled !== false) trackerLogger.warn("洗牌前牌堆身份账本更新失败，已跳过旧世代身份暂停", {
 					error,
 					move,
 					pileCountAfter,
@@ -8608,23 +8175,10 @@
 			}
 			this.identity.commitPileIdentityForMove(context, pileSnapshot);
 			this.resolveConstraints();
-			trackerLogger.info("moveCards 完成", {
-				...summarizeMoveContext(context, { includeKnownCardIDs: true }),
-				publicMovedCardIDs: context.publicMovedCards.map((card) => card.id),
-				movedUnknownCardIDs: context.movedUnknownCards.map((card) => card.id),
-				dirtyCardCount: this.dirtyCards.size,
-				constraintGroupCount: this.constraintGroups.size
-			});
 			return true;
 		}
 		destroy() {
 			if (this.game.room === this) this.game.bindRoom(null);
-			trackerLogger.info("Room destroy 开始", {
-				cardCount: this.cards.length,
-				playerCount: this.players.size,
-				constraintGroupCount: this.constraintGroups.size,
-				suspendedCount: this.suspendedKnownCards.size
-			});
 			this.players.forEach((player) => player.reset());
 			this.players.clear();
 			this.zones.forEach((zone) => zone.clear());
@@ -8636,7 +8190,6 @@
 			this.size = 0;
 			this.firstID = void 0;
 			this.mySeatID = void 0;
-			trackerLogger.info("Room destroy 完成");
 		}
 	};
 	function getCount(event) {
@@ -9073,9 +8626,7 @@
 		deleteSpellState(room, HAND_EXCHANGE_STATE_KEY, spellID);
 	}
 	function getPlayerHandCards(room, seatID) {
-		const playerCards = room.refreshPlayerSnapshot();
-		recordTraversal("handExchange:playerHand", playerCards.length);
-		return playerCards.filter((card) => card.subZone === "hand" && card.seats.has(seatID));
+		return room.refreshPlayerSnapshot().filter((card) => card.subZone === "hand" && card.seats.has(seatID));
 	}
 	function isHandCandidate(candidate, seatID) {
 		return candidate.type === "player" && candidate.subZone === "hand" && candidate.seatID === seatID;
@@ -9295,6 +8846,7 @@
 			actorSeat,
 			targetSeat,
 			pileCount,
+			hasFullInformation: false,
 			pileCardIDs: null,
 			handCardIDs: null
 		};
@@ -9303,6 +8855,7 @@
 			actorSeat,
 			targetSeat,
 			pileCount,
+			hasFullInformation: true,
 			pileCardIDs: Params.slice(2, 2 + pileCount),
 			handCardIDs: Params.slice(2 + pileCount)
 		};
@@ -9327,7 +8880,7 @@
 		const actorSeat = eventActorSeat != null && eventActorSeat !== 255 ? eventActorSeat : context?.actorSeat ?? null;
 		if (actorSeat !== null && room.mySeatID === actorSeat) return "default";
 		if (context && actorSeat === context.actorSeat && room.mySeatID === context.targetSeat) return "target-limited";
-		if (context && actorSeat === context.actorSeat && room.mySeatID !== void 0 && room.mySeatID !== context.actorSeat && room.mySeatID !== context.targetSeat) return "observer-limited";
+		if (context && actorSeat === context.actorSeat && room.mySeatID !== void 0 && room.mySeatID !== context.actorSeat && room.mySeatID !== context.targetSeat) return context.hasFullInformation ? "default" : "observer-limited";
 		return "skip";
 	}
 	function noOp(event) {
@@ -9557,7 +9110,8 @@
 					recordJieLiContext(room, {
 						actorSeat: notice.actorSeat,
 						targetSeat: notice.targetSeat,
-						pileCount: notice.pileCount
+						pileCount: notice.pileCount,
+						hasFullInformation: notice.hasFullInformation
 					});
 				}
 				return;
@@ -9654,16 +9208,10 @@
 			if (card.color === 1 || card.color === 2) selectedCards.push(card);
 		}
 		if (selectedCards.length === 0) return event;
-		const decorated = patchEvent(event, { options: {
+		return patchEvent(event, { options: {
 			sourceCards: selectedCards,
 			combinationID: nextGroupID(room, SI_QI_SPELL_ID, "siqi_candidate")
 		} });
-		trackerLogger.debug("思泣来源牌推断", {
-			cardCount,
-			selectedCardIDs: selectedCards.map((card) => card.id),
-			fallbackCount: Math.max(0, cardCount - selectedCards.length)
-		});
-		return decorated;
 	}
 	var TIAN_HOU_SPELL_ID = 3903;
 	var TIAN_HOU_STATE_KEY = "tianHouExchange";
@@ -9682,9 +9230,7 @@
 		return room.mySeatID === void 0 || room.mySeatID !== actorSeat;
 	}
 	function getActorHandCards(room, actorSeat) {
-		const playerCards = room.refreshPlayerSnapshot();
-		recordTraversal("tianHou:playerHand", playerCards.length);
-		return playerCards.filter((card) => card.location === "player" && card.subZone === "hand" && card.seats.size === 1 && card.seats.has(actorSeat) && !card.hasLocationCandidates());
+		return room.refreshPlayerSnapshot().filter((card) => card.location === "player" && card.subZone === "hand" && card.seats.size === 1 && card.seats.has(actorSeat) && !card.hasLocationCandidates());
 	}
 	function createKnownOutConstraint(room, batch, cards, knownOut, label) {
 		if (cards.length === 0) return null;
@@ -9761,13 +9307,6 @@
 		batch.maxKnownOut = Math.min(count, knownHandCards.length);
 		batch.minKnownOut = player?.hasObservedHandCount === true ? Math.min(Math.max(0, count - hiddenCapacity), batch.maxKnownOut) : 0;
 		batch.phase = "hand-staged";
-		trackerLogger.info("天候记录其他视角换牌候选", {
-			actorSeat,
-			count,
-			knownHandCardIDs: knownHandCards.map((card) => card.id),
-			minKnownOut: batch.minKnownOut,
-			maxKnownOut: batch.maxKnownOut
-		});
 		return patchEvent(event, { options: { sourceCards: outgoingCards } });
 	}
 	function decorateExchangeReorder(event, room, actorSeat) {
@@ -10286,7 +9825,7 @@
 		const previous = room.readSkillState(GUI_FU_ROLE_DATA_ID);
 		if (previous) {
 			room.deleteSkillState(GUI_FU_ROLE_DATA_ID);
-			trackerLogger.warn("诡伏移动未收到相邻角色数据，已丢弃待补全移动", {
+			if (trackerLogger.enabled !== false) trackerLogger.warn("诡伏移动未收到相邻角色数据，已丢弃待补全移动", {
 				previous,
 				next: move
 			});
@@ -10308,7 +9847,7 @@
 		const count = patched.CardCount;
 		const gainedIDs = cardIDs.filter((cardID) => !isHeldGuiFuCard(room, seatID, cardID));
 		if (patched.ToID !== seatID || gainedIDs.length !== count || new Set(gainedIDs).size !== count || patched.FromZone === 2 && !hasDiscardSourceCards(room, gainedIDs)) {
-			trackerLogger.warn("诡伏相邻角色数据与待补全移动不匹配，已取消移动", {
+			if (trackerLogger.enabled !== false) trackerLogger.warn("诡伏相邻角色数据与待补全移动不匹配，已取消移动", {
 				pending,
 				seatID,
 				cardIDs
@@ -10599,17 +10138,13 @@
 		room.registerSkillPlugin(zeXingPlugin);
 		room.registerSkillPlugin(xiaShuPlugin);
 	}
-	var MOVE_EVENT_SUMMARY_OPTIONS = {
-		normalizeCardIDs: true,
-		includeEventCardCount: true,
-		includeSourceCards: true
-	};
 	var noopView = {
 		mount(_room) {},
 		unmount() {},
 		scheduleRender() {}
 	};
 	var noopLogger = {
+		enabled: false,
 		debug() {},
 		info() {},
 		warn() {}
@@ -10629,7 +10164,10 @@
 			};
 			this.controllerLogger = {
 				...noopLogger,
-				...logger
+				...logger,
+				get enabled() {
+					return logger.enabled ?? true;
+				}
 			};
 			this.gameState = gameState;
 			this.getSeatUIs = getSeatUIs;
@@ -10678,10 +10216,9 @@
 				this.gameState.beginPlayback();
 				const room = new Room({ gameState: this.gameState });
 				this.trackerRoom = room;
-				this.controllerLogger.info("Room 初始化");
 				this.registerMoveEventHandlers(room);
 			} catch (e) {
-				trackerLogger.error("Room 初始化失败", e);
+				if (trackerLogger.enabled !== false) trackerLogger.error("Room 初始化失败", e);
 				this.controllerView.unmount();
 				if (this.trackerRoom) {
 					this.trackerRoom.destroy();
@@ -10693,7 +10230,6 @@
 			if (!this.trackerRoom) return;
 			this.trackerRoom.initDeck(cardIDs);
 			this.controllerView.mount(this.trackerRoom);
-			this.controllerLogger.info("Room 牌堆初始化完成", { cardIDs });
 		}
 		registerTrackerPlayers(infos, currentUserID) {
 			if (!this.trackerRoom) return;
@@ -10727,17 +10263,19 @@
 			try {
 				const firstID = this.trackerRoom.firstID;
 				if (firstID !== void 0) {
-					if (firstID !== seatID) this.controllerLogger.warn("先手座位重复设置且不一致，已忽略", {
-						currentSeatID: firstID,
-						receivedSeatID: seatID
-					});
+					if (firstID !== seatID) {
+						if (this.controllerLogger.enabled !== false) this.controllerLogger.warn("先手座位重复设置且不一致，已忽略", {
+							currentSeatID: firstID,
+							receivedSeatID: seatID
+						});
+					}
 					return;
 				}
 				this.trackerRoom.setFirstHand(seatID);
 				this.getSeatUIs();
 				this.controllerView.scheduleRender();
 			} catch (e) {
-				trackerLogger.error("先手同步失败", e);
+				if (trackerLogger.enabled !== false) trackerLogger.error("先手同步失败", e);
 			}
 		}
 		scheduleTrackerRender() {
@@ -10759,23 +10297,19 @@
 			};
 			try {
 				Object.assign(patched, normalizeTrackerMovePosition(patched));
-				this.controllerLogger.info(getProtocolMoveSpecialLabel(patched) ?? "移动协议输入", {
-					raw: this.summarizeProtocolMove(raw),
-					patched: this.summarizeProtocolMove(patched)
-				});
 				if (readyRoom.beforeNormalizeMove(patched, raw) === "defer") return;
 				if (hasMixedTrackerMoveVisibility(patched)) {
-					this.controllerLogger.warn("移动协议明暗牌混合，按暗牌处理", {
+					if (this.controllerLogger.enabled !== false) this.controllerLogger.warn("移动协议明暗牌混合，按暗牌处理", {
 						raw,
 						patched
 					});
 					patched.CardIDs = [];
 				}
 				const normalizedEvent = normalizeMoveEvent(patched, raw);
-				if (getMoveSubZone(normalizedEvent.from) === "hand") normalizedEvent.cardIDs.forEach((cardID) => {
+				if (this.controllerLogger.enabled && getMoveSubZone(normalizedEvent.from) === "hand") normalizedEvent.cardIDs.forEach((cardID) => {
 					const card = readyRoom.cardIndex.get(cardID);
 					if (!card || card.suspended || card.hasLocationCandidates() || card.resolvedSeat !== getMoveSeat(normalizedEvent.from) || card.subZone !== "equip" && card.subZone !== "judge" && card.subZone !== "mark") return;
-					this.controllerLogger.warn("协议手牌来源与本地确定子区冲突，仍按协议处理", {
+					if (this.controllerLogger.enabled !== false) this.controllerLogger.warn("协议手牌来源与本地确定子区冲突，仍按协议处理", {
 						cardID,
 						fromSeatID: getMoveSeat(normalizedEvent.from),
 						fromSubZone: getMoveSubZone(normalizedEvent.from),
@@ -10785,47 +10319,29 @@
 						patched: this.summarizeProtocolMove(patched)
 					});
 				});
-				this.controllerLogger.debug("移动事件归一化", summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS));
 				const event = readyRoom.decorateMoveEvent(normalizedEvent);
-				this.controllerLogger.debug("移动事件装饰完成", {
-					before: summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS),
-					after: summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
-				});
-				if (normalizedEvent.from !== event.from) this.controllerLogger.info("移动事件来源修正", {
-					cardIDs: event.cardIDs,
-					from: normalizedEvent.from,
-					correctedFrom: event.from
-				});
+				if (normalizedEvent.from !== event.from) {}
 				if (event.type === "revealPublicCandidate") {
-					this.controllerLogger.info("移动事件分支: revealPublicCandidate", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
 					if (!this.revealPublicCandidateCards(readyRoom, event)) return;
-				} else if (event.type === "noop") {
-					this.controllerLogger.info("移动事件跳过", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
-					return;
-				} else if (event.type === "showCards") {
-					this.controllerLogger.info("移动事件分支: showCards", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
+				} else if (event.type === "noop") return;
+				else if (event.type === "showCards") {
 					if (!this.showTrackerCards(readyRoom, event)) return;
-				} else if (event.type === "shuffleDiscardIntoPile") {
-					this.controllerLogger.info("移动事件分支: shuffleDiscardIntoPile", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
-					readyRoom.shufflePile({ cardCount: event.cardCount });
-				} else {
-					this.controllerLogger.info("移动事件分支: moveCards", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
-					if (!readyRoom.moveCards(event.cardIDs, {
-						from: event.from,
-						to: event.to,
-						triggerSpellID: event.protocol.SpellID,
-						...event.options,
-						pileIdentityEvent: event
-					})) {
-						this.controllerLogger.warn("移动来源解析失败，已取消本次 tracker 移动", { cardIDs: event.cardIDs });
-						return;
-					}
+				} else if (event.type === "shuffleDiscardIntoPile") readyRoom.shufflePile({ cardCount: event.cardCount });
+				else if (!readyRoom.moveCards(event.cardIDs, {
+					from: event.from,
+					to: event.to,
+					triggerSpellID: event.protocol.SpellID,
+					...event.options,
+					pileIdentityEvent: event
+				})) {
+					if (this.controllerLogger.enabled !== false) this.controllerLogger.warn("移动来源解析失败，已取消本次 tracker 移动", { cardIDs: event.cardIDs });
+					return;
 				}
 				readyRoom.afterMoveCommitted(event);
 				readyRoom.notifyCardsRevealed(event.cardIDs);
 				this.controllerView.scheduleRender();
 			} catch (e) {
-				trackerLogger.error("移动同步异常，已跳过本次 tracker 更新", e, this.summarizeProtocolMove(raw));
+				if (trackerLogger.enabled !== false) trackerLogger.error("移动同步异常，已跳过本次 tracker 更新", e, this.summarizeProtocolMove(raw));
 			}
 		}
 		revealPublicCandidateCards(room, event) {
@@ -10834,15 +10350,7 @@
 			const ids = event.cardIDs.filter((id) => id > 0);
 			const locationCandidate = fromPublicCandidate(createPublicCandidate(reveal.zone, reveal.position, Number(reveal.count)));
 			if (ids.length === 0 || !locationCandidate) return false;
-			const cards = room.revealPublicCandidates(ids, locationCandidate);
-			this.controllerLogger.info("公共区范围揭示完成", {
-				ids,
-				zone: reveal.zone,
-				position: locationCandidate.position,
-				count: reveal.count,
-				resolvedCount: cards.length
-			});
-			return cards.length > 0;
+			return room.revealPublicCandidates(ids, locationCandidate).length > 0;
 		}
 		showTrackerCards(room, event) {
 			const ids = event.cardIDs.filter((id) => id > 0);
@@ -10874,12 +10382,6 @@
 				zoneName: materializationZone,
 				position: event.from.type === "public" || event.from.type === "unresolved" ? event.from.position : event.protocol.FromPosition ?? position
 			}, this.controllerLogger);
-			this.controllerLogger.info("展示明牌进入公共区", {
-				ids,
-				zoneName,
-				position,
-				resolvedCount: knownCards.length
-			});
 			if (sourceZoneName && sourceZoneName !== zoneName) {
 				knownCards.forEach((card) => card.confirmKnown());
 				return room.moveCards(ids, {
@@ -10925,10 +10427,6 @@
 			const ids = this.normalizeIDs(cardIDs).filter((id) => id > 0);
 			if (ids.length === 0) return;
 			try {
-				this.controllerLogger.info("明牌同步输入", {
-					target,
-					cardIDs: ids
-				});
 				if (target.type === "player") {
 					const seatID = Number(target.seatID);
 					if (Number.isNaN(seatID) || seatID === 255) return;
@@ -10984,7 +10482,7 @@
 				readyRoom.notifyCardsRevealed(ids);
 				this.controllerView.scheduleRender();
 			} catch (e) {
-				trackerLogger.error("明牌同步失败", e, {
+				if (trackerLogger.enabled !== false) trackerLogger.error("明牌同步失败", e, {
 					target,
 					cardIDs: ids
 				});
@@ -10999,7 +10497,7 @@
 				for (const move of moves) this.syncTrackerMove(move.patched, move.raw);
 				if (moves.length === 0 && readyRoom.dirtyCardSeq !== previousCardSeq) this.controllerView.scheduleRender();
 			} catch (error) {
-				trackerLogger.error("技能协议处理失败", error, event);
+				if (trackerLogger.enabled !== false) trackerLogger.error("技能协议处理失败", error, event);
 			}
 		}
 		revealTrackerCardsInZone(protocolZone, cardIDs = []) {
@@ -11084,9 +10582,8 @@
 					this.trackerRoom.destroy();
 					this.trackerRoom = null;
 				} else this.gameState.bindRoom(null);
-				this.controllerLogger.info("Room 销毁");
 			} catch (e) {
-				trackerLogger.error("Room 销毁失败", e);
+				if (trackerLogger.enabled !== false) trackerLogger.error("Room 销毁失败", e);
 			}
 		}
 	};
@@ -12043,7 +11540,7 @@
 	function getLayoutViewportWidth() {
 		return document.documentElement.clientWidth || window.innerWidth;
 	}
-	function initDragElement(globalConfig, globalState, refreshSidebarViewport) {
+	function initDragElement(globalConfig, globalState, requestWindowResize) {
 		bindSorderPenetration();
 		const draggable = document.getElementById("header");
 		const container = document.getElementById("tracker-shell");
@@ -12066,7 +11563,7 @@
 			if (globalConfig.padding) return;
 			if (globalState.closeIframe) document.getElementById("toggle-me")?.click();
 			globalConfig.padding = 232;
-			refreshSidebarViewport();
+			requestWindowResize();
 			translateX = 0;
 			translateY = 0;
 			container.style.transform = "translate(0px, 0px)";
@@ -12105,7 +11602,7 @@
 			if (globalConfig.padding) {
 				globalConfig.padding = 0;
 				container.style.height = "500px";
-				refreshSidebarViewport();
+				requestWindowResize();
 			}
 			if (!pendingFrame) {
 				pendingFrame = true;
@@ -12194,6 +11691,24 @@
 	}
 	function clamp$1(value, min, max) {
 		return Math.max(min, Math.min(max, value));
+	}
+	var resizeEvents = new EventTarget();
+	var resizeListeners = new Set();
+	function subscribeWindowResize(callback) {
+		const listener = () => callback();
+		if (resizeListeners.size === 0) window.addEventListener("resize", dispatchResize, true);
+		resizeListeners.add(listener);
+		resizeEvents.addEventListener("resize", listener);
+		return () => {
+			resizeEvents.removeEventListener("resize", listener);
+			if (resizeListeners.delete(listener) && resizeListeners.size === 0) window.removeEventListener("resize", dispatchResize, true);
+		};
+	}
+	function requestWindowResize() {
+		window.dispatchEvent(new Event("resize"));
+	}
+	function dispatchResize() {
+		resizeEvents.dispatchEvent(new Event("resize"));
 	}
 	var windowStates = new Map();
 	function createDraggableWindow({ id, styleId, styleText, markup, handleSelector }) {
@@ -12315,11 +11830,11 @@
 		const correct = () => correctPosition(element, state);
 		const observer = new ResizeObserver(correct);
 		observer.observe(element, { box: "border-box" });
-		window.addEventListener("resize", correct);
+		const stopWindowResize = subscribeWindowResize(correct);
 		correct();
 		state.cleanupPosition = () => {
 			observer.disconnect();
-			window.removeEventListener("resize", correct);
+			stopWindowResize();
 			state.cleanupPosition = null;
 		};
 	}
@@ -13166,6 +12681,263 @@
 	function formatNumberCounts(counts) {
 		return counts.flatMap((count, number) => number > 0 ? Array(count).fill(n2N(number, false)) : []);
 	}
+	function isStrictMultisetSubset(subset, superSet) {
+		if (subset.length >= superSet.length) return false;
+		const counts = new Map();
+		superSet.forEach((number) => counts.set(number, (counts.get(number) || 0) + 1));
+		return subset.every((number) => {
+			const count = counts.get(number) || 0;
+			if (count <= 0) return false;
+			counts.set(number, count - 1);
+			return true;
+		});
+	}
+	function drawChengXiang(array, K) {
+		const arr = normalizeCardNumbers(array);
+		if (!arr.length) return;
+		const results = [];
+		function backtrack(temp, start, sum) {
+			if (sum > 13) return;
+			if (temp.length > 0) {
+				const numbers = temp.slice();
+				const exact = K && sum === 13 ? temp.length : 0;
+				results.push({
+					numbers,
+					exact
+				});
+			}
+			for (let i = start; i < arr.length; i++) {
+				if (i > start && arr[i] === arr[i - 1]) continue;
+				if (sum + arr[i] > 13) break;
+				temp.push(arr[i]);
+				backtrack(temp, i + 1, sum + arr[i]);
+				temp.pop();
+			}
+		}
+		backtrack([], 0, 0);
+		const resDiv = getResultContainer();
+		if (!resDiv) return;
+		const fragment = document.createDocumentFragment();
+		const visibleResults = results.filter((subset, _, self) => !self.some((superSet) => isStrictMultisetSubset(subset.numbers, superSet.numbers))).sort((a, b) => (b.exact || 0) - (a.exact || 0) || b.numbers.length - a.numbers.length);
+		for (const result of visibleResults) {
+			const button = buttonRes(formatCardNumbers(result.numbers, false));
+			if (K && result.exact) button.classList.add("textRes");
+			fragment.appendChild(button);
+		}
+		resDiv.appendChild(fragment);
+	}
+	function drawMiZhu(array) {
+		const arr = normalizeCardNumbers(array);
+		const results = [];
+		function backtrack(temp, start, sum) {
+			if (sum === 13) {
+				results.push(temp.slice());
+				return;
+			}
+			for (let i = start; i < arr.length; i++) {
+				if (i > start && arr[i] === arr[i - 1]) continue;
+				if (sum + arr[i] > 13) break;
+				temp.push(arr[i]);
+				backtrack(temp, i + 1, sum + arr[i]);
+				temp.pop();
+			}
+		}
+		backtrack([], 0, 0);
+		const resDiv = getResultContainer();
+		if (!resDiv) return;
+		const fragment = document.createDocumentFragment();
+		const sortedResults = results.sort((a, b) => b.length - a.length);
+		for (let i = 0; i < sortedResults.length && i < 15; i += 1) fragment.appendChild(buttonRes(formatCardNumbers(sortedResults[i], false)));
+		if (!fragment.childNodes.length) {
+			showTextResult(resDiv, "【资援】无解！");
+			return;
+		}
+		resDiv.appendChild(fragment);
+	}
+	function getYanJiaoRemain(counts, ...subsets) {
+		const remain = counts.slice();
+		for (let i = 0; i < remain.length; i += 1) {
+			for (const subset of subsets) {
+				remain[i] -= subset[i];
+				if (remain[i] < 0) return null;
+			}
+			if (i > 0 && remain[i] >= 2) return null;
+		}
+		return remain;
+	}
+	function createYanJiaoButton(left, right) {
+		const button = document.createElement("button");
+		const spanA = document.createElement("span");
+		const spanB = document.createElement("span");
+		button.className = "calRes";
+		button.title = "点击复制";
+		spanA.innerText = formatNumberCounts(left).join("+");
+		spanB.innerText = formatNumberCounts(right).join("+");
+		button.appendChild(spanA);
+		button.insertAdjacentHTML("beforeend", "<span>=</span>");
+		button.appendChild(spanB);
+		button.onclick = function() {
+			toClipboard(button.innerText, true);
+		};
+		return button;
+	}
+	function drawYanJiao(array) {
+		const counts = countCardNumbers(normalizeCardNumbers(array));
+		const half = Math.floor(getCountedNumbersTotal(counts) / 2);
+		const subsetsBySum = new Map([[0, [Array(14).fill(0)]]]);
+		for (let number = 1; number <= 13; number += 1) {
+			const count = counts[number];
+			if (count === 0) continue;
+			for (const sum of Array.from(subsetsBySum.keys()).sort((a, b) => b - a)) {
+				const subsets = subsetsBySum.get(sum);
+				for (let n = 1; n <= count; n += 1) {
+					const newSum = sum + number * n;
+					if (newSum > half) break;
+					if (!subsetsBySum.has(newSum)) subsetsBySum.set(newSum, []);
+					const targetSubsets = subsetsBySum.get(newSum);
+					for (const subset of subsets) {
+						const nextSubset = subset.slice();
+						nextSubset[0] += n;
+						nextSubset[number] += n;
+						targetSubsets.push(nextSubset);
+					}
+				}
+			}
+		}
+		subsetsBySum.delete(0);
+		const pairs = new Map();
+		for (const sum of Array.from(subsetsBySum.keys()).sort((a, b) => b - a)) {
+			const subsets = subsetsBySum.get(sum);
+			for (let i = 0; i < subsets.length; i += 1) for (let j = i; j < subsets.length; j += 1) {
+				const remain = getYanJiaoRemain(counts, subsets[i], subsets[j]);
+				if (!remain) continue;
+				const [left, right] = subsets[i][0] <= subsets[j][0] ? [subsets[i], subsets[j]] : [subsets[j], subsets[i]];
+				if (!pairs.has(remain[0])) pairs.set(remain[0], []);
+				pairs.get(remain[0]).push([
+					left,
+					right,
+					remain
+				]);
+			}
+		}
+		const resDiv = getResultContainer();
+		if (!resDiv) return;
+		const fragment = document.createDocumentFragment();
+		let rendered = 0;
+		for (const remainCount of Array.from(pairs.keys()).sort((a, b) => a - b)) {
+			const pairsByRemain = pairs.get(remainCount).sort((a, b) => a[0][0] - b[0][0]);
+			for (const [left, right] of pairsByRemain) {
+				fragment.appendChild(createYanJiaoButton(left, right));
+				rendered += 1;
+				if (rendered >= 5) break;
+			}
+			if (rendered >= 5) break;
+		}
+		if (!rendered) {
+			showTextResult(resDiv, "【严教】无解！");
+			return;
+		}
+		resDiv.appendChild(fragment);
+	}
+	var MAX_RENDERED_RESULTS = 15;
+	function getYiChengGroups(numbers, length) {
+		const groups = [];
+		function backtrack(start, selected, sum) {
+			if (selected.length === length) {
+				groups.push({
+					selected: selected.slice(),
+					sum
+				});
+				return;
+			}
+			for (let i = start; i < numbers.length; i += 1) {
+				if (i > start && numbers[i] === numbers[i - 1]) continue;
+				selected.push(numbers[i]);
+				backtrack(i + 1, selected, sum + numbers[i]);
+				selected.pop();
+			}
+		}
+		backtrack(0, [], 0);
+		return groups;
+	}
+	function hasNumberOverlap(left, right) {
+		const rightSet = new Set(right);
+		return left.some((number) => rightSet.has(number));
+	}
+	function drawYiCheng(paiduiNumbers, shoupaiNumbers) {
+		if (!paiduiNumbers?.length || !shoupaiNumbers?.length) return;
+		const resDiv = getResultContainer();
+		if (!resDiv) return;
+		const paidui = normalizeCardNumbers(paiduiNumbers);
+		const shoupai = normalizeCardNumbers(shoupaiNumbers);
+		const max = Math.min(paidui.length, shoupai.length);
+		const fragment = document.createDocumentFragment();
+		let rendered = 0;
+		for (let n = 2; n <= max && rendered < MAX_RENDERED_RESULTS; n++) {
+			const paiduiGroups = getYiChengGroups(paidui, n);
+			const handGroups = getYiChengGroups(shoupai, n);
+			for (const handGroup of handGroups) {
+				if (rendered >= MAX_RENDERED_RESULTS) break;
+				for (const paiduiGroup of paiduiGroups) {
+					if (rendered >= MAX_RENDERED_RESULTS) break;
+					if (handGroup.sum <= paiduiGroup.sum) continue;
+					if (hasNumberOverlap(handGroup.selected, paiduiGroup.selected)) continue;
+					if (max >= 3 && !handGroup.selected.some((number, index) => number < paiduiGroup.selected[index])) continue;
+					fragment.appendChild(buttonRes(`${formatCardNumbers(handGroup.selected)}→${formatCardNumbers(paiduiGroup.selected)}`, "点击复制", false));
+					rendered += 1;
+				}
+			}
+		}
+		const shoupaiSet = Array.from(new Set(shoupai));
+		const paiduiSet = Array.from(new Set(paidui));
+		for (const sp of shoupaiSet) {
+			if (rendered >= MAX_RENDERED_RESULTS) break;
+			const pd = paiduiSet.filter((n) => n < sp);
+			if (!pd.length) continue;
+			fragment.appendChild(buttonRes(n2N(sp) + "→" + pd.map((n) => n2N(n)).join("/"), "点击复制", false));
+			rendered += 1;
+		}
+		if (!rendered) {
+			showTextResult(resDiv, "【易城】无法交换！");
+			return;
+		}
+		resDiv.appendChild(fragment);
+	}
+	function drawLastUseCard(cardIDs = [], { spellId, color } = {}) {
+		const toBeAdd = document.getElementById("lastUseCard");
+		if (!toBeAdd) return;
+		const ids = (cardIDs || []).filter((id) => id);
+		let card;
+		let isRed;
+		if (ids.length === 1) {
+			card = CardConfig.GetInstance().getCard(ids[0]);
+			isRed = card?.color === 1 || card?.color === 2;
+		} else {
+			card = spellId ? SkillsConfig.GetInstance().getSpell(spellId) : null;
+			isRed = color === 1;
+		}
+		if (!card) return;
+		const button = document.createElement("button");
+		button.classList.add("shoupai");
+		button.classList.toggle("red-card", isRed);
+		button.innerHTML = getCardFaceHtml(card);
+		clearDirectCards(toBeAdd);
+		toBeAdd.appendChild(button);
+	}
+	function clearDirectCards(element) {
+		if (!(element instanceof HTMLElement)) return;
+		invalidateEllipsisOverflow(element);
+		element.querySelectorAll(":scope > .shoupai, :scope > .markedCard").forEach((e) => e.remove());
+	}
+	function clearZoneMirrors() {
+		document.querySelectorAll("#seatUI .sorder-body").forEach(clearDirectCards);
+		document.querySelectorAll("#seatUI .markedCard").forEach((element) => element.remove());
+	}
+	function refreshZoneMirrorOverflow() {
+		document.querySelectorAll(".sorder-body").forEach((orderBody) => {
+			checkEllipsisOverflow(orderBody, 40);
+		});
+	}
 	var ROUND_ZHAN_FA_IDS = new Set([
 		2100,
 		2101,
@@ -13519,324 +13291,6 @@
 		}
 	};
 	var laya = new GameRuntime();
-	function isStrictMultisetSubset(subset, superSet) {
-		if (subset.length >= superSet.length) return false;
-		const counts = new Map();
-		superSet.forEach((number) => counts.set(number, (counts.get(number) || 0) + 1));
-		return subset.every((number) => {
-			const count = counts.get(number) || 0;
-			if (count <= 0) return false;
-			counts.set(number, count - 1);
-			return true;
-		});
-	}
-	function drawChengXiang(array, K) {
-		const arr = normalizeCardNumbers(array);
-		if (!arr.length) return;
-		const results = [];
-		function backtrack(temp, start, sum) {
-			if (sum > 13) return;
-			if (temp.length > 0) {
-				const numbers = temp.slice();
-				const exact = K && sum === 13 ? temp.length : 0;
-				results.push({
-					numbers,
-					exact
-				});
-			}
-			for (let i = start; i < arr.length; i++) {
-				if (i > start && arr[i] === arr[i - 1]) continue;
-				if (sum + arr[i] > 13) break;
-				temp.push(arr[i]);
-				backtrack(temp, i + 1, sum + arr[i]);
-				temp.pop();
-			}
-		}
-		backtrack([], 0, 0);
-		const resDiv = getResultContainer();
-		if (!resDiv) return;
-		const fragment = document.createDocumentFragment();
-		const visibleResults = results.filter((subset, _, self) => !self.some((superSet) => isStrictMultisetSubset(subset.numbers, superSet.numbers))).sort((a, b) => (b.exact || 0) - (a.exact || 0) || b.numbers.length - a.numbers.length);
-		for (const result of visibleResults) {
-			const button = buttonRes(formatCardNumbers(result.numbers, false));
-			if (K && result.exact) button.classList.add("textRes");
-			fragment.appendChild(button);
-		}
-		resDiv.appendChild(fragment);
-	}
-	function drawMiZhu(array) {
-		const arr = normalizeCardNumbers(array);
-		const results = [];
-		function backtrack(temp, start, sum) {
-			if (sum === 13) {
-				results.push(temp.slice());
-				return;
-			}
-			for (let i = start; i < arr.length; i++) {
-				if (i > start && arr[i] === arr[i - 1]) continue;
-				if (sum + arr[i] > 13) break;
-				temp.push(arr[i]);
-				backtrack(temp, i + 1, sum + arr[i]);
-				temp.pop();
-			}
-		}
-		backtrack([], 0, 0);
-		const resDiv = getResultContainer();
-		if (!resDiv) return;
-		const fragment = document.createDocumentFragment();
-		const sortedResults = results.sort((a, b) => b.length - a.length);
-		for (let i = 0; i < sortedResults.length && i < 15; i += 1) fragment.appendChild(buttonRes(formatCardNumbers(sortedResults[i], false)));
-		if (!fragment.childNodes.length) {
-			showTextResult(resDiv, "【资援】无解！");
-			return;
-		}
-		resDiv.appendChild(fragment);
-	}
-	function getYanJiaoRemain(counts, ...subsets) {
-		const remain = counts.slice();
-		for (let i = 0; i < remain.length; i += 1) {
-			for (const subset of subsets) {
-				remain[i] -= subset[i];
-				if (remain[i] < 0) return null;
-			}
-			if (i > 0 && remain[i] >= 2) return null;
-		}
-		return remain;
-	}
-	function createYanJiaoButton(left, right) {
-		const button = document.createElement("button");
-		const spanA = document.createElement("span");
-		const spanB = document.createElement("span");
-		button.className = "calRes";
-		button.title = "点击复制";
-		spanA.innerText = formatNumberCounts(left).join("+");
-		spanB.innerText = formatNumberCounts(right).join("+");
-		button.appendChild(spanA);
-		button.insertAdjacentHTML("beforeend", "<span>=</span>");
-		button.appendChild(spanB);
-		button.onclick = function() {
-			toClipboard(button.innerText, true);
-		};
-		return button;
-	}
-	function drawYanJiao(array) {
-		const counts = countCardNumbers(normalizeCardNumbers(array));
-		const half = Math.floor(getCountedNumbersTotal(counts) / 2);
-		const subsetsBySum = new Map([[0, [Array(14).fill(0)]]]);
-		for (let number = 1; number <= 13; number += 1) {
-			const count = counts[number];
-			if (count === 0) continue;
-			for (const sum of Array.from(subsetsBySum.keys()).sort((a, b) => b - a)) {
-				const subsets = subsetsBySum.get(sum);
-				for (let n = 1; n <= count; n += 1) {
-					const newSum = sum + number * n;
-					if (newSum > half) break;
-					if (!subsetsBySum.has(newSum)) subsetsBySum.set(newSum, []);
-					const targetSubsets = subsetsBySum.get(newSum);
-					for (const subset of subsets) {
-						const nextSubset = subset.slice();
-						nextSubset[0] += n;
-						nextSubset[number] += n;
-						targetSubsets.push(nextSubset);
-					}
-				}
-			}
-		}
-		subsetsBySum.delete(0);
-		const pairs = new Map();
-		for (const sum of Array.from(subsetsBySum.keys()).sort((a, b) => b - a)) {
-			const subsets = subsetsBySum.get(sum);
-			for (let i = 0; i < subsets.length; i += 1) for (let j = i; j < subsets.length; j += 1) {
-				const remain = getYanJiaoRemain(counts, subsets[i], subsets[j]);
-				if (!remain) continue;
-				const [left, right] = subsets[i][0] <= subsets[j][0] ? [subsets[i], subsets[j]] : [subsets[j], subsets[i]];
-				if (!pairs.has(remain[0])) pairs.set(remain[0], []);
-				pairs.get(remain[0]).push([
-					left,
-					right,
-					remain
-				]);
-			}
-		}
-		const resDiv = getResultContainer();
-		if (!resDiv) return;
-		const fragment = document.createDocumentFragment();
-		let rendered = 0;
-		for (const remainCount of Array.from(pairs.keys()).sort((a, b) => a - b)) {
-			const pairsByRemain = pairs.get(remainCount).sort((a, b) => a[0][0] - b[0][0]);
-			for (const [left, right] of pairsByRemain) {
-				fragment.appendChild(createYanJiaoButton(left, right));
-				rendered += 1;
-				if (rendered >= 5) break;
-			}
-			if (rendered >= 5) break;
-		}
-		if (!rendered) {
-			showTextResult(resDiv, "【严教】无解！");
-			return;
-		}
-		resDiv.appendChild(fragment);
-	}
-	var MAX_RENDERED_RESULTS = 15;
-	function getYiChengGroups(numbers, length) {
-		const groups = [];
-		function backtrack(start, selected, sum) {
-			if (selected.length === length) {
-				groups.push({
-					selected: selected.slice(),
-					sum
-				});
-				return;
-			}
-			for (let i = start; i < numbers.length; i += 1) {
-				if (i > start && numbers[i] === numbers[i - 1]) continue;
-				selected.push(numbers[i]);
-				backtrack(i + 1, selected, sum + numbers[i]);
-				selected.pop();
-			}
-		}
-		backtrack(0, [], 0);
-		return groups;
-	}
-	function hasNumberOverlap(left, right) {
-		const rightSet = new Set(right);
-		return left.some((number) => rightSet.has(number));
-	}
-	function drawYiCheng(paiduiNumbers, shoupaiNumbers) {
-		if (!paiduiNumbers?.length || !shoupaiNumbers?.length) return;
-		const resDiv = getResultContainer();
-		if (!resDiv) return;
-		const paidui = normalizeCardNumbers(paiduiNumbers);
-		const shoupai = normalizeCardNumbers(shoupaiNumbers);
-		const max = Math.min(paidui.length, shoupai.length);
-		const fragment = document.createDocumentFragment();
-		let rendered = 0;
-		for (let n = 2; n <= max && rendered < MAX_RENDERED_RESULTS; n++) {
-			const paiduiGroups = getYiChengGroups(paidui, n);
-			const handGroups = getYiChengGroups(shoupai, n);
-			for (const handGroup of handGroups) {
-				if (rendered >= MAX_RENDERED_RESULTS) break;
-				for (const paiduiGroup of paiduiGroups) {
-					if (rendered >= MAX_RENDERED_RESULTS) break;
-					if (handGroup.sum <= paiduiGroup.sum) continue;
-					if (hasNumberOverlap(handGroup.selected, paiduiGroup.selected)) continue;
-					if (max >= 3 && !handGroup.selected.some((number, index) => number < paiduiGroup.selected[index])) continue;
-					fragment.appendChild(buttonRes(`${formatCardNumbers(handGroup.selected)}→${formatCardNumbers(paiduiGroup.selected)}`, "点击复制", false));
-					rendered += 1;
-				}
-			}
-		}
-		const shoupaiSet = Array.from(new Set(shoupai));
-		const paiduiSet = Array.from(new Set(paidui));
-		for (const sp of shoupaiSet) {
-			if (rendered >= MAX_RENDERED_RESULTS) break;
-			const pd = paiduiSet.filter((n) => n < sp);
-			if (!pd.length) continue;
-			fragment.appendChild(buttonRes(n2N(sp) + "→" + pd.map((n) => n2N(n)).join("/"), "点击复制", false));
-			rendered += 1;
-		}
-		if (!rendered) {
-			showTextResult(resDiv, "【易城】无法交换！");
-			return;
-		}
-		resDiv.appendChild(fragment);
-	}
-	function drawLastUseCard(cardIDs = [], { spellId, color } = {}) {
-		const toBeAdd = document.getElementById("lastUseCard");
-		if (!toBeAdd) return;
-		const ids = (cardIDs || []).filter((id) => id);
-		let card;
-		let isRed;
-		if (ids.length === 1) {
-			card = CardConfig.GetInstance().getCard(ids[0]);
-			isRed = card?.color === 1 || card?.color === 2;
-		} else {
-			card = spellId ? SkillsConfig.GetInstance().getSpell(spellId) : null;
-			isRed = color === 1;
-		}
-		if (!card) return;
-		const button = document.createElement("button");
-		button.classList.add("shoupai");
-		button.classList.toggle("red-card", isRed);
-		button.innerHTML = getCardFaceHtml(card);
-		clearDirectCards(toBeAdd);
-		toBeAdd.appendChild(button);
-	}
-	function clearDirectCards(element) {
-		if (!(element instanceof HTMLElement)) return;
-		invalidateEllipsisOverflow(element);
-		element.querySelectorAll(":scope > .shoupai, :scope > .markedCard").forEach((e) => e.remove());
-	}
-	function clearZoneMirrors() {
-		document.querySelectorAll("#seatUI .sorder-body").forEach(clearDirectCards);
-		document.querySelectorAll("#seatUI .markedCard").forEach((element) => element.remove());
-	}
-	function debounce(func, wait) {
-		let timeout;
-		function debounced(...args) {
-			clearTimeout(timeout);
-			timeout = setTimeout(() => func.apply(this, args), wait);
-		}
-		debounced.cancel = function() {
-			clearTimeout(timeout);
-			timeout = null;
-		};
-		return debounced;
-	}
-	var optimizedResizeHandler = debounce(() => {
-		requestAnimationFrame(() => {
-			document.querySelectorAll(".sorder-body").forEach((orderBody) => {
-				checkEllipsisOverflow(orderBody, 40);
-			});
-		});
-	}, 500);
-	window.addEventListener("resize", optimizedResizeHandler);
-	function drawSeatUIs() {
-		const seatUI = document.getElementById("seatUI");
-		if (!seatUI) return false;
-		const seats = UI.seatUIs.slice(1);
-		if (seats.length === 0 || seats.some((seat) => !hasSeatPosition(seat))) return false;
-		const defaultWidth = UI.unscaledWidth + UI.paddingRight;
-		const layouts = seats.map((seat) => {
-			const displayID = seat.fixedViewId;
-			return {
-				displayID,
-				orderContainer: seatUI.querySelector("#or" + displayID),
-				seat
-			};
-		});
-		if (layouts.some(({ orderContainer }) => !orderContainer)) return false;
-		const visibleContainers = new Set(layouts.map(({ orderContainer }) => orderContainer));
-		for (const container of seatUI.querySelectorAll(".sorderContainer:not(.deckEdgeUI)")) {
-			const isShown = visibleContainers.has(container);
-			container.style.display = isShown ? "flex" : "none";
-			container.style.visibility = isShown && Game.turn > 0 ? "visible" : "hidden";
-		}
-		for (const { displayID, orderContainer, seat } of layouts) {
-			applySeatContainerLayout(orderContainer, seat, defaultWidth);
-			ensureSeatOrderBody(orderContainer, displayID).className = `sorder-body sNo${displayID}`;
-		}
-		UI.firstUpdateSeatUI = true;
-		window.dispatchEvent(new CustomEvent("dxc-seat-overlay-layout"));
-		return true;
-	}
-	function hasSeatPosition(seat) {
-		return Number.isFinite(seat?.posX) && Number.isFinite(seat?.posY) && Number.isFinite(seat?.fixedViewId);
-	}
-	function applySeatContainerLayout(orderContainer, seat, defaultWidth) {
-		orderContainer.style.top = seat.posY + "px";
-		orderContainer.style.left = seat.posX + "px";
-		orderContainer.style.width = (seat.width || defaultWidth) + "px";
-	}
-	function ensureSeatOrderBody(orderContainer, displayID) {
-		let orderBody = orderContainer.querySelector("#s" + displayID);
-		if (!orderBody) {
-			orderBody = document.createElement("div");
-			orderBody.id = "s" + displayID;
-			orderContainer.appendChild(orderBody);
-		}
-		return orderBody;
-	}
 	function revealPlayerHandCards(seatID, cardIDs, options = {}) {
 		tracker.revealTrackerCards({
 			type: "player",
@@ -14438,787 +13892,28 @@
 			return laya.class("RogueLikePveManager")?.RogueLikeDataReq(dm);
 		};
 	})();
-	var ConfigManager = class ConfigManager {
-		configUrl = "https://web.sanguosha.com/220/h5_2/res/config/Config_w.sgs";
-		fileNames = [
-			"sys_playcard",
-			"cha_spell",
-			"character",
-			"hd_roguelike",
-			"cha_spellextend"
-		];
-		static GetInstance() {
-			if (null == this.instance) this.instance = new ConfigManager();
-			return this.instance;
-		}
-		constructor() {
-			this.preloadConfigerList = [
-				CardConfig.GetInstance(),
-				SkillsConfig.GetInstance(),
-				CharacterConfig.GetInstance(),
-				RoguelikeConfig.GetInstance(),
-				SpellExtendConfig.GetInstance()
-			];
-		}
-		async loadAndParseConfigs() {
-			const response = await fetch(this.configUrl);
-			if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-			const zipData = await response.arrayBuffer();
-			const zip = await JSZip.loadAsync(zipData);
-			const promises = this.preloadConfigerList.map(async (configer) => {
-				if (!configer) return;
-				const data = await this.loadConfigFile(zip, configer.FileName);
-				configer.parse(data);
-			});
-			await Promise.all(promises);
-			console.info("[ConfigManager] Config_w 解析完成");
-		}
-		async loadConfigFile(zip, fileName) {
-			const file = zip.file(fileName + ".sgs");
-			if (!file) throw new Error(`File not found in zip: ${fileName}.sgs`);
-			const arrayBuffer = await file.async("arraybuffer");
-			const decryptedData = CtrUtil.Ctr.Ofb_Dec(arrayBuffer);
-			const uint8Array = decryptedData instanceof Uint8Array ? decryptedData : new Uint8Array(decryptedData);
-			const decompressedData = new Zlib.Gunzip(uint8Array).decompress();
-			const fileData = new TextDecoder().decode(decompressedData);
-			return JSON.parse(fileData);
-		}
-	};
-	var ALWAYS_RECORDED_CLASSES = new Set([
-		"SsClientVersionNtf",
-		"MsgReconnectGame",
-		"MsgReconnectGameHand",
-		"decodeGameRecordInitInfo",
-		"decodeGsClientUserSeatFlagNtf",
-		"GsCFirstPhaseRole",
-		"MsgGamePlayCardNtf",
-		"SmsgGameSetCharacter",
-		"GsCGuoZhanSetCharacter",
-		"MsgGameTurnNtf",
-		"GsCGamephaseNtf",
-		"MsgGameRoundNtf",
-		"MsgGameOver",
-		"ClientLeavetableRep"
-	]);
-	var EMPTY_PAYLOAD_CLASSES = new Set(["ClientLeavetableRep", "MsgGameOver"]);
-	var ROLE_OPT_TARGET_SPELL_IDS = new Set([
-		4,
-		5,
-		357,
-		361,
-		372,
-		501,
-		774,
-		811,
-		851,
-		898,
-		921,
-		943,
-		987,
-		988,
-		2900,
-		3119,
-		3310,
-		3437,
-		3483,
-		3876,
-		3903,
-		4025
-	]);
-	var TRACKER_ROLE_DATA_EX_IDS = new Set([
-		8,
-		3544,
-		3571,
-		GUI_FU_ROLE_DATA_ID
-	]);
-	var TRACKER_USE_SPELL_IDS = new Set([
-		3090,
-		3138,
-		3157,
-		3161,
-		3185,
-		3193,
-		3511,
-		3731,
-		3750
-	]);
-	var CONDITIONAL_RECORDING_RULES = {
-		MsgNtfUseCardType: shouldRecordCounterUseCard,
-		PubGsCUseCard: shouldRecordCounterUseCard,
-		PubGsCUseSpell: shouldRecordUseSpell,
-		PubGsCMoveCard: shouldRecordMoveCard,
-		GsCUpdateRoleDataNtf: (message) => readNumberField(message, "StateID") === 58,
-		MsgGameShowFigure: (message) => readNumberField(message, "Figure") === 1,
-		GsCUpdateRoleDataExNtf: (message) => TRACKER_ROLE_DATA_EX_IDS.has(readNumberField(message, "DataID") ?? -1),
-		GsCRoleOptTargetNtf: shouldRecordRoleOptTarget,
-		CGsRoleSpellOptRep: shouldRecordRoleSpellOpt
-	};
-	var ROOT_IGNORED_FIELDS = new Set([
-		"ByteData",
-		"CardSpell",
-		"ClassName",
-		"Data",
-		"DataCount",
-		"FItem",
-		"ProtoObj",
-		"Spell",
-		"_className_",
-		"className",
-		"data",
-		"data_count",
-		"errCode",
-		"errMsg",
-		"fromSocket2",
-		"id",
-		"isResume",
-		"isSend",
-		"msgQueuePriority",
-		"pbMsgType",
-		"printIgnorList",
-		"printJsonIgnorList",
-		"protoName",
-		"receviedStatus",
-		"sendStatus",
-		"timestamp",
-		"userID"
-	]);
-	var ROOT_FIELD_EXCEPTIONS = new Map([
-		["MsgNtfUseCardType", new Set(["isSend"])],
-		["PubGsCUseCard", new Set(["isSend"])],
-		["PubGsCMoveCard", new Set(["isSend"])]
-	]);
-	var ROOT_FIELD_ALLOWLISTS = {
-		SsClientVersionNtf: new Set(),
-		MsgReconnectGame: new Set(["CardPileCount", "SeatInfos"]),
-		MsgReconnectGameHand: new Set([
-			"CardIDs",
-			"Count",
-			"SeatIndex"
-		]),
-		decodeGameRecordInitInfo: new Set(),
-		decodeGsClientUserSeatFlagNtf: new Set(),
-		GsCFirstPhaseRole: new Set(["SeatID"]),
-		GsCGamephaseNtf: new Set(["Round", "SeatID"]),
-		GsCGuoZhanSetCharacter: new Set(["GeneralData", "SeatID"]),
-		GsCUpdateRoleDataExNtf: new Set([
-			"DataID",
-			"Datas",
-			"SeatID"
-		]),
-		GsCUpdateRoleDataNtf: new Set(["SeatID", "StateID"]),
-		MsgGamePlayCardNtf: new Set(["CardList"]),
-		MsgGameRoundNtf: new Set(["isPassed"]),
-		MsgGameShowFigure: new Set(["Figure", "SeatID"]),
-		MsgGameTurnNtf: new Set(["TurnCnt"]),
-		MsgNtfUseCardType: new Set([
-			"castSeatId",
-			"isSend",
-			"spellID",
-			"spellId",
-			"useType"
-		]),
-		PubGsCMoveCard: new Set([
-			"CardCount",
-			"CardIDs",
-			"FromID",
-			"FromPosition",
-			"FromZone",
-			"FromZoneParam",
-			"MoveType",
-			"SpellID",
-			"SrcSeatID",
-			"ToID",
-			"ToPosition",
-			"ToZone",
-			"ToZoneParam",
-			"isSend"
-		]),
-		PubGsCUseCard: new Set([
-			"SeatID",
-			"isSend",
-			"spellID",
-			"useType"
-		]),
-		PubGsCUseSpell: new Set([
-			"CardIDs",
-			"DestSeatIDs",
-			"EffectIndex",
-			"SeatID",
-			"SkillOwerSeatID",
-			"SpellID",
-			"SrcSeatID"
-		]),
-		SmsgGameSetCharacter: new Set(["Infos"]),
-		CGsRoleSpellOptRep: new Set([
-			"Datas",
-			"SeatID",
-			"SpellID",
-			"Type"
-		]),
-		GsCRoleOptTargetNtf: new Set([
-			"Param",
-			"Params",
-			"SeatID",
-			"SpellID",
-			"SrcSeatID",
-			"Type",
-			"targetSeatID"
-		])
-	};
-	var NESTED_FIELD_ALLOWLISTS = {
-		"MsgReconnectGame.SeatInfos": new Set([
-			"SeatID",
-			"HandCardCount",
-			"EquipCardCount",
-			"EquipCards",
-			"JudgeCardCount",
-			"JudgeCards",
-			"CharacterID",
-			"Figure"
-		]),
-		"MsgReconnectGame.SeatInfos.EquipCards": new Set(["CardId"]),
-		"MsgReconnectGame.SeatInfos.JudgeCards": new Set(["CardId", "SpellId"]),
-		"GsCGuoZhanSetCharacter.GeneralData": new Set(["cardID", "index"]),
-		"SmsgGameSetCharacter.Infos": new Set(["CharacterID", "SeatID"])
-	};
-	var NESTED_IGNORED_FIELDS = new Set(["timestamp"]);
-	var TRACKER_SEAT_INFO_FIELDS = [
-		"SeatID",
-		"seat_id",
-		"user_temp_id",
-		"ClientID"
-	];
-	var OMITTED = Symbol("omitted");
-	var MAX_PROTOCOL_DEPTH = 20;
-	function shouldRecordTrackerProtocol(message, context = {}) {
-		if (!isProtocolObject(message)) return false;
-		const className = getProtocolClassName(message);
-		if (!className) return false;
-		const conditionalRule = CONDITIONAL_RECORDING_RULES[className];
-		if (conditionalRule) return conditionalRule(message, context);
-		return ALWAYS_RECORDED_CLASSES.has(className);
+	function createDeckEdgeOverlay() {
+		const deck = document.createElement("div");
+		deck.id = "deckEdgeUI";
+		deck.className = "sorderContainer deckEdgeUI";
+		deck.style.display = "none";
+		return deck;
 	}
-	function shouldRecordCounterUseCard(message, context) {
-		const useType = readNumberField(message, "useType");
-		const spellID = readNumberField(message, "spellID") ?? readNumberField(message, "spellId") ?? 0;
-		if (useType !== 1 || Boolean(readProtocolField(message, "isSend")) || spellID <= 0) return false;
-		if (context.mySeatID === void 0) return true;
-		return (readNumberField(message, "SeatID") ?? readNumberField(message, "castSeatId") ?? void 0) === context.mySeatID;
+	function resetDeckEdgeOverlay() {
+		const deck = document.getElementById("deckEdgeUI");
+		if (!deck) return;
+		deck.replaceChildren();
+		deck.style.display = "none";
 	}
-	function shouldRecordUseSpell(message, context) {
-		const spellID = readNumberField(message, "SpellID") ?? -1;
-		if (!TRACKER_USE_SPELL_IDS.has(spellID)) return false;
-		switch (spellID) {
-			case 3090:
-				if (readNumberField(message, "EffectIndex") !== 1) return false;
-				return context.currentSeatID === void 0 || readNumberField(message, "SeatID") === context.currentSeatID;
-			case 3157:
-			case 3511: return readArrayField(message, "CardIDs").some((cardID) => Number(cardID) > 0);
-			case 3750: return readNumberField(message, "EffectIndex") === 2 && readArrayField(message, "DestSeatIDs").length === 0;
-			case 3731: return readNumberField(message, "EffectIndex") === 2 && readArrayField(message, "DestSeatIDs").length > 0;
-			default: return true;
-		}
-	}
-	function shouldRecordMoveCard(message) {
-		return !(readNumberField(message, "CardCount") === 0 || readNumberField(message, "MoveType") === 0 || readNumberField(message, "ToZone") === 11 || Boolean(readProtocolField(message, "isSend")));
-	}
-	function shouldRecordRoleSpellOpt(message, context = {}) {
-		const datas = readArrayField(message, "Datas");
-		if (datas.length === 0) return false;
-		const type = readNumberField(message, "Type");
-		if (type === 72) return true;
-		switch (readNumberField(message, "SpellID")) {
-			case 2022:
-			case 3659: return true;
-			case 3744: return type !== 73;
-			case 3336:
-			case 3868: return type === 50;
-			case 7009: return type === 30;
-			case 3483: return type === 53 && (context.mySeatID === void 0 || Number(datas[1]) === Number(context.mySeatID));
-			default: return false;
-		}
-	}
-	function shouldRecordRoleOptTarget(message) {
-		const spellID = readNumberField(message, "SpellID") ?? -1;
-		if (!ROLE_OPT_TARGET_SPELL_IDS.has(spellID)) return false;
-		const params = readArrayField(message, "Params");
-		const param = readNumberField(message, "Param");
-		const type = readNumberField(message, "Type");
-		const targetSeatID = readNumberField(message, "targetSeatID");
-		const srcSeatID = readNumberField(message, "SrcSeatID");
-		switch (spellID) {
-			case 4:
-			case 5:
-			case 357:
-			case 372:
-			case 501:
-			case 811:
-			case 921:
-			case 3119:
-			case 3437:
-			case 3876:
-			case 4025: return targetSeatID !== void 0 && targetSeatID !== 255 && params.length > 0;
-			case 361:
-			case 774:
-			case 851:
-			case 3310: return targetSeatID !== void 0 && targetSeatID !== 255 && param === 0 && params.length > 0;
-			case 943: return param === 0 && params.length === 1;
-			case 898: return srcSeatID !== void 0 && srcSeatID !== 255 && param === 0 && params.length > 2;
-			case 987:
-			case 988: return targetSeatID !== void 0 && param === 1 && params.length > 2;
-			case 2900: return targetSeatID !== void 0 && type === 28 && params.length >= 3;
-			case 3483: return targetSeatID !== void 0 && param === 1 && params.length > 0;
-			case 3903: return targetSeatID === 255 && param === 0 && (type === 28 && params.length > 2 || type === 29 && params.length === 4);
-			default: return false;
-		}
-	}
-	function readArrayField(message, key) {
-		const value = readProtocolField(message, key);
-		return Array.isArray(value) ? value : [];
-	}
-	function projectTrackerProtocol(message) {
-		if (!isProtocolObject(message)) return null;
-		const className = getProtocolClassName(message);
-		if (!className) return null;
-		if (EMPTY_PAYLOAD_CLASSES.has(className)) return {
-			className,
-			payload: {}
-		};
-		const payload = collectRootPayload(message, className);
-		appendRequiredNestedPayload(message, className, payload);
-		return {
-			className,
-			payload
-		};
-	}
-	function getProtocolClassName(message) {
-		const className = readProtocolField(message, "className");
-		if (typeof className === "string" && className) return className;
-		const fallbackClassName = readProtocolField(message, "ClassName");
-		return typeof fallbackClassName === "string" && fallbackClassName ? fallbackClassName : null;
-	}
-	function collectRootPayload(message, className) {
-		const payload = {};
-		const exceptions = ROOT_FIELD_EXCEPTIONS.get(className);
-		const allowedFields = ROOT_FIELD_ALLOWLISTS[className];
-		for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(message))) {
-			if (!descriptor.enumerable || !("value" in descriptor)) continue;
-			if (allowedFields && !allowedFields.has(key)) continue;
-			if (ROOT_IGNORED_FIELDS.has(key) && !exceptions?.has(key)) continue;
-			const value = cloneProtocolValue(descriptor.value);
-			if (value !== OMITTED) payload[key] = value;
-		}
-		applyNestedFieldProjections(className, payload);
-		return payload;
-	}
-	function applyNestedFieldProjections(className, payload) {
-		for (const [fieldPath, allowedFields] of Object.entries(NESTED_FIELD_ALLOWLISTS)) {
-			const [targetClassName, ...fieldNames] = fieldPath.split(".");
-			if (targetClassName !== className) continue;
-			projectNestedField(payload, fieldNames, allowedFields);
-		}
-	}
-	function projectNestedField(value, fieldNames, allowedFields) {
-		if (Array.isArray(value)) {
-			value.forEach((item) => projectNestedField(item, fieldNames, allowedFields));
-			return;
-		}
-		if (!isProtocolObject(value)) return;
-		const [fieldName, ...remainingFields] = fieldNames;
-		const values = value[fieldName];
-		if (remainingFields.length > 0) {
-			projectNestedField(values, remainingFields, allowedFields);
-			return;
-		}
-		if (Array.isArray(values)) value[fieldName] = values.map((item) => projectNestedRecord(item, allowedFields));
-	}
-	function projectNestedRecord(value, allowedFields) {
-		if (!isProtocolObject(value)) return value;
-		const projected = {};
-		for (const field of allowedFields) if (Object.prototype.hasOwnProperty.call(value, field)) projected[field] = value[field];
-		return projected;
-	}
-	function appendRequiredNestedPayload(message, className, payload) {
-		if (className === "decodeGameRecordInitInfo") appendRecordInitPayload(message, payload);
-		if (className === "decodeGsClientUserSeatFlagNtf") appendSeatInfoPayload(message, payload);
-	}
-	function appendRecordInitPayload(message, payload) {
-		const protoObj = readProtocolField(message, "ProtoObj");
-		if (!isProtocolObject(protoObj)) return;
-		const recordInfo = {};
-		for (const key of ["gameId", "matchName"]) {
-			const value = cloneProtocolValue(readProtocolField(protoObj, key));
-			if (value !== OMITTED) recordInfo[key] = value;
-		}
-		if (Object.keys(recordInfo).length > 0) payload.ProtoObj = recordInfo;
-	}
-	function appendSeatInfoPayload(message, payload) {
-		const data = readProtocolField(message, "data");
-		if (!isProtocolObject(data)) return;
-		const protoObj = readProtocolField(data, "protoObj");
-		if (!isProtocolObject(protoObj)) return;
-		const seatinfo = readProtocolField(protoObj, "seatinfo");
-		if (!Array.isArray(seatinfo)) return;
-		payload.data = { protoObj: { seatinfo: seatinfo.map(projectSeatInfo) } };
-	}
-	function projectSeatInfo(value) {
-		if (!isProtocolObject(value)) return {};
-		const result = {};
-		TRACKER_SEAT_INFO_FIELDS.forEach((key) => {
-			const fieldValue = cloneProtocolValue(readProtocolField(value, key));
-			if (fieldValue !== OMITTED) result[key] = fieldValue;
-		});
-		return result;
-	}
-	function readNumberField(message, key) {
-		const value = Number(readProtocolField(message, key));
-		return Number.isFinite(value) ? value : void 0;
-	}
-	function readProtocolField(message, key) {
-		const descriptor = Object.getOwnPropertyDescriptor(message, key);
-		if (descriptor && "value" in descriptor) return descriptor.value;
-		try {
-			return message[key];
-		} catch {
-			return;
-		}
-	}
-	function cloneProtocolValue(value, seen = new WeakSet(), depth = 0) {
-		if (value === null || typeof value === "string" || typeof value === "boolean") return value;
-		if (typeof value === "number") return Number.isFinite(value) ? value : OMITTED;
-		if (typeof value === "bigint") return value.toString();
-		if (typeof value !== "object") return OMITTED;
-		if (depth >= MAX_PROTOCOL_DEPTH || value instanceof Date) return OMITTED;
-		if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return OMITTED;
-		if (seen.has(value)) return OMITTED;
-		seen.add(value);
-		if (Array.isArray(value)) {
-			const result = value.map((item) => {
-				const clonedItem = cloneProtocolValue(item, seen, depth + 1);
-				return clonedItem === OMITTED ? null : clonedItem;
-			});
-			seen.delete(value);
-			return result;
-		}
-		const result = {};
-		for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
-			if (!descriptor.enumerable || !("value" in descriptor)) continue;
-			if (NESTED_IGNORED_FIELDS.has(key)) continue;
-			const clonedValue = cloneProtocolValue(descriptor.value, seen, depth + 1);
-			if (clonedValue !== OMITTED) result[key] = clonedValue;
-		}
-		seen.delete(value);
-		return result;
-	}
-	function isProtocolObject(value) {
-		return value !== null && typeof value === "object";
-	}
-	var DATABASE_NAME = "dxc-tracker-protocol-recording";
-	var DATABASE_VERSION = 2;
-	var RECORD_STORE_NAME = "records";
-	var active = false;
-	var sequence = 0;
-	var limitReached = false;
-	var currentSession;
-	var records = [];
-	var pendingRecords = [];
-	var flushScheduled = false;
-	var databasePromise = null;
-	var storageQueue = Promise.resolve();
-	var statusNotificationScheduled = false;
-	var statusListeners = new Set();
-	function recordTrackerProtocol(message, context = {}) {
-		if (!active || !shouldRecordTrackerProtocol(message, context)) return;
-		try {
-			const projected = projectTrackerProtocol(message);
-			if (!projected) return;
-			const record = {
-				seq: ++sequence,
-				...projected
-			};
-			records.push(record);
-			pendingRecords.push(record);
-			if (records.length >= 1e4) {
-				active = false;
-				limitReached = true;
-				flushPendingRecords();
-			} else schedulePendingRecordFlush();
-			notifyStatusListeners();
-		} catch (error) {
-			console.warn("[protocol-recorder] 协议录制失败，已跳过当前消息", error);
-		}
-	}
-	function getProtocolRecordingStatus() {
-		return {
-			active,
-			count: records.length,
-			limitReached
-		};
-	}
-	function schedulePendingRecordFlush() {
-		if (flushScheduled) return;
-		flushScheduled = true;
-		queueMicrotask(flushPendingRecords);
-	}
-	function flushPendingRecords() {
-		flushScheduled = false;
-		if (pendingRecords.length === 0) return;
-		const batch = pendingRecords;
-		pendingRecords = [];
-		const session = currentSession;
-		if (!session) return;
-		enqueueStorage(() => putStoredRecords(session, batch));
-	}
-	function notifyStatusListeners() {
-		if (statusNotificationScheduled) return;
-		statusNotificationScheduled = true;
-		queueMicrotask(() => {
-			statusNotificationScheduled = false;
-			const status = getProtocolRecordingStatus();
-			statusListeners.forEach((listener) => listener(status));
-		});
-	}
-	function enqueueStorage(operation) {
-		storageQueue = storageQueue.then(operation).catch((error) => {
-			console.warn("[protocol-recorder] IndexedDB 写入失败，当前录制仍保留在内存中", error);
-		});
-		return storageQueue;
-	}
-	async function putStoredRecords(session, batch) {
-		const database = await openDatabase();
-		if (!database || batch.length === 0) return;
-		const transaction = database.transaction(RECORD_STORE_NAME, "readwrite");
-		const store = transaction.objectStore(RECORD_STORE_NAME);
-		batch.forEach((record) => {
-			const storedRecord = {
-				...record,
-				sessionId: session.id,
-				sessionStartedAt: session.startedAt
-			};
-			store.put(storedRecord);
-		});
-		await waitForTransaction(transaction);
-	}
-	function openDatabase() {
-		if (databasePromise) return databasePromise;
-		if (typeof indexedDB === "undefined") return Promise.resolve(null);
-		let resolveDatabase = () => void 0;
-		const openPromise = new Promise((resolve) => {
-			resolveDatabase = resolve;
-		});
-		databasePromise = openPromise;
-		let request;
-		try {
-			request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
-		} catch {
-			databasePromise = null;
-			resolveDatabase(null);
-			return openPromise;
-		}
-		let settled = false;
-		const resolveFailure = () => {
-			if (settled) return;
-			settled = true;
-			if (databasePromise === openPromise) databasePromise = null;
-			resolveDatabase(null);
-		};
-		request.onupgradeneeded = () => {
-			const database = request.result;
-			if (database.objectStoreNames.contains(RECORD_STORE_NAME)) database.deleteObjectStore(RECORD_STORE_NAME);
-			database.createObjectStore(RECORD_STORE_NAME, { keyPath: ["sessionId", "seq"] });
-		};
-		request.onsuccess = () => {
-			if (settled) {
-				request.result.close();
-				return;
-			}
-			settled = true;
-			resolveDatabase(request.result);
-		};
-		request.onerror = resolveFailure;
-		request.onblocked = resolveFailure;
-		return openPromise;
-	}
-	function waitForTransaction(transaction) {
-		return new Promise((resolve, reject) => {
-			transaction.oncomplete = () => resolve();
-			transaction.onerror = () => reject(transaction.error);
-			transaction.onabort = () => reject(transaction.error);
-		});
-	}
-	var tooltipDelegationBound = false;
-	var activeTooltipTarget = null;
-	var activeTooltipElement = null;
-	function clamp(value, min, max) {
-		return Math.max(min, Math.min(max, value));
-	}
-	function getReusableTooltip(owner = document.body) {
-		if (!activeTooltipElement) {
-			activeTooltipElement = document.createElement("div");
-			activeTooltipElement.classList.add("tooltip", "top");
-			owner.appendChild(activeTooltipElement);
-		} else if (!activeTooltipElement.isConnected || activeTooltipElement.parentElement !== owner) owner.appendChild(activeTooltipElement);
-		return activeTooltipElement;
-	}
-	function hideReusableTooltip() {
-		if (!activeTooltipElement) return;
-		activeTooltipElement.classList.remove("visible", "dialog-tooltip");
-		activeTooltipElement.style.visibility = "hidden";
-		activeTooltipElement.style.left = "-9999px";
-		activeTooltipElement.style.top = "-9999px";
-		activeTooltipTarget = null;
-	}
-	function prepareTooltip(mark, dialog) {
-		const tooltip = getReusableTooltip(dialog || document.body);
-		tooltip.className = dialog ? "tooltip top dialog-tooltip" : "tooltip top";
-		tooltip.textContent = mark.getAttribute("data-tooltip");
-		tooltip.style.maxWidth = "";
-		tooltip.style.visibility = "hidden";
-		tooltip.style.left = "-9999px";
-		tooltip.style.top = "-9999px";
-		tooltip.removeAttribute("popover");
-		return tooltip;
-	}
-	function positionTooltip({ tooltip, anchor, dialog }) {
-		const rect = anchor.getBoundingClientRect();
-		const boundsRect = dialog?.getBoundingClientRect();
-		const offset = 8;
-		const padding = 4;
-		if (dialog && boundsRect) {
-			tooltip.style.maxWidth = `${Math.min(200, Math.max(120, boundsRect.width - padding * 2))}px`;
-			const left = clamp(rect.left - boundsRect.left + rect.width / 2 - tooltip.offsetWidth / 2, padding, Math.max(padding, boundsRect.width - tooltip.offsetWidth - padding));
-			let top = rect.top - boundsRect.top - tooltip.offsetHeight - offset;
-			if (top < padding) top = rect.bottom - boundsRect.top + offset;
-			top = clamp(top, padding, Math.max(padding, boundsRect.height - tooltip.offsetHeight - padding));
-			tooltip.style.left = `${left}px`;
-			tooltip.style.top = `${top}px`;
-			return;
-		}
-		const left = clamp(rect.left + rect.width / 2 - tooltip.offsetWidth / 2, offset, Math.max(offset, window.innerWidth - tooltip.offsetWidth - offset));
-		let top = rect.top - tooltip.offsetHeight - offset;
-		if (top < offset) top = rect.bottom + offset;
-		top = clamp(top, offset, Math.max(offset, window.innerHeight - tooltip.offsetHeight - offset));
-		tooltip.style.left = `${left}px`;
-		tooltip.style.top = `${top}px`;
-	}
-	function showReusableTooltip(mark) {
-		if (!mark?.getAttribute?.("data-tooltip")) return;
-		const dialog = mark.closest("dialog[open]");
-		const tooltip = prepareTooltip(mark, dialog);
-		positionTooltip({
-			tooltip,
-			anchor: mark.querySelector(".switch") || mark,
-			dialog
-		});
-		tooltip.style.visibility = "";
-		tooltip.classList.add("visible");
-		activeTooltipTarget = mark;
-	}
-	function bindDelegatedTooltips() {
-		if (tooltipDelegationBound) return;
-		tooltipDelegationBound = true;
-		document.addEventListener("mouseover", (event) => {
-			const mark = event.target?.closest?.(".switch-container, .calRes");
-			if (!mark || !mark.getAttribute("data-tooltip") || mark.contains(event.relatedTarget)) return;
-			showReusableTooltip(mark);
-		});
-		document.addEventListener("mouseout", (event) => {
-			const mark = event.target?.closest?.(".switch-container, .calRes");
-			if (!mark || mark !== activeTooltipTarget || mark.contains(event.relatedTarget)) return;
-			hideReusableTooltip();
-		});
-	}
-	var unsubscribeRenderedMainHandCardIDs = null;
-	function getRenderedPeiXiuHandSuitColors() {
-		const cardIDs = getRenderedMainHandCardIDs();
-		if (cardIDs === null) return null;
-		const cardConfig = CardConfig.GetInstance();
-		return cardIDs.map((id) => Number(cardConfig.getCardColor(id))).filter((color) => color >= 1 && color <= 4);
-	}
-	function refreshPeiXiuHandSuitColors() {
-		const state = Game.getSpellState(4022);
-		if (!state?.usesMainHandMirror || !state.result) return;
-		const handSuitColors = getRenderedPeiXiuHandSuitColors();
-		if (handSuitColors === null) return;
-		if (Array.isArray(state.handSuitColors) && state.handSuitColors.length === handSuitColors.length && state.handSuitColors.every((color, index) => color === handSuitColors[index])) return;
-		const nextState = {
-			...state,
-			handSuitColors
-		};
-		Game.setSpellState(4022, nextState);
-		renderPeiXiuMapWindow(nextState, SpellExtendConfig.GetInstance().PeiXiuBonus);
-	}
-	function bindPeiXiuHandSuitColorRefresh() {
-		if (unsubscribeRenderedMainHandCardIDs) return;
-		unsubscribeRenderedMainHandCardIDs = subscribeRenderedMainHandCardIDs(refreshPeiXiuHandSuitColors);
-	}
-	function unbindPeiXiuHandSuitColorRefresh() {
-		unsubscribeRenderedMainHandCardIDs?.();
-		unsubscribeRenderedMainHandCardIDs = null;
-	}
-	function bindInitialResize(globalConfig, resize) {
-		window.WDVerSion = "1.0.0";
-		window.padding = globalConfig.padding || 0;
-		Object.defineProperty(window, "innerWidth", {
-			configurable: true,
-			enumerable: true,
-			get() {
-				const padding = Math.max(0, Number(window.padding) || 0);
-				return document.documentElement.clientWidth - padding;
-			}
-		});
-		window.addEventListener("resize", resize, true);
-	}
-	function observeDomResize(onResize) {
-		const viewport = window.visualViewport;
-		viewport?.addEventListener("resize", onResize);
-		return () => viewport?.removeEventListener("resize", onResize);
-	}
-	function removeInjectedDom(globalState) {
-		unbindPeiXiuHandSuitColorRefresh();
-		unbindTrackerVisibilityShortcut();
-		document.getElementById("seatUI")?.remove();
-		document.getElementById("cusBGDiv")?.remove();
-		document.getElementById("tracker-shell")?.remove();
-		destroyPeiXiuMapWindow();
-		document.getElementById("peixiu-map-style")?.remove();
-		globalState.isFrameAdd = false;
-	}
-	function cleanupLifecycle({ resize, scheduleSetGameSize, globalState }) {
-		window.removeEventListener("resize", resize, true);
-		window.removeEventListener("resize", scheduleSetGameSize);
-		removeInjectedDom(globalState);
-		return true;
-	}
-	function waitForLegacyFrameReady(initFrame) {
-		return new Promise((resolve, reject) => {
-			function checkLibraries() {
-				return new Promise((libResolve) => {
-					function checkLibs() {
-						if (typeof JSZipUtils !== "undefined" && typeof CtrUtil !== "undefined" && typeof CtrUtil?.Ctr?.Ofb_Dec !== "undefined" && typeof ChannelUtils !== "undefined" && document.getElementById("bgDiv")) initFrame(true).then(libResolve);
-						else if (typeof PUERTS_JS_RESOURCES !== "undefined") libResolve(true);
-						else setTimeout(checkLibs, 1e3);
-					}
-					checkLibs();
-				});
-			}
-			Promise.all([checkLibraries()]).then(resolve).catch(reject);
-		});
-	}
-	function addSeatUI(globalConfig) {
-		var seatUI = document.createElement("div");
+	function createSeatOverlay(config) {
+		const seatUI = document.createElement("div");
 		seatUI.id = "seatUI";
 		seatUI.style.position = "absolute";
 		seatUI.style.top = "50%";
 		seatUI.style.left = "50%";
 		seatUI.style.transform = "translate(-50%, -50%)";
 		seatUI.style.pointerEvents = "none";
-		seatUI.style.display = "";
-		var deckEdgeUI = document.createElement("div");
-		deckEdgeUI.id = "deckEdgeUI";
-		deckEdgeUI.className = "sorderContainer deckEdgeUI";
-		deckEdgeUI.style.display = "none";
-		seatUI.appendChild(deckEdgeUI);
+		seatUI.appendChild(createDeckEdgeOverlay());
 		const seatSlotFragment = document.createDocumentFragment();
 		for (let i = 1; i <= 8; i++) {
 			const orderContainer = document.createElement("div");
@@ -15233,230 +13928,56 @@
 			seatSlotFragment.appendChild(orderContainer);
 		}
 		seatUI.appendChild(seatSlotFragment);
-		globalConfig.seatUISwitch ? seatUI.style.display = "block" : (seatUI.style.display = "none", seatUI.querySelectorAll(":scope > *").forEach((el) => el.style.display = "none"));
 		document.body.appendChild(seatUI);
+		setSeatOverlayVisible(config.seatUISwitch);
 	}
-	function resetOrderContainer() {
-		for (let i = 0; i <= 7; i++) {
-			const o = "or" + (i + 1);
-			const orderContainer = document.querySelector("#seatUI #" + o);
-			if (!orderContainer) continue;
-			orderContainer.style.display = "flex";
-			orderContainer.style.visibility = "hidden";
-			orderContainer.style.removeProperty("top");
-			orderContainer.style.removeProperty("left");
-			orderContainer.style.removeProperty("width");
-		}
+	function updateSeatOverlay(room) {
+		const seats = getSeatUIs(room);
+		UI.seatUIs = seats;
+		if (!syncSeatOverlayViewport() || room?.firstID === void 0 || seats.length === 0) return false;
+		getSeatUiPos(seats);
+		return drawSeatUIs(seats);
 	}
-	function hideOrderContainer(size) {
-		for (let i = 7; i >= size; i--) {
-			const o = "or" + (i + 1);
-			const orderContainer = document.querySelector("#seatUI #" + o);
-			if (!orderContainer) continue;
-			orderContainer.style.display = "none";
-			orderContainer.style.visibility = "hidden";
-		}
-	}
-	function hideSelfOrderContainer(displayID) {
-		if (!displayID) return false;
-		const orderContainer = document.querySelector("#seatUI #or" + displayID);
-		if (!orderContainer) return false;
-		orderContainer.style.display = "none";
-		orderContainer.style.visibility = "hidden";
-		return true;
-	}
-	function showOrderContainers() {
-		for (let i = 1; i <= 8; i++) {
-			const orderContainer = document.querySelector("#seatUI #or" + i);
-			if (!orderContainer || orderContainer.style.display === "none") continue;
-			orderContainer.style.visibility = "visible";
-		}
-	}
-	var STYLE_ID = "dxc-shell-style";
-	function ensureStyle() {
-		let style = document.getElementById(STYLE_ID);
-		if (style) return;
-		style = document.createElement("style");
-		style.id = STYLE_ID;
-		style.textContent = `
-    #tracker-shell {
-      position: fixed;
-      overflow: hidden;
-      resize: vertical;
-      top: 31px;
-      right: 155px;
-      width: 230px;
-      height: 500px;
-      z-index: 10000000000;
-      display: flex;
-      flex-direction: column;
-      color: #f2de9c;
-      background: rgb(35, 32, 29);
-      user-select: none;
-      text-align: left;
-      transition: width 200ms, opacity 200ms;
-      border-radius: 8px;
-      transform-origin: top right;
-      transform: translate(0px, 0px);
-    }
-    #tracker-shell.collapsed {
-      height: 30px !important;
-      width: 75px !important;
-      opacity: 0.6 !important;
-      resize: none !important;
-    }
-    #tracker-shell .header {
-      margin: 1px;
-      user-select: none;
-      touch-action: none;
-      cursor: grab;
-      display: flex;
-      align-items: center;
-      font-size: 20px;
-      border-radius: 5px;
-    }
-    #tracker-shell #title {
-      margin-right: auto;
-    }
-    #tracker-shell #toggle-me {
-      text-align: center;
-      color: #f2de9c;
-      background: rgb(107, 30, 30);
-      border-radius: 6px;
-      width: 26px;
-      height: 26px;
-      border: 1px solid rgb(212, 212, 162);
-      cursor: pointer;
-      user-select: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 1px;
-      font-size: 20px;
-    }
-    #tracker-shell #toggle-me:hover {
-      background-color: rgb(130, 30, 30);
-    }
-    #tracker-shell .tracker-content {
-      border: none;
-      width: 230px;
-      height: 100%;
-      margin: 0px;
-      overflow: hidden;
-    }
-    #tracker-shell.collapsed .tracker-content {
-      display: none !important;
-    }
-  `;
-		document.head.appendChild(style);
-	}
-	function createMainShell(version) {
-		ensureStyle();
-		const div = document.createElement("div");
-		div.id = "tracker-shell";
-		const header = document.createElement("p");
-		header.id = "header";
-		header.className = "header";
-		const title = document.createElement("span");
-		title.id = "title";
-		title.style = "margin-right: auto;";
-		title.innerText = "三国杀小抄" + version;
-		div.appendChild(header);
-		const btn = document.createElement("button");
-		btn.innerText = "-";
-		btn.id = "toggle-me";
-		btn.type = "button";
-		header.appendChild(title);
-		header.appendChild(btn);
-		document.body.appendChild(div);
-		bindTrackerVisibilityShortcut();
-		const iframe = document.createElement("div");
-		iframe.className = "tracker-content";
-		div.append(iframe);
-		return {
-			div,
-			iframe
-		};
-	}
-	var INTERFACE_HTML_URL = "https://www.desuwa.link/tracker/iframe.html";
-	async function loadInterfaceHtml(force = false) {
-		const response = await fetch(INTERFACE_HTML_URL, { cache: force ? "reload" : "default" });
-		if (!response.ok) throw new Error(`加载小抄界面失败：${response.status} ${response.statusText}`);
-		return response.text();
-	}
-	var iframe = null;
-	var version = "0.21.0";
-	function getTrackedHandNumbers(seatID) {
-		const config = CardConfig.GetInstance();
-		return tracker.getTrackedPlayerHandCardIDs(seatID).map((id) => config.getCardNumber(id)).filter((number) => number > 0);
-	}
-	function Init() {
-		bindInitialResize(globalConfig, resize);
-		console.info("🚀 初始化...");
-		return waitForLegacyFrameReady(initFrame);
-	}
-	function Exit() {
-		stopGameSizeUpdates();
-		return cleanupLifecycle({
-			resize,
-			scheduleSetGameSize,
-			globalState
+	function resetSeatOverlay() {
+		UI.seatUIs = [];
+		UI.friendGeneral = 0;
+		clearZoneMirrors();
+		resetDeckEdgeOverlay();
+		document.querySelectorAll("#seatUI .sorderContainer:not(.deckEdgeUI)").forEach((container) => {
+			container.style.display = "none";
+			container.style.visibility = "hidden";
+			container.style.removeProperty("top");
+			container.style.removeProperty("left");
+			container.style.removeProperty("width");
 		});
 	}
-	function resize() {
-		document.documentElement.style.setProperty("--sgs-center-x", `${window.innerWidth / 2}px`);
-	}
-	function refreshSidebarViewport() {
-		resize();
-		window.dispatchEvent(new Event("resize"));
-	}
-	var updateTimeout;
-	var stopDomResize = null;
-	function stopGameSizeUpdates() {
-		stopDomResize?.();
-		stopDomResize = null;
-		if (updateTimeout) clearTimeout(updateTimeout);
-		updateTimeout = null;
-	}
-	function scheduleSetGameSize() {
-		if (updateTimeout) clearTimeout(updateTimeout);
-		updateTimeout = setTimeout(() => {
-			updateTimeout = null;
-			setGameSize();
-		}, 500);
-	}
-	async function initFrame(force = false) {
-		if (force) removeInjectedDom(globalState);
-		if (!globalState.isFrameAdd) {
-			stopGameSizeUpdates();
-			window.addEventListener("resize", scheduleSetGameSize);
-			stopDomResize = observeDomResize(scheduleSetGameSize);
-			try {
-				document.getElementById("bgDiv").firstElementChild.draggable = false;
-				document.querySelector("link[rel=stylesheet]")?.remove();
-			} catch {
-				console.error("移除4399服的CSS失败");
-			}
-			addSeatUI(globalConfig);
-			await addFrame();
-			setGameSize();
-			bindPeiXiuHandSuitColorRefresh();
-			globalState.isFrameAdd = true;
-			return ConfigManager.GetInstance().loadAndParseConfigs();
-		}
-	}
-	function setGameSize() {
-		if (!syncGameSize()) return;
-		if (UI.seatUIs?.length > 0) {
-			getSeatUiPos();
-			drawSeatUIs();
-		}
-	}
-	function syncGameSize() {
-		const scene = laya.scene;
-		if (!scene) return false;
+	function setSeatOverlayVisible(visible) {
 		const seatUI = document.getElementById("seatUI");
-		if (!seatUI) return false;
+		if (seatUI) seatUI.style.display = visible ? "block" : "none";
+	}
+	function destroySeatOverlay() {
+		clearZoneMirrors();
+		resetDeckEdgeOverlay();
+		UI.seatUIs = [];
+		document.getElementById("seatUI")?.remove();
+	}
+	function getSeatUIs(room) {
+		if (!room?.seatIDs?.length || room.mySeatID === void 0) return [];
+		const { seatIDs, players, mySeatID } = room;
+		const startIndex = seatIDs.indexOf(Number(mySeatID));
+		if (startIndex < 0) return [];
+		return seatIDs.map((_, index) => {
+			const seatID = seatIDs[(startIndex + index) % seatIDs.length];
+			return {
+				seatID,
+				fixedViewId: players.get(Number(seatID))?.fixedViewId
+			};
+		}).filter((seat, index) => index === 0 || players.get(seat.seatID)?.isShown);
+	}
+	function syncSeatOverlayViewport() {
+		const scene = laya.scene;
+		const seatUI = document.getElementById("seatUI");
+		if (!scene || !seatUI) return false;
 		const { width, height, globalScaleX } = scene;
 		if (!width || !height) return false;
 		const scaledHeight = height * globalScaleX;
@@ -15467,12 +13988,6 @@
 			width: UI.width / window.devicePixelRatio,
 			height: UI.height / window.devicePixelRatio
 		};
-		if (globalConfig.padding && document.getElementById("tracker-shell")) {
-			document.getElementById("bgDiv").style.width = document.documentElement.clientWidth + "px";
-			document.getElementById("tracker-shell").style.height = "100%";
-			document.getElementById("tracker-shell").style.right = "0px";
-			document.getElementById("tracker-shell").style.top = "0px";
-		} else document.getElementById("bgDiv").style.width = document.documentElement.clientWidth + "px";
 		const top = ((window.innerHeight * window.devicePixelRatio - scaledHeight) / (2 * window.devicePixelRatio) + scaledHeight / 2) / window.devicePixelRatio;
 		seatUI.style.width = `${app.width}px`;
 		seatUI.style.height = `${app.height}px`;
@@ -15483,8 +13998,7 @@
 		document.documentElement.style.setProperty("--sgs-center-x", `${UI.centerX}px`);
 		return true;
 	}
-	function getSeatUiPos() {
-		const list = UI.seatUIs || [];
+	function getSeatUiPos(list) {
 		const metrics = getSeatLayoutMetrics();
 		UI.ScaleWidth = metrics.seatWidth;
 		UI.ScaleHeight = metrics.seatHeight;
@@ -15604,190 +14118,49 @@
 		seatUI.posX = Math.trunc(x) / dpr;
 		seatUI.posY = Math.trunc(y) / dpr;
 	}
-	function resetSeatUIs() {
-		UI.seatUIs = [];
-		UI.firstUpdateSeatUI = false;
-		UI.friendGeneral = 0;
-		clearZoneMirrors();
-	}
-	function getSeatUIs() {
-		const trackerRoom = tracker.getTrackerRoom();
-		if (!trackerRoom?.seatIDs?.length || trackerRoom.mySeatID === void 0) return;
-		const { seatIDs, players, mySeatID } = trackerRoom;
-		const startIndex = seatIDs.indexOf(Number(mySeatID));
-		if (startIndex < 0) return;
-		UI.seatUIs = seatIDs.map((_, index) => {
-			const seatID = seatIDs[(startIndex + index) % seatIDs.length];
+	function drawSeatUIs(list) {
+		const seatUI = document.getElementById("seatUI");
+		const seats = list.slice(1);
+		if (seats.some((seat) => !hasSeatPosition(seat))) return false;
+		const defaultWidth = UI.unscaledWidth + UI.paddingRight;
+		const layouts = seats.map((seat) => {
+			const displayID = seat.fixedViewId;
 			return {
-				seatID,
-				fixedViewId: players.get(Number(seatID))?.fixedViewId
+				displayID,
+				orderContainer: seatUI.querySelector("#or" + displayID),
+				seat
 			};
-		}).filter((seat, index) => index === 0 || players.get(seat.seatID)?.isShown);
-		if (!syncGameSize()) return;
-		getSeatUiPos();
-		if (trackerRoom.firstID !== void 0) drawSeatUIs();
+		});
+		if (layouts.some(({ orderContainer }) => !orderContainer)) return false;
+		const visibleContainers = new Set(layouts.map(({ orderContainer }) => orderContainer));
+		for (const container of seatUI.querySelectorAll(".sorderContainer:not(.deckEdgeUI)")) {
+			const isShown = visibleContainers.has(container);
+			container.style.display = isShown ? "flex" : "none";
+			container.style.visibility = isShown && Game.turn > 0 ? "visible" : "hidden";
+		}
+		for (const { displayID, orderContainer, seat } of layouts) {
+			applySeatContainerLayout(orderContainer, seat, defaultWidth);
+			ensureSeatOrderBody(orderContainer, displayID).className = `sorder-body sNo${displayID}`;
+		}
+		window.dispatchEvent(new CustomEvent("dxc-seat-overlay-layout"));
+		return true;
 	}
-	setTrackerSeatUIReader(getSeatUIs);
-	async function addFrame() {
-		if (!document.getElementById("tracker-shell")) {
-			iframe = createMainShell(version).iframe;
-			if (localStorage.getItem("DXCVersion") != version) {
-				addTooltip(`小抄已经更新到${version}`, "acTooltip", 15e3);
-				localStorage.setItem("DXCVersion", version);
-			}
-			try {
-				iframe.innerHTML = await loadInterfaceHtml();
-			} catch (error) {
-				console.error("Failed to load iframe content:", error);
-			}
-			initInjectedInterface({
-				container: iframe,
-				expandJiePanel,
-				bindDelegatedTooltips
-			});
-		}
-		addDragHint();
-		buttonClick();
-		initDragElement(globalConfig, globalState, refreshSidebarViewport);
+	function hasSeatPosition(seat) {
+		return Number.isFinite(seat?.posX) && Number.isFinite(seat?.posY) && Number.isFinite(seat?.fixedViewId);
 	}
-	function buttonClick() {
-		const detailBlockSwitchIds = [
-			"blockKillEffectSwitch",
-			"blockSkinStateSwitch",
-			"skipAdWindowSwitch",
-			"skipPackageWindowSwitch",
-			"blockMvpSettlementSwitch"
-		];
-		const getSwitchElement = (configKey) => document.getElementById(configKey);
-		const setSwitchChecked = (configKey, value) => {
-			const element = getSwitchElement(configKey);
-			if (element) element.checked = value;
-		};
-		const setConfigSwitch = (configKey, value) => {
-			globalConfig[configKey] = value;
-			setSwitchChecked(configKey, value);
-		};
-		const syncEffectBlockSwitchFromDetails = () => {
-			setConfigSwitch("effectBlockSwitch", detailBlockSwitchIds.some((configKey) => Boolean(globalConfig[configKey])));
-		};
-		const syncDetailBlockSwitches = (switchValue) => {
-			detailBlockSwitchIds.forEach((configKey) => setConfigSwitch(configKey, switchValue));
-		};
-		const switchHandlers = {
-			seatUISwitch(switchValue) {
-				document.getElementById("seatUI").style.display = switchValue ? "block" : "none";
-			},
-			cardLabelSwitch() {},
-			showNameSwitch() {},
-			rogueCitySwitch(switchValue) {
-				switchValue && UI.cities ? drawCitiesUI(UI.cities) : drawCitiesUI("");
-			},
-			debugLogSwitch() {},
-			peiXiuMapSwitch(switchValue) {
-				setPeiXiuMapWindowVisible(switchValue);
-			},
-			effectBlockSwitch(switchValue) {
-				syncDetailBlockSwitches(switchValue);
-			},
-			blockKillEffectSwitch() {
-				syncEffectBlockSwitchFromDetails();
-			},
-			blockSkinStateSwitch() {
-				syncEffectBlockSwitchFromDetails();
-			},
-			skipAdWindowSwitch() {
-				syncEffectBlockSwitchFromDetails();
-			},
-			skipPackageWindowSwitch() {
-				syncEffectBlockSwitchFromDetails();
-			},
-			blockMvpSettlementSwitch() {
-				syncEffectBlockSwitchFromDetails();
-			}
-		};
-		const switchConfigKeys = Object.keys(switchHandlers);
-		const toggle = document.getElementById("toggle-me");
-		if (toggle) toggle.onclick = function() {
-			globalState.closeIframe = !globalState.closeIframe;
-			const container = document.getElementById("tracker-shell");
-			if (globalState.closeIframe) {
-				container.classList.add("collapsed");
-				toggle.innerText = "+";
-				document.getElementById("title").innerText = "小抄";
-				container.style.top = "31px";
-				container.style.right = "155px";
-				if (globalConfig.padding) {
-					globalConfig.padding = 0;
-					refreshSidebarViewport();
-					container.style.transform = "translate(0px, 0px)";
-				}
-			} else {
-				container.classList.remove("collapsed");
-				toggle.innerText = "-";
-				document.getElementById("title").innerText = "三国杀小抄0.21.0";
-				expandJiePanel({ defer: true });
-			}
-		};
-		function handleSwitchChange(event) {
-			const switchElement = event.target;
-			if (!switchElement?.matches?.("input[type=\"checkbox\"]")) return;
-			const configKey = switchElement.dataset.configKey || switchElement.id;
-			const handler = switchHandlers[configKey];
-			if (!handler) return;
-			const switchValue = switchElement.checked;
-			globalConfig[configKey] = switchValue;
-			handler(switchValue);
-		}
-		if (window.padding == 0) toggle?.click();
-		refreshSidebarViewport();
-		switchConfigKeys.forEach((configKey) => setSwitchChecked(configKey, Boolean(globalConfig[configKey])));
-		const switchRoot = document.getElementById("tracker-shell");
-		if (switchRoot && !switchRoot.dataset.switchDelegationBound) {
-			switchRoot.dataset.switchDelegationBound = "true";
-			switchRoot.addEventListener("change", handleSwitchChange);
-		}
-		syncEffectBlockSwitchFromDetails();
-		const mizhuBtn = document.getElementById("mizhu");
-		if (mizhuBtn) mizhuBtn.onclick = function() {
-			drawMiZhu(getTrackedHandNumbers(Game.myID));
-		};
-		const openWelfareBtn = document.getElementById("openWelfareBtn");
-		if (openWelfareBtn) openWelfareBtn.onclick = function() {
-			laya.ShowWindow("WelfareWindow");
-		};
-		const blockEffectContainer = document.getElementById("blockEffectContainer");
-		const blockEffectDialog = document.getElementById("blockEffectDialog");
-		if (blockEffectContainer && blockEffectDialog) {
-			const explanation = blockEffectContainer.querySelector(".explanation");
-			if (explanation) explanation.onclick = function() {
-				blockEffectDialog.showModal();
-			};
-			const closeBtn = blockEffectDialog.querySelector(".dialog-close-btn");
-			if (closeBtn) closeBtn.onclick = function() {
-				blockEffectDialog.close();
-			};
-			blockEffectDialog.onclick = function(event) {
-				if (event.target === blockEffectDialog) blockEffectDialog.close();
-			};
-		}
-		const protocolRecordSwitch = document.getElementById("protocolRecordSwitch");
-		const protocolRecorderControls = document.getElementById("protocolRecorderControls");
-		protocolRecordSwitch?.closest(".switch-container")?.style.setProperty("display", "none");
-		protocolRecorderControls?.style.setProperty("display", "none");
+	function applySeatContainerLayout(orderContainer, seat, defaultWidth) {
+		orderContainer.style.top = seat.posY + "px";
+		orderContainer.style.left = seat.posX + "px";
+		orderContainer.style.width = (seat.width || defaultWidth) + "px";
 	}
-	function expandJiePanel(options = {}) {
-		const { defer = false } = options;
-		const apply = () => {
-			const layaHeader = document.querySelector(".jie-header");
-			if (!layaHeader) return;
-			const panelContent = layaHeader.nextElementSibling;
-			if (!panelContent) return;
-			getPanelContentInner(panelContent);
-			panelContent.style.removeProperty("max-height");
-			layaHeader.classList.add("active");
-		};
-		if (defer) requestAnimationFrame(apply);
-		else apply();
+	function ensureSeatOrderBody(orderContainer, displayID) {
+		let orderBody = orderContainer.querySelector("#s" + displayID);
+		if (!orderBody) {
+			orderBody = document.createElement("div");
+			orderBody.id = "s" + displayID;
+			orderContainer.appendChild(orderBody);
+		}
+		return orderBody;
 	}
 	var closeGameOverWindowsTimer = null;
 	var gameOverTask = null;
@@ -15841,22 +14214,18 @@
 		Game.end();
 		destroyPeiXiuMapWindow();
 		destroyPingJianWindow();
-		resetSeatUIs();
+		resetSeatOverlay();
 		tracker.destroyTrackerRoom();
 	}
 	function handleGameTurn(msg) {
 		const { TurnCnt } = msg;
-		if (typeof TurnCnt !== "number" || !Number.isFinite(TurnCnt)) return;
-		if (TurnCnt === 1) {
-			laya.zhanfaRegister();
-			getSeatUIs();
-			hideSelfOrderContainer(Game.myDisplayID);
-			if (UI.firstUpdateSeatUI) showOrderContainers();
-		}
+		if (typeof TurnCnt !== "number") return;
+		if (TurnCnt === 1) laya.zhanfaRegister();
 		if (TurnCnt > 0) {
 			Game.setTurn(TurnCnt);
 			laya.zhanfaReset();
 		}
+		if (TurnCnt === 1) updateSeatOverlay(tracker.getTrackerRoom());
 		tracker.scheduleTrackerRender();
 	}
 	var SeatRoundState = class SeatRoundState {
@@ -16007,6 +14376,34 @@
 			default: break;
 		}
 	}
+	var unsubscribeRenderedMainHandCardIDs = null;
+	function getRenderedPeiXiuHandSuitColors() {
+		const cardIDs = getRenderedMainHandCardIDs();
+		if (cardIDs === null) return null;
+		const cardConfig = CardConfig.GetInstance();
+		return cardIDs.map((id) => Number(cardConfig.getCardColor(id))).filter((color) => color >= 1 && color <= 4);
+	}
+	function refreshPeiXiuHandSuitColors() {
+		const state = Game.getSpellState(4022);
+		if (!state?.usesMainHandMirror || !state.result) return;
+		const handSuitColors = getRenderedPeiXiuHandSuitColors();
+		if (handSuitColors === null) return;
+		if (Array.isArray(state.handSuitColors) && state.handSuitColors.length === handSuitColors.length && state.handSuitColors.every((color, index) => color === handSuitColors[index])) return;
+		const nextState = {
+			...state,
+			handSuitColors
+		};
+		Game.setSpellState(4022, nextState);
+		renderPeiXiuMapWindow(nextState, SpellExtendConfig.GetInstance().PeiXiuBonus);
+	}
+	function bindPeiXiuHandSuitColorRefresh() {
+		if (unsubscribeRenderedMainHandCardIDs) return;
+		unsubscribeRenderedMainHandCardIDs = subscribeRenderedMainHandCardIDs(refreshPeiXiuHandSuitColors);
+	}
+	function unbindPeiXiuHandSuitColorRefresh() {
+		unsubscribeRenderedMainHandCardIDs?.();
+		unsubscribeRenderedMainHandCardIDs = null;
+	}
 	function handleUpdateRoleDataExNtf(msg) {
 		const { Datas, SeatID, DataID } = msg;
 		tracker.dispatchSkillProtocolEvent({
@@ -16109,10 +14506,8 @@
 	}
 	function registerGamePlayers(infos) {
 		cancelGameOverTask();
-		resetSeatUIs();
+		resetSeatOverlay();
 		tracker.initTrackerRoom();
-		resetOrderContainer();
-		hideOrderContainer(infos.length);
 		tracker.registerTrackerPlayers(infos, user.userID);
 	}
 	function handleRecordStartGame(msg) {
@@ -16292,6 +14687,538 @@
 		if (!progress?.ratio) return;
 		showStatusTip("wishPool", `心愿皮肤当前进度: ${progress.ratio / 100}%`);
 	}
+	var ConfigManager = class ConfigManager {
+		configUrl = "https://web.sanguosha.com/220/h5_2/res/config/Config_w.sgs";
+		fileNames = [
+			"sys_playcard",
+			"cha_spell",
+			"character",
+			"hd_roguelike",
+			"cha_spellextend"
+		];
+		static GetInstance() {
+			if (null == this.instance) this.instance = new ConfigManager();
+			return this.instance;
+		}
+		constructor() {
+			this.preloadConfigerList = [
+				CardConfig.GetInstance(),
+				SkillsConfig.GetInstance(),
+				CharacterConfig.GetInstance(),
+				RoguelikeConfig.GetInstance(),
+				SpellExtendConfig.GetInstance()
+			];
+		}
+		async loadAndParseConfigs() {
+			const response = await fetch(this.configUrl);
+			if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+			const zipData = await response.arrayBuffer();
+			const zip = await JSZip.loadAsync(zipData);
+			const promises = this.preloadConfigerList.map(async (configer) => {
+				if (!configer) return;
+				const data = await this.loadConfigFile(zip, configer.FileName);
+				configer.parse(data);
+			});
+			await Promise.all(promises);
+			console.info("[ConfigManager] Config_w 解析完成");
+		}
+		async loadConfigFile(zip, fileName) {
+			const file = zip.file(fileName + ".sgs");
+			if (!file) throw new Error(`File not found in zip: ${fileName}.sgs`);
+			const arrayBuffer = await file.async("arraybuffer");
+			const decryptedData = CtrUtil.Ctr.Ofb_Dec(arrayBuffer);
+			const uint8Array = decryptedData instanceof Uint8Array ? decryptedData : new Uint8Array(decryptedData);
+			const decompressedData = new Zlib.Gunzip(uint8Array).decompress();
+			const fileData = new TextDecoder().decode(decompressedData);
+			return JSON.parse(fileData);
+		}
+	};
+	Promise.resolve();
+	var tooltipDelegationBound = false;
+	var activeTooltipTarget = null;
+	var activeTooltipElement = null;
+	function clamp(value, min, max) {
+		return Math.max(min, Math.min(max, value));
+	}
+	function getReusableTooltip(owner = document.body) {
+		if (!activeTooltipElement) {
+			activeTooltipElement = document.createElement("div");
+			activeTooltipElement.classList.add("tooltip", "top");
+			owner.appendChild(activeTooltipElement);
+		} else if (!activeTooltipElement.isConnected || activeTooltipElement.parentElement !== owner) owner.appendChild(activeTooltipElement);
+		return activeTooltipElement;
+	}
+	function hideReusableTooltip() {
+		if (!activeTooltipElement) return;
+		activeTooltipElement.classList.remove("visible", "dialog-tooltip");
+		activeTooltipElement.style.visibility = "hidden";
+		activeTooltipElement.style.left = "-9999px";
+		activeTooltipElement.style.top = "-9999px";
+		activeTooltipTarget = null;
+	}
+	function prepareTooltip(mark, dialog) {
+		const tooltip = getReusableTooltip(dialog || document.body);
+		tooltip.className = dialog ? "tooltip top dialog-tooltip" : "tooltip top";
+		tooltip.textContent = mark.getAttribute("data-tooltip");
+		tooltip.style.maxWidth = "";
+		tooltip.style.visibility = "hidden";
+		tooltip.style.left = "-9999px";
+		tooltip.style.top = "-9999px";
+		tooltip.removeAttribute("popover");
+		return tooltip;
+	}
+	function positionTooltip({ tooltip, anchor, dialog }) {
+		const rect = anchor.getBoundingClientRect();
+		const boundsRect = dialog?.getBoundingClientRect();
+		const offset = 8;
+		const padding = 4;
+		if (dialog && boundsRect) {
+			tooltip.style.maxWidth = `${Math.min(200, Math.max(120, boundsRect.width - padding * 2))}px`;
+			const left = clamp(rect.left - boundsRect.left + rect.width / 2 - tooltip.offsetWidth / 2, padding, Math.max(padding, boundsRect.width - tooltip.offsetWidth - padding));
+			let top = rect.top - boundsRect.top - tooltip.offsetHeight - offset;
+			if (top < padding) top = rect.bottom - boundsRect.top + offset;
+			top = clamp(top, padding, Math.max(padding, boundsRect.height - tooltip.offsetHeight - padding));
+			tooltip.style.left = `${left}px`;
+			tooltip.style.top = `${top}px`;
+			return;
+		}
+		const left = clamp(rect.left + rect.width / 2 - tooltip.offsetWidth / 2, offset, Math.max(offset, window.innerWidth - tooltip.offsetWidth - offset));
+		let top = rect.top - tooltip.offsetHeight - offset;
+		if (top < offset) top = rect.bottom + offset;
+		top = clamp(top, offset, Math.max(offset, window.innerHeight - tooltip.offsetHeight - offset));
+		tooltip.style.left = `${left}px`;
+		tooltip.style.top = `${top}px`;
+	}
+	function showReusableTooltip(mark) {
+		if (!mark?.getAttribute?.("data-tooltip")) return;
+		const dialog = mark.closest("dialog[open]");
+		const tooltip = prepareTooltip(mark, dialog);
+		positionTooltip({
+			tooltip,
+			anchor: mark.querySelector(".switch") || mark,
+			dialog
+		});
+		tooltip.style.visibility = "";
+		tooltip.classList.add("visible");
+		activeTooltipTarget = mark;
+	}
+	function bindDelegatedTooltips() {
+		if (tooltipDelegationBound) return;
+		tooltipDelegationBound = true;
+		document.addEventListener("mouseover", (event) => {
+			const mark = event.target?.closest?.(".switch-container, .calRes");
+			if (!mark || !mark.getAttribute("data-tooltip") || mark.contains(event.relatedTarget)) return;
+			showReusableTooltip(mark);
+		});
+		document.addEventListener("mouseout", (event) => {
+			const mark = event.target?.closest?.(".switch-container, .calRes");
+			if (!mark || mark !== activeTooltipTarget || mark.contains(event.relatedTarget)) return;
+			hideReusableTooltip();
+		});
+	}
+	function configureViewport(globalConfig) {
+		window.WDVerSion = "1.0.0";
+		window.padding = globalConfig.padding || 0;
+		Object.defineProperty(window, "innerWidth", {
+			configurable: true,
+			enumerable: true,
+			get() {
+				const padding = Math.max(0, Number(window.padding) || 0);
+				return document.documentElement.clientWidth - padding;
+			}
+		});
+	}
+	function removeInjectedDom(globalState) {
+		unbindPeiXiuHandSuitColorRefresh();
+		unbindTrackerVisibilityShortcut();
+		destroySeatOverlay();
+		document.getElementById("cusBGDiv")?.remove();
+		document.getElementById("tracker-shell")?.remove();
+		destroyPeiXiuMapWindow();
+		destroyPingJianWindow();
+		document.getElementById("peixiu-map-style")?.remove();
+		globalState.isFrameAdd = false;
+	}
+	function cleanupLifecycle(globalState) {
+		removeInjectedDom(globalState);
+		return true;
+	}
+	function waitForLegacyFrameReady(initFrame) {
+		return new Promise((resolve, reject) => {
+			function checkLibraries() {
+				return new Promise((libResolve) => {
+					function checkLibs() {
+						if (typeof JSZipUtils !== "undefined" && typeof CtrUtil !== "undefined" && typeof CtrUtil?.Ctr?.Ofb_Dec !== "undefined" && typeof ChannelUtils !== "undefined" && document.getElementById("bgDiv")) initFrame(true).then(libResolve);
+						else if (typeof PUERTS_JS_RESOURCES !== "undefined") libResolve(true);
+						else setTimeout(checkLibs, 1e3);
+					}
+					checkLibs();
+				});
+			}
+			Promise.all([checkLibraries()]).then(resolve).catch(reject);
+		});
+	}
+	var STYLE_ID = "dxc-shell-style";
+	function ensureStyle() {
+		let style = document.getElementById(STYLE_ID);
+		if (style) return;
+		style = document.createElement("style");
+		style.id = STYLE_ID;
+		style.textContent = `
+    #tracker-shell {
+      position: fixed;
+      overflow: hidden;
+      resize: vertical;
+      top: 31px;
+      right: 155px;
+      width: 230px;
+      height: 500px;
+      z-index: 10000000000;
+      display: flex;
+      flex-direction: column;
+      color: #f2de9c;
+      background: rgb(35, 32, 29);
+      user-select: none;
+      text-align: left;
+      transition: width 200ms, opacity 200ms;
+      border-radius: 8px;
+      transform-origin: top right;
+      transform: translate(0px, 0px);
+    }
+    #tracker-shell.collapsed {
+      height: 30px !important;
+      width: 75px !important;
+      opacity: 0.6 !important;
+      resize: none !important;
+    }
+    #tracker-shell .header {
+      margin: 1px;
+      user-select: none;
+      touch-action: none;
+      cursor: grab;
+      display: flex;
+      align-items: center;
+      font-size: 20px;
+      border-radius: 5px;
+    }
+    #tracker-shell #title {
+      margin-right: auto;
+    }
+    #tracker-shell #toggle-me {
+      text-align: center;
+      color: #f2de9c;
+      background: rgb(107, 30, 30);
+      border-radius: 6px;
+      width: 26px;
+      height: 26px;
+      border: 1px solid rgb(212, 212, 162);
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 1px;
+      font-size: 20px;
+    }
+    #tracker-shell #toggle-me:hover {
+      background-color: rgb(130, 30, 30);
+    }
+    #tracker-shell .tracker-content {
+      border: none;
+      width: 230px;
+      height: 100%;
+      margin: 0px;
+      overflow: hidden;
+    }
+    #tracker-shell.collapsed .tracker-content {
+      display: none !important;
+    }
+  `;
+		document.head.appendChild(style);
+	}
+	function createMainShell(version) {
+		ensureStyle();
+		const div = document.createElement("div");
+		div.id = "tracker-shell";
+		const header = document.createElement("p");
+		header.id = "header";
+		header.className = "header";
+		const title = document.createElement("span");
+		title.id = "title";
+		title.style = "margin-right: auto;";
+		title.innerText = "三国杀小抄" + version;
+		div.appendChild(header);
+		const btn = document.createElement("button");
+		btn.innerText = "-";
+		btn.id = "toggle-me";
+		btn.type = "button";
+		header.appendChild(title);
+		header.appendChild(btn);
+		document.body.appendChild(div);
+		bindTrackerVisibilityShortcut();
+		const iframe = document.createElement("div");
+		iframe.className = "tracker-content";
+		div.append(iframe);
+		return {
+			div,
+			iframe
+		};
+	}
+	var INTERFACE_HTML_URL = "https://www.desuwa.link/tracker/iframe.html";
+	async function loadInterfaceHtml(force = false) {
+		const response = await fetch(INTERFACE_HTML_URL, { cache: force ? "reload" : "default" });
+		if (!response.ok) throw new Error(`加载小抄界面失败：${response.status} ${response.statusText}`);
+		return response.text();
+	}
+	var iframe = null;
+	var version = "0.21.1";
+	function getTrackedHandNumbers(seatID) {
+		const config = CardConfig.GetInstance();
+		return tracker.getTrackedPlayerHandCardIDs(seatID).map((id) => config.getCardNumber(id)).filter((number) => number > 0);
+	}
+	function Init() {
+		configureViewport(globalConfig);
+		startGameSizeUpdates();
+		console.info("🚀 初始化...");
+		return waitForLegacyFrameReady(initFrame);
+	}
+	function Exit() {
+		stopGameSizeUpdates();
+		return cleanupLifecycle(globalState);
+	}
+	function updateViewportCenter() {
+		document.documentElement.style.setProperty("--sgs-center-x", `${window.innerWidth / 2}px`);
+	}
+	var updateTimeout = null;
+	var stopWindowResize = null;
+	var overflowFrame = null;
+	function startGameSizeUpdates() {
+		stopGameSizeUpdates();
+		stopWindowResize = subscribeWindowResize(() => {
+			updateViewportCenter();
+			scheduleSetGameSize();
+		});
+	}
+	function stopGameSizeUpdates() {
+		stopWindowResize?.();
+		stopWindowResize = null;
+		if (updateTimeout !== null) clearTimeout(updateTimeout);
+		updateTimeout = null;
+		if (overflowFrame !== null) cancelAnimationFrame(overflowFrame);
+		overflowFrame = null;
+	}
+	function scheduleSetGameSize() {
+		if (updateTimeout !== null) clearTimeout(updateTimeout);
+		updateTimeout = setTimeout(() => {
+			updateTimeout = null;
+			setGameSize();
+		}, 500);
+	}
+	async function initFrame(force = false) {
+		if (!stopWindowResize) return;
+		if (force) {
+			stopGameSizeUpdates();
+			removeInjectedDom(globalState);
+		}
+		if (!globalState.isFrameAdd) {
+			startGameSizeUpdates();
+			const stopCurrentResize = stopWindowResize;
+			try {
+				document.getElementById("bgDiv").firstElementChild.draggable = false;
+				document.querySelector("link[rel=stylesheet]")?.remove();
+			} catch {
+				console.error("移除4399服的CSS失败");
+			}
+			createSeatOverlay(globalConfig);
+			await addFrame(stopCurrentResize);
+			if (stopWindowResize !== stopCurrentResize) return;
+			setGameSize();
+			bindPeiXiuHandSuitColorRefresh();
+			globalState.isFrameAdd = true;
+			return ConfigManager.GetInstance().loadAndParseConfigs();
+		}
+	}
+	function setGameSize() {
+		const bgDiv = document.getElementById("bgDiv");
+		if (bgDiv) bgDiv.style.width = document.documentElement.clientWidth + "px";
+		const shell = document.getElementById("tracker-shell");
+		if (globalConfig.padding && shell) {
+			shell.style.height = "100%";
+			shell.style.right = "0px";
+			shell.style.top = "0px";
+		}
+		updateSeatOverlay(tracker.getTrackerRoom());
+		if (overflowFrame !== null) cancelAnimationFrame(overflowFrame);
+		overflowFrame = requestAnimationFrame(() => {
+			overflowFrame = null;
+			refreshZoneMirrorOverflow();
+		});
+	}
+	setTrackerSeatUIReader(() => updateSeatOverlay(tracker.getTrackerRoom()));
+	async function addFrame(stopCurrentResize = stopWindowResize) {
+		if (!document.getElementById("tracker-shell")) {
+			iframe = createMainShell(version).iframe;
+			if (localStorage.getItem("DXCVersion") != version) {
+				addTooltip(`小抄已经更新到${version}`, "acTooltip", 15e3);
+				localStorage.setItem("DXCVersion", version);
+			}
+			let html;
+			try {
+				html = await loadInterfaceHtml();
+			} catch (error) {
+				console.error("Failed to load iframe content:", error);
+			}
+			if (stopWindowResize !== stopCurrentResize) return;
+			if (html !== void 0) iframe.innerHTML = html;
+			initInjectedInterface({
+				container: iframe,
+				expandJiePanel,
+				bindDelegatedTooltips
+			});
+		}
+		addDragHint();
+		buttonClick();
+		initDragElement(globalConfig, globalState, requestWindowResize);
+	}
+	function buttonClick() {
+		const detailBlockSwitchIds = [
+			"blockKillEffectSwitch",
+			"blockSkinStateSwitch",
+			"skipAdWindowSwitch",
+			"skipPackageWindowSwitch",
+			"blockMvpSettlementSwitch"
+		];
+		const getSwitchElement = (configKey) => document.getElementById(configKey);
+		const setSwitchChecked = (configKey, value) => {
+			const element = getSwitchElement(configKey);
+			if (element) element.checked = value;
+		};
+		const setConfigSwitch = (configKey, value) => {
+			globalConfig[configKey] = value;
+			setSwitchChecked(configKey, value);
+		};
+		const syncEffectBlockSwitchFromDetails = () => {
+			setConfigSwitch("effectBlockSwitch", detailBlockSwitchIds.some((configKey) => Boolean(globalConfig[configKey])));
+		};
+		const syncDetailBlockSwitches = (switchValue) => {
+			detailBlockSwitchIds.forEach((configKey) => setConfigSwitch(configKey, switchValue));
+		};
+		const switchHandlers = {
+			seatUISwitch(switchValue) {
+				setSeatOverlayVisible(switchValue);
+			},
+			cardLabelSwitch() {},
+			showNameSwitch() {},
+			rogueCitySwitch(switchValue) {
+				switchValue && UI.cities ? drawCitiesUI(UI.cities) : drawCitiesUI("");
+			},
+			debugLogSwitch() {},
+			peiXiuMapSwitch(switchValue) {
+				setPeiXiuMapWindowVisible(switchValue);
+			},
+			effectBlockSwitch(switchValue) {
+				syncDetailBlockSwitches(switchValue);
+			},
+			blockKillEffectSwitch() {
+				syncEffectBlockSwitchFromDetails();
+			},
+			blockSkinStateSwitch() {
+				syncEffectBlockSwitchFromDetails();
+			},
+			skipAdWindowSwitch() {
+				syncEffectBlockSwitchFromDetails();
+			},
+			skipPackageWindowSwitch() {
+				syncEffectBlockSwitchFromDetails();
+			},
+			blockMvpSettlementSwitch() {
+				syncEffectBlockSwitchFromDetails();
+			}
+		};
+		const switchConfigKeys = Object.keys(switchHandlers);
+		const toggle = document.getElementById("toggle-me");
+		if (toggle) toggle.onclick = function() {
+			globalState.closeIframe = !globalState.closeIframe;
+			const container = document.getElementById("tracker-shell");
+			if (globalState.closeIframe) {
+				container.classList.add("collapsed");
+				toggle.innerText = "+";
+				document.getElementById("title").innerText = "小抄";
+				container.style.top = "31px";
+				container.style.right = "155px";
+				if (globalConfig.padding) {
+					globalConfig.padding = 0;
+					requestWindowResize();
+					container.style.transform = "translate(0px, 0px)";
+				}
+			} else {
+				container.classList.remove("collapsed");
+				toggle.innerText = "-";
+				document.getElementById("title").innerText = "三国杀小抄0.21.1";
+				expandJiePanel({ defer: true });
+			}
+		};
+		function handleSwitchChange(event) {
+			const switchElement = event.target;
+			if (!switchElement?.matches?.("input[type=\"checkbox\"]")) return;
+			const configKey = switchElement.dataset.configKey || switchElement.id;
+			const handler = switchHandlers[configKey];
+			if (!handler) return;
+			const switchValue = switchElement.checked;
+			globalConfig[configKey] = switchValue;
+			handler(switchValue);
+		}
+		if (window.padding == 0) toggle?.click();
+		requestWindowResize();
+		switchConfigKeys.forEach((configKey) => setSwitchChecked(configKey, Boolean(globalConfig[configKey])));
+		const switchRoot = document.getElementById("tracker-shell");
+		if (switchRoot && !switchRoot.dataset.switchDelegationBound) {
+			switchRoot.dataset.switchDelegationBound = "true";
+			switchRoot.addEventListener("change", handleSwitchChange);
+		}
+		syncEffectBlockSwitchFromDetails();
+		const mizhuBtn = document.getElementById("mizhu");
+		if (mizhuBtn) mizhuBtn.onclick = function() {
+			drawMiZhu(getTrackedHandNumbers(Game.myID));
+		};
+		const openWelfareBtn = document.getElementById("openWelfareBtn");
+		if (openWelfareBtn) openWelfareBtn.onclick = function() {
+			laya.ShowWindow("WelfareWindow");
+		};
+		const blockEffectContainer = document.getElementById("blockEffectContainer");
+		const blockEffectDialog = document.getElementById("blockEffectDialog");
+		if (blockEffectContainer && blockEffectDialog) {
+			const explanation = blockEffectContainer.querySelector(".explanation");
+			if (explanation) explanation.onclick = function() {
+				blockEffectDialog.showModal();
+			};
+			const closeBtn = blockEffectDialog.querySelector(".dialog-close-btn");
+			if (closeBtn) closeBtn.onclick = function() {
+				blockEffectDialog.close();
+			};
+			blockEffectDialog.onclick = function(event) {
+				if (event.target === blockEffectDialog) blockEffectDialog.close();
+			};
+		}
+		const protocolRecordSwitch = document.getElementById("protocolRecordSwitch");
+		const protocolRecorderControls = document.getElementById("protocolRecorderControls");
+		protocolRecordSwitch?.closest(".switch-container")?.style.setProperty("display", "none");
+		protocolRecorderControls?.style.setProperty("display", "none");
+	}
+	function expandJiePanel(options = {}) {
+		const { defer = false } = options;
+		const apply = () => {
+			const layaHeader = document.querySelector(".jie-header");
+			if (!layaHeader) return;
+			const panelContent = layaHeader.nextElementSibling;
+			if (!panelContent) return;
+			getPanelContentInner(panelContent);
+			panelContent.style.removeProperty("max-height");
+			layaHeader.classList.add("active");
+		};
+		if (defer) requestAnimationFrame(apply);
+		else apply();
+	}
 	var USER_IDENTITY_MESSAGES = new Set([
 		"ClientLoginRep",
 		"ClientUserDataCounterNtf",
@@ -16323,10 +15250,6 @@
 			if (className === lastClassName && className === "MsgGameOver") return;
 			lastClassName = className;
 			const { ProtoObj, SeatID } = msg;
-			recordTrackerProtocol(msg, {
-				mySeatID: Game.myID,
-				currentSeatID: Game.currentID
-			});
 			if (!isRetainedLogicMessage(className)) return;
 			handleUserSession(msg, className);
 			switch (className) {
@@ -16384,9 +15307,7 @@
 				case "ClientLeavetableRep":
 					handleLeaveTable();
 					break;
-				case "ClientRecommendShopItemRep":
-					if (Game.isGameStart && msg?.userID === user.userID) handleLeaveTable();
-					break;
+				case "ClientRecommendShopItemRep": break;
 				case "decodeRougeBaseInfoRep":
 					UI.friendGeneral = ProtoObj?.friendGeneral?.length ?? UI.friendGeneral;
 					break;
