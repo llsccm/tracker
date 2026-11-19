@@ -119,11 +119,13 @@ export function decorateChengLie(event: MoveEventDraft, room: Room): MoveEventDr
   if (fromZone === 10 && toZone === 4 && !hasPositiveID(cardIDs)) {
     const state = getChengLieState(room)
     if (state.revealedIDs.length > 0) {
-      logChengLie('暗置进入标记区', {
-        toSeatID: move.ToID,
-        cardCount: getCount(event),
-        revealedIDs: state.revealedIDs
-      })
+      if (import.meta.env.DEV && trackerLogger.enabled) {
+        logChengLie('暗置进入标记区', {
+          toSeatID: move.ToID,
+          cardCount: getCount(event),
+          revealedIDs: state.revealedIDs
+        })
+      }
     }
   }
 
@@ -145,12 +147,14 @@ export function decorateChengLie(event: MoveEventDraft, room: Room): MoveEventDr
     })
   }
 
-  logChengLie('暗中从处理区进入手牌', {
-    casterSeatID: state.casterSeatID,
-    cardCount: getCount(event),
-    exchangeCardIDs: exchangeCards.map((card) => card.id).filter((id) => id > 0),
-    groupedCardIDs: groupedCards.map((card) => card.id).filter((id) => id > 0)
-  })
+  if (import.meta.env.DEV && trackerLogger.enabled) {
+    logChengLie('暗中从处理区进入手牌', {
+      casterSeatID: state.casterSeatID,
+      cardCount: getCount(event),
+      exchangeCardIDs: exchangeCards.map((card) => card.id).filter((id) => id > 0),
+      groupedCardIDs: groupedCards.map((card) => card.id).filter((id) => id > 0)
+    })
+  }
 
   return patchEvent(event, {
     from: event.from.type === 'public' ? { ...event.from, position: POSITION_BOTTOM } : event.from,
@@ -168,11 +172,13 @@ function observeChengLieFinalDiscard(
   if (!state) return
 
   state.finalDiscardIDs = Array.from(new Set([...state.finalDiscardIDs, ...ids]))
-  logChengLie('观察到标记区明置进弃牌堆', {
-    currentDiscardIDs: state.finalDiscardIDs,
-    expectedCount: state.revealedIDs.length,
-    ...meta
-  })
+  if (import.meta.env.DEV && trackerLogger.enabled) {
+    logChengLie('观察到标记区明置进弃牌堆', {
+      currentDiscardIDs: state.finalDiscardIDs,
+      expectedCount: state.revealedIDs.length,
+      ...meta
+    })
+  }
 
   if (state.finalDiscardIDs.length >= state.revealedIDs.length) {
     settleChengLieInference(event, room, state)
@@ -205,13 +211,15 @@ function settleChengLieInference(event: MoveEventDraft, room: Room, state: Cheng
     takenToHandIDs.length <= 1 &&
     givenFromHandIDs.length <= 1
 
-  logChengLie('结算差分', {
-    revealedIDs: state.revealedIDs,
-    finalDiscardIDs: state.finalDiscardIDs,
-    takenToHandIDs,
-    givenFromHandIDs,
-    canResolveStrongly
-  })
+  if (import.meta.env.DEV && trackerLogger.enabled) {
+    logChengLie('结算差分', {
+      revealedIDs: state.revealedIDs,
+      finalDiscardIDs: state.finalDiscardIDs,
+      takenToHandIDs,
+      givenFromHandIDs,
+      canResolveStrongly
+    })
+  }
 
   if (canResolveStrongly && takenToHandIDs.length === 1) {
     const [cardID] = takenToHandIDs
@@ -230,22 +238,30 @@ function settleChengLieInference(event: MoveEventDraft, room: Room, state: Cheng
         sourceEvent: event.options?.sourceEvent
       })
 
-      logChengLie('确认亮出牌进入手牌', { cardID, casterSeatID: state.casterSeatID })
+      if (import.meta.env.DEV && trackerLogger.enabled) {
+        logChengLie('确认亮出牌进入手牌', { cardID, casterSeatID: state.casterSeatID })
+      }
     } else {
-      trackerLogger.warn('[骋烈] 无法确认亮出牌进入手牌', {
-        cardID,
-        casterSeatID: state.casterSeatID,
-        hasCard: Boolean(card)
-      })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('[骋烈] 无法确认亮出牌进入手牌', {
+          cardID,
+          casterSeatID: state.casterSeatID,
+          hasCard: Boolean(card)
+        })
+      }
     }
   } else if (canResolveStrongly && takenToHandIDs.length === 0) {
-    logChengLie('未发生交换或没有亮出牌留在手牌')
+    if (import.meta.env.DEV && trackerLogger.enabled) {
+      logChengLie('未发生交换或没有亮出牌留在手牌')
+    }
   } else {
-    trackerLogger.info('[骋烈] 存在前置不确定明牌或异常差分，跳过强确认', {
-      hadAmbiguousKnownBeforeReveal: state.hadAmbiguousKnownBeforeReveal,
-      takenToHandIDs,
-      givenFromHandIDs
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('[骋烈] 存在前置不确定明牌或异常差分，跳过强确认', {
+        hadAmbiguousKnownBeforeReveal: state.hadAmbiguousKnownBeforeReveal,
+        takenToHandIDs,
+        givenFromHandIDs
+      })
+    }
   }
 
   chengLieState.clear(room)
@@ -282,10 +298,12 @@ function recordChengLieReveal(
   const ambiguousCards = getAmbiguousKnownHandCards(room)
 
   if (state.revealedIDs.length > 0 && state.finalDiscardIDs.length < state.revealedIDs.length) {
-    logChengLie('新的亮牌覆盖未完成状态', {
-      previousRevealedIDs: state.revealedIDs,
-      previousFinalDiscardIDs: state.finalDiscardIDs
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled) {
+      logChengLie('新的亮牌覆盖未完成状态', {
+        previousRevealedIDs: state.revealedIDs,
+        previousFinalDiscardIDs: state.finalDiscardIDs
+      })
+    }
   }
 
   state.revealedIDs = ids
@@ -294,12 +312,14 @@ function recordChengLieReveal(
   state.hadAmbiguousKnownBeforeReveal = ambiguousCards.length > 0
   state.sourceEvent = event.options?.sourceEvent
 
-  logChengLie('记录亮牌', {
-    revealedIDs: state.revealedIDs,
-    casterSeatID: state.casterSeatID,
-    hadAmbiguousKnownBeforeReveal: state.hadAmbiguousKnownBeforeReveal,
-    ambiguousKnownIDs: ambiguousCards.map((card) => card.id).filter((id) => id > 0)
-  })
+  if (import.meta.env.DEV && trackerLogger.enabled) {
+    logChengLie('记录亮牌', {
+      revealedIDs: state.revealedIDs,
+      casterSeatID: state.casterSeatID,
+      hadAmbiguousKnownBeforeReveal: state.hadAmbiguousKnownBeforeReveal,
+      ambiguousKnownIDs: ambiguousCards.map((card) => card.id).filter((id) => id > 0)
+    })
+  }
 }
 
 function getAmbiguousKnownHandCards(room: Room): Card[] {
@@ -342,7 +362,9 @@ function getSeatID(seatID: number | undefined): number | null {
 }
 
 function logChengLie(stage: string, payload: Record<string, unknown> = {}): void {
-  trackerLogger.info(`[骋烈] ${stage}`, payload)
+  if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    trackerLogger.info(`[骋烈] ${stage}`, payload)
+  }
 }
 
 function isChengLieReveal(move: NormalizedMoveCardFields, ids: number[]): boolean {

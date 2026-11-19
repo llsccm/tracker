@@ -7,9 +7,8 @@ import { getMovePosition } from '@/tracker/helper/moveEndpoint'
  * - 开发模式允许目标视角保留协议中的完整牌堆身份，便于调试。
  * - 生产模式的目标视角只利用 Type=53 确定“自己被换走的手牌落在哪个
  *   牌堆槽位”；其它牌堆槽位保持匿名，不把协议泄露的 CardID 物化到牌堆。
- * - 其它视角不消费协议牌 ID，也不移动任何物理实体；只有观察到完整交换链后，
- *   才把目标手牌明牌扩展为“原候选位置 / 牌堆顶前 pileCount 张”的弱候选。
- *   该分支不反推原牌堆顶身份，也不利用交换张数建立精确 N 选 K 约束。
+ * - 其它视角收到完整观看信息时按协议精确移动；只有观看张数时，在完整交换链
+ *   结算后为目标手牌明牌保留“原位置 / 牌堆顶前 pileCount 张”的弱候选。
  *
  * 目标视角的生产路径会短暂保存“协议牌 ID -> 匿名物理槽”映射，它只用于计算
  * 目标手牌的回堆位置，不进入 Card/cardIndex/PileIdentityLedger，结算后立即清理。
@@ -31,6 +30,7 @@ export type JieLiContextData = {
   actorSeat: number
   targetSeat: number
   pileCount: number
+  hasFullInformation: boolean
 }
 
 export type JieLiSelectionData = {
@@ -66,18 +66,12 @@ type JieLiBatch = {
 
 type JieLiObserverPhase = 'pile-staged' | 'hand-staged' | 'pile-returned'
 
-/**
- * 第三方视角只保存协议公开的张数事实和目标手牌候选实体引用。
- * 四条物理移动全部保持 noop，因此批次中的 Card 引用不会进入 exchange 区。
- */
+/** 信息不完整的其它视角只保存张数与目标手牌引用，不移动交换区实体。 */
 type JieLiObserverBatch = {
   actorSeat: number
   targetSeat: number
-  /** GsCRoleOptTargetNtf.Params[0]，也是最终公共候选的牌顶范围。 */
   pileCount: number
-  /** 目标手牌进入交换区消息的 CardCount；只用于校验结算链完整。 */
   exchangeCount: number
-  /** 交换开始时确定或可能位于目标手牌的已知牌；匿名牌不参与身份候选。 */
   targetHandCards: Card[]
   phase: JieLiObserverPhase
 }
@@ -102,7 +96,8 @@ export function clearJieLiState(room: Room): void {
 
 /**
  * 由 GsCRoleOptTargetNtf 记录发动者/目标座位。
- * 这里不保存任何牌 ID，只为后续移动选择正确的视角策略。
+ * 同时记录通知是否包含完整观看信息，供其它视角选择精确移动或弱候选推断。
+ * 这里不保存任何牌 ID。
  */
 export function recordJieLiContext(room: Room, data: JieLiContextData): void {
   const state = jieLiState.ensure(room, () => ({}))
@@ -173,7 +168,14 @@ export function parseJieLiNotice(msg: {
   if (!Number.isInteger(pileCount) || pileCount <= 0) return null
 
   if (Params.length === 1) {
-    return { actorSeat, targetSeat, pileCount, pileCardIDs: null, handCardIDs: null }
+    return {
+      actorSeat,
+      targetSeat,
+      pileCount,
+      hasFullInformation: false,
+      pileCardIDs: null,
+      handCardIDs: null
+    }
   }
 
   if (
@@ -188,6 +190,7 @@ export function parseJieLiNotice(msg: {
     actorSeat,
     targetSeat,
     pileCount,
+    hasFullInformation: true,
     pileCardIDs: Params.slice(2, 2 + pileCount),
     handCardIDs: Params.slice(2 + pileCount)
   }
@@ -241,8 +244,8 @@ function resolveViewMode(room: Room, eventActorSeat?: number): JieLiViewMode {
     room.mySeatID !== context.actorSeat &&
     room.mySeatID !== context.targetSeat
   ) {
-    // 只有既非发动者、也非目标角色的明确本地座位才运行弱候选推断。
-    return 'observer-limited'
+    // 同阵营队友可收到完整观看信息；只有张数的视角不能据交换 ID 固化身份。
+    return context.hasFullInformation ? 'default' : 'observer-limited'
   }
 
   return 'skip'
@@ -252,11 +255,7 @@ function noOp(event: MoveEventDraft): MoveEventDraft {
   return patchEvent(event, { type: 'noop' })
 }
 
-/**
- * 候选已经在装饰阶段写入 Card，但普通 noop 会让 Controller 提前返回，
- * 无法执行 resolveConstraints 和视图刷新。将最终消息改成零张移动，可以只触发
- * 收敛、索引同步与渲染，而不改变手牌数、交换区或牌堆身份账本。
- */
+/** 候选提交后用零张移动触发收敛与索引同步，不改变物理区域或手牌张数。 */
 function resolveOnlyMove(event: MoveEventDraft): MoveEventDraft {
   return patchEvent(event, {
     cardIDs: [],
@@ -275,10 +274,6 @@ function failObserverInference(event: MoveEventDraft, room: Room): MoveEventDraf
   return noOp(event)
 }
 
-/**
- * 使用稳定位置索引收集两类已知身份：确定在目标手里的明牌，以及仍包含目标手牌
- * 分支的候选明牌。匿名手牌只承担物理数量，不需要增加身份位置候选。
- */
 function collectObserverTargetHandCards(room: Room, targetSeat: number): Card[] {
   const knownHandCards = room.locationIndex.knownHandBySeat.get(targetSeat) ?? []
   const candidateHandCards = room.locationIndex.candidateHandBySeat.get(targetSeat) ?? []
@@ -288,10 +283,7 @@ function collectObserverTargetHandCards(room: Room, targetSeat: number): Card[] 
   )
 }
 
-/**
- * 结算前重新确认目标手牌分支仍然有效，避免交换链期间其它明确协议已经收敛了该牌，
- * 却仍根据旧快照给它追加牌顶范围。
- */
+/** 后续明确协议可能已经收敛旧快照，结算时仅扩展仍含目标手牌分支的身份。 */
 function hasTargetHandBranch(card: Card, targetSeat: number): boolean {
   const locationCandidates = card.locationCandidates
   if (locationCandidates.length > 0) {
@@ -306,10 +298,6 @@ function hasTargetHandBranch(card: Card, targetSeat: number): boolean {
   return card.location === 'player' && card.subZone === 'hand' && card.seats.has(targetSeat)
 }
 
-/**
- * 第三方视角观察到牌堆侧进入 exchange，只校验发动者与观看张数并启动状态机。
- * 即使消息意外携带正 CardIDs，也不会读取、物化或移动这些身份。
- */
 function stageObserverPile(event: MoveEventDraft, room: Room): MoveEventDraft {
   const move = event.protocol
   const context = jieLiState.read(room)?.context
@@ -331,10 +319,6 @@ function stageObserverPile(event: MoveEventDraft, room: Room): MoveEventDraft {
   return noOp(event)
 }
 
-/**
- * 手牌侧进入 exchange 证明本次确实发生了交换。此时物理状态尚未被本分支修改，
- * 因而可以安全快照目标手牌的确定明牌与候选明牌。
- */
 function stageObserverTargetHand(event: MoveEventDraft, room: Room): MoveEventDraft {
   const move = event.protocol
   const batch = jieLiState.read(room)?.observerBatch
@@ -356,10 +340,6 @@ function stageObserverTargetHand(event: MoveEventDraft, room: Room): MoveEventDr
   return noOp(event)
 }
 
-/**
- * 回牌堆消息只推进状态机：第三方不知道哪些手牌被换出，因此不能在此移动实体、
- * 绑定匿名槽或消费消息中的 CardIDs。
- */
 function returnObserverCardsToPile(event: MoveEventDraft, room: Room): MoveEventDraft {
   const move = event.protocol
   const batch = jieLiState.read(room)?.observerBatch
@@ -377,12 +357,6 @@ function returnObserverCardsToPile(event: MoveEventDraft, room: Room): MoveEvent
   return noOp(event)
 }
 
-/**
- * 完整交换链的提交点。对快照中仍含目标手牌分支的每张明牌，仅追加
- * “牌堆顶前 pileCount 张”这一可能位置，并保留它原有的全部位置分支。
- * exchangeCount 只能证明总交换张数，无法证明其中有几张属于这些候选明牌，
- * 所以这里刻意不创建 ConstraintGroup 的精确数量约束。
- */
 function returnObserverCardsToTargetHand(event: MoveEventDraft, room: Room): MoveEventDraft {
   const move = event.protocol
   const batch = jieLiState.read(room)?.observerBatch
@@ -396,6 +370,7 @@ function returnObserverCardsToTargetHand(event: MoveEventDraft, room: Room): Mov
     return failObserverInference(event, room)
   }
 
+  // 张数不能证明某张已知手牌被换出，只追加牌顶范围并保留原有位置分支。
   const pileCandidate = createPublicCandidate('pile', POSITION_TOP, batch.pileCount)
   let changed = false
   batch.targetHandCards.forEach((card) => {
@@ -645,7 +620,7 @@ export default function decorateJieLi(event: MoveEventDraft, room: Room): MoveEv
   const viewMode = resolveViewMode(room, eventActorSeat)
 
   if (moveType === MOVE_TYPE.SHOW) {
-    // 生产目标与第三方视角都不消费泄露完整牌堆的同区展示。
+    // 只有观看张数的视角不消费完整牌堆同区展示。
     return viewMode === 'target-limited' || viewMode === 'observer-limited' || viewMode === 'skip'
       ? noOp(event)
       : event
@@ -663,7 +638,6 @@ export default function decorateJieLi(event: MoveEventDraft, room: Room): MoveEv
     return noOp(event)
   }
   if (viewMode === 'observer-limited') {
-    // 第三方只消费四条消息的座位、方向与张数，所有协议牌 ID 均保持不可见。
     if (fromZone === 1 && toZone === 10) return stageObserverPile(event, room)
     if (fromZone === 5 && toZone === 10) return stageObserverTargetHand(event, room)
     if (fromZone === 10 && toZone === 1) return returnObserverCardsToPile(event, room)
@@ -712,7 +686,8 @@ export const jieLiPlugin: RoomSkillPlugin = {
         recordJieLiContext(room, {
           actorSeat: notice.actorSeat,
           targetSeat: notice.targetSeat,
-          pileCount: notice.pileCount
+          pileCount: notice.pileCount,
+          hasFullInformation: notice.hasFullInformation
         })
       }
       return

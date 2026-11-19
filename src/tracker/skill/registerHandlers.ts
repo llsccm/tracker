@@ -121,7 +121,7 @@ export function registerDefaultMoveEventHandlers(room: Room): void {
   // 马承【骋烈】
   room.registerSkillPlugin({ id: 'chengLie', spellIDs: [3208], decorateMove: decorateChengLieMove })
 
-  // 族钟繇【诫厉】：目标视角定位换出槽位，第三方视角保留手牌/牌顶范围弱候选。
+  // 族钟繇【诫厉】：目标视角定位换出槽位，其它视角按观看信息选择精确移动或弱候选。
   room.registerSkillPlugin(jieLiPlugin)
 
   // 徐氏【问卦】：相邻的主动交牌/回堆消息只筛选候选来源，不追踪单个实体。

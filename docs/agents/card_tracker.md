@@ -102,12 +102,12 @@
 
 > 应用级 INIT/EXIT 与时序图见 [`lifecycle.md`](lifecycle.md)。此处只列记牌器关键协议。
 
-- `decodeGsClientUserSeatFlagNtf -> handleRecordStartGame()`：**当前主动开局路径**。注册新局前先执行 `resetSeatUIs()` 清理上一局，再 `initTrackerRoom()` → `registerTrackerPlayers(seatinfo, user.userID)`，并重置、裁剪座位覆盖层容器。
+- `decodeGsClientUserSeatFlagNtf -> handleRecordStartGame()`：**当前主动开局路径**。注册新局前先执行 `resetSeatOverlay()` 清理上一局并隐藏、清空旧容器布局，再 `initTrackerRoom()` → `registerTrackerPlayers(seatinfo, user.userID)`。有效容器由 `src/ui/seatOverlay.js` 的 `updateSeatOverlay()` 按当前显示玩家统一选择。
 - `GsCModifyUserseatNtf -> handleStartGame()`：函数仍导出，但 `logic.js` 中分发**当前注释未调用**；恢复时同样走 Room 创建与玩家注册。
-- `GsCFirstPhaseRole` / `MsgGameShowFigure(Figure===1)` → `tracker.setTrackerFirstHand()`：写入 `firstID` 并更新固定视角；主视角与先手都确定后计算座位位置，但容器保持隐藏，首轮开始时再显示。
+- `GsCFirstPhaseRole` / `MsgGameShowFigure(Figure===1)` → `tracker.setTrackerFirstHand()`：写入 `firstID` 并更新固定视角，浏览器 bridge 回调接入 `updateSeatOverlay()`；主视角与先手都确定后计算座位位置，首轮前保持隐藏，局中更新即时生效。
 - `MsgGamePlayCardNtf -> readyTrackerGame() -> initTrackerDeck()`：初始化物理牌池并完整 `view.mount`。
 - `PubGsCMoveCard -> handleMoveCard() -> syncTrackerMove()`：预处理后同步到 `Room.moveCards()` / `shufflePile()`。
-- `MsgGameTurnNtf`：`handleGameTurn` 在首轮先隐藏主视角，再显示已完成定位的其他座位，之后推进 `Game` 轮次并处理轮级战法 Laya 状态，最后 `scheduleTrackerRender`。容器重置与人数裁剪在玩家注册后完成。
+- `MsgGameTurnNtf`：`handleGameTurn` 先推进 `Game` 轮次并处理轮级战法 Laya 状态，首轮再调用 `updateSeatOverlay()` 同步尺寸、提交布局并显示有效座位，最后 `scheduleTrackerRender`。主视角排除、无效容器隐藏和轮次显隐统一由覆盖层模块处理。
 - `GsCGamephaseNtf`：`handleGamePhase` 以 `SeatRoundState` 编排玩家阶段；
   `Game.enter` 只推进纯状态，回合结果 DOM 清理、阶段文案与战法 Laya 重置留在
   handler。
@@ -172,7 +172,7 @@
 ## 已知未完成项
 
 - 尚未完整恢复旧版 `cardManager.pack()` 链表推理承载的所有不确定性语义；宴戏、权变、诫厉等技能仍需要用新版 `ConstraintGroup` 做进一步精细化。
-- 诫厉协议已对视角分流：发动者的 `GsCRoleOptTargetNtf` 携带完整牌堆/手牌 ID，目标与其它座位只有 `Params=[pileCount]`。生产目标用 Type 53 只定位自己被换走手牌的回堆槽，其它槽位保持匿名；发动者只走默认移动。第三方视角不消费牌 ID、不移动物理实体，仅在完整交换链结算后把目标手牌明牌扩展为“原位置 / 牌堆顶前 pileCount 张”弱候选；开发模式只允许目标视角做完整身份调试。
+- 诫厉观看通知按实际 `Params` 同步牌面并记录上下文，存在完整 ID 与纯计数两种形态。生产目标用 Type 53 只定位自己被换走手牌的回堆槽，其它槽位保持匿名。其它视角按通知完整度分流：完整信息走默认移动，同阵营队友可同步完整交换结果；纯计数在完整交换链结算后为目标手牌明牌追加“原位置 / 牌堆顶前 pileCount 张”弱候选。开发模式允许目标视角做完整身份调试。
 - 主动运行路径不再依赖 `cardManager.findKZ()`；旧链表辅助与未接入技能文件已清理。
 - 技能生命周期已通过 `RoomSkillPlugin` 批量分发；跨协议的通用中断协调器仍未实现，现有技能各自维护序列有效性。
 - 已有 `pnpm test:tracker` 的 Node/Vitest 回归覆盖导入边界、Controller、位置候选、公共候选、位置索引、暗置标记、脏渲染与遍历基线等；仍需补齐更多 `Room.moveCards()` 组合路线与浏览器运行时验证。

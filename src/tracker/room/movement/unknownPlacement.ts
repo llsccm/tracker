@@ -37,14 +37,16 @@ export class RoomMovementUnknownPlacement {
     if (unknownCount <= 0) return
 
     if (context.skipUnknownMovement) {
-      trackerLogger.debug('未知牌移动已由特殊候选逻辑接管', {
-        requestedCount: unknownCount,
-        fromSeat,
-        fromSubZone,
-        targetSeats,
-        subZone,
-        spellID
-      })
+      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        trackerLogger.debug('未知牌移动已由特殊候选逻辑接管', {
+          requestedCount: unknownCount,
+          fromSeat,
+          fromSubZone,
+          targetSeats,
+          subZone,
+          spellID
+        })
+      }
       return
     }
 
@@ -84,20 +86,22 @@ export class RoomMovementUnknownPlacement {
         })
       }
 
-      trackerLogger.debug('未知牌进入玩家区', {
-        requestedCount: unknownCount,
-        movedCardIDs: movedUnknownCards.map((card) => card.id),
-        fromSeat,
-        fromSubZone,
-        fromZone,
-        targetSeats,
-        subZone,
-        spellID,
-        knownSourceCardIDs: movedUnknownCards
-          .filter((card) => card.isKnown === true)
-          .map((card) => card.id),
-        constraintCreated: movedUnknownCards.length > 0 && targetSeats.length > 0
-      })
+      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        trackerLogger.debug('未知牌进入玩家区', {
+          requestedCount: unknownCount,
+          movedCardIDs: movedUnknownCards.map((card) => card.id),
+          fromSeat,
+          fromSubZone,
+          fromZone,
+          targetSeats,
+          subZone,
+          spellID,
+          knownSourceCardIDs: movedUnknownCards
+            .filter((card) => card.isKnown === true)
+            .map((card) => card.id),
+          constraintCreated: movedUnknownCards.length > 0 && targetSeats.length > 0
+        })
+      }
 
       return
     }
@@ -109,21 +113,23 @@ export class RoomMovementUnknownPlacement {
       const fallbackCount = unknownCount - takenCount
       const fallbackCards = this.room.createExternalCards([], fallbackCount)
       if (fallbackCards.length > 0 && this.room.trackingMode === 'full') {
-        trackerLogger.warn('来源实体不足，创建匿名暗占位补足公共区移动', {
-          reason: 'moveUnknownCardsForContext:publicFallback',
-          requestedCount: unknownCount,
-          takenCount,
-          createdPlaceholderCount: fallbackCards.length,
-          placeholderCardIDs: fallbackCards.map((card) => card.id),
-          fromSeat,
-          fromSubZone,
-          fromZone,
-          fromPosition,
-          toZone,
-          position,
-          spellID,
-          sourceEvent
-        })
+        if (trackerLogger.enabled !== false) {
+          trackerLogger.warn('来源实体不足，创建匿名暗占位补足公共区移动', {
+            reason: 'moveUnknownCardsForContext:publicFallback',
+            requestedCount: unknownCount,
+            takenCount,
+            createdPlaceholderCount: fallbackCards.length,
+            placeholderCardIDs: fallbackCards.map((card) => card.id),
+            fromSeat,
+            fromSubZone,
+            fromZone,
+            fromPosition,
+            toZone,
+            position,
+            spellID,
+            sourceEvent
+          })
+        }
       }
       movedUnknownCards.push(...fallbackCards)
     }
@@ -158,20 +164,22 @@ export class RoomMovementUnknownPlacement {
       count: unknownCount
     })
 
-    trackerLogger.debug('未知牌进入公共区', {
-      requestedCount: unknownCount,
-      takenCount,
-      createdFallbackCount: Math.max(0, unknownCount - takenCount),
-      movedCardIDs: movedUnknownCards.map((card) => card.id),
-      fromSeat,
-      fromSubZone,
-      fromZone,
-      toZone,
-      position,
-      knownSourceCardIDs: movedUnknownCards
-        .filter((card) => card.isKnown === true)
-        .map((card) => card.id),
-      targetZoneExists: Boolean(targetZone)
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.debug('未知牌进入公共区', {
+        requestedCount: unknownCount,
+        takenCount,
+        createdFallbackCount: Math.max(0, unknownCount - takenCount),
+        movedCardIDs: movedUnknownCards.map((card) => card.id),
+        fromSeat,
+        fromSubZone,
+        fromZone,
+        toZone,
+        position,
+        knownSourceCardIDs: movedUnknownCards
+          .filter((card) => card.isKnown === true)
+          .map((card) => card.id),
+        targetZoneExists: Boolean(targetZone)
+      })
+    }
   }
 }

@@ -82,7 +82,7 @@ export class RoomPublicZones {
     knownCards: Card[],
     zoneName: PublicZoneName,
     options: PublicRevealPlacementOptions = {},
-    logger: Pick<TrackerLogger, 'info'> = trackerLogger
+    logger: Pick<TrackerLogger, 'info' | 'enabled'> = trackerLogger
   ): void {
     const room = this.room
     const position = options.position ?? POSITION_TOP
@@ -117,11 +117,13 @@ export class RoomPublicZones {
     })
 
     if (skippedCards.length > 0) {
-      logger.info('公共区展示跳过无法回收的实体', {
-        zoneName,
-        skippedIDs: skippedCards.map((card) => card.id),
-        skippedLocations: skippedCards.map((card) => card.location)
-      })
+      if (import.meta.env.DEV && logger.enabled !== false) {
+        logger.info('公共区展示跳过无法回收的实体', {
+          zoneName,
+          skippedIDs: skippedCards.map((card) => card.id),
+          skippedLocations: skippedCards.map((card) => card.location)
+        })
+      }
     }
 
     placeableCards.forEach((card) => {
@@ -237,10 +239,12 @@ export function assertPublicZoneConsistency(room: Room, context = ''): PublicZon
 
   const issues = getPublicZoneConsistencyIssues(room)
   if (issues.length > 0) {
-    trackerLogger.warn('公共区顺序关系不一致', {
-      context,
-      issues
-    })
+    if (trackerLogger.enabled !== false) {
+      trackerLogger.warn('公共区顺序关系不一致', {
+        context,
+        issues
+      })
+    }
   }
   return issues
 }

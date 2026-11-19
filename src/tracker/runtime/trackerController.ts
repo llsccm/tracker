@@ -89,6 +89,7 @@ const noopView: TrackerView = {
 }
 
 const noopLogger: TrackerLogger = {
+  enabled: false,
   debug() {},
   info() {},
   warn() {}
@@ -124,7 +125,11 @@ export class TrackerController {
     }
     this.controllerLogger = {
       ...noopLogger,
-      ...logger
+      ...logger,
+      // 对象展开会求值并固化 getter；保留原日志对象的实时开关。
+      get enabled() {
+        return logger.enabled ?? true
+      }
     }
     this.gameState = gameState
     this.getSeatUIs = getSeatUIs
@@ -190,10 +195,14 @@ export class TrackerController {
       this.gameState.beginPlayback()
       const room = new Room({ gameState: this.gameState })
       this.trackerRoom = room
-      this.controllerLogger.info('Room 初始化')
+      if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+        this.controllerLogger.info('Room 初始化')
+      }
       this.registerMoveEventHandlers(room)
     } catch (e) {
-      trackerLogger.error('Room 初始化失败', e)
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.error('Room 初始化失败', e)
+      }
       this.controllerView.unmount()
       if (this.trackerRoom) {
         this.trackerRoom.destroy()
@@ -213,7 +222,9 @@ export class TrackerController {
 
     this.trackerRoom.initDeck(cardIDs)
     this.controllerView.mount(this.trackerRoom)
-    this.controllerLogger.info('Room 牌堆初始化完成', { cardIDs })
+    if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+      this.controllerLogger.info('Room 牌堆初始化完成', { cardIDs })
+    }
   }
 
   /**
@@ -235,8 +246,8 @@ export class TrackerController {
 
   /**
    * 主视角和先手协议到达后补齐固定视角座位顺序。
-   * Seat UI 依赖固定视角；setTrackerFirstHand() 调用 getSeatUIs() 后，
-   * 由 drawSeatUIs() 提交实际 DOM 布局，首轮回合只显示已经布局的容器。
+   * Seat UI 依赖固定视角；getSeatUIs() 回调由浏览器装配层接入
+   * updateSeatOverlay()，统一提交布局并按当前轮次控制显隐。
    * 重连手牌协议明确给出视角时，可覆盖此前的兜底推断。
    */
   setTrackerMySeatID(seatID: SeatID, options: { overwrite?: boolean } = {}): void {
@@ -267,10 +278,12 @@ export class TrackerController {
       const firstID = this.trackerRoom.firstID
       if (firstID !== undefined) {
         if (firstID !== seatID) {
-          this.controllerLogger.warn('先手座位重复设置且不一致，已忽略', {
-            currentSeatID: firstID,
-            receivedSeatID: seatID
-          })
+          if (this.controllerLogger.enabled !== false) {
+            this.controllerLogger.warn('先手座位重复设置且不一致，已忽略', {
+              currentSeatID: firstID,
+              receivedSeatID: seatID
+            })
+          }
         }
 
         return
@@ -280,7 +293,9 @@ export class TrackerController {
       this.getSeatUIs()
       this.controllerView.scheduleRender()
     } catch (e) {
-      trackerLogger.error('先手同步失败', e)
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.error('先手同步失败', e)
+      }
     }
   }
 
@@ -310,20 +325,24 @@ export class TrackerController {
 
     try {
       Object.assign(patched, normalizeTrackerMovePosition(patched))
-      this.controllerLogger.info(getProtocolMoveSpecialLabel(patched) ?? '移动协议输入', {
-        raw: this.summarizeProtocolMove(raw),
-        patched: this.summarizeProtocolMove(patched)
-      })
+      if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+        this.controllerLogger.info(getProtocolMoveSpecialLabel(patched) ?? '移动协议输入', {
+          raw: this.summarizeProtocolMove(raw),
+          patched: this.summarizeProtocolMove(patched)
+        })
+      }
 
       if (readyRoom.beforeNormalizeMove(patched, raw) === 'defer') return
       if (hasMixedTrackerMoveVisibility(patched)) {
-        this.controllerLogger.warn('移动协议明暗牌混合，按暗牌处理', { raw, patched })
+        if (this.controllerLogger.enabled !== false) {
+          this.controllerLogger.warn('移动协议明暗牌混合，按暗牌处理', { raw, patched })
+        }
         patched.CardIDs = []
       }
       const normalizedEvent = normalizeMoveEvent(patched, raw)
 
       // 来源区域由协议给出；本地代表子区可能仍为 mark，不能覆盖 hand/mark 完整位置候选。
-      if (getMoveSubZone(normalizedEvent.from) === 'hand') {
+      if (this.controllerLogger.enabled && getMoveSubZone(normalizedEvent.from) === 'hand') {
         normalizedEvent.cardIDs.forEach((cardID) => {
           const card = readyRoom.cardIndex.get(cardID)
           if (
@@ -336,70 +355,88 @@ export class TrackerController {
             return
           }
 
-          this.controllerLogger.warn('协议手牌来源与本地确定子区冲突，仍按协议处理', {
-            cardID,
-            fromSeatID: getMoveSeat(normalizedEvent.from),
-            fromSubZone: getMoveSubZone(normalizedEvent.from),
-            localSubZone: card.subZone,
-            localSpellID: card.spellID,
-            raw: this.summarizeProtocolMove(raw),
-            patched: this.summarizeProtocolMove(patched)
-          })
+          if (this.controllerLogger.enabled !== false) {
+            this.controllerLogger.warn('协议手牌来源与本地确定子区冲突，仍按协议处理', {
+              cardID,
+              fromSeatID: getMoveSeat(normalizedEvent.from),
+              fromSubZone: getMoveSubZone(normalizedEvent.from),
+              localSubZone: card.subZone,
+              localSpellID: card.spellID,
+              raw: this.summarizeProtocolMove(raw),
+              patched: this.summarizeProtocolMove(patched)
+            })
+          }
         })
       }
-      this.controllerLogger.debug(
-        '移动事件归一化',
-        summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS)
-      )
+      if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+        this.controllerLogger.debug(
+          '移动事件归一化',
+          summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS)
+        )
+      }
 
       // 技能处理器
       const event = readyRoom.decorateMoveEvent(normalizedEvent)
 
-      this.controllerLogger.debug('移动事件装饰完成', {
-        before: summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS),
-        after: summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
-      })
-
-      if (normalizedEvent.from !== event.from) {
-        this.controllerLogger.info('移动事件来源修正', {
-          cardIDs: event.cardIDs,
-          from: normalizedEvent.from,
-          correctedFrom: event.from
+      if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+        this.controllerLogger.debug('移动事件装饰完成', {
+          before: summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS),
+          after: summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
         })
       }
 
+      if (normalizedEvent.from !== event.from) {
+        if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+          this.controllerLogger.info('移动事件来源修正', {
+            cardIDs: event.cardIDs,
+            from: normalizedEvent.from,
+            correctedFrom: event.from
+          })
+        }
+      }
+
       if (event.type === 'revealPublicCandidate') {
-        this.controllerLogger.info(
-          '移动事件分支: revealPublicCandidate',
-          summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
-        )
+        if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+          this.controllerLogger.info(
+            '移动事件分支: revealPublicCandidate',
+            summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
+          )
+        }
         if (!this.revealPublicCandidateCards(readyRoom, event)) return
       } else if (event.type === 'noop') {
-        this.controllerLogger.info(
-          '移动事件跳过',
-          summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
-        )
+        if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+          this.controllerLogger.info(
+            '移动事件跳过',
+            summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
+          )
+        }
         return
       } else if (event.type === 'showCards') {
-        this.controllerLogger.info(
-          '移动事件分支: showCards',
-          summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
-        )
+        if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+          this.controllerLogger.info(
+            '移动事件分支: showCards',
+            summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
+          )
+        }
         if (!this.showTrackerCards(readyRoom, event)) return
       } else if (event.type === 'shuffleDiscardIntoPile') {
-        this.controllerLogger.info(
-          '移动事件分支: shuffleDiscardIntoPile',
-          summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
-        )
+        if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+          this.controllerLogger.info(
+            '移动事件分支: shuffleDiscardIntoPile',
+            summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
+          )
+        }
 
         readyRoom.shufflePile({
           cardCount: event.cardCount
         })
       } else {
-        this.controllerLogger.info(
-          '移动事件分支: moveCards',
-          summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
-        )
+        if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+          this.controllerLogger.info(
+            '移动事件分支: moveCards',
+            summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
+          )
+        }
         const moveCompleted = readyRoom.moveCards(event.cardIDs, {
           from: event.from,
           to: event.to,
@@ -408,9 +445,11 @@ export class TrackerController {
           pileIdentityEvent: event
         })
         if (!moveCompleted) {
-          this.controllerLogger.warn('移动来源解析失败，已取消本次 tracker 移动', {
-            cardIDs: event.cardIDs
-          })
+          if (this.controllerLogger.enabled !== false) {
+            this.controllerLogger.warn('移动来源解析失败，已取消本次 tracker 移动', {
+              cardIDs: event.cardIDs
+            })
+          }
           return
         }
       }
@@ -419,11 +458,13 @@ export class TrackerController {
       readyRoom.notifyCardsRevealed(event.cardIDs)
       this.controllerView.scheduleRender()
     } catch (e) {
-      trackerLogger.error(
-        '移动同步异常，已跳过本次 tracker 更新',
-        e,
-        this.summarizeProtocolMove(raw)
-      )
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.error(
+          '移动同步异常，已跳过本次 tracker 更新',
+          e,
+          this.summarizeProtocolMove(raw)
+        )
+      }
     }
   }
 
@@ -448,13 +489,15 @@ export class TrackerController {
 
     const cards = room.revealPublicCandidates(ids, locationCandidate)
 
-    this.controllerLogger.info('公共区范围揭示完成', {
-      ids,
-      zone: reveal.zone,
-      position: locationCandidate.position,
-      count: reveal.count,
-      resolvedCount: cards.length
-    })
+    if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+      this.controllerLogger.info('公共区范围揭示完成', {
+        ids,
+        zone: reveal.zone,
+        position: locationCandidate.position,
+        count: reveal.count,
+        resolvedCount: cards.length
+      })
+    }
     return cards.length > 0
   }
 
@@ -504,12 +547,14 @@ export class TrackerController {
       this.controllerLogger
     )
 
-    this.controllerLogger.info('展示明牌进入公共区', {
-      ids,
-      zoneName,
-      position,
-      resolvedCount: knownCards.length
-    })
+    if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+      this.controllerLogger.info('展示明牌进入公共区', {
+        ids,
+        zoneName,
+        position,
+        resolvedCount: knownCards.length
+      })
+    }
 
     if (sourceZoneName && sourceZoneName !== zoneName) {
       // 判定获得既会展示牌面，也会把实体移出来源公共区；复用标准移动链路完成来源置换，
@@ -572,7 +617,9 @@ export class TrackerController {
     if (ids.length === 0) return
 
     try {
-      this.controllerLogger.info('明牌同步输入', { target, cardIDs: ids })
+      if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+        this.controllerLogger.info('明牌同步输入', { target, cardIDs: ids })
+      }
 
       if (target.type === 'player') {
         const seatID = Number(target.seatID)
@@ -647,7 +694,9 @@ export class TrackerController {
       readyRoom.notifyCardsRevealed(ids)
       this.controllerView.scheduleRender()
     } catch (e) {
-      trackerLogger.error('明牌同步失败', e, { target, cardIDs: ids })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.error('明牌同步失败', e, { target, cardIDs: ids })
+      }
     }
   }
 
@@ -663,7 +712,9 @@ export class TrackerController {
         this.controllerView.scheduleRender()
       }
     } catch (error) {
-      trackerLogger.error('技能协议处理失败', error, event)
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.error('技能协议处理失败', error, event)
+      }
     }
   }
 
@@ -767,9 +818,13 @@ export class TrackerController {
       } else {
         this.gameState.bindRoom(null)
       }
-      this.controllerLogger.info('Room 销毁')
+      if (import.meta.env.DEV && this.controllerLogger.enabled !== false) {
+        this.controllerLogger.info('Room 销毁')
+      }
     } catch (e) {
-      trackerLogger.error('Room 销毁失败', e)
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.error('Room 销毁失败', e)
+      }
     }
   }
 }

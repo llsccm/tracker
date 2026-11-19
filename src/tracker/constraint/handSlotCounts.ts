@@ -31,7 +31,9 @@ export function collectHandSlotCardsBySeat(
   cards: Card[],
   seatIDs: Iterable<number>
 ): Map<number, HandSlotCards> {
-  recordTraversal('handSlotCounts:collectBySeat', cards.length)
+  if (import.meta.env.DEV) {
+    recordTraversal('handSlotCounts:collectBySeat', cards.length)
+  }
   const cardsBySeat = new Map<number, HandSlotCards>()
   for (const seatID of seatIDs) {
     cardsBySeat.set(Number(seatID), {

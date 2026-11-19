@@ -248,7 +248,7 @@ export class GameState {
   private applyRecordMode(): void {
     const matchName = this.recordMatchName
     if (!matchName) return
-    this.isDouDiZhu = matchName === '斗地主'
+    this.isDouDiZhu = matchName.includes('斗地主')
     this.isRoguelike1v1 = matchName === '单骑无双'
     this.needShowName =
       this.isDouDiZhu ||
@@ -272,7 +272,9 @@ export class GameState {
     this.applyRecordMode()
     this.isGameStart = true
     this.isPassed = false
-    trackerLogger.info('GameState 游戏已重置并开始')
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('GameState 游戏已重置并开始')
+    }
 
     UI.seatUIs = []
     UI.friendGeneral = 0
@@ -288,14 +290,18 @@ export class GameState {
       this.isGameStart = false
       this.isPassed = true
       this.resetRoomState()
-      trackerLogger.info('GameState 游戏已结束')
+      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        trackerLogger.info('GameState 游戏已结束')
+      }
     }
   }
 
   start(): void {
     const seatIDs = this.room?.seatIDs ?? []
     const mySeatID = this.room?.mySeatID ?? undefined
-    trackerLogger.info('GameState 游戏开始', { seatIDs, mySeatID })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('GameState 游戏开始', { seatIDs, mySeatID })
+    }
 
     if (this.isGameStart) return
 

@@ -29,7 +29,7 @@ import {
 } from './handler/clientEnhancements'
 import { handleUserSession } from './handler/userSession'
 import { laya } from './runtime/gameAdapter'
-import { Game, globalConfig, UI, user } from './tracker'
+import { Game, globalConfig, UI } from './tracker'
 import { tracker } from './tracker/runtime/browser'
 import { recordTrackerProtocol } from './tracker/runtime/protocolRecorder'
 import { handleBroadMsg } from './handler/chat'
@@ -59,7 +59,9 @@ export function logic(msg) {
     const { ProtoObj, SeatID } = msg
 
     // 录制器有独立的记牌协议规则，需先于功能白名单执行，以保留路由遗漏现场。
-    recordTrackerProtocol(msg, { mySeatID: Game.myID, currentSeatID: Game.currentID })
+    if (import.meta.env.DEV) {
+      recordTrackerProtocol(msg, { mySeatID: Game.myID, currentSeatID: Game.currentID })
+    }
 
     if (!isRetainedLogicMessage(className)) return
 
@@ -220,7 +222,7 @@ export function logic(msg) {
 
       case 'ClientRecommendShopItemRep':
         // 退出录像时清理? 可能还有更好的方法
-        if (Game.isGameStart && msg?.userID === user.userID) handleLeaveTable()
+        // if (Game.isGameStart && msg?.userID === user.userID) handleLeaveTable()
         break
 
       case 'decodeRougeBaseInfoRep':

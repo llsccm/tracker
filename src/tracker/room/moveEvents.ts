@@ -112,12 +112,14 @@ export class RoomMoveEvents {
         const decorated = plugin.decorateMove?.(nextEvent, this.room)
         return decorated ? decorated : nextEvent
       } catch (error) {
-        trackerLogger.warn('移动事件装饰失败', {
-          pluginID: plugin.id,
-          spellIDs,
-          event: summarizeMoveEvent(nextEvent)
-        })
-        console.error('[Refactor] 移动事件装饰失败:', error, nextEvent)
+        if (trackerLogger.enabled !== false) {
+          trackerLogger.warn('移动事件装饰失败', {
+            pluginID: plugin.id,
+            spellIDs,
+            event: import.meta.env.DEV ? summarizeMoveEvent(nextEvent) : nextEvent.protocol
+          })
+          console.error('[Refactor] 移动事件装饰失败:', error)
+        }
         return nextEvent
       }
     }, event)
@@ -168,7 +170,9 @@ export class RoomMoveEvents {
       try {
         notify(plugin)
       } catch (error) {
-        trackerLogger.warn('技能生命周期通知失败', { pluginID: plugin.id, phase, error })
+        if (trackerLogger.enabled !== false) {
+          trackerLogger.warn('技能生命周期通知失败', { pluginID: plugin.id, phase, error })
+        }
       }
     }
   }

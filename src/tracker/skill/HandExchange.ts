@@ -144,7 +144,9 @@ function clearSpellExchangeStateIfEmpty(room: Room, spellID: number): void {
 function getPlayerHandCards(room: Room, seatID: SeatID): Card[] {
   // 装饰阶段优先复用 player 快照，避免每次进区都扫 room.cards 全牌池。
   const playerCards = room.refreshPlayerSnapshot()
-  recordTraversal('handExchange:playerHand', playerCards.length)
+  if (import.meta.env.DEV) {
+    recordTraversal('handExchange:playerHand', playerCards.length)
+  }
   return playerCards.filter((card) => card.subZone === 'hand' && card.seats.has(seatID))
 }
 
@@ -321,11 +323,13 @@ function returnCandidateAlternatives(
     // 正常情况下总会留下另一个玩家/批次分支；删空说明协议整手明牌与本地候选相互矛盾，
     // 多半是上游观测有误。开发环境显式告警，避免静默留下一张无位置的已知牌难以定位。
     if (import.meta.env?.DEV && nextCandidates.length === 0) {
-      trackerLogger.warn('整手交换回手后候选牌已无任何可证明位置（疑似协议矛盾或上游观测错误）', {
-        cardID: card.id,
-        batchID,
-        toSeat
-      })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('整手交换回手后候选牌已无任何可证明位置（疑似协议矛盾或上游观测错误）', {
+          cardID: card.id,
+          batchID,
+          toSeat
+        })
+      }
     }
 
     if (nextCandidates.length === 0 || !nextCandidates.some(isBatchCandidate)) {

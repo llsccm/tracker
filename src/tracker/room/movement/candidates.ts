@@ -164,31 +164,35 @@ export class RoomMovementCandidates {
     // 只有唯一归属实体能完整覆盖转移前手牌时，才能建立 N 选 K 约束。
     // 多座位候选可多于观测手牌数（例如上一次随机转移后仍保留双边候选），不能据此判 overflow。
     if (sourceTotal < count || sourceTotal <= 0) {
-      trackerLogger.warn('随机手牌转移无法建立完整实体候选覆盖', {
-        fromSeat,
-        targetSeat,
-        count,
-        sourceTotal,
-        existingEntityCount: existingSourceCards.length,
-        exclusiveEntityCount: exclusiveSourceCards.length,
-        ambiguousEntityCount: ambiguousSourceCards.length,
-        reason: 'insufficientSource'
-      })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('随机手牌转移无法建立完整实体候选覆盖', {
+          fromSeat,
+          targetSeat,
+          count,
+          sourceTotal,
+          existingEntityCount: existingSourceCards.length,
+          exclusiveEntityCount: exclusiveSourceCards.length,
+          ambiguousEntityCount: ambiguousSourceCards.length,
+          reason: 'insufficientSource'
+        })
+      }
 
       return []
     }
 
     if (exclusiveSourceCards.length > sourceTotal) {
-      trackerLogger.warn('随机手牌转移无法建立完整实体候选覆盖', {
-        fromSeat,
-        targetSeat,
-        count,
-        sourceTotal,
-        existingEntityCount: existingSourceCards.length,
-        exclusiveEntityCount: exclusiveSourceCards.length,
-        ambiguousEntityCount: ambiguousSourceCards.length,
-        reason: 'entityOverflow'
-      })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('随机手牌转移无法建立完整实体候选覆盖', {
+          fromSeat,
+          targetSeat,
+          count,
+          sourceTotal,
+          existingEntityCount: existingSourceCards.length,
+          exclusiveEntityCount: exclusiveSourceCards.length,
+          ambiguousEntityCount: ambiguousSourceCards.length,
+          reason: 'entityOverflow'
+        })
+      }
 
       return []
     }
@@ -260,24 +264,26 @@ export class RoomMovementCandidates {
       sourceEvent: sourceEvent ?? { type: 'randomHandTransferCandidates' }
     })
 
-    trackerLogger.info('手牌候选传播', {
-      fromSeat,
-      targetSeat,
-      count,
-      sourceTotal,
-      expectedSourceSlots: sourceTotal - count,
-      expectedTargetSlots: count,
-      createdAnonymousCount: fallbackCards.length,
-      // 日志只展开已公开身份；暗实体仅输出数量，避免调试信息泄露其真实 ID。
-      cards: sourceCandidateCards
-        .filter((card) => card.isKnown === true)
-        .map((card) => ({
-          id: card.id,
-          name: card.name,
-          seats: Array.from(card.seats)
-        })),
-      hiddenEntityCount: sourceCandidateCards.filter((card) => card.isKnown !== true).length
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('手牌候选传播', {
+        fromSeat,
+        targetSeat,
+        count,
+        sourceTotal,
+        expectedSourceSlots: sourceTotal - count,
+        expectedTargetSlots: count,
+        createdAnonymousCount: fallbackCards.length,
+        // 日志只展开已公开身份；暗实体仅输出数量，避免调试信息泄露其真实 ID。
+        cards: sourceCandidateCards
+          .filter((card) => card.isKnown === true)
+          .map((card) => ({
+            id: card.id,
+            name: card.name,
+            seats: Array.from(card.seats)
+          })),
+        hiddenEntityCount: sourceCandidateCards.filter((card) => card.isKnown !== true).length
+      })
+    }
 
     return sourceCandidateCards
   }
@@ -391,18 +397,20 @@ export class RoomMovementCandidates {
       sourceEvent: sourceEvent ?? { type: 'markStoredToHandCandidates' }
     })
 
-    trackerLogger.info('标记或弹窗空间暗取，建立位置候选', {
-      fromSeat,
-      fromSpellID,
-      toSeat,
-      count,
-      cardIDs: markCards.map((card) => card.id),
-      markSlots: slots.get(markKey)?.min,
-      handSlots: slots.get(handKey),
-      locationCandidates: markCards.map((card) =>
-        card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate))
-      )
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('标记或弹窗空间暗取，建立位置候选', {
+        fromSeat,
+        fromSpellID,
+        toSeat,
+        count,
+        cardIDs: markCards.map((card) => card.id),
+        markSlots: slots.get(markKey)?.min,
+        handSlots: slots.get(handKey),
+        locationCandidates: markCards.map((card) =>
+          card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate))
+        )
+      })
+    }
 
     return true
   }
@@ -455,18 +463,20 @@ export class RoomMovementCandidates {
     const candidate = createPublicCandidate(toZone, position, unknownCount)
     sourceCandidateCards.forEach((card) => card.addPublicCandidate(candidate))
 
-    trackerLogger.info('手牌候选进入公共区', {
-      fromSeat,
-      toZone,
-      position,
-      unknownCount,
-      cards: sourceCandidateCards.map((card) => ({
-        id: card.id,
-        name: card.name,
-        seats: Array.from(card.seats),
-        publicCandidates: card.publicCandidates
-      }))
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('手牌候选进入公共区', {
+        fromSeat,
+        toZone,
+        position,
+        unknownCount,
+        cards: sourceCandidateCards.map((card) => ({
+          id: card.id,
+          name: card.name,
+          seats: Array.from(card.seats),
+          publicCandidates: card.publicCandidates
+        }))
+      })
+    }
 
     return sourceCandidateCards
   }
@@ -571,18 +581,20 @@ export class RoomMovementCandidates {
       sourceEvent: sourceEvent ?? { type: 'publicCandidatesToHand' }
     })
 
-    trackerLogger.info('公共候选进入手牌', {
-      fromZone,
-      position,
-      targetSeat,
-      count,
-      cards: affectedCards.map((card) => ({
-        id: card.id,
-        name: card.name,
-        seats: Array.from(card.seats),
-        publicCandidates: card.publicCandidates
-      }))
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.info('公共候选进入手牌', {
+        fromZone,
+        position,
+        targetSeat,
+        count,
+        cards: affectedCards.map((card) => ({
+          id: card.id,
+          name: card.name,
+          seats: Array.from(card.seats),
+          publicCandidates: card.publicCandidates
+        }))
+      })
+    }
 
     return affectedCards
   }

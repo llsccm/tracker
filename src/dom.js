@@ -1,6 +1,6 @@
 import { CardConfig } from './config'
 import { ConfigManager } from './config/ConfigManager'
-import { clearZoneMirrors, drawMiZhu, drawSeatUIs } from './draw'
+import { drawMiZhu, refreshZoneMirrorOverflow } from './draw'
 import { laya } from './runtime/gameAdapter'
 import { Game, globalConfig, globalState, UI } from './tracker'
 import { setTrackerSeatUIReader, tracker } from './tracker/runtime/browser'
@@ -10,14 +10,14 @@ import { bindDelegatedTooltips } from './ui/domHelpers'
 import { addDragHint, initDragElement } from './ui/drag'
 import { getPanelContentInner, initInjectedInterface } from './ui/frameContent'
 import {
-  bindInitialResize,
+  configureViewport,
   cleanupLifecycle,
-  observeDomResize,
   removeInjectedDom,
   waitForLegacyFrameReady
 } from './ui/lifecycle'
-import { addSeatUI } from './ui/seatOverlay'
+import { createSeatOverlay, setSeatOverlayVisible, updateSeatOverlay } from './ui/seatOverlay'
 import { createMainShell } from './ui/shell'
+import { requestWindowResize, subscribeWindowResize } from './ui/windowResize'
 import { bindPeiXiuHandSuitColorRefresh } from './ui/PeiXiuHandMirror'
 import {
   bindProtocolRecorderControls,
@@ -39,7 +39,8 @@ function getTrackedHandNumbers(seatID) {
 }
 
 export function Init() {
-  bindInitialResize(globalConfig, resize)
+  configureViewport(globalConfig)
+  startGameSizeUpdates()
   console.info('🚀 初始化...')
   return waitForLegacyFrameReady(initFrame)
 }
@@ -50,31 +51,36 @@ export function Exit() {
     unbindProtocolRecorderControls()
     void stopProtocolRecording()
   }
-  return cleanupLifecycle({ resize, scheduleSetGameSize, globalState })
+  return cleanupLifecycle(globalState)
 }
 
-function resize() {
+function updateViewportCenter() {
   document.documentElement.style.setProperty('--sgs-center-x', `${window.innerWidth / 2}px`)
 }
 
-function refreshSidebarViewport() {
-  resize()
-  window.dispatchEvent(new Event('resize'))
-}
+let updateTimeout = null
+let stopWindowResize = null
+let overflowFrame = null
 
-let updateTimeout
-let stopDomResize = null
+function startGameSizeUpdates() {
+  stopGameSizeUpdates()
+  stopWindowResize = subscribeWindowResize(() => {
+    updateViewportCenter()
+    scheduleSetGameSize()
+  })
+}
 
 function stopGameSizeUpdates() {
-  stopDomResize?.()
-  stopDomResize = null
-  if (updateTimeout) clearTimeout(updateTimeout)
+  stopWindowResize?.()
+  stopWindowResize = null
+  if (updateTimeout !== null) clearTimeout(updateTimeout)
   updateTimeout = null
+  if (overflowFrame !== null) cancelAnimationFrame(overflowFrame)
+  overflowFrame = null
 }
 
-//防抖
 function scheduleSetGameSize() {
-  if (updateTimeout) clearTimeout(updateTimeout)
+  if (updateTimeout !== null) clearTimeout(updateTimeout)
 
   updateTimeout = setTimeout(() => {
     updateTimeout = null
@@ -83,15 +89,16 @@ function scheduleSetGameSize() {
 }
 
 export async function initFrame(force = false) {
+  if (!stopWindowResize) return
+
   if (force) {
+    stopGameSizeUpdates()
     removeInjectedDom(globalState)
   }
 
   if (!globalState.isFrameAdd) {
-    stopGameSizeUpdates()
-    // 监听变化事件
-    window.addEventListener('resize', scheduleSetGameSize)
-    stopDomResize = observeDomResize(scheduleSetGameSize)
+    startGameSizeUpdates()
+    const stopCurrentResize = stopWindowResize
 
     try {
       //禁止拖动背景
@@ -103,9 +110,11 @@ export async function initFrame(force = false) {
     }
 
     //injectCSS()
-    addSeatUI(globalConfig)
+    createSeatOverlay(globalConfig)
     // addDynamicBG()
-    await addFrame()
+    await addFrame(stopCurrentResize)
+    // 卸载或重建后，不继续处理旧界面的异步初始化。
+    if (stopWindowResize !== stopCurrentResize) return
     setGameSize()
     bindPeiXiuHandSuitColorRefresh()
 
@@ -116,282 +125,28 @@ export async function initFrame(force = false) {
 }
 
 function setGameSize() {
-  if (!syncGameSize()) return
+  const bgDiv = document.getElementById('bgDiv')
+  if (bgDiv) bgDiv.style.width = document.documentElement.clientWidth + 'px'
 
-  if (UI.seatUIs?.length > 0) {
-    getSeatUiPos()
-    drawSeatUIs()
-  }
-}
-
-function syncGameSize() {
-  const scene = laya.scene
-  if (!scene) return false
-
-  const seatUI = document.getElementById('seatUI')
-  if (!seatUI) return false
-
-  const { width, height, globalScaleX } = scene
-  if (!width || !height) return false
-
-  const scaledHeight = height * globalScaleX
-  UI.width = Math.trunc(width * globalScaleX)
-  UI.height = Math.trunc(scaledHeight)
-  UI.scale = globalScaleX
-
-  const app = {
-    width: UI.width / window.devicePixelRatio,
-    height: UI.height / window.devicePixelRatio
+  const shell = document.getElementById('tracker-shell')
+  if (globalConfig.padding && shell) {
+    shell.style.height = '100%'
+    shell.style.right = '0px'
+    shell.style.top = '0px'
   }
 
-  if (globalConfig.padding && document.getElementById('tracker-shell')) {
-    document.getElementById('bgDiv').style.width = document.documentElement.clientWidth + 'px'
-    document.getElementById('tracker-shell').style.height = '100%'
-    document.getElementById('tracker-shell').style.right = '0px' // 启用窗口调整大小
-    document.getElementById('tracker-shell').style.top = '0px' // 启用窗口调整大小
-  } else {
-    document.getElementById('bgDiv').style.width = document.documentElement.clientWidth + 'px'
-  }
+  updateSeatOverlay(tracker.getTrackerRoom())
 
-  // let cusBGDiv = document.getElementById('cusBGDiv')
-  // let sgsBgVideo = document.getElementById('sgsBgVideo')
-  // let imgBG = document.getElementById('sgsBgIMG')
-  const top =
-    ((window.innerHeight * window.devicePixelRatio - scaledHeight) / (2 * window.devicePixelRatio) +
-      scaledHeight / 2) /
-    window.devicePixelRatio
-
-  // if (cusBGDiv) {
-  //   cusBGDiv.style.width = `${app.width}px`
-  //   cusBGDiv.style.height = `${app.height}px`
-  //   cusBGDiv.style.left = window.innerWidth / 2 + 'px'
-  //   cusBGDiv.style.top = top + 'px'
-  // }
-
-  // if (sgsBgVideo) {
-  // sgsBgVideo.width = app.width // 设置视频宽度为 bgDiv 的宽度
-  // sgsBgVideo.height = app.height // 设置视频高度为 bgDiv 的高度
-  // sgsBgVideo.style.left = window.innerWidth / 2 + 'px'
-  // sgsBgVideo.style.top = top + 'px'
-  // }
-
-  // imgBG.width = app.width // 设置图片宽度为 bgDiv 的宽度
-  // imgBG.height = app.height // 设置图片高度为 bgDiv 的高度
-  // imgBG.style.left = (window.innerWidth / 2) + 'px';
-  // imgBG.style.top = top + 'px';
-
-  seatUI.style.width = `${app.width}px`
-  seatUI.style.height = `${app.height}px`
-  seatUI.style.left = window.innerWidth / 2 + 'px'
-  seatUI.style.top = top + 'px'
-  // drawDeckEdgeUI()
-  UI.centerX = window.innerWidth > app.width ? app.width / 2 : window.innerWidth / 2
-  UI.centerY = app.height / 2
-  document.documentElement.style.setProperty('--sgs-center-x', `${UI.centerX}px`)
-  return true
+  if (overflowFrame !== null) cancelAnimationFrame(overflowFrame)
+  overflowFrame = requestAnimationFrame(() => {
+    overflowFrame = null
+    refreshZoneMirrorOverflow()
+  })
 }
 
-function getSeatUiPos() {
-  const list = UI.seatUIs || []
-  const metrics = getSeatLayoutMetrics()
+setTrackerSeatUIReader(() => updateSeatOverlay(tracker.getTrackerRoom()))
 
-  UI.ScaleWidth = metrics.seatWidth
-  UI.ScaleHeight = metrics.seatHeight
-
-  if (list.length <= 1) return
-
-  const seatCount = getSeatLayoutCount(list)
-  let nextIndex = 1
-
-  nextIndex = layoutRightSeats(list, nextIndex, seatCount.right, metrics)
-  nextIndex = layoutTopSeats(list, nextIndex, seatCount.top, metrics)
-  layoutLeftSeats(list, nextIndex, seatCount.left, metrics)
-}
-
-function getSeatLayoutMetrics() {
-  const scale = UI.scale
-
-  return {
-    scale,
-    dpr: window.devicePixelRatio,
-    width: UI.width,
-    height: UI.height,
-    seatWidth: UI.unscaledWidth * scale,
-    seatHeight: UI.unscaledHeight * scale,
-    selfSeatHeight: UI.selfSeatUiUnscaledHeight * scale,
-    rightBarWidth: UI.rightBarWidth * scale,
-    topPadding: (UI.paddingTop + 10) * scale
-  }
-}
-
-function getSeatLayoutCount(list) {
-  const otherSeatCount = list.length - 1
-  let top = getDefaultTopSeatCount(otherSeatCount)
-  let right = (otherSeatCount - top) >> 1
-  let left = otherSeatCount - right - top
-
-  // 斗地主按主视角相对先手的固定顺位调整左右侧落点。
-  if (Game.isDouDiZhu && list.length === 3) {
-    const myFixedViewId = list[0]?.fixedViewId
-
-    if (myFixedViewId === 2) {
-      top = 1
-      right = 1
-      left = 0
-    } else if (myFixedViewId === 3) {
-      top = 1
-      left = 1
-      right = 0
-    }
-  }
-
-  if (Game.isShanHeTu && list.length === 3 && UI.friendGeneral === 1) {
-    top = 1
-    left = 1
-    right = 0
-  }
-
-  return { top, right, left }
-}
-
-function getDefaultTopSeatCount(otherSeatCount) {
-  if (otherSeatCount < 3) return otherSeatCount
-  if (otherSeatCount === 3) return 1
-  if (otherSeatCount === 4 || otherSeatCount === 6) return 2
-  if (otherSeatCount === 5 || otherSeatCount === 7) return 3
-
-  return 0
-}
-
-function layoutRightSeats(list, startIndex, count, metrics) {
-  if (count <= 0) return startIndex
-
-  const { measuredHeight, gap } = getVerticalSeatLayout(count, metrics)
-  const endIndex = startIndex + count
-  const x =
-    metrics.width - metrics.seatWidth - UI.paddingRight * metrics.scale - metrics.rightBarWidth
-  let y = getSideSeatsStartY(measuredHeight, metrics) + measuredHeight
-
-  UI.verticalGap = gap
-
-  for (let index = startIndex; index < endIndex; index += 1) {
-    y -= metrics.seatHeight
-    setSeatPosition(list[index], 'Right', x - 5, y + metrics.seatHeight, metrics.dpr)
-    y -= gap
-  }
-
-  return endIndex
-}
-
-function layoutTopSeats(list, startIndex, count, metrics) {
-  if (count <= 0) return startIndex
-
-  let measuredWidth = metrics.seatWidth * count
-  const gap = ((metrics.width - metrics.rightBarWidth - measuredWidth) * 0.07) >> 0
-  const endIndex = startIndex + count
-  const y = metrics.topPadding + metrics.seatHeight
-  measuredWidth += (count - 1) * gap
-
-  let x =
-    (metrics.width - measuredWidth - metrics.rightBarWidth) / 2 +
-    measuredWidth +
-    (metrics.width <= 1600 ? UI.paddingLeftTopExtra : 0)
-
-  UI.horizontalGap = gap
-
-  for (let index = startIndex; index < endIndex; index += 1) {
-    x -= metrics.seatWidth
-    setSeatPosition(list[index], 'Top', x, y, metrics.dpr)
-    x -= gap
-  }
-
-  return endIndex
-}
-
-function layoutLeftSeats(list, startIndex, count, metrics) {
-  if (count <= 0) return startIndex
-
-  const { measuredHeight, gap } = getVerticalSeatLayout(count, metrics)
-  const endIndex = startIndex + count
-  const x = UI.paddingLeft * metrics.scale
-  let y = getSideSeatsStartY(measuredHeight, metrics)
-
-  for (let index = startIndex; index < endIndex; index += 1) {
-    setSeatPosition(list[index], 'Left', x, y + metrics.seatHeight, metrics.dpr)
-    y += metrics.seatHeight + gap
-  }
-
-  return endIndex
-}
-
-function getVerticalSeatLayout(count, metrics) {
-  let measuredHeight = metrics.seatHeight * count
-  const gap = ((metrics.height - metrics.selfSeatHeight - measuredHeight) * 0.25) >> 0
-  measuredHeight += (count - 1) * gap
-
-  return { measuredHeight, gap }
-}
-
-function getSideSeatsStartY(measuredHeight, metrics) {
-  return (
-    ((metrics.height -
-      metrics.selfSeatHeight -
-      measuredHeight -
-      UI.paddingTop * metrics.scale -
-      UI.paddingBottom) >>
-      1) +
-    metrics.topPadding +
-    UI.leftRightTop
-  )
-}
-
-function setSeatPosition(seatUI, displayLocation, x, y, dpr) {
-  if (!seatUI) return
-
-  seatUI.DisplayLocation = displayLocation
-  seatUI.posX = Math.trunc(x) / dpr
-  seatUI.posY = Math.trunc(y) / dpr
-}
-
-/** 重置座位覆盖层状态并清理区域镜像。 */
-export function resetSeatUIs() {
-  UI.seatUIs = []
-  UI.firstUpdateSeatUI = false
-  UI.friendGeneral = 0
-  clearZoneMirrors()
-}
-
-export function getSeatUIs() {
-  const trackerRoom = tracker.getTrackerRoom()
-  if (!trackerRoom?.seatIDs?.length || trackerRoom.mySeatID === undefined) return
-
-  const { seatIDs, players, mySeatID } = trackerRoom
-  const startIndex = seatIDs.indexOf(Number(mySeatID))
-  if (startIndex < 0) return
-
-  // 从主视角开始循环排列物理座位，同时保留相对先手的固定顺位。
-  UI.seatUIs = seatIDs
-    .map((_, index) => {
-      const seatID = seatIDs[(startIndex + index) % seatIDs.length]
-      return {
-        seatID,
-        fixedViewId: players.get(Number(seatID))?.fixedViewId
-      }
-    })
-    // 主视角保留为布局原点，其余只计算当前显示的座位。
-    .filter((seat, index) => index === 0 || players.get(seat.seatID)?.isShown)
-
-  // 场景和 DOM 可晚于座位协议就绪，布局前同步尺寸，不依赖窗口 resize。
-  if (!syncGameSize()) return
-
-  // 先手和主视角都确定后提交布局；首轮前保持隐藏，局中显隐变化即时生效。
-  getSeatUiPos()
-  if (trackerRoom.firstID !== undefined) drawSeatUIs()
-}
-
-setTrackerSeatUIReader(getSeatUIs)
-
-export async function addFrame() {
+export async function addFrame(stopCurrentResize = stopWindowResize) {
   if (!document.getElementById('tracker-shell')) {
     const shell = createMainShell(version)
     iframe = shell.iframe
@@ -401,11 +156,15 @@ export async function addFrame() {
       localStorage.setItem('DXCVersion', version)
     }
 
+    let html
     try {
-      iframe.innerHTML = await loadInterfaceHtml()
+      html = await loadInterfaceHtml()
     } catch (error) {
       console.error('Failed to load iframe content:', error)
     }
+
+    if (stopWindowResize !== stopCurrentResize) return
+    if (html !== undefined) iframe.innerHTML = html
 
     initInjectedInterface({
       container: iframe,
@@ -416,7 +175,7 @@ export async function addFrame() {
 
   addDragHint()
   buttonClick()
-  initDragElement(globalConfig, globalState, refreshSidebarViewport)
+  initDragElement(globalConfig, globalState, requestWindowResize)
   // drawChatFace()
 }
 
@@ -450,7 +209,7 @@ function buttonClick() {
 
   const switchHandlers = {
     seatUISwitch(switchValue) {
-      document.getElementById('seatUI').style.display = switchValue ? 'block' : 'none'
+      setSeatOverlayVisible(switchValue)
     },
     cardLabelSwitch() {},
     showNameSwitch() {},
@@ -498,7 +257,7 @@ function buttonClick() {
 
         if (globalConfig.padding) {
           globalConfig.padding = 0
-          refreshSidebarViewport()
+          requestWindowResize()
           container.style.transform = 'translate(0px, 0px)'
         }
       } else {
@@ -533,7 +292,7 @@ function buttonClick() {
     // document.getElementById('tracker-shell').style.right = '0px';
     // document.getElementById('tracker-shell').style.left = '';
   }
-  refreshSidebarViewport()
+  requestWindowResize()
 
   switchConfigKeys.forEach((configKey) =>
     setSwitchChecked(configKey, Boolean(globalConfig[configKey]))

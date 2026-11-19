@@ -193,37 +193,41 @@ export class RoomMovementKnownPlacement {
         )
       }
       if (!fallbackPlaceholder && createdSourcePlaceholder) {
-        trackerLogger.warn('已创建来源瞬时匿名占位但仍未完成置换', {
-          knownCardID: card.id,
-          placeholderCardID: createdSourcePlaceholder.id,
-          placeholderEntityID: createdSourcePlaceholder.entityID,
-          fromSeat,
-          fromSubZone,
-          toZone,
-          sourceEvent
-        })
+        if (trackerLogger.enabled !== false) {
+          trackerLogger.warn('已创建来源瞬时匿名占位但仍未完成置换', {
+            knownCardID: card.id,
+            placeholderCardID: createdSourcePlaceholder.id,
+            placeholderEntityID: createdSourcePlaceholder.entityID,
+            fromSeat,
+            fromSubZone,
+            toZone,
+            sourceEvent
+          })
+        }
       }
       if (!fallbackPlaceholder) {
-        trackerLogger.warn('玩家来源明牌未找到可立即置换的手牌占位', {
-          knownCardID: card.id,
-          fromSeat,
-          fromSubZone,
-          toZone,
-          sourceHandCards: (fromSeat === null
-            ? []
-            : getPlayerHandCardsBySeat(this.room, fromSeat)
-          ).map((sourceCard) => ({
-            cardID: sourceCard.id,
-            isKnown: sourceCard.isKnown,
-            suspended: sourceCard.suspended,
-            seats: Array.from(sourceCard.seats, Number),
-            hasLocationCandidates: sourceCard.hasLocationCandidates(),
-            hasPlayerLocationCandidates: sourceCard.locationCandidates.some(
-              (candidate) => candidate.type === 'player'
-            )
-          })),
-          sourceEvent
-        })
+        if (trackerLogger.enabled !== false) {
+          trackerLogger.warn('玩家来源明牌未找到可立即置换的手牌占位', {
+            knownCardID: card.id,
+            fromSeat,
+            fromSubZone,
+            toZone,
+            sourceHandCards: (fromSeat === null
+              ? []
+              : getPlayerHandCardsBySeat(this.room, fromSeat)
+            ).map((sourceCard) => ({
+              cardID: sourceCard.id,
+              isKnown: sourceCard.isKnown,
+              suspended: sourceCard.suspended,
+              seats: Array.from(sourceCard.seats, Number),
+              hasLocationCandidates: sourceCard.hasLocationCandidates(),
+              hasPlayerLocationCandidates: sourceCard.locationCandidates.some(
+                (candidate) => candidate.type === 'player'
+              )
+            })),
+            sourceEvent
+          })
+        }
       }
     }
     this.registerPopupReplacement(placeholder)
@@ -278,16 +282,18 @@ export class RoomMovementKnownPlacement {
         sourceEvent: sourceEvent ?? { type: 'moveCards' }
       })
 
-      trackerLogger.debug('已知牌进入玩家区', {
-        cardIDs: knownCards.map((card) => card.id),
-        targetSeats,
-        subZone,
-        spellID,
-        combinationID,
-        swappedCardIDs,
-        handledSpellCardIDs,
-        resolvedSourceCardIDs
-      })
+      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        trackerLogger.debug('已知牌进入玩家区', {
+          cardIDs: knownCards.map((card) => card.id),
+          targetSeats,
+          subZone,
+          spellID,
+          combinationID,
+          swappedCardIDs,
+          handledSpellCardIDs,
+          resolvedSourceCardIDs
+        })
+      }
 
       return
     }
@@ -303,16 +309,18 @@ export class RoomMovementKnownPlacement {
 
     context.publicMovedCards.push(...knownCards)
 
-    trackerLogger.debug('已知牌进入公共区', {
-      cardIDs: knownCards.map((card) => card.id),
-      toZone,
-      position,
-      spellID,
-      swappedCardIDs,
-      handledSpellCardIDs,
-      resolvedSourceCardIDs,
-      targetZoneExists: Boolean(targetZone)
-    })
+    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      trackerLogger.debug('已知牌进入公共区', {
+        cardIDs: knownCards.map((card) => card.id),
+        toZone,
+        position,
+        spellID,
+        swappedCardIDs,
+        handledSpellCardIDs,
+        resolvedSourceCardIDs,
+        targetZoneExists: Boolean(targetZone)
+      })
+    }
   }
 
   private collectPublicResidues(knownCards: Card[]): KnownPublicResidue[] {
@@ -398,21 +406,23 @@ export class RoomMovementKnownPlacement {
         if (!placeholder) {
           placeholder = this.room.createExternalCards([], 1)[0] ?? null
           if (placeholder) {
-            trackerLogger.warn('公共区残留修复创建匿名回补占位', {
-              reason: 'moveKnownCardsForContext:publicResidueFallback',
-              knownCardID: card.id,
-              placeholderCardID: placeholder.id,
-              residue,
-              fromSeat,
-              fromSubZone,
-              toZone,
-              position,
-              sourceHandTotalObserved: context.sourceHandTotalObserved,
-              sourceHandTotalBefore: context.sourceHandTotalBefore,
-              handMoveCount: context.handMoveCount,
-              canUseKnownSourcePlaceholder,
-              sourceEvent
-            })
+            if (trackerLogger.enabled !== false) {
+              trackerLogger.warn('公共区残留修复创建匿名回补占位', {
+                reason: 'moveKnownCardsForContext:publicResidueFallback',
+                knownCardID: card.id,
+                placeholderCardID: placeholder.id,
+                residue,
+                fromSeat,
+                fromSubZone,
+                toZone,
+                position,
+                sourceHandTotalObserved: context.sourceHandTotalObserved,
+                sourceHandTotalBefore: context.sourceHandTotalBefore,
+                handMoveCount: context.handMoveCount,
+                canUseKnownSourcePlaceholder,
+                sourceEvent
+              })
+            }
           }
         }
 
@@ -446,17 +456,19 @@ export class RoomMovementKnownPlacement {
         })
       })
 
-      trackerLogger.warn('玩家来源明牌残留公共区，已尝试用来源占位回补旧公共区槽位', {
-        fromSeat,
-        fromSubZone,
-        toZone,
-        position,
-        cardIDs: knownCards.map((card) => card.id),
-        repairedResidues,
-        unrepairedResidues,
-        playerSourceSwapAttempts,
-        sourceEvent
-      })
+      if (trackerLogger.enabled !== false) {
+        trackerLogger.warn('玩家来源明牌残留公共区，已尝试用来源占位回补旧公共区槽位', {
+          fromSeat,
+          fromSubZone,
+          toZone,
+          position,
+          cardIDs: knownCards.map((card) => card.id),
+          repairedResidues,
+          unrepairedResidues,
+          playerSourceSwapAttempts,
+          sourceEvent
+        })
+      }
     }
   }
 }

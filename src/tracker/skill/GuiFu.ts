@@ -19,10 +19,12 @@ export function deferGuiFuMove(
   const previous = room.readSkillState<GuiFuMove>(GUI_FU_ROLE_DATA_ID)
   if (previous) {
     room.deleteSkillState(GUI_FU_ROLE_DATA_ID)
-    trackerLogger.warn('诡伏移动未收到相邻角色数据，已丢弃待补全移动', {
-      previous,
-      next: move
-    })
+    if (trackerLogger.enabled !== false) {
+      trackerLogger.warn('诡伏移动未收到相邻角色数据，已丢弃待补全移动', {
+        previous,
+        next: move
+      })
+    }
   }
 
   const fromZone = move.FromZone
@@ -65,11 +67,13 @@ export function completeGuiFuMove(
     new Set(gainedIDs).size !== count ||
     (patched.FromZone === 2 && !hasDiscardSourceCards(room, gainedIDs))
   ) {
-    trackerLogger.warn('诡伏相邻角色数据与待补全移动不匹配，已取消移动', {
-      pending,
-      seatID,
-      cardIDs
-    })
+    if (trackerLogger.enabled !== false) {
+      trackerLogger.warn('诡伏相邻角色数据与待补全移动不匹配，已取消移动', {
+        pending,
+        seatID,
+        cardIDs
+      })
+    }
     return null
   }
 
