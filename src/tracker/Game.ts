@@ -60,6 +60,7 @@ export class GameState {
   declare isDouDiZhu: boolean
   declare isRoguelike1v1: boolean
   declare isSWJG: boolean
+  declare isShenFen: boolean
   /** 房间人数 由 Room 同步 */
   declare size: number | undefined
 
@@ -146,6 +147,7 @@ export class GameState {
     this.isDouDiZhu = false
     this.isRoguelike1v1 = false
     this.isSWJG = false
+    this.isShenFen = false
     this.needShowName = false
   }
 
@@ -248,6 +250,7 @@ export class GameState {
   private applyRecordMode(): void {
     const matchName = this.recordMatchName
     if (!matchName) return
+    this.isShenFen = matchName.includes('身份演武')
     this.isDouDiZhu = matchName.includes('斗地主')
     this.isRoguelike1v1 = matchName === '单骑无双'
     this.needShowName =
