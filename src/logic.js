@@ -220,9 +220,9 @@ export function logic(msg) {
         handleLeaveTable()
         break
 
-      case 'ClientRecommendShopItemRep':
-        // 退出录像时清理? 可能还有更好的方法
-        // if (Game.isGameStart && msg?.userID === user.userID) handleLeaveTable()
+      // 退出录像时清理
+      case 'ClientLeavepageNtf':
+        if (Game.isGameStart) handleLeaveTable()
         break
 
       // 旁观退出

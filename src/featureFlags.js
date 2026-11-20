@@ -52,6 +52,7 @@ const retainedLogicMessages = new Set([
   'ClientModifyTblsetingNtf',
   'MsgGamePlayerShowStatusNtf',
   'GsClientLookonTerminationNtf',
+  'ClientLeavepageNtf',
 
   // 记牌器核心消息：维护已知牌、牌区移动、手牌展示、点数推理和小抄辅助结果。
   'GsCUpdateHpNtf',
