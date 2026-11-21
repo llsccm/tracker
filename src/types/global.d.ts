@@ -4,6 +4,8 @@ declare global {
   interface Window {
     Laya?: typeof Laya
     padding?: number
+    /** 宿主游戏维护的内容缩放倍率，初始化前可能尚未赋值。 */
+    PclobbyEnlargeNumber?: number
   }
 
   const unsafeWindow: Window | undefined
@@ -476,6 +478,20 @@ declare global {
 
     class Browser {
       static readonly window: Window & typeof globalThis
+    }
+
+    class Utils {
+      /** 映射到浏览器窗口 CSS 坐标，包含场景、舞台与 Canvas 适配；不能传入 Stage。 */
+      static getTransformRelativeToWindow(
+        coordinateSpace: Sprite,
+        x: number,
+        y: number
+      ): {
+        x: number
+        y: number
+        scaleX: number
+        scaleY: number
+      }
     }
 
     class ClassUtils {

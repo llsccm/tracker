@@ -100,7 +100,7 @@
 
 ## 生命周期接入点
 
-> 应用级 INIT/EXIT 与时序图见 [`lifecycle.md`](lifecycle.md)。此处只列记牌器关键协议。
+> 应用初始化、界面重建与时序图见 [`lifecycle.md`](lifecycle.md)。此处只列记牌器关键协议。
 
 - `decodeGsClientUserSeatFlagNtf -> handleRecordStartGame()`：**当前主动开局路径**。注册新局前先执行 `resetSeatOverlay()` 清理上一局并隐藏、清空旧容器布局，再 `initTrackerRoom()` → `registerTrackerPlayers(seatinfo, user.userID)`。有效容器由 `src/ui/seatOverlay.js` 的 `updateSeatOverlay()` 按当前显示玩家统一选择。
 - `GsCModifyUserseatNtf -> handleStartGame()`：函数仍导出，但 `logic.js` 中分发**当前注释未调用**；恢复时同样走 Room 创建与玩家注册。

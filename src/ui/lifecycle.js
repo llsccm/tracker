@@ -31,11 +31,6 @@ export function removeInjectedDom(globalState) {
   globalState.isFrameAdd = false
 }
 
-export function cleanupLifecycle(globalState) {
-  removeInjectedDom(globalState)
-  return true
-}
-
 export function waitForLegacyFrameReady(initFrame) {
   return new Promise((resolve, reject) => {
     // 检查 JSZipUtils、CtrUtil 和其他脚本的加载状态

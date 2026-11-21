@@ -3,6 +3,8 @@ import { laya } from '@/runtime/gameAdapter'
 import { Game, UI } from '@/tracker'
 import { createDeckEdgeOverlay, resetDeckEdgeOverlay } from './deckEdgeOverlay'
 
+const SEAT_TOP_OFFSET = 6
+
 export function createSeatOverlay(config) {
   const seatUI = document.createElement('div')
   seatUI.id = 'seatUI'
@@ -100,29 +102,26 @@ function syncSeatOverlayViewport() {
   const seatUI = document.getElementById('seatUI')
   if (!scene || !seatUI) return false
 
-  const { width, height, globalScaleX } = scene
+  const { width, height } = scene
   if (!width || !height) return false
 
-  const scaledHeight = height * globalScaleX
-  UI.width = Math.trunc(width * globalScaleX)
-  UI.height = Math.trunc(scaledHeight)
-  UI.scale = globalScaleX
-
+  // 最终变换包含场景、舞台与 Canvas 适配，游戏上下留白不一定相等。
+  const transform = Laya.Utils.getTransformRelativeToWindow(scene, 0, 0)
+  const dpr = window.devicePixelRatio
   const app = {
-    width: UI.width / window.devicePixelRatio,
-    height: UI.height / window.devicePixelRatio
+    width: width * transform.scaleX,
+    height: height * transform.scaleY
   }
-  const top =
-    ((window.innerHeight * window.devicePixelRatio - scaledHeight) / (2 * window.devicePixelRatio) +
-      scaledHeight / 2) /
-    window.devicePixelRatio
+  UI.width = Math.trunc(app.width * dpr)
+  UI.height = Math.trunc(app.height * dpr)
+  UI.scale = transform.scaleX * dpr
+  UI.centerX = transform.x + app.width / 2
+  UI.centerY = transform.y + app.height / 2
 
   seatUI.style.width = `${app.width}px`
   seatUI.style.height = `${app.height}px`
-  seatUI.style.left = window.innerWidth / 2 + 'px'
-  seatUI.style.top = top + 'px'
-  UI.centerX = window.innerWidth > app.width ? app.width / 2 : window.innerWidth / 2
-  UI.centerY = app.height / 2
+  seatUI.style.left = UI.centerX + 'px'
+  seatUI.style.top = UI.centerY + 'px'
   document.documentElement.style.setProperty('--sgs-center-x', `${UI.centerX}px`)
   return true
 }
@@ -276,7 +275,7 @@ function getSideSeatsStartY(measuredHeight, metrics) {
       UI.paddingBottom) >>
       1) +
     metrics.topPadding +
-    UI.leftRightTop
+    UI.leftRightTop * metrics.scale
   )
 }
 
@@ -285,7 +284,8 @@ function setSeatPosition(seatUI, displayLocation, x, y, dpr) {
 
   seatUI.DisplayLocation = displayLocation
   seatUI.posX = Math.trunc(x) / dpr
-  seatUI.posY = Math.trunc(y) / dpr
+  // 逻辑偏移先按当前布局倍率缩放，再统一换算为 CSS 坐标。
+  seatUI.posY = Math.trunc(y + SEAT_TOP_OFFSET * UI.scale) / dpr
 }
 
 function drawSeatUIs(list) {

@@ -101,7 +101,7 @@ const UI: UIState = {
   paddingBottom: 0,
   paddingLeftTopExtra: 0,
   selectStarted: false,
-  leftRightTop: 20,
+  leftRightTop: 16,
   stackCardAreaHeight: 0,
   stackCardAreaY: 0,
   MAX_SEAT_WIDTH: 149,
