@@ -241,7 +241,7 @@ Room 重建保留已经收到的对局 ID 和模式信息。
 
 | 协议                         | 入口                                                     | 专属行为                                                  |
 | ---------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
-| `MsgGameOver`                | [`handleGameOver()`](../../src/handler/MsgGameOver.js)   | “屏蔽MVP结算”开启时，合并重复消息并依次关闭结果、MVP 窗口 |
+| `MsgGameOver`                | [`handleGameOver()`](../../src/handler/MsgGameOver.js)   | 第二次通知清理本局，单次通知超时兜底；通过 `wait()` 获取并关闭结算窗口 |
 | `ClientLeavetableRep`        | [`handleLeaveTable()`](../../src/handler/MsgGameOver.js) | 只清理对局                                                |
 | `ClientRecommendShopItemRep` | `handleLeaveTable()`                                     | 当前用户退出录像时的清理兜底                              |
 
@@ -249,6 +249,21 @@ Room 重建保留已经收到的对局 ID 和模式信息。
 统一状态仓库）、销毁裴秀地图窗口、
 `resetSeatOverlay()` 清空并隐藏座位覆盖层，骨架保留到脚本卸载；并由 `tracker.destroyTrackerRoom()` 依次卸载视图、销毁 Room、清空控制器中的
 `trackerRoom`。
+
+`handleGameOver()` 首次通知只保存待关闭窗口名单，并启动超时兜底。
+第二次通知立即取消兜底，通过 `finishGameOver()` 清理本局；只有一次通知时，兜底到期执行同一收尾入口。
+`logic.js` 不过滤连续 `MsgGameOver`，统一交由 handler 决定何时收尾。
+清理后，“屏蔽MVP结算”开启时才延迟启动独立弹窗任务，通过
+`src/utils/index.js` 的 `wait()` 获取可见窗口，再等待 `isShowWait` 结束。
+窗口已 `destroyed`、仍在等待、任务失效或超过截止时间时跳过关闭，否则调用 `laterClose()`。
+每个窗口独立等待，获取窗口与等待就绪共用任务截止时间，等待不会逐个累加。
+窗口缺失、延迟出现、等待超时或关闭异常都不阻塞 `cleanupGame()`；单个窗口关闭失败时记录告警，
+不影响其余窗口。所有窗口等待结束后释放任务。
+任务以独立对象标识校验。收尾完成后，单局幂等标记使后续 `MsgGameOver` 不再清理或调度，
+弹窗任务完成、超时、取消或关闭“屏蔽MVP结算”时仍保留该标记；新开局注册玩家时才重置。
+新开局注册玩家与离桌均调用 `cancelGameOverTask()`，清除兜底和弹窗初始延迟定时器，
+并使任务标识失效；进行中的 `wait()` 在下一次检查时结束，关闭前再次校验，避免跨局收尾或关闭窗口。
+离桌同时标记本局已结束，后续结束通知不再启动任务。
 
 ---
 
