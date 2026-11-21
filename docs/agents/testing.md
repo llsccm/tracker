@@ -38,7 +38,7 @@
 | `tests/tracker/helpers/` | 测试夹具与 noop runtime/view                          |
 | `tests/replay/tracker/`  | 按需加载的协议 JSONL 重建、诊断与真实录制回放入口（见 `replay.md`） |
 | `tests/contracts/pile-identity/` | 牌堆身份纯模型、真实牌序 oracle 与长期语义契约 |
-| `tests/runtime/`         | 宿主运行时适配、窗口关闭与对局结束 UI 生命周期        |
+| `tests/runtime/`         | 宿主运行时适配与既有裴秀手牌镜像验证；不新增 UI 用例   |
 | `tests/utils/`           | 非 tracker 工具逻辑，如裴秀路线                       |
 
 ### 现有 tracker 回归主题
