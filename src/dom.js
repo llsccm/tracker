@@ -4,31 +4,23 @@ import { drawMiZhu, refreshZoneMirrorOverflow } from './draw'
 import { laya } from './runtime/gameAdapter'
 import { Game, globalConfig, globalState, UI } from './tracker'
 import { setTrackerSeatUIReader, tracker } from './tracker/runtime/browser'
-import { stopProtocolRecording } from './tracker/runtime/protocolRecorder'
 import { drawCitiesUI } from './ui/CitiesUI'
 import { bindDelegatedTooltips } from './ui/domHelpers'
 import { addDragHint, initDragElement } from './ui/drag'
 import { getPanelContentInner, initInjectedInterface } from './ui/frameContent'
-import {
-  configureViewport,
-  cleanupLifecycle,
-  removeInjectedDom,
-  waitForLegacyFrameReady
-} from './ui/lifecycle'
+import { configureViewport, removeInjectedDom, waitForLegacyFrameReady } from './ui/lifecycle'
 import { createSeatOverlay, setSeatOverlayVisible, updateSeatOverlay } from './ui/seatOverlay'
 import { createMainShell } from './ui/shell'
 import { requestWindowResize, subscribeWindowResize } from './ui/windowResize'
 import { bindPeiXiuHandSuitColorRefresh } from './ui/PeiXiuHandMirror'
-import {
-  bindProtocolRecorderControls,
-  unbindProtocolRecorderControls
-} from './ui/protocolRecorderControls'
+import { bindProtocolRecorderControls } from './ui/protocolRecorderControls'
 import { loadInterfaceHtml } from './utils/htmlResource'
 import { addTooltip } from './utils/notification'
 import { setPeiXiuMapWindowVisible } from './ui/PeiXiuMapWindow'
 
 let iframe = null
 const version = import.meta.env.VITE_version ?? '0.9.0'
+const GAME_SIZE_DEBOUNCE_MS = 150
 
 function getTrackedHandNumbers(seatID) {
   const config = CardConfig.GetInstance()
@@ -43,15 +35,6 @@ export function Init() {
   startGameSizeUpdates()
   console.info('🚀 初始化...')
   return waitForLegacyFrameReady(initFrame)
-}
-
-export function Exit() {
-  stopGameSizeUpdates()
-  if (import.meta.env.DEV) {
-    unbindProtocolRecorderControls()
-    void stopProtocolRecording()
-  }
-  return cleanupLifecycle(globalState)
 }
 
 function updateViewportCenter() {
@@ -85,7 +68,7 @@ function scheduleSetGameSize() {
   updateTimeout = setTimeout(() => {
     updateTimeout = null
     setGameSize()
-  }, 500)
+  }, GAME_SIZE_DEBOUNCE_MS)
 }
 
 export async function initFrame(force = false) {
@@ -113,7 +96,7 @@ export async function initFrame(force = false) {
     createSeatOverlay(globalConfig)
     // addDynamicBG()
     await addFrame(stopCurrentResize)
-    // 卸载或重建后，不继续处理旧界面的异步初始化。
+    // 重建后，不继续处理旧界面的异步初始化。
     if (stopWindowResize !== stopCurrentResize) return
     setGameSize()
     bindPeiXiuHandSuitColorRefresh()

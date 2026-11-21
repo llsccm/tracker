@@ -1,5 +1,5 @@
 import { logic } from './logic.js'
-import { Init, Exit } from './dom.js'
+import { Init } from './dom.js'
 import { notifyScriptError } from './utils/errorNotifier.js'
 
 console.info(
@@ -46,8 +46,7 @@ function main() {
 
   try {
     if (args[0] === 'INIT') return Init()
-    else if (args[0] === 'EXIT') return Exit()
-    else return logic(args[args.length - 1])
+    return logic(args[args.length - 1])
   } catch (e) {
     console.error(e.message)
     console.error(e.stack)

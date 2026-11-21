@@ -12,10 +12,7 @@ Room 内部状态所有权、行为模块与写入管线见 [`room.md`](room.md)
 
 ```mermaid
 graph TD
-    A[Greasemonkey 注入] --> B{是否存在旧实例?}
-    B -- 是 --> C[执行 EXIT 卸载生命周期]
-    B -- 否 --> D[重写 console.log]
-    C --> D
+    A[Greasemonkey 注入] --> D[重写 console.log]
     D --> E[执行 INIT 初始化生命周期]
     E --> F[等待 Laya 与宿主核心库就绪]
     F --> G[DOM 初始化与 Iframe 注入]
@@ -26,22 +23,31 @@ graph TD
 
 ### 1. 初始化阶段 (INIT)
 
-- **触发条件**：脚本在 `document-start` 注入后执行；若已有 `SGSMODULE` 则先 EXIT，再劫持 `console.log`，最后调用 `main('INIT')`。
+- **触发条件**：脚本在 `document-start` 注入后执行，劫持 `console.log`，随后调用 `main('INIT')`。Vite 开发更新通过页面刷新重新初始化。
 - **执行时序与入口**：
   1. [`src/index.js`](../../src/index.js) 的 `main('INIT')` 调用 [`src/dom.js`](../../src/dom.js) 的 `Init()`。
   2. `Init()` 调用 [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js) 的 `configureViewport()` 配置布局视口，并通过 `startGameSizeUpdates()` 订阅统一窗口尺寸通知。
   3. `waitForLegacyFrameReady()` 轮询宿主依赖（`JSZipUtils`、`CtrUtil`、`#bgDiv`；微端 `PUERTS_JS_RESOURCES` 则直接通过），界面注入不等待 Laya 场景。
   4. 就绪后回调 [`src/dom.js`](../../src/dom.js) 的 `initFrame()`：
      - 强制重建时先停止旧尺寸更新，再清理残留注入 DOM；
-     - 通过 [`src/ui/windowResize.js`](../../src/ui/windowResize.js) 的 `subscribeWindowResize()` 订阅 `window.resize`；中心位置立即更新，`scheduleSetGameSize()` 保留 500ms 防抖，触发后重新读取当前 `laya.scene` 的尺寸与缩放；
+     - 通过 [`src/ui/windowResize.js`](../../src/ui/windowResize.js) 的 `subscribeWindowResize()` 订阅 `window.resize`；中心位置立即更新，`scheduleSetGameSize()` 对连续尺寸变化进行防抖，回调执行时重新读取当前 `laya.scene` 的尺寸与最终页面变换；
      - `createSeatOverlay` + `addFrame()`，经 [`src/utils/htmlResource.js`](../../src/utils/htmlResource.js) 的 `loadInterfaceHtml()` 加载远端 `html/iframe.html`；
-     - DOM 注入完成后立即调用 `setGameSize()`：主窗口尺寸由 `dom.js` 调整，座位覆盖层统一交给 [`src/ui/seatOverlay.js`](../../src/ui/seatOverlay.js) 的 `updateSeatOverlay()`，将当前可用场景的 `width` / `height` / `globalScaleX` 同步到 `UI` 与外层 `#seatUI`；场景尚未就绪时留待座位更新或首轮消息再次同步；
+     - DOM 注入完成后立即调用 `setGameSize()`：主窗口尺寸由 `dom.js` 调整，座位覆盖层统一交给 [`src/ui/seatOverlay.js`](../../src/ui/seatOverlay.js) 的 `updateSeatOverlay()`，按当前场景的 `width` / `height` 与游戏缩放同步 `UI` 和外层 `#seatUI`；场景尚未就绪时留待座位更新或首轮消息再次同步；
      - [`src/config/ConfigManager.js`](../../src/config/ConfigManager.js) 的 `loadAndParseConfigs()` 解析远端 `Config_w.sgs`。
-  5. `main('INIT')` 的 Promise 成功后，将 `main` 推入 `window.SGSMODULE`。
+  5. `main('INIT')` 的 Promise 成功后，将 `main` 推入 `window._SGSMODULE`。
+
+覆盖层通过 `Laya.Utils.getTransformRelativeToWindow(scene, 0, 0)` 读取场景最终的页面原点与缩放。
+该变换包含场景、舞台和 Canvas 适配，以及游戏对 `window.PclobbyEnlargeNumber` 的实际应用，
+无需再单独乘以游戏倍率或除以 DPR。覆盖层 CSS 尺寸使用场景尺寸乘以最终缩放，中心使用
+实际原点加上显示尺寸的一半，适配游戏上下留白不相等的情况。内部座位尺寸与坐标继续使用
+最终缩放乘以 DPR，提交 CSS 坐标时再除以 DPR。
+明牌框的纵向偏移 `SEAT_TOP_OFFSET` 与侧边布局偏移 `UI.leftRightTop` 均使用游戏逻辑坐标，
+乘以当前布局倍率后叠加，再与其他布局坐标统一换算为 CSS 坐标。
 
 整个脚本只注册一个原生 `window.resize` 监听器，尺寸同步和拖拽窗口位置纠正通过订阅共享。
 最后一个订阅取消时移除原生监听；主动触发使用 `requestWindowResize()`，仍通知宿主游戏。
-当前布局只读取 `window` 与 Laya 场景尺寸，不再监听 `visualViewport.resize`。
+当前布局通过窗口尺寸同步和已有座位更新入口刷新，读取 Laya 场景尺寸与最终页面变换。
+窗口尺寸防抖时长统一由 [`src/dom.js`](../../src/dom.js) 的 `GAME_SIZE_DEBOUNCE_MS` 维护。
 牌镜像省略号检查由 `setGameSize()` 在布局更新后的动画帧调用 `refreshZoneMirrorOverflow()`，
 `draw.js` 不自行注册全局事件。拖拽窗口的元素 `ResizeObserver` 继续处理内容或元素自身尺寸变化。
 
@@ -49,19 +55,15 @@ graph TD
 
 - **触发条件**：宿主输出日志，触发劫持后的 `console.log`。
 - **执行时序与入口**：
-  1. [`src/index.js`](../../src/index.js) 的 `sgsConsoleLog` 遍历 `window.SGSMODULE` 分发。
+  1. [`src/index.js`](../../src/index.js) 的 `sgsConsoleLog` 遍历 `window._SGSMODULE` 分发。
   2. `main` 提取消息对象，进入 [`src/logic.js`](../../src/logic.js) 的 `logic()`。
   3. [`src/featureFlags.js`](../../src/featureFlags.js) 的 `isRetainedLogicMessage()` 做白名单过滤。
   4. 按 `ClassName` / `className` 分发到 `src/handler/` 等处理器。
 
-### 3. 卸载阶段 (EXIT)
+### 3. 界面重建
 
-- **触发条件**：页面重载、脚本热重载或显式卸载。
-- **执行时序与入口**：
-  1. [`src/index.js`](../../src/index.js) 若发现已有 `SGSMODULE`：将 `console.log` 临时改为 `console.info`，广播 `'EXIT'`，删除 `SGSMODULE`。
-  2. [`src/dom.js`](../../src/dom.js) 的 `Exit()` → [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js) 的 `cleanupLifecycle()`。
-  3. `stopGameSizeUpdates()` 取消主界面的窗口订阅、待执行的尺寸防抖任务与省略号检查动画帧；强制重建界面时也先停止这些任务。卸载或重建后，旧界面的异步初始化不再继续提交尺寸更新。
-  4. `removeInjectedDom()` 调用 `destroySeatOverlay()` 清理座位覆盖层，再清理 iframe、裴秀地图窗口、评荐窗口与可见性快捷键绑定。拖拽窗口销毁时取消窗口订阅并断开元素观察器，最后一个订阅取消后统一解绑原生 `resize`；山河图城市由 Laya 场景持有，不再注入 DOM 容器。
+- `initFrame(true)` 强制重建时，`stopGameSizeUpdates()` 取消主界面的窗口订阅、待执行的尺寸防抖任务与省略号检查动画帧；旧界面的异步初始化不再继续提交尺寸更新。
+- `removeInjectedDom()` 调用 `destroySeatOverlay()` 清理座位覆盖层，再清理 iframe、裴秀地图窗口、评荐窗口与可见性快捷键绑定。拖拽窗口销毁时取消窗口订阅并断开元素观察器，最后一个订阅取消后统一解绑原生 `resize`；山河图城市由 Laya 场景持有，不再注入 DOM 容器。
 
 ---
 
@@ -320,5 +322,5 @@ graph LR
 | 视图挂载     | `mount` / `scheduleRender`                                 | [`view/index.ts`](../../src/tracker/view/index.ts)                                                                                                                           | 两段式挂载与脏渲染                    |
 | 可见性       | `applyTrackerVisibility`                                   | [`trackerVisibility.ts`](../../src/ui/trackerVisibility.ts)                                                                                                                  | 快捷键显隐                            |
 | 回合轮次     | `setTurn` / `handleGameTurn` / `enter` / `handleGamePhase` | [`Game.ts`](../../src/tracker/Game.ts) / [`MsgGameTurnNtf.js`](../../src/handler/MsgGameTurnNtf.js) / [`GsCGamephaseNtf.js`](../../src/handler/GsCGamephaseNtf.js) | 局内状态推进与回合/阶段 DOM/Laya 编排 |
-| 脚本卸载     | `cleanupLifecycle`                                         | [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js)                                                                                                                           | 移除监听与 DOM                        |
+| 界面重建清理 | `removeInjectedDom`                                        | [`src/ui/lifecycle.js`](../../src/ui/lifecycle.js)                                                                                                                           | 移除旧界面 DOM 与绑定                 |
 | Room 销毁    | `destroyTrackerRoom`                                       | `trackerController`                                                                                                                                                          | unmount + destroy                     |
