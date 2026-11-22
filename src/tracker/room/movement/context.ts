@@ -73,7 +73,7 @@ export function createMoveContext(
     skipUnknownMovement: false
   }
 
-  if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+  if (trackerLogger.enabled !== false) {
     trackerLogger.debug(
       '移动上下文创建',
       summarizeMoveContext(context, { includeSourceCardIDs: true })

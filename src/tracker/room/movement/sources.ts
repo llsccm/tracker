@@ -332,7 +332,7 @@ export class RoomMovementSources {
     if (!placeholder) return null
 
     placeholder.bindCandidates([fromSeat], 'hand', null, { known: false })
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.info('玩家来源明牌缺少可置换实体，已创建瞬时匿名占位', {
         reason: 'moveKnownCardsForContext:knownSourcePlaceholderFallback',
         knownCardID: card.id,
@@ -386,7 +386,7 @@ export class RoomMovementSources {
       subZone: fromSubZone,
       spellID: card.spellID
     })
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.info('可见子区明牌已就地对齐到协议来源', {
         reason: 'alignVisibleSubZoneTransfer',
         cardID: card.id,
@@ -513,7 +513,7 @@ export class RoomMovementSources {
         placeholder,
         'restoreUnknownPlaceholderToPreviousPublicLocation:suspended'
       )
-      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      if (trackerLogger.enabled !== false) {
         trackerLogger.debug('暂停追踪来源占位置换后移出占位', {
           knownCardID: card.id,
           placeholderCardID,
@@ -635,7 +635,7 @@ export class RoomMovementSources {
       replacement.moveToPublicZone(previousZoneID)
       previousZone.replaceCard(card, replacement)
 
-      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      if (trackerLogger.enabled !== false) {
         trackerLogger.debug('公共区已知牌命中其它公共区实体，使用来源占位回填旧槽位', {
           cardID: card.id,
           replacementCardID: replacement.id,
@@ -662,7 +662,7 @@ export class RoomMovementSources {
 
     this.hiddenMarks.replaceHiddenMarkPlaceholder(card, replacement)
 
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.debug('公共区已知牌命中本地玩家实体，使用公共来源实体替回', {
         cardID: card.id,
         replacementCardID: replacement.id,

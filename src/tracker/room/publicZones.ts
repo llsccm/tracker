@@ -117,7 +117,7 @@ export class RoomPublicZones {
     })
 
     if (skippedCards.length > 0) {
-      if (import.meta.env.DEV && logger.enabled !== false) {
+      if (logger.enabled !== false) {
         logger.info('公共区展示跳过无法回收的实体', {
           zoneName,
           skippedIDs: skippedCards.map((card) => card.id),

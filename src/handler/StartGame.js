@@ -5,7 +5,7 @@ import { resetSeatOverlay } from '@/ui/seatOverlay'
 import { cancelGameOverTask } from './MsgGameOver'
 
 function registerGamePlayers(infos) {
-  cancelGameOverTask()
+  cancelGameOverTask({ resetForNewGame: true })
   resetSeatOverlay()
   tracker.initTrackerRoom()
   tracker.registerTrackerPlayers(infos, user.userID)

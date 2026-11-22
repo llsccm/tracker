@@ -930,7 +930,7 @@ export class Room extends RoomBase {
     }
 
     if (newlySuspendedCardIDs.length > 0) {
-      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      if (trackerLogger.enabled !== false) {
         trackerLogger.info('洗牌后暂停追踪旧牌堆世代中尚未出现的身份', {
           suspendedCardIDs: newlySuspendedCardIDs,
           activeSuspendedCardIDs: Array.from(this.suspendedKnownCards, (card) => card.id).filter(
@@ -1108,7 +1108,7 @@ export class Room extends RoomBase {
       assertPileIdentityLedgerConsistency(this, 'moveCards')
     }
 
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.info('moveCards 完成', {
         ...summarizeMoveContext(context, { includeKnownCardIDs: true }),
         publicMovedCardIDs: context.publicMovedCards.map((card) => card.id),

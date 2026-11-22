@@ -6,65 +6,98 @@ import { destroyPeiXiuMapWindow } from '@/ui/PeiXiuMapWindow'
 import { destroyPingJianWindow } from '@/ui/PingJianWindow'
 import { wait } from '@/utils'
 
-let closeGameOverWindowsTimer = null
+let gameOverFallbackTimer = null
 let gameOverTask = null
+// 收尾完成后仍保留单局标记，不随弹窗任务结束而重置。
+let gameOverHandled = false
 
-export function cancelGameOverTask() {
-  if (closeGameOverWindowsTimer !== null) {
-    clearTimeout(closeGameOverWindowsTimer)
-    closeGameOverWindowsTimer = null
+export function cancelGameOverTask({ resetForNewGame = false } = {}) {
+  if (gameOverFallbackTimer !== null) {
+    clearTimeout(gameOverFallbackTimer)
+    gameOverFallbackTimer = null
   }
   gameOverTask = null
+  if (resetForNewGame) gameOverHandled = false
 }
 
 function isCurrentGameOverTask(task) {
-  if (gameOverTask !== task) return false
-  const room = tracker.getTrackerRoom()
-  return room === task.room
+  return gameOverTask === task
 }
 
-function scheduleCloseGameOverWindows(task) {
-  if (!globalConfig.blockMvpSettlementSwitch) {
-    cleanupGame(task.room)
-    return
+async function closeGameOverWindows(task) {
+  if (!isCurrentGameOverTask(task)) return
+
+  for (const windowName of task.windowNames) {
+    await waitAndCloseGameOverWindow(task, windowName)
   }
 
-  closeGameOverWindowsTimer = setTimeout(async () => {
-    closeGameOverWindowsTimer = null
-    if (!isCurrentGameOverTask(task)) return
+  if (isCurrentGameOverTask(task)) cancelGameOverTask()
+}
 
-    const getWindow = (name) => {
-      const win = laya.GetWindow(name)
-      return win && win.visible ? win : null
-    }
+async function waitAndCloseGameOverWindow(task, windowName) {
+  const canClose = () => isCurrentGameOverTask(task) && globalConfig.blockMvpSettlementSwitch
+  if (!canClose()) return
 
-    for (const windowName of task.windowNames) {
-      const win = await wait(() => !isCurrentGameOverTask(task) || getWindow(windowName))
-      if (!isCurrentGameOverTask(task)) return
-      if (!win) break
+  try {
+    const win = await wait(() => {
+      // wait 以真值结束；取消后提前退出，并在关闭前再次检查。
+      if (!canClose()) return true
+      const win = laya.GetWindow(windowName)
+      return win?.visible ? win : null
+    })
 
-      win.laterClose?.()
-    }
+    if (!canClose() || !win || win === true) return
 
-    if (isCurrentGameOverTask(task)) cleanupGame(task.room)
-  }, 500)
+    await wait(() => !canClose() || win.destroyed || !win.isShowWait, 5, 250, { immediate: true })
+    if (win.destroyed) return
+    if (!canClose() || win.isShowWait) return
+
+    win.laterClose?.()
+  } catch (e) {
+    console.warn('[game-over] 关闭结算窗口失败', windowName, e)
+  }
 }
 
 export function handleGameOver() {
-  cancelGameOverTask()
-  gameOverTask = {
-    room: tracker.getTrackerRoom(),
-    windowNames: Game.isShanHeTu ? ['GameResultWindow'] : ['GameResultWindow', 'GameMvpWindow']
+  if (gameOverHandled) return
+  if (gameOverTask !== null) {
+    finishGameOver(gameOverTask)
+    return
   }
-  scheduleCloseGameOverWindows(gameOverTask)
+
+  // 首次通知只记录；第二次通知或超时兜底才进入收尾。
+  const windowNames = Game.isShanHeTu ? ['GameResultWindow'] : ['GameResultWindow', 'GameMvpWindow']
+  const task = {
+    windowNames: new Set(windowNames)
+  }
+  gameOverTask = task
+  gameOverFallbackTimer = setTimeout(() => finishGameOver(task), 2000)
+}
+
+function finishGameOver(task) {
+  if (!isCurrentGameOverTask(task) || gameOverHandled) return
+  gameOverHandled = true
+  if (gameOverFallbackTimer !== null) {
+    clearTimeout(gameOverFallbackTimer)
+    gameOverFallbackTimer = null
+  }
+
+  cleanupGame()
+  if (!isCurrentGameOverTask(task)) return
+  if (!globalConfig.blockMvpSettlementSwitch) {
+    cancelGameOverTask()
+    return
+  }
+
+  void closeGameOverWindows(task)
 }
 
 export function handleLeaveTable() {
+  cancelGameOverTask()
   cleanupGame()
 }
 
-function cleanupGame(room = tracker.getTrackerRoom()) {
-  if (tracker.getTrackerRoom() !== room) return
+function cleanupGame() {
   // document.querySelectorAll('.mizhu').forEach((e) => (e.style.display = 'none'))
   Game.isPassed = null
   laya.zhanfaMap.clear()

@@ -41,8 +41,6 @@ import { handleBroadMsg } from './handler/chat'
 //   'MsgGameOver'
 // ])
 
-let lastClassName = null
-
 export function logic(msg) {
   try {
     if (!msg) return
@@ -50,12 +48,6 @@ export function logic(msg) {
     if (msg.className === undefined && msg.ClassName === undefined) return
 
     const className = msg.ClassName || msg.className || msg.toString()
-    // 结束消息只处理连续消息中的第一条；初始化通知仅幂等更新对局信息。
-    if (className === lastClassName && className === 'MsgGameOver') {
-      return
-    }
-    lastClassName = className
-
     const { ProtoObj, SeatID } = msg
 
     // 录制器有独立的记牌协议规则，需先于功能白名单执行，以保留路由遗漏现场。
@@ -220,9 +212,14 @@ export function logic(msg) {
         handleLeaveTable()
         break
 
-      case 'ClientRecommendShopItemRep':
-        // 退出录像时清理? 可能还有更好的方法
-        // if (Game.isGameStart && msg?.userID === user.userID) handleLeaveTable()
+      // 退出录像时清理
+      case 'ClientLeavepageNtf':
+        if (Game.isGameStart) handleLeaveTable()
+        break
+
+      // 旁观退出
+      case 'GsClientLookonTerminationNtf':
+        handleLeaveTable()
         break
 
       case 'decodeRougeBaseInfoRep':

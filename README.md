@@ -17,6 +17,10 @@ work in progress
    - [从 GitHub Releases 安装](https://github.com/llsccm/tracker/releases/latest/download/daxiaochao.user.js)
    - [通过 CDN 安装](https://cdn.jsdelivr.net/gh/llsccm/tracker@releases/daxiaochao.user.js)：从 `releases` 分支获取最新构建，更新可能有缓存延迟。
 
+## 微端运行
+
+[到此项目中下载微端文件](https://github.com/llsccm/sgs-electron)
+
 ## 开源许可
 
 本项目当前分发版本采用 [GPL-3.0-or-later](https://www.gnu.org/licenses/gpl-3.0.html)。

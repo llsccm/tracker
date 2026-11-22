@@ -282,7 +282,7 @@ export class RoomMovementKnownPlacement {
         sourceEvent: sourceEvent ?? { type: 'moveCards' }
       })
 
-      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      if (trackerLogger.enabled !== false) {
         trackerLogger.debug('已知牌进入玩家区', {
           cardIDs: knownCards.map((card) => card.id),
           targetSeats,
@@ -309,7 +309,7 @@ export class RoomMovementKnownPlacement {
 
     context.publicMovedCards.push(...knownCards)
 
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.debug('已知牌进入公共区', {
         cardIDs: knownCards.map((card) => card.id),
         toZone,

@@ -126,7 +126,7 @@ export class RoomMovementHiddenMarks {
     })
 
     if (records.length > 0 || movedMarkCardIDs.length > 0) {
-      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      if (trackerLogger.enabled !== false) {
         trackerLogger.info('木牛流马内部牌按标记空间协议迁移', {
           spellID,
           fromSeat,
@@ -161,7 +161,7 @@ export class RoomMovementHiddenMarks {
     // 完整容器位置 key 不变，但约束的 candidateSeats 仍需要同步。
     this.removeHiddenMarkConstraint(record)
     this.applyHiddenMarkProjection(record)
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.info('木牛流马暗标记账本更新承载座位', {
         recordID: record.id,
         sourceSeat: record.sourceSeat,
@@ -332,7 +332,7 @@ export class RoomMovementHiddenMarks {
     this.applyHiddenMarkProjection(record)
     this.moveHiddenMarkPlaceholders(context, record)
 
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.info('手牌暗置标记区候选记录', {
         sourceSeat,
         targetSeat,
@@ -366,7 +366,7 @@ export class RoomMovementHiddenMarks {
     })
     context.movedUnknownCards.push(...placeholderCards)
 
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.debug('手牌暗置标记区占位移动', {
         sourceSeat: record.sourceSeat,
         targetSeat: record.targetSeat,
@@ -485,7 +485,7 @@ export class RoomMovementHiddenMarks {
     })
 
     if (materialized.length > 0) {
-      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      if (trackerLogger.enabled !== false) {
         trackerLogger.info('暗置标记占位物化未定位身份', {
           reason,
           spellID: record.spellID,
@@ -605,7 +605,7 @@ export class RoomMovementHiddenMarks {
       recycledPlaceholderEntityIDs.push(placeholder.entityID)
     }
 
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.debug('mark 空间守恒回收溢出匿名占位', {
         reason,
         spellID: record.spellID,
@@ -811,7 +811,7 @@ export class RoomMovementHiddenMarks {
         this.setHiddenMarkConfirmation(record, card, 'mark')
         changed = true
 
-        if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        if (trackerLogger.enabled !== false) {
           trackerLogger.info('整手完整揭示反向收敛木马候选', {
             spellID: record.spellID,
             sourceSeat: record.sourceSeat,
@@ -882,7 +882,7 @@ export class RoomMovementHiddenMarks {
         } else if (card.hasLocationCandidate(candidate)) {
           changed = card.resolveLocationCandidate(candidate, 'hiddenMark:confirmedMark') || changed
         }
-        if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        if (trackerLogger.enabled !== false) {
           trackerLogger.info('手牌暗置标记区候选确认进标记', {
             spellID: record.spellID,
             sourceSeat: record.sourceSeat,
@@ -913,7 +913,7 @@ export class RoomMovementHiddenMarks {
         if (card.hasLocationCandidate(candidate)) {
           changed = card.resolveLocationCandidate(candidate, 'hiddenMark:confirmedHand') || changed
         }
-        if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+        if (trackerLogger.enabled !== false) {
           trackerLogger.info('手牌暗置标记区候选确认回手牌', {
             spellID: record.spellID,
             sourceSeat: record.sourceSeat,
@@ -1041,7 +1041,7 @@ export class RoomMovementHiddenMarks {
       this.settleHiddenMarkRecord(record, 'observedContainerSnapshot')
     })
 
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.info('手牌暗置标记区候选按可见装备容器快照收敛', {
         spellID: markSpellID,
         targetSeat: observedSeat,
@@ -1075,7 +1075,7 @@ export class RoomMovementHiddenMarks {
   private settleHiddenMarkRecord(record: HiddenMarkRecord, reason: string): void {
     if (record.confirmedHandCards.size + record.confirmedMarkCards.size < record.cards.size) return
 
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.info('手牌暗置标记区候选账本结清', {
         spellID: record.spellID,
         sourceSeat: record.sourceSeat,

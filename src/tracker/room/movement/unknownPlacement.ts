@@ -37,7 +37,7 @@ export class RoomMovementUnknownPlacement {
     if (unknownCount <= 0) return
 
     if (context.skipUnknownMovement) {
-      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      if (trackerLogger.enabled !== false) {
         trackerLogger.debug('未知牌移动已由特殊候选逻辑接管', {
           requestedCount: unknownCount,
           fromSeat,
@@ -86,7 +86,7 @@ export class RoomMovementUnknownPlacement {
         })
       }
 
-      if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+      if (trackerLogger.enabled !== false) {
         trackerLogger.debug('未知牌进入玩家区', {
           requestedCount: unknownCount,
           movedCardIDs: movedUnknownCards.map((card) => card.id),
@@ -164,7 +164,7 @@ export class RoomMovementUnknownPlacement {
       count: unknownCount
     })
 
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.debug('未知牌进入公共区', {
         requestedCount: unknownCount,
         takenCount,

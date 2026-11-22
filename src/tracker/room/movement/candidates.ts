@@ -264,7 +264,7 @@ export class RoomMovementCandidates {
       sourceEvent: sourceEvent ?? { type: 'randomHandTransferCandidates' }
     })
 
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.info('手牌候选传播', {
         fromSeat,
         targetSeat,
@@ -397,7 +397,7 @@ export class RoomMovementCandidates {
       sourceEvent: sourceEvent ?? { type: 'markStoredToHandCandidates' }
     })
 
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.info('标记或弹窗空间暗取，建立位置候选', {
         fromSeat,
         fromSpellID,
@@ -463,7 +463,7 @@ export class RoomMovementCandidates {
     const candidate = createPublicCandidate(toZone, position, unknownCount)
     sourceCandidateCards.forEach((card) => card.addPublicCandidate(candidate))
 
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.info('手牌候选进入公共区', {
         fromSeat,
         toZone,
@@ -581,7 +581,7 @@ export class RoomMovementCandidates {
       sourceEvent: sourceEvent ?? { type: 'publicCandidatesToHand' }
     })
 
-    if (import.meta.env.DEV && trackerLogger.enabled !== false) {
+    if (trackerLogger.enabled !== false) {
       trackerLogger.info('公共候选进入手牌', {
         fromZone,
         position,

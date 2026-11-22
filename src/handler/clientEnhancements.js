@@ -17,13 +17,24 @@ export function handleKillEffect(msg) {
 
 export function handleGeneralSkin(msg) {
   if (import.meta.env.DEV) console.info(msg)
+  // Type 0是开局查询 1是自己切换
   if (!Game.isGameStart || !globalConfig.blockSkinStateSwitch) return
 
   const GeneralSkinList = msg.GeneralSkinList || []
   GeneralSkinList.forEach((GeneralSkin) => {
     if (!GeneralSkin) return
-    // 只显示主视角动态皮肤。
-    if (Game.myGenerals.includes(GeneralSkin.GeneralID)) return
+
+    // 只显示主视角动态皮肤
+    if (Game.myGenerals.includes(GeneralSkin.GeneralID)) {
+      if (msg.Type !== 0 || !Game.isShenFen) return
+
+      wait(() => laya.GetWindow('SelectSkinWindow'))
+        .then((win) => win?.Close())
+        .catch((error) => console.error(error))
+
+      return
+    }
+
     GeneralSkin.state = 0
   })
 }
@@ -31,7 +42,7 @@ export function handleGeneralSkin(msg) {
 export function handleUserProfileSkin(msg) {
   if (!globalConfig.blockSkinStateSwitch) return
   if (msg.ProtoObj?.nickname_usertempid === user.userID) return
-
+  // 动态三国秀
   if (msg.Info) msg.Info.IsUseDySkinShow = false
 }
 

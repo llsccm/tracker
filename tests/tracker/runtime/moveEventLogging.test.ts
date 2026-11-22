@@ -27,6 +27,7 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.clearAllMocks()
   vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
 })
 
 const pileGainMove: RawMoveCardEvent = {
@@ -45,7 +46,8 @@ const pileGainMove: RawMoveCardEvent = {
 }
 
 describe('移动事件日志', () => {
-  it('日志开关关闭时不构造移动摘要，重新开启后同一控制器恢复日志', () => {
+  it.each([true, false])('DEV=%s：同一控制器可关闭、开启和再次关闭移动日志', (dev) => {
+    vi.stubEnv('DEV', dev)
     let enabled = false
     vi.spyOn(trackerLogger, 'enabled', 'get').mockImplementation(() => enabled)
     const info = vi.fn()
@@ -79,17 +81,30 @@ describe('移动事件日志', () => {
     expect(summarizeMoveContext).toHaveBeenCalled()
     expect(info).toHaveBeenCalled()
     expect(debug).toHaveBeenCalled()
+
+    enabled = false
+    vi.clearAllMocks()
+    controller.syncTrackerMove({ ...pileGainMove, CardCount: 1 })
+
+    expect(room.getZone('pile').cards).toHaveLength(1)
+    expect(summarizeMoveEvent).not.toHaveBeenCalled()
+    expect(summarizeMoveContext).not.toHaveBeenCalled()
+    expect(info).not.toHaveBeenCalled()
+    expect(debug).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
   })
 
-  it('非 DEV 环境仍同步移动和异常告警，但不生成详细摘要或遍历统计', () => {
+  it('非 DEV 环境开启调试开关后输出移动日志和告警，仍不执行遍历统计', () => {
     vi.stubEnv('DEV', false)
-    vi.spyOn(trackerLogger, 'enabled', 'get').mockReturnValue(true)
-    const info = vi.fn()
-    const debug = vi.fn()
-    const warn = vi.fn()
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn((key) => (key === 'DEBUG_LOG_SWITCH' ? 'true' : null))
+    })
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { controller, room } = createReadyControllerHarness({
       cardIDs: [1, 2, 3, 4],
-      logger: { enabled: true, info, debug, warn }
+      logger: trackerLogger
     })
 
     const { stats } = collectTraversalStats(() => {
@@ -98,11 +113,22 @@ describe('移动事件日志', () => {
 
     expect(room.getZone('pile').cards).toHaveLength(2)
     expect(stats.sites.size).toBe(0)
-    expect(summarizeMoveEvent).not.toHaveBeenCalled()
-    expect(summarizeMoveContext).not.toHaveBeenCalled()
-    expect(info).not.toHaveBeenCalled()
-    expect(debug).not.toHaveBeenCalled()
-    expect(warn).toHaveBeenCalledWith('移动协议明暗牌混合，按暗牌处理', expect.any(Object))
+    expect(summarizeMoveEvent).toHaveBeenCalled()
+    expect(summarizeMoveContext).toHaveBeenCalled()
+    expect(info).toHaveBeenCalledWith(
+      '[DXC][tracker]',
+      '移动事件分支: moveCards',
+      expect.any(Object)
+    )
+    expect(info).toHaveBeenCalledWith('[DXC][tracker]', 'moveCards 完成', expect.any(Object))
+    expect(debug).toHaveBeenCalledWith('[DXC][tracker]', '移动事件归一化', expect.any(Object))
+    expect(debug).toHaveBeenCalledWith('[DXC][tracker]', '移动上下文创建', expect.any(Object))
+    expect(debug).toHaveBeenCalledWith('[DXC][tracker]', '未知牌进入玩家区', expect.any(Object))
+    expect(warn).toHaveBeenCalledWith(
+      '[DXC][tracker]',
+      '移动协议明暗牌混合，按暗牌处理',
+      expect.any(Object)
+    )
   })
 
   it.each([
