@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         三国杀小抄 Lite
 // @namespace    https://greasyfork.org/scripts/448004
-// @version      0.21.1
+// @version      0.21.2
 // @author       三国杀小抄
 // @description  三国杀记牌器
 // @license      GPL-3.0-or-later
@@ -1292,6 +1292,8 @@
 		"ClientRecommendShopItemRep",
 		"ClientModifyTblsetingNtf",
 		"MsgGamePlayerShowStatusNtf",
+		"GsClientLookonTerminationNtf",
+		"ClientLeavepageNtf",
 		"GsCUpdateHpNtf",
 		"GsCTriggerSpellNew",
 		"ClientHappyGetFriendHandcardRep",
@@ -1608,7 +1610,7 @@
 		paddingBottom: 0,
 		paddingLeftTopExtra: 0,
 		selectStarted: false,
-		leftRightTop: 20,
+		leftRightTop: 16,
 		stackCardAreaHeight: 0,
 		stackCardAreaY: 0,
 		MAX_SEAT_WIDTH: 149,
@@ -1792,6 +1794,7 @@
 			this.isDouDiZhu = false;
 			this.isRoguelike1v1 = false;
 			this.isSWJG = false;
+			this.isShenFen = false;
 			this.needShowName = false;
 		}
 		setGeneral(seatID, generalID, index = 0, _an = false) {
@@ -1857,6 +1860,7 @@
 		applyRecordMode() {
 			const matchName = this.recordMatchName;
 			if (!matchName) return;
+			this.isShenFen = matchName.includes("身份演武");
 			this.isDouDiZhu = matchName.includes("斗地主");
 			this.isRoguelike1v1 = matchName === "单骑无双";
 			this.needShowName = this.isDouDiZhu || this.isRoguelike1v1 || matchName === "新欢乐排位" || matchName.includes("cmk");
@@ -2226,6 +2230,44 @@
 			position: normalizedPosition,
 			count,
 			label: getPublicCandidateLabel(zone, normalizedPosition, count)
+		};
+	}
+	function summarizeMoveEvent(event, options = {}) {
+		const eventOptions = event.options;
+		const moveType = event.moveType ?? eventOptions.moveType;
+		const label = eventOptions.sourceEvent?.label;
+		return {
+			type: event.type,
+			triggerSpellID: event.protocol.SpellID,
+			cardIDs: options.normalizeCardIDs ? [...event.cardIDs] : event.cardIDs,
+			...moveType !== void 0 ? { moveType } : {},
+			...label ? { label } : {},
+			from: event.from,
+			to: event.to,
+			...options.includeEventCardCount ? { cardCount: event.cardCount } : {},
+			options: {
+				combinationID: eventOptions.combinationID,
+				cardCount: eventOptions.cardCount,
+				moveType: eventOptions.moveType,
+				...options.includeSourceCards ? { sourceCards: eventOptions.sourceCards?.map((card) => card.id) } : {}
+			}
+		};
+	}
+	function summarizeMoveContext(context, options = {}) {
+		return {
+			from: context.from,
+			to: context.to,
+			triggerSpellID: context.triggerSpellID,
+			cardIDs: context.cardIDs,
+			combinationID: context.combinationID,
+			cardCount: context.cardCount,
+			handMoveCount: context.handMoveCount,
+			sourceHandSeat: context.sourceHandSeat,
+			targetHandSeat: context.targetHandSeat,
+			knownIDs: context.knownIDs,
+			...options.includeKnownCardIDs ? { knownCardIDs: context.knownCards?.map((card) => card.id) } : {},
+			unknownCount: context.unknownCount,
+			...options.includeSourceCardIDs ? { sourceCardIDs: context.sourceCards?.map((card) => card.id) } : {}
 		};
 	}
 	var PROTOCOL_ZONE = Object.freeze({
@@ -4764,7 +4806,13 @@
 				}
 				skippedCards.push(card);
 			});
-			if (skippedCards.length > 0) {}
+			if (skippedCards.length > 0) {
+				if (logger.enabled !== false) logger.info("公共区展示跳过无法回收的实体", {
+					zoneName,
+					skippedIDs: skippedCards.map((card) => card.id),
+					skippedLocations: skippedCards.map((card) => card.location)
+				});
+			}
 			placeableCards.forEach((card) => {
 				room.removeCardsFromConstraintGroups([card]);
 				card.confirmKnown();
@@ -5912,6 +5960,21 @@
 				known: false,
 				sourceEvent: sourceEvent ?? { type: "randomHandTransferCandidates" }
 			});
+			if (trackerLogger.enabled !== false) trackerLogger.info("手牌候选传播", {
+				fromSeat,
+				targetSeat,
+				count,
+				sourceTotal,
+				expectedSourceSlots: sourceTotal - count,
+				expectedTargetSlots: count,
+				createdAnonymousCount: fallbackCards.length,
+				cards: sourceCandidateCards.filter((card) => card.isKnown === true).map((card) => ({
+					id: card.id,
+					name: card.name,
+					seats: Array.from(card.seats)
+				})),
+				hiddenEntityCount: sourceCandidateCards.filter((card) => card.isKnown !== true).length
+			});
 			return sourceCandidateCards;
 		}
 		markStoredToHandCandidates({ fromPopupSpaceID, fromSeat, fromSpellID, toSeat, count, sourceEvent }) {
@@ -5985,6 +6048,16 @@
 				known: previousGroup?.known ?? true,
 				sourceEvent: sourceEvent ?? { type: "markStoredToHandCandidates" }
 			});
+			if (trackerLogger.enabled !== false) trackerLogger.info("标记或弹窗空间暗取，建立位置候选", {
+				fromSeat,
+				fromSpellID,
+				toSeat,
+				count,
+				cardIDs: markCards.map((card) => card.id),
+				markSlots: slots.get(markKey)?.min,
+				handSlots: slots.get(handKey),
+				locationCandidates: markCards.map((card) => card.locationCandidates.map((candidate) => createLocationCandidateKey(candidate)))
+			});
 			return true;
 		}
 		shouldMarkRandomHandToPublicCandidates(sourceSeat, targetSeat, toZone, unknownCount) {
@@ -5997,6 +6070,18 @@
 			if (sourceCandidateCards.length === 0) return [];
 			const candidate = createPublicCandidate(toZone, position, unknownCount);
 			sourceCandidateCards.forEach((card) => card.addPublicCandidate(candidate));
+			if (trackerLogger.enabled !== false) trackerLogger.info("手牌候选进入公共区", {
+				fromSeat,
+				toZone,
+				position,
+				unknownCount,
+				cards: sourceCandidateCards.map((card) => ({
+					id: card.id,
+					name: card.name,
+					seats: Array.from(card.seats),
+					publicCandidates: card.publicCandidates
+				}))
+			});
 			return sourceCandidateCards;
 		}
 		updatePublicCandidatesAfterUnknownPileReturn({ toZone, position, count }) {
@@ -6039,6 +6124,18 @@
 				expectedSlotsByLocation: new Map([[createLocationCandidateKey(targetHandCandidate), Math.min(count, affectedCards.length)]]),
 				known: true,
 				sourceEvent: sourceEvent ?? { type: "publicCandidatesToHand" }
+			});
+			if (trackerLogger.enabled !== false) trackerLogger.info("公共候选进入手牌", {
+				fromZone,
+				position,
+				targetSeat,
+				count,
+				cards: affectedCards.map((card) => ({
+					id: card.id,
+					name: card.name,
+					seats: Array.from(card.seats),
+					publicCandidates: card.publicCandidates
+				}))
 			});
 			return affectedCards;
 		}
@@ -6187,19 +6284,34 @@
 				card.setSeats([targetSeat], "moveMuniuMarkSpace");
 				movedMarkCardIDs.push(card.id);
 			});
-			if (records.length > 0 || movedMarkCardIDs.length > 0) {}
+			if (records.length > 0 || movedMarkCardIDs.length > 0) {
+				if (trackerLogger.enabled !== false) trackerLogger.info("木牛流马内部牌按标记空间协议迁移", {
+					spellID,
+					fromSeat,
+					targetSeat,
+					movedMarkCardIDs,
+					retargetedRecordIDs: records.map((record) => record.id)
+				});
+			}
 		}
 		retargetMuniuRecord(record, targetSeat) {
 			if (record.spellID === null) return false;
 			if (!getEquipmentMarkContainerByMarkSpellID(record.spellID)) return false;
 			if (targetSeat === record.targetSeat) return false;
-			record.targetSeat;
+			const previousTargetSeat = record.targetSeat;
 			record.targetSeat = targetSeat;
 			record.placeholderCards.forEach((card) => {
 				if (card.location === "player" && card.subZone === "mark" && card.spellID === record.spellID) card.bindCandidates([targetSeat], "mark", record.spellID, { known: false });
 			});
 			this.removeHiddenMarkConstraint(record);
 			this.applyHiddenMarkProjection(record);
+			if (trackerLogger.enabled !== false) trackerLogger.info("木牛流马暗标记账本更新承载座位", {
+				recordID: record.id,
+				sourceSeat: record.sourceSeat,
+				previousTargetSeat,
+				targetSeat,
+				candidateCardIDs: Array.from(record.cards, (card) => card.id)
+			});
 			return true;
 		}
 		getHiddenMarkState() {
@@ -6283,6 +6395,16 @@
 			context.skipUnknownMovement = true;
 			this.applyHiddenMarkProjection(record);
 			this.moveHiddenMarkPlaceholders(context, record);
+			if (trackerLogger.enabled !== false) trackerLogger.info("手牌暗置标记区候选记录", {
+				sourceSeat,
+				targetSeat,
+				spellID,
+				hiddenCount: context.unknownCount,
+				candidateCardIDs: candidateCards.map((card) => card.id),
+				knownMarkMin,
+				knownMarkMax,
+				exact: record.knownMarkMin === record.knownMarkMax
+			});
 			return true;
 		}
 		moveHiddenMarkPlaceholders(context, record) {
@@ -6296,6 +6418,13 @@
 				record.placeholderCards.add(card);
 			});
 			context.movedUnknownCards.push(...placeholderCards);
+			if (trackerLogger.enabled !== false) trackerLogger.debug("手牌暗置标记区占位移动", {
+				sourceSeat: record.sourceSeat,
+				targetSeat: record.targetSeat,
+				spellID: record.spellID,
+				requestedCount: count,
+				placeholderCardIDs: placeholderCards.map((card) => card.id)
+			});
 			return placeholderCards;
 		}
 		findHiddenMarkSourcePlaceholder(card, sourceCards) {
@@ -6351,7 +6480,17 @@
 					placeholderEntityID: previousEntityID
 				});
 			});
-			if (materialized.length > 0) {}
+			if (materialized.length > 0) {
+				if (trackerLogger.enabled !== false) trackerLogger.info("暗置标记占位物化未定位身份", {
+					reason,
+					spellID: record.spellID,
+					sourceSeat: record.sourceSeat,
+					targetSeat: record.targetSeat,
+					materialized,
+					remainingPlaceholderCount: record.placeholderCards.size,
+					remainingPendingIDs: pendingIDs.filter((id) => !this.room.cardIndex.has(id))
+				});
+			}
 			return materialized;
 		}
 		bindConfirmedMarkCardToMarkSpace(record, card, reason) {
@@ -6400,6 +6539,17 @@
 				placeholder.bindCandidates([record.sourceSeat], "hand", null, { known: false });
 				recycledPlaceholderEntityIDs.push(placeholder.entityID);
 			}
+			if (trackerLogger.enabled !== false) trackerLogger.debug("mark 空间守恒回收溢出匿名占位", {
+				reason,
+				spellID: record.spellID,
+				sourceSeat: record.sourceSeat,
+				targetSeat: record.targetSeat,
+				hiddenCount: record.hiddenCount,
+				confirmedMarkSlotUsers,
+				overflow,
+				recycledPlaceholderEntityIDs,
+				remainingPlaceholderCount: record.placeholderCards.size
+			});
 			return true;
 		}
 		occupiesHiddenMarkSlot(card, record) {
@@ -6490,6 +6640,15 @@
 					else card.resolveLocationCandidate(candidate, "hiddenMark:fullHandReveal");
 					this.setHiddenMarkConfirmation(record, card, "mark");
 					changed = true;
+					if (trackerLogger.enabled !== false) trackerLogger.info("整手完整揭示反向收敛木马候选", {
+						spellID: record.spellID,
+						sourceSeat: record.sourceSeat,
+						targetSeat: record.targetSeat,
+						cardID: card.id,
+						revealedIDs: context.knownIDs,
+						confirmedMarkCount: record.confirmedMarkCards.size,
+						placeholderCount: record.placeholderCards.size
+					});
 				});
 				if (strandedCandidates.length > 0) changed = this.reconcileMarkSpace(record, "hiddenMark:fullHandReveal") || changed;
 				this.settleHiddenMarkRecord(record, "fullHandReveal");
@@ -6520,6 +6679,17 @@
 					changed = this.bindConfirmedMarkCardToMarkSpace(record, card, "hiddenMark:confirmedMark") || changed;
 					if (candidate.type === "container" && card.hasLocationCandidate(candidate)) changed = card.setLocationCandidates([candidate], "hiddenMark:confirmedMark") || changed;
 					else if (card.hasLocationCandidate(candidate)) changed = card.resolveLocationCandidate(candidate, "hiddenMark:confirmedMark") || changed;
+					if (trackerLogger.enabled !== false) trackerLogger.info("手牌暗置标记区候选确认进标记", {
+						spellID: record.spellID,
+						sourceSeat: record.sourceSeat,
+						targetSeat: record.targetSeat,
+						cardID: card.id,
+						fromSubZone: getMoveSubZone(context.from),
+						fromSpellID: getMoveMarkSpellID(context.from),
+						confirmedMarkCount: record.confirmedMarkCards.size,
+						confirmedHandCount: record.confirmedHandCards.size,
+						placeholderCount: record.placeholderCards.size
+					});
 				} else if (getMoveSubZone(context.from) === "hand") {
 					const moveHandSeat = getMoveSeat(context.from) !== null ? getMoveSeat(context.from) : record.sourceSeat;
 					if (moveHandSeat !== record.sourceSeat) return;
@@ -6531,6 +6701,16 @@
 					};
 					this.setHiddenMarkConfirmation(record, card, "hand");
 					if (card.hasLocationCandidate(candidate)) changed = card.resolveLocationCandidate(candidate, "hiddenMark:confirmedHand") || changed;
+					if (trackerLogger.enabled !== false) trackerLogger.info("手牌暗置标记区候选确认回手牌", {
+						spellID: record.spellID,
+						sourceSeat: record.sourceSeat,
+						targetSeat: record.targetSeat,
+						cardID: card.id,
+						fromSubZone: getMoveSubZone(context.from),
+						confirmedMarkCount: record.confirmedMarkCards.size,
+						confirmedHandCount: record.confirmedHandCards.size,
+						placeholderCount: record.placeholderCards.size
+					});
 				}
 				this.settleHiddenMarkRecord(record, "move");
 			});
@@ -6593,6 +6773,15 @@
 				changed = this.applyHiddenMarkProjection(record) || changed;
 				this.settleHiddenMarkRecord(record, "observedContainerSnapshot");
 			});
+			if (trackerLogger.enabled !== false) trackerLogger.info("手牌暗置标记区候选按可见装备容器快照收敛", {
+				spellID: markSpellID,
+				targetSeat: observedSeat,
+				visibleCardIDs: context.knownIDs,
+				resolvedHandCardIDs,
+				clearedPlaceholderIDs,
+				knownCardCount: context.knownCards.length,
+				knownIDs: context.knownIDs
+			});
 			return changed;
 		}
 		setHiddenMarkConfirmation(record, card, subZone) {
@@ -6602,6 +6791,15 @@
 		}
 		settleHiddenMarkRecord(record, reason) {
 			if (record.confirmedHandCards.size + record.confirmedMarkCards.size < record.cards.size) return;
+			if (trackerLogger.enabled !== false) trackerLogger.info("手牌暗置标记区候选账本结清", {
+				spellID: record.spellID,
+				sourceSeat: record.sourceSeat,
+				targetSeat: record.targetSeat,
+				reason,
+				confirmedMarkCardIDs: Array.from(record.confirmedMarkCards, (card) => card.id),
+				confirmedHandCardIDs: Array.from(record.confirmedHandCards, (card) => card.id),
+				remainingPlaceholderCount: record.placeholderCards.size
+			});
 			this.getHiddenMarkState().records.delete(record.id);
 		}
 	};
@@ -6722,6 +6920,16 @@
 			const placeholder = this.room.createExternalCards([], 1)[0];
 			if (!placeholder) return null;
 			placeholder.bindCandidates([fromSeat], "hand", null, { known: false });
+			if (trackerLogger.enabled !== false) trackerLogger.info("玩家来源明牌缺少可置换实体，已创建瞬时匿名占位", {
+				reason: "moveKnownCardsForContext:knownSourcePlaceholderFallback",
+				knownCardID: card.id,
+				placeholderCardID: placeholder.id,
+				placeholderEntityID: placeholder.entityID,
+				knownCardLocation: card.location,
+				fromSeat,
+				fromSubZone,
+				sourceEvent
+			});
 			return placeholder;
 		}
 		alignVisibleSubZoneTransfer(card, context) {
@@ -6739,6 +6947,16 @@
 				type: "card-bound",
 				subZone: fromSubZone,
 				spellID: card.spellID
+			});
+			if (trackerLogger.enabled !== false) trackerLogger.info("可见子区明牌已就地对齐到协议来源", {
+				reason: "alignVisibleSubZoneTransfer",
+				cardID: card.id,
+				entityID: card.entityID,
+				fromSubZone: sourceSubZone,
+				toSeat: fromSeat,
+				toSubZone: fromSubZone,
+				spellID: card.spellID,
+				sourceEvent: context.sourceEvent
 			});
 			return true;
 		}
@@ -6801,8 +7019,15 @@
 			const oldZoneCardCount = zone?.cards.length ?? null;
 			const oldZoneHasKnownCard = zone?.cards.includes(card) ?? false;
 			if (oldLocation === "suspended") {
-				placeholder.id;
-				this.room.releaseUnknownPlaceholderToOutside(placeholder, "restoreUnknownPlaceholderToPreviousPublicLocation:suspended");
+				const placeholderCardID = placeholder.id;
+				const releasedIdentityID = this.room.releaseUnknownPlaceholderToOutside(placeholder, "restoreUnknownPlaceholderToPreviousPublicLocation:suspended");
+				if (trackerLogger.enabled !== false) trackerLogger.debug("暂停追踪来源占位置换后移出占位", {
+					knownCardID: card.id,
+					placeholderCardID,
+					releasedIdentityID,
+					oldLocation,
+					keepPreviousPosition
+				});
 				return;
 			}
 			if (zone) {
@@ -6864,6 +7089,13 @@
 				replacement.suspended = false;
 				replacement.moveToPublicZone(previousZoneID);
 				previousZone.replaceCard(card, replacement);
+				if (trackerLogger.enabled !== false) trackerLogger.debug("公共区已知牌命中其它公共区实体，使用来源占位回填旧槽位", {
+					cardID: card.id,
+					replacementCardID: replacement.id,
+					fromZone,
+					fromPosition,
+					previousZoneID
+				});
 				return replacement;
 			}
 			const oldSubZone = card.subZone;
@@ -6876,6 +7108,14 @@
 				spaceID: card.popupSpaceID
 			});
 			this.hiddenMarks.replaceHiddenMarkPlaceholder(card, replacement);
+			if (trackerLogger.enabled !== false) trackerLogger.debug("公共区已知牌命中本地玩家实体，使用公共来源实体替回", {
+				cardID: card.id,
+				replacementCardID: replacement.id,
+				fromZone,
+				fromPosition,
+				oldSubZone,
+				oldSeats: Array.from(oldSeats)
+			});
 			return replacement;
 		}
 		takeSourceCards(count, options) {
@@ -6956,9 +7196,9 @@
 		}
 		confirm(context, resolution) {
 			const { knownIDs } = context;
-			getMoveZone(context.from);
-			getMoveSeat(context.from);
-			context.from.type;
+			const fromZone = getMoveZone(context.from);
+			const fromSeat = getMoveSeat(context.from);
+			const sourceIsOutside = context.from.type === "outside";
 			const { missingIDs, createdCards, knownCardCreationReason, isExternalSource } = resolution;
 			const createdCardSet = new Set(createdCards);
 			const resumedCardIDs = [];
@@ -6975,7 +7215,36 @@
 				if (card.id > 0 && card.isKnown !== true && !isExpectedExternalCreation) confirmedFromUnknownIDs.push(card.id);
 				if (card.id > 0) card.confirmKnown();
 			});
-			if (confirmedFromUnknownIDs.length > 0) {}
+			if (confirmedFromUnknownIDs.length > 0) {
+				if (trackerLogger.enabled !== false) trackerLogger.info("已知牌解析后补确认明牌", {
+					knownIDs,
+					confirmedFromUnknownIDs,
+					createdCardIDs: createdCards.map((card) => card.id),
+					missingIDs,
+					fromZone,
+					fromSeat,
+					sourceIsOutside,
+					isExternalSource,
+					knownCardCreationReason
+				});
+			}
+			if (trackerLogger.enabled !== false) trackerLogger.debug("已知牌解析完成", {
+				knownIDs,
+				resolvedCardIDs: context.knownCards.map((card) => card.id),
+				knownCardStates: context.knownCards.map((card) => ({
+					id: card.id,
+					entityID: card.entityID,
+					isKnown: card.isKnown === true,
+					location: card.location
+				})),
+				missingIDs,
+				createdCardIDs: createdCards.map((card) => card.id),
+				resumedCardIDs,
+				confirmedFromUnknownIDs,
+				sourceIsOutside,
+				isExternalSource,
+				knownCardCreationReason
+			});
 		}
 		resolveOutsideSource(context, isExternalSource) {
 			const { knownIDs } = context;
@@ -7004,17 +7273,66 @@
 			let knownCardCreationReason = isExternalSource ? "external-source" : null;
 			const sourceZone = this.room.zones.get(fromZone);
 			const endpointCount = Math.max(knownIDs.length, Math.max(0, Math.floor(Number(context.cardCount) || 0)));
-			const availableTargets = (fromZone === "pile" && normalizePublicPosition(fromPosition) === "random" ? (sourceZone?.cards ?? []).filter((card) => card.isAnonymous).slice(-endpointCount).reverse() : this.room.getPublicEndpointCards(fromZone, endpointCount, fromPosition)).filter((card) => card.isAnonymous);
-			availableTargets.length;
+			const endpointCards = fromZone === "pile" && normalizePublicPosition(fromPosition) === "random" ? (sourceZone?.cards ?? []).filter((card) => card.isAnonymous).slice(-endpointCount).reverse() : this.room.getPublicEndpointCards(fromZone, endpointCount, fromPosition);
+			const availableTargets = endpointCards.filter((card) => card.isAnonymous);
+			const anonymousTargetCountBefore = availableTargets.length;
+			const collectDetails = trackerLogger.enabled !== false;
+			const resolveAttempts = collectDetails ? [] : void 0;
 			context.knownCards = knownIDs.map((cardID) => {
 				const existing = this.room.cardIndex.get(cardID);
 				const existingInSource = Boolean(existing && sourceZone?.cards.includes(existing));
-				!existingInSource && availableTargets.length;
+				const hadAnonymousTarget = !existingInSource && availableTargets.length > 0;
 				const target = existingInSource ? existing : availableTargets.shift();
-				return (isExternalSource && existingInSource ? existing : this.room.materialize(cardID, target ?? null)) ?? existing;
+				const ledgerBefore = collectDetails ? {
+					inCardIndex: this.room.cardIndex.has(cardID),
+					inUnlocated: this.room.unlocatedIdentities.has(cardID),
+					inDeckIdentities: this.room.deckIdentities.has(cardID),
+					existingLocation: existing?.location ?? null,
+					existingIsKnown: existing?.isKnown === true,
+					existingInSource,
+					tookAnonymousTarget: Boolean(target && target !== existing && target.isAnonymous),
+					targetEntityID: target?.entityID ?? null,
+					remainingAnonymousTargets: availableTargets.length
+				} : void 0;
+				const resolved = (isExternalSource && existingInSource ? existing : this.room.materialize(cardID, target ?? null)) ?? existing;
+				resolveAttempts?.push({
+					cardID,
+					...ledgerBefore,
+					hadAnonymousTarget,
+					materializeOk: Boolean(resolved),
+					afterInCardIndex: this.room.cardIndex.has(cardID)
+				});
+				return resolved;
 			}).filter((card) => Boolean(card));
 			missingIDs = knownIDs.filter((id) => !this.room.cardIndex.has(id));
 			if (missingIDs.length > 0) {
+				if (trackerLogger.enabled !== false) trackerLogger.info("known 路径实体缺口，将 createExternal", {
+					knownIDs,
+					missingIDs,
+					fromZone,
+					fromPosition,
+					anonymousTargetCountBefore,
+					anonymousTargetCountAfter: availableTargets.length,
+					sourceZoneCards: (sourceZone?.cards ?? []).map((card) => ({
+						id: card.id,
+						entityID: card.entityID,
+						isKnown: card.isKnown === true,
+						isAnonymous: card.isAnonymous
+					})),
+					endpointCards: endpointCards.map((card) => ({
+						id: card.id,
+						entityID: card.entityID,
+						isKnown: card.isKnown === true,
+						isAnonymous: card.isAnonymous
+					})),
+					resolveAttempts,
+					knownIDLedgers: knownIDs.map((cardID) => ({
+						cardID,
+						inCardIndex: this.room.cardIndex.has(cardID),
+						inUnlocated: this.room.unlocatedIdentities.has(cardID),
+						inDeckIdentities: this.room.deckIdentities.has(cardID)
+					}))
+				});
 				knownCardCreationReason = isExternalSource ? "external-source" : "known-fallback";
 				createdCards = this.room.createExternalCards(missingIDs, missingIDs.length);
 				const cardMap = new Map(context.knownCards.map((card) => [card.id, card]));
@@ -7052,11 +7370,32 @@
 					});
 				});
 			}
-			const resolveAttempts = void 0;
+			const collectDetails = trackerLogger.enabled !== false;
+			const resolveAttempts = collectDetails ? [] : void 0;
 			context.knownCards = knownIDs.map((cardID) => {
 				const existing = this.room.cardIndex.get(cardID);
-				const target = Boolean(existing && !this.room.detachedKnownCards.has(existing) && this.sources.isCardInStoredSource(existing, context)) ? existing : availableTargets.shift();
-				return this.room.materialize(cardID, target ?? null) ?? existing;
+				const existingInSource = Boolean(existing && !this.room.detachedKnownCards.has(existing) && this.sources.isCardInStoredSource(existing, context));
+				const target = existingInSource ? existing : availableTargets.shift();
+				const ledgerBefore = collectDetails ? {
+					inCardIndex: this.room.cardIndex.has(cardID),
+					inUnlocated: this.room.unlocatedIdentities.has(cardID),
+					inDeckIdentities: this.room.deckIdentities.has(cardID),
+					existingLocation: existing?.location ?? null,
+					existingSubZone: existing?.subZone ?? null,
+					existingIsKnown: existing?.isKnown === true,
+					existingInSource,
+					tookAnonymousTarget: Boolean(target && target.isAnonymous),
+					targetSubZone: target?.subZone ?? null,
+					remainingAnonymousTargets: availableTargets.length
+				} : void 0;
+				const resolved = this.room.materialize(cardID, target ?? null) ?? existing;
+				resolveAttempts?.push({
+					cardID,
+					...ledgerBefore,
+					materializeOk: Boolean(resolved),
+					afterInCardIndex: this.room.cardIndex.has(cardID)
+				});
+				return resolved;
 			}).filter((card) => Boolean(card));
 			missingIDs = knownIDs.filter((id) => !this.room.cardIndex.has(id));
 			if (missingIDs.length > 0) {
@@ -7229,8 +7568,8 @@
 		finishMove(context, placement) {
 			const { combinationID, expectedSlotsByLocation, knownCards, sourceEvent } = context;
 			const position = getMovePosition(context.to);
-			getMoveCallbackSpellID(context, context.triggerSpellID);
-			getMoveSubZone(context.to);
+			const spellID = getMoveCallbackSpellID(context, context.triggerSpellID);
+			const subZone = getMoveSubZone(context.to);
 			const targetSeats = getMoveTargetSeats(context.to);
 			const toZone = getMoveZone(context.to);
 			const { swappedCardIDs, handledSpellCardIDs, resolvedSourceCardIDs } = placement;
@@ -7252,6 +7591,16 @@
 					known: true,
 					sourceEvent: sourceEvent ?? { type: "moveCards" }
 				});
+				if (trackerLogger.enabled !== false) trackerLogger.debug("已知牌进入玩家区", {
+					cardIDs: knownCards.map((card) => card.id),
+					targetSeats,
+					subZone,
+					spellID,
+					combinationID,
+					swappedCardIDs,
+					handledSpellCardIDs,
+					resolvedSourceCardIDs
+				});
 				return;
 			}
 			this.repairPublicResidues(context, placement);
@@ -7259,6 +7608,16 @@
 			if (targetZone) targetZone.add(knownCards, position);
 			else knownCards.forEach((card) => card.moveToPublicZone(toZone));
 			context.publicMovedCards.push(...knownCards);
+			if (trackerLogger.enabled !== false) trackerLogger.debug("已知牌进入公共区", {
+				cardIDs: knownCards.map((card) => card.id),
+				toZone,
+				position,
+				spellID,
+				swappedCardIDs,
+				handledSpellCardIDs,
+				resolvedSourceCardIDs,
+				targetZoneExists: Boolean(targetZone)
+			});
 		}
 		collectPublicResidues(knownCards) {
 			return knownCards.flatMap((card) => {
@@ -7378,7 +7737,7 @@
 		const targetHandSeat = getMoveSubZone(to) === "hand" ? getMoveSeat(to) : null;
 		const knownIDs = cardIDs.filter((id) => id > 0);
 		const sourcePlayer = from.type === "player" ? room.getPlayer(from.seatID) : null;
-		return {
+		const context = {
 			from,
 			to,
 			triggerSpellID,
@@ -7409,6 +7768,8 @@
 			publicMovedCards: [],
 			skipUnknownMovement: false
 		};
+		if (trackerLogger.enabled !== false) trackerLogger.debug("移动上下文创建", summarizeMoveContext(context, { includeSourceCardIDs: true }));
+		return context;
 	}
 	var RoomMovementUnknownPlacement = class {
 		room;
@@ -7431,7 +7792,17 @@
 			const targetSeats = getMoveTargetSeats(context.to);
 			const toZone = getMoveZone(context.to);
 			if (unknownCount <= 0) return;
-			if (context.skipUnknownMovement) return;
+			if (context.skipUnknownMovement) {
+				if (trackerLogger.enabled !== false) trackerLogger.debug("未知牌移动已由特殊候选逻辑接管", {
+					requestedCount: unknownCount,
+					fromSeat,
+					fromSubZone,
+					targetSeats,
+					subZone,
+					spellID
+				});
+				return;
+			}
 			if (toZone === "player") {
 				const movedUnknownCards = this.sources.takeSourceCards(unknownCount, context);
 				if (this.room.trackingMode === "degraded" && movedUnknownCards.length < unknownCount) movedUnknownCards.push(...this.room.createExternalCards([], unknownCount - movedUnknownCards.length));
@@ -7450,6 +7821,18 @@
 					expectedSlotsByLocation,
 					known: false,
 					sourceEvent: sourceEvent ?? { type: "moveCards:unknown" }
+				});
+				if (trackerLogger.enabled !== false) trackerLogger.debug("未知牌进入玩家区", {
+					requestedCount: unknownCount,
+					movedCardIDs: movedUnknownCards.map((card) => card.id),
+					fromSeat,
+					fromSubZone,
+					fromZone,
+					targetSeats,
+					subZone,
+					spellID,
+					knownSourceCardIDs: movedUnknownCards.filter((card) => card.isKnown === true).map((card) => card.id),
+					constraintCreated: movedUnknownCards.length > 0 && targetSeats.length > 0
 				});
 				return;
 			}
@@ -7498,6 +7881,19 @@
 				toZone,
 				position,
 				count: unknownCount
+			});
+			if (trackerLogger.enabled !== false) trackerLogger.debug("未知牌进入公共区", {
+				requestedCount: unknownCount,
+				takenCount,
+				createdFallbackCount: Math.max(0, unknownCount - takenCount),
+				movedCardIDs: movedUnknownCards.map((card) => card.id),
+				fromSeat,
+				fromSubZone,
+				fromZone,
+				toZone,
+				position,
+				knownSourceCardIDs: movedUnknownCards.filter((card) => card.isKnown === true).map((card) => card.id),
+				targetZoneExists: Boolean(targetZone)
 			});
 		}
 	};
@@ -8093,7 +8489,12 @@
 					actualPileCardIDs: pile.cards.map((card) => card.id)
 				});
 			}
-			if (newlySuspendedCardIDs.length > 0) {}
+			if (newlySuspendedCardIDs.length > 0) {
+				if (trackerLogger.enabled !== false) trackerLogger.info("洗牌后暂停追踪旧牌堆世代中尚未出现的身份", {
+					suspendedCardIDs: newlySuspendedCardIDs,
+					activeSuspendedCardIDs: Array.from(this.suspendedKnownCards, (card) => card.id).filter((cardID) => cardID > 0)
+				});
+			}
 			this.identity.anonymizePileCohortIdentityEntities(identityContext);
 			this.detachedKnownCards.forEach((card) => {
 				card.removePublicCandidates((candidate) => candidate.zone === "pile" || candidate.zone === "discard");
@@ -8175,6 +8576,13 @@
 			}
 			this.identity.commitPileIdentityForMove(context, pileSnapshot);
 			this.resolveConstraints();
+			if (trackerLogger.enabled !== false) trackerLogger.info("moveCards 完成", {
+				...summarizeMoveContext(context, { includeKnownCardIDs: true }),
+				publicMovedCardIDs: context.publicMovedCards.map((card) => card.id),
+				movedUnknownCardIDs: context.movedUnknownCards.map((card) => card.id),
+				dirtyCardCount: this.dirtyCards.size,
+				constraintGroupCount: this.constraintGroups.size
+			});
 			return true;
 		}
 		destroy() {
@@ -10138,6 +10546,11 @@
 		room.registerSkillPlugin(zeXingPlugin);
 		room.registerSkillPlugin(xiaShuPlugin);
 	}
+	var MOVE_EVENT_SUMMARY_OPTIONS = {
+		normalizeCardIDs: true,
+		includeEventCardCount: true,
+		includeSourceCards: true
+	};
 	var noopView = {
 		mount(_room) {},
 		unmount() {},
@@ -10297,6 +10710,10 @@
 			};
 			try {
 				Object.assign(patched, normalizeTrackerMovePosition(patched));
+				if (this.controllerLogger.enabled !== false) this.controllerLogger.info(getProtocolMoveSpecialLabel(patched) ?? "移动协议输入", {
+					raw: this.summarizeProtocolMove(raw),
+					patched: this.summarizeProtocolMove(patched)
+				});
 				if (readyRoom.beforeNormalizeMove(patched, raw) === "defer") return;
 				if (hasMixedTrackerMoveVisibility(patched)) {
 					if (this.controllerLogger.enabled !== false) this.controllerLogger.warn("移动协议明暗牌混合，按暗牌处理", {
@@ -10319,23 +10736,43 @@
 						patched: this.summarizeProtocolMove(patched)
 					});
 				});
+				if (this.controllerLogger.enabled !== false) this.controllerLogger.debug("移动事件归一化", summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS));
 				const event = readyRoom.decorateMoveEvent(normalizedEvent);
-				if (normalizedEvent.from !== event.from) {}
+				if (this.controllerLogger.enabled !== false) this.controllerLogger.debug("移动事件装饰完成", {
+					before: summarizeMoveEvent(normalizedEvent, MOVE_EVENT_SUMMARY_OPTIONS),
+					after: summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS)
+				});
+				if (normalizedEvent.from !== event.from) {
+					if (this.controllerLogger.enabled !== false) this.controllerLogger.info("移动事件来源修正", {
+						cardIDs: event.cardIDs,
+						from: normalizedEvent.from,
+						correctedFrom: event.from
+					});
+				}
 				if (event.type === "revealPublicCandidate") {
+					if (this.controllerLogger.enabled !== false) this.controllerLogger.info("移动事件分支: revealPublicCandidate", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
 					if (!this.revealPublicCandidateCards(readyRoom, event)) return;
-				} else if (event.type === "noop") return;
-				else if (event.type === "showCards") {
-					if (!this.showTrackerCards(readyRoom, event)) return;
-				} else if (event.type === "shuffleDiscardIntoPile") readyRoom.shufflePile({ cardCount: event.cardCount });
-				else if (!readyRoom.moveCards(event.cardIDs, {
-					from: event.from,
-					to: event.to,
-					triggerSpellID: event.protocol.SpellID,
-					...event.options,
-					pileIdentityEvent: event
-				})) {
-					if (this.controllerLogger.enabled !== false) this.controllerLogger.warn("移动来源解析失败，已取消本次 tracker 移动", { cardIDs: event.cardIDs });
+				} else if (event.type === "noop") {
+					if (this.controllerLogger.enabled !== false) this.controllerLogger.info("移动事件跳过", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
 					return;
+				} else if (event.type === "showCards") {
+					if (this.controllerLogger.enabled !== false) this.controllerLogger.info("移动事件分支: showCards", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
+					if (!this.showTrackerCards(readyRoom, event)) return;
+				} else if (event.type === "shuffleDiscardIntoPile") {
+					if (this.controllerLogger.enabled !== false) this.controllerLogger.info("移动事件分支: shuffleDiscardIntoPile", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
+					readyRoom.shufflePile({ cardCount: event.cardCount });
+				} else {
+					if (this.controllerLogger.enabled !== false) this.controllerLogger.info("移动事件分支: moveCards", summarizeMoveEvent(event, MOVE_EVENT_SUMMARY_OPTIONS));
+					if (!readyRoom.moveCards(event.cardIDs, {
+						from: event.from,
+						to: event.to,
+						triggerSpellID: event.protocol.SpellID,
+						...event.options,
+						pileIdentityEvent: event
+					})) {
+						if (this.controllerLogger.enabled !== false) this.controllerLogger.warn("移动来源解析失败，已取消本次 tracker 移动", { cardIDs: event.cardIDs });
+						return;
+					}
 				}
 				readyRoom.afterMoveCommitted(event);
 				readyRoom.notifyCardsRevealed(event.cardIDs);
@@ -10350,7 +10787,15 @@
 			const ids = event.cardIDs.filter((id) => id > 0);
 			const locationCandidate = fromPublicCandidate(createPublicCandidate(reveal.zone, reveal.position, Number(reveal.count)));
 			if (ids.length === 0 || !locationCandidate) return false;
-			return room.revealPublicCandidates(ids, locationCandidate).length > 0;
+			const cards = room.revealPublicCandidates(ids, locationCandidate);
+			if (this.controllerLogger.enabled !== false) this.controllerLogger.info("公共区范围揭示完成", {
+				ids,
+				zone: reveal.zone,
+				position: locationCandidate.position,
+				count: reveal.count,
+				resolvedCount: cards.length
+			});
+			return cards.length > 0;
 		}
 		showTrackerCards(room, event) {
 			const ids = event.cardIDs.filter((id) => id > 0);
@@ -10382,6 +10827,12 @@
 				zoneName: materializationZone,
 				position: event.from.type === "public" || event.from.type === "unresolved" ? event.from.position : event.protocol.FromPosition ?? position
 			}, this.controllerLogger);
+			if (this.controllerLogger.enabled !== false) this.controllerLogger.info("展示明牌进入公共区", {
+				ids,
+				zoneName,
+				position,
+				resolvedCount: knownCards.length
+			});
 			if (sourceZoneName && sourceZoneName !== zoneName) {
 				knownCards.forEach((card) => card.confirmKnown());
 				return room.moveCards(ids, {
@@ -10427,6 +10878,10 @@
 			const ids = this.normalizeIDs(cardIDs).filter((id) => id > 0);
 			if (ids.length === 0) return;
 			try {
+				if (this.controllerLogger.enabled !== false) this.controllerLogger.info("明牌同步输入", {
+					target,
+					cardIDs: ids
+				});
 				if (target.type === "player") {
 					const seatID = Number(target.seatID);
 					if (Number.isNaN(seatID) || seatID === 255) return;
@@ -13905,6 +14360,7 @@
 		deck.replaceChildren();
 		deck.style.display = "none";
 	}
+	var SEAT_TOP_OFFSET = 6;
 	function createSeatOverlay(config) {
 		const seatUI = document.createElement("div");
 		seatUI.id = "seatUI";
@@ -13978,23 +14434,23 @@
 		const scene = laya.scene;
 		const seatUI = document.getElementById("seatUI");
 		if (!scene || !seatUI) return false;
-		const { width, height, globalScaleX } = scene;
+		const { width, height } = scene;
 		if (!width || !height) return false;
-		const scaledHeight = height * globalScaleX;
-		UI.width = Math.trunc(width * globalScaleX);
-		UI.height = Math.trunc(scaledHeight);
-		UI.scale = globalScaleX;
+		const transform = Laya.Utils.getTransformRelativeToWindow(scene, 0, 0);
+		const dpr = window.devicePixelRatio;
 		const app = {
-			width: UI.width / window.devicePixelRatio,
-			height: UI.height / window.devicePixelRatio
+			width: width * transform.scaleX,
+			height: height * transform.scaleY
 		};
-		const top = ((window.innerHeight * window.devicePixelRatio - scaledHeight) / (2 * window.devicePixelRatio) + scaledHeight / 2) / window.devicePixelRatio;
+		UI.width = Math.trunc(app.width * dpr);
+		UI.height = Math.trunc(app.height * dpr);
+		UI.scale = transform.scaleX * dpr;
+		UI.centerX = transform.x + app.width / 2;
+		UI.centerY = transform.y + app.height / 2;
 		seatUI.style.width = `${app.width}px`;
 		seatUI.style.height = `${app.height}px`;
-		seatUI.style.left = window.innerWidth / 2 + "px";
-		seatUI.style.top = top + "px";
-		UI.centerX = window.innerWidth > app.width ? app.width / 2 : window.innerWidth / 2;
-		UI.centerY = app.height / 2;
+		seatUI.style.left = UI.centerX + "px";
+		seatUI.style.top = UI.centerY + "px";
 		document.documentElement.style.setProperty("--sgs-center-x", `${UI.centerX}px`);
 		return true;
 	}
@@ -14110,13 +14566,13 @@
 		};
 	}
 	function getSideSeatsStartY(measuredHeight, metrics) {
-		return (metrics.height - metrics.selfSeatHeight - measuredHeight - UI.paddingTop * metrics.scale - UI.paddingBottom >> 1) + metrics.topPadding + UI.leftRightTop;
+		return (metrics.height - metrics.selfSeatHeight - measuredHeight - UI.paddingTop * metrics.scale - UI.paddingBottom >> 1) + metrics.topPadding + UI.leftRightTop * metrics.scale;
 	}
 	function setSeatPosition(seatUI, displayLocation, x, y, dpr) {
 		if (!seatUI) return;
 		seatUI.DisplayLocation = displayLocation;
 		seatUI.posX = Math.trunc(x) / dpr;
-		seatUI.posY = Math.trunc(y) / dpr;
+		seatUI.posY = Math.trunc(y + SEAT_TOP_OFFSET * UI.scale) / dpr;
 	}
 	function drawSeatUIs(list) {
 		const seatUI = document.getElementById("seatUI");
@@ -14162,53 +14618,74 @@
 		}
 		return orderBody;
 	}
-	var closeGameOverWindowsTimer = null;
+	var gameOverFallbackTimer = null;
 	var gameOverTask = null;
-	function cancelGameOverTask() {
-		if (closeGameOverWindowsTimer !== null) {
-			clearTimeout(closeGameOverWindowsTimer);
-			closeGameOverWindowsTimer = null;
+	var gameOverHandled = false;
+	function cancelGameOverTask({ resetForNewGame = false } = {}) {
+		if (gameOverFallbackTimer !== null) {
+			clearTimeout(gameOverFallbackTimer);
+			gameOverFallbackTimer = null;
 		}
 		gameOverTask = null;
+		if (resetForNewGame) gameOverHandled = false;
 	}
 	function isCurrentGameOverTask(task) {
-		if (gameOverTask !== task) return false;
-		return tracker.getTrackerRoom() === task.room;
+		return gameOverTask === task;
 	}
-	function scheduleCloseGameOverWindows(task) {
-		if (!globalConfig.blockMvpSettlementSwitch) {
-			cleanupGame(task.room);
-			return;
+	async function closeGameOverWindows(task) {
+		if (!isCurrentGameOverTask(task)) return;
+		for (const windowName of task.windowNames) await waitAndCloseGameOverWindow(task, windowName);
+		if (isCurrentGameOverTask(task)) cancelGameOverTask();
+	}
+	async function waitAndCloseGameOverWindow(task, windowName) {
+		const canClose = () => isCurrentGameOverTask(task) && globalConfig.blockMvpSettlementSwitch;
+		if (!canClose()) return;
+		try {
+			const win = await wait(() => {
+				if (!canClose()) return true;
+				const win = laya.GetWindow(windowName);
+				return win?.visible ? win : null;
+			});
+			if (!canClose() || !win || win === true) return;
+			await wait(() => !canClose() || win.destroyed || !win.isShowWait, 5, 250, { immediate: true });
+			if (win.destroyed) return;
+			if (!canClose() || win.isShowWait) return;
+			win.laterClose?.();
+		} catch (e) {
+			console.warn("[game-over] 关闭结算窗口失败", windowName, e);
 		}
-		closeGameOverWindowsTimer = setTimeout(async () => {
-			closeGameOverWindowsTimer = null;
-			if (!isCurrentGameOverTask(task)) return;
-			const getWindow = (name) => {
-				const win = laya.GetWindow(name);
-				return win && win.visible ? win : null;
-			};
-			for (const windowName of task.windowNames) {
-				const win = await wait(() => !isCurrentGameOverTask(task) || getWindow(windowName));
-				if (!isCurrentGameOverTask(task)) return;
-				if (!win) break;
-				win.laterClose?.();
-			}
-			if (isCurrentGameOverTask(task)) cleanupGame(task.room);
-		}, 500);
 	}
 	function handleGameOver() {
-		cancelGameOverTask();
-		gameOverTask = {
-			room: tracker.getTrackerRoom(),
-			windowNames: Game.isShanHeTu ? ["GameResultWindow"] : ["GameResultWindow", "GameMvpWindow"]
-		};
-		scheduleCloseGameOverWindows(gameOverTask);
+		if (gameOverHandled) return;
+		if (gameOverTask !== null) {
+			finishGameOver(gameOverTask);
+			return;
+		}
+		const windowNames = Game.isShanHeTu ? ["GameResultWindow"] : ["GameResultWindow", "GameMvpWindow"];
+		const task = { windowNames: new Set(windowNames) };
+		gameOverTask = task;
+		gameOverFallbackTimer = setTimeout(() => finishGameOver(task), 2e3);
+	}
+	function finishGameOver(task) {
+		if (!isCurrentGameOverTask(task) || gameOverHandled) return;
+		gameOverHandled = true;
+		if (gameOverFallbackTimer !== null) {
+			clearTimeout(gameOverFallbackTimer);
+			gameOverFallbackTimer = null;
+		}
+		cleanupGame();
+		if (!isCurrentGameOverTask(task)) return;
+		if (!globalConfig.blockMvpSettlementSwitch) {
+			cancelGameOverTask();
+			return;
+		}
+		closeGameOverWindows(task);
 	}
 	function handleLeaveTable() {
+		cancelGameOverTask();
 		cleanupGame();
 	}
-	function cleanupGame(room = tracker.getTrackerRoom()) {
-		if (tracker.getTrackerRoom() !== room) return;
+	function cleanupGame() {
 		Game.isPassed = null;
 		laya.zhanfaMap.clear();
 		Game.end();
@@ -14505,7 +14982,7 @@
 		}
 	}
 	function registerGamePlayers(infos) {
-		cancelGameOverTask();
+		cancelGameOverTask({ resetForNewGame: true });
 		resetSeatOverlay();
 		tracker.initTrackerRoom();
 		tracker.registerTrackerPlayers(infos, user.userID);
@@ -14660,7 +15137,11 @@
 		if (!Game.isGameStart || !globalConfig.blockSkinStateSwitch) return;
 		(msg.GeneralSkinList || []).forEach((GeneralSkin) => {
 			if (!GeneralSkin) return;
-			if (Game.myGenerals.includes(GeneralSkin.GeneralID)) return;
+			if (Game.myGenerals.includes(GeneralSkin.GeneralID)) {
+				if (msg.Type !== 0 || !Game.isShenFen) return;
+				wait(() => laya.GetWindow("SelectSkinWindow")).then((win) => win?.Close()).catch((error) => console.error(error));
+				return;
+			}
 			GeneralSkin.state = 0;
 		});
 	}
@@ -14733,7 +15214,6 @@
 			return JSON.parse(fileData);
 		}
 	};
-	Promise.resolve();
 	var tooltipDelegationBound = false;
 	var activeTooltipTarget = null;
 	var activeTooltipElement = null;
@@ -14838,10 +15318,6 @@
 		destroyPingJianWindow();
 		document.getElementById("peixiu-map-style")?.remove();
 		globalState.isFrameAdd = false;
-	}
-	function cleanupLifecycle(globalState) {
-		removeInjectedDom(globalState);
-		return true;
 	}
 	function waitForLegacyFrameReady(initFrame) {
 		return new Promise((resolve, reject) => {
@@ -14964,6 +15440,7 @@
 			iframe
 		};
 	}
+	Promise.resolve();
 	var INTERFACE_HTML_URL = "https://www.desuwa.link/tracker/iframe.html";
 	async function loadInterfaceHtml(force = false) {
 		const response = await fetch(INTERFACE_HTML_URL, { cache: force ? "reload" : "default" });
@@ -14971,7 +15448,8 @@
 		return response.text();
 	}
 	var iframe = null;
-	var version = "0.21.1";
+	var version = "0.21.2";
+	var GAME_SIZE_DEBOUNCE_MS = 150;
 	function getTrackedHandNumbers(seatID) {
 		const config = CardConfig.GetInstance();
 		return tracker.getTrackedPlayerHandCardIDs(seatID).map((id) => config.getCardNumber(id)).filter((number) => number > 0);
@@ -14981,10 +15459,6 @@
 		startGameSizeUpdates();
 		console.info("🚀 初始化...");
 		return waitForLegacyFrameReady(initFrame);
-	}
-	function Exit() {
-		stopGameSizeUpdates();
-		return cleanupLifecycle(globalState);
 	}
 	function updateViewportCenter() {
 		document.documentElement.style.setProperty("--sgs-center-x", `${window.innerWidth / 2}px`);
@@ -15012,7 +15486,7 @@
 		updateTimeout = setTimeout(() => {
 			updateTimeout = null;
 			setGameSize();
-		}, 500);
+		}, GAME_SIZE_DEBOUNCE_MS);
 	}
 	async function initFrame(force = false) {
 		if (!stopWindowResize) return;
@@ -15154,7 +15628,7 @@
 			} else {
 				container.classList.remove("collapsed");
 				toggle.innerText = "-";
-				document.getElementById("title").innerText = "三国杀小抄0.21.1";
+				document.getElementById("title").innerText = "三国杀小抄0.21.2";
 				expandJiePanel({ defer: true });
 			}
 		};
@@ -15240,15 +15714,12 @@
 			console.error("[logic] initFrame failed:", error);
 		});
 	}
-	var lastClassName = null;
 	function logic(msg) {
 		try {
 			if (!msg) return;
 			if (msg.startsWith?.("socket连接关闭")) return;
 			if (msg.className === void 0 && msg.ClassName === void 0) return;
 			const className = msg.ClassName || msg.className || msg.toString();
-			if (className === lastClassName && className === "MsgGameOver") return;
-			lastClassName = className;
 			const { ProtoObj, SeatID } = msg;
 			if (!isRetainedLogicMessage(className)) return;
 			handleUserSession(msg, className);
@@ -15307,7 +15778,12 @@
 				case "ClientLeavetableRep":
 					handleLeaveTable();
 					break;
-				case "ClientRecommendShopItemRep": break;
+				case "ClientLeavepageNtf":
+					if (Game.isGameStart) handleLeaveTable();
+					break;
+				case "GsClientLookonTerminationNtf":
+					handleLeaveTable();
+					break;
 				case "decodeRougeBaseInfoRep":
 					UI.friendGeneral = ProtoObj?.friendGeneral?.length ?? UI.friendGeneral;
 					break;
@@ -15467,8 +15943,7 @@
 		const args = Array.prototype.slice.call(arguments);
 		try {
 			if (args[0] === "INIT") return Init();
-			else if (args[0] === "EXIT") return Exit();
-			else return logic(args[args.length - 1]);
+			return logic(args[args.length - 1]);
 		} catch (e) {
 			console.error(e.message);
 			console.error(e.stack);
