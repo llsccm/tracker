@@ -234,8 +234,7 @@ export class GameState {
   }
 
   updateRecordInfo({ gameId, matchName }: GameRecordInitInfo): void {
-    // gameId 是 64 位整数，按高低位比较，不能转换成可能丢失精度的 Number。
-    const gameKey = gameId ? `${gameId.high >>> 0}:${gameId.low >>> 0}` : null
+    const gameKey = gameId ? getGameKey(gameId) : null
     if (gameKey && gameKey !== this.currentGameKey) {
       this.resetGameInfo()
       this.currentGameKey = gameKey
@@ -245,6 +244,14 @@ export class GameState {
     if (!matchName || matchName === this.recordMatchName) return
     this.recordMatchName = matchName
     this.applyRecordMode()
+  }
+
+  isCurrentGame(gameId: NonNullable<GameRecordInitInfo['gameId']>): boolean {
+    return getGameKey(gameId) === this.currentGameKey
+  }
+
+  isOtherGame(gameId: NonNullable<GameRecordInitInfo['gameId']>): boolean {
+    return this.currentGameKey !== null && !this.isCurrentGame(gameId)
   }
 
   private applyRecordMode(): void {
@@ -373,6 +380,11 @@ export class GameState {
   private clearStateStore(): void {
     this.stateStore.clear()
   }
+}
+
+function getGameKey(gameId: NonNullable<GameRecordInitInfo['gameId']>): string {
+  // gameId 是 64 位整数，按无符号高低位比较，不能转换成可能丢失精度的 Number。
+  return `${gameId.high >>> 0}:${gameId.low >>> 0}`
 }
 
 function getStateStoreKey(scope: GameStateScope, stateKey: GameStateKey): StoredGameStateKey {

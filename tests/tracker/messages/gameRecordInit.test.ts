@@ -150,6 +150,10 @@ describe('录像对局初始化', () => {
     expect(gameState.turn).toBe(5)
     expect(gameState.needShowName).toBe(true)
     expect(gameState.isGuoZhan).toBe(true)
+    expect(gameState.isCurrentGame(gameId)).toBe(true)
+    expect(gameState.isCurrentGame({ ...gameId, low: gameId.low >>> 0 })).toBe(true)
+    expect(gameState.isOtherGame(gameId)).toBe(false)
+    expect(gameState.isOtherGame({ ...gameId, low: gameId.low + 1 })).toBe(true)
   })
 
   it('同局第二条通知可以补充模式，缺省名称与重复名称不覆盖后续牌堆识别', () => {
@@ -185,6 +189,7 @@ describe('录像对局初始化', () => {
       expect(gameState.isDouDiZhu).toBe(false)
       expect(gameState.needShowName).toBe(false)
       expect(gameState.getSpellState('previous-playback')).toBeUndefined()
+      expect(gameState.isOtherGame(gameId)).toBe(false)
 
       gameState.updateRecordInfo({ gameId, matchName: '斗地主' })
       gameState.beginPlayback()

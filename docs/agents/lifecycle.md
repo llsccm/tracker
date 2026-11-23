@@ -129,7 +129,7 @@ sequenceDiagram
 
     Note over Engine,View: 单局结束
     Engine ->> Logic: MsgGameOver
-    Logic ->> Handler: handleGameOver()
+    Logic ->> Handler: handleGameOver(ProtoObj)
     Engine ->> Logic: ClientLeavetableRep / ClientRecommendShopItemRep
     Logic ->> Handler: handleLeaveTable()
     Handler ->> Bridge: tracker.destroyTrackerRoom()
@@ -243,17 +243,20 @@ Room 重建保留已经收到的对局 ID 和模式信息。
 
 | 协议                         | 入口                                                     | 专属行为                                                  |
 | ---------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
-| `MsgGameOver`                | [`handleGameOver()`](../../src/handler/MsgGameOver.js)   | 第二次通知清理本局，单次通知超时兜底；通过 `wait()` 获取并关闭结算窗口 |
+| `MsgGameOver`                | [`handleGameOver()`](../../src/handler/MsgGameOver.js)   | 第二次通知完成收尾，单次通知超时兜底；通过 `wait()` 获取并关闭结算窗口 |
 | `ClientLeavetableRep`        | [`handleLeaveTable()`](../../src/handler/MsgGameOver.js) | 只清理对局                                                |
 | `ClientRecommendShopItemRep` | `handleLeaveTable()`                                     | 当前用户退出录像时的清理兜底                              |
 
-两个入口最终复用 `cleanupGame()` 完成通用清理：隐藏 `.mizhu`、`Game.end()`（立即清空本局
+两个入口最终复用单局幂等的 `cleanupGame()` 完成通用清理：隐藏 `.mizhu`、`Game.end()`（立即清空本局
 统一状态仓库）、销毁裴秀地图窗口、
 `resetSeatOverlay()` 清空并隐藏座位覆盖层，骨架保留到脚本卸载；并由 `tracker.destroyTrackerRoom()` 依次卸载视图、销毁 Room、清空控制器中的
 `trackerRoom`。
 
-`handleGameOver()` 首次通知只保存待关闭窗口名单，并启动超时兜底。
-第二次通知立即取消兜底，通过 `finishGameOver()` 清理本局；只有一次通知时，兜底到期执行同一收尾入口。
+`handleGameOver(ProtoObj)` 通过 `Game.isOtherGame(ProtoObj.game_id)` 校验对局归属：
+当前对局键存在且与通知的无符号高低位键不同时拒绝处理；当前键为空表示已结束，允许尝试结算收尾。
+任务只保存待关闭窗口名单，不另外保存对局 ID 副本。首次通知创建任务并启动超时兜底。
+第二次通知立即取消兜底，通过 `finishGameOver()` 清理尚未清理的本局并完成结算收尾；
+只有一次通知时，兜底到期携带原通知执行同一收尾入口；若当前对局键已切换且与原通知不同，旧任务直接取消。
 `logic.js` 不过滤连续 `MsgGameOver`，统一交由 handler 决定何时收尾。
 清理后，“屏蔽MVP结算”开启时直接启动异步弹窗任务，通过
 `src/utils/index.js` 的 `wait()` 获取可见窗口，再等待 `isShowWait` 结束。
@@ -262,11 +265,14 @@ Room 重建保留已经收到的对局 ID 和模式信息。
 获取窗口与等待就绪分别使用独立的 `wait()` 重试次数，后一窗口在前一窗口处理结束后才开始等待。
 窗口缺失、延迟出现、重试次数耗尽或关闭异常都不阻塞 `cleanupGame()`；单个窗口关闭失败时记录告警，
 不影响其余窗口。所有窗口等待结束后释放任务。
-任务以独立对象标识校验。收尾完成后，单局幂等标记使后续 `MsgGameOver` 不再清理或调度，
+窗口任务使用保存名单的 `Set`，以实例引用校验是否仍是当前任务。
+对局清理与结算收尾分别保存单局幂等标记。收尾完成后，后续 `MsgGameOver` 不再清理或调度，
 弹窗任务完成、重试耗尽、取消或关闭“屏蔽MVP结算”时仍保留该标记；新开局注册玩家时才重置。
-新开局注册玩家与离桌均调用 `cancelGameOverTask()`，清除兜底定时器，
+新开局注册玩家调用 `cancelGameOverTask({ resetForNewGame: true })`，清除兜底定时器与幂等标记，
 并使任务标识失效；进行中的 `wait()` 在下一次检查时结束，关闭前再次校验，避免跨局收尾或关闭窗口。
-离桌同时标记本局已结束，后续结束通知不再启动任务。
+离桌只执行一次对局清理，保留已有结束任务的定时器与进行中的窗口等待。
+两次结束通知之间离桌后，仍由后续结束通知或超时兜底完成收尾，不重复销毁 Room。
+当前对局键已清空时，后续结束通知仍可进入结算收尾，对局清理不会重复执行。
 
 ---
 

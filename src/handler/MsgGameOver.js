@@ -8,8 +8,9 @@ import { wait } from '@/utils'
 
 let gameOverFallbackTimer = null
 let gameOverTask = null
-// 收尾完成后仍保留单局标记，不随弹窗任务结束而重置。
+// 对局清理与结算收尾可能由不同通知触发，分别保持单局幂等。
 let gameOverHandled = false
+let gameCleanedUp = false
 
 export function cancelGameOverTask({ resetForNewGame = false } = {}) {
   if (gameOverFallbackTimer !== null) {
@@ -17,7 +18,10 @@ export function cancelGameOverTask({ resetForNewGame = false } = {}) {
     gameOverFallbackTimer = null
   }
   gameOverTask = null
-  if (resetForNewGame) gameOverHandled = false
+  if (resetForNewGame) {
+    gameOverHandled = false
+    gameCleanedUp = false
+  }
 }
 
 function isCurrentGameOverTask(task) {
@@ -27,7 +31,7 @@ function isCurrentGameOverTask(task) {
 async function closeGameOverWindows(task) {
   if (!isCurrentGameOverTask(task)) return
 
-  for (const windowName of task.windowNames) {
+  for (const windowName of task) {
     await waitAndCloseGameOverWindow(task, windowName)
   }
 
@@ -39,12 +43,17 @@ async function waitAndCloseGameOverWindow(task, windowName) {
   if (!canClose()) return
 
   try {
-    const win = await wait(() => {
-      // wait 以真值结束；取消后提前退出，并在关闭前再次检查。
-      if (!canClose()) return true
-      const win = laya.GetWindow(windowName)
-      return win?.visible ? win : null
-    })
+    const win = await wait(
+      () => {
+        // wait 以真值结束；取消后提前退出，并在关闭前再次检查。
+        if (!canClose()) return true
+        const win = laya.GetWindow(windowName)
+        return win?.visible ? win : null
+      },
+      10,
+      250,
+      { immediate: true }
+    )
 
     if (!canClose() || !win || win === true) return
 
@@ -58,24 +67,26 @@ async function waitAndCloseGameOverWindow(task, windowName) {
   }
 }
 
-export function handleGameOver() {
-  if (gameOverHandled) return
+export function handleGameOver(data) {
+  if (gameOverHandled || Game.isOtherGame(data.game_id)) return
   if (gameOverTask !== null) {
-    finishGameOver(gameOverTask)
+    finishGameOver(gameOverTask, data)
     return
   }
 
   // 首次通知只记录；第二次通知或超时兜底才进入收尾。
   const windowNames = Game.isShanHeTu ? ['GameResultWindow'] : ['GameResultWindow', 'GameMvpWindow']
-  const task = {
-    windowNames: new Set(windowNames)
-  }
+  const task = new Set(windowNames)
   gameOverTask = task
-  gameOverFallbackTimer = setTimeout(() => finishGameOver(task), 2000)
+  gameOverFallbackTimer = setTimeout(() => finishGameOver(task, data), 1200)
 }
 
-function finishGameOver(task) {
+function finishGameOver(task, data) {
   if (!isCurrentGameOverTask(task) || gameOverHandled) return
+  if (Game.isOtherGame(data.game_id)) {
+    cancelGameOverTask()
+    return
+  }
   gameOverHandled = true
   if (gameOverFallbackTimer !== null) {
     clearTimeout(gameOverFallbackTimer)
@@ -93,11 +104,13 @@ function finishGameOver(task) {
 }
 
 export function handleLeaveTable() {
-  cancelGameOverTask()
+  // 离桌可能夹在两次结束通知之间，保留任务供后续通知或超时收尾。
   cleanupGame()
 }
 
 function cleanupGame() {
+  if (gameCleanedUp) return
+  gameCleanedUp = true
   // document.querySelectorAll('.mizhu').forEach((e) => (e.style.display = 'none'))
   Game.isPassed = null
   laya.zhanfaMap.clear()

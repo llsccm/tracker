@@ -128,14 +128,18 @@ export function logic(msg) {
         if (ProtoObj) Game.updateRecordInfo(ProtoObj)
         break
 
-      case 'GsCModifyUserseatNtf': // 游戏开始标志 / 游戏结束标志
+      // 游戏开始标志 / 游戏结束标志
+      case 'GsCModifyUserseatNtf':
         // 最佳的初始化位置 但是旧录像没有这个消息
-        // 第二个 decodeGameRecordInitInfo 消息在此之后
+        // 在第二个 decodeGameRecordInitInfo 之前
+        if (import.meta.env.DEV) console.info(msg)
         // handleStartGame(msg)
         break
 
       // 座位信息
       case 'decodeGsClientUserSeatFlagNtf':
+        // 在第二个 decodeGameRecordInitInfo 之后
+        if (import.meta.env.DEV) console.info(msg)
         // 新录像两个消息都有 旧录像只有这个消息
         handleRecordStartGame(msg)
         if (globalConfig.showNameSwitch && Game.needShowName) laya.showName()
@@ -205,7 +209,7 @@ export function logic(msg) {
 
       case 'MsgGameOver':
         if (import.meta.env.DEV) console.info(msg)
-        handleGameOver()
+        handleGameOver(ProtoObj)
         break
 
       case 'ClientLeavetableRep':
