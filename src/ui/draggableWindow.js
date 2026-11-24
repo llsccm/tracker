@@ -1,5 +1,6 @@
 import { getLayoutViewportWidth } from './drag'
 import { bindPointerDrag } from './pointerDrag'
+import { subscribeWindowResize } from './windowResize'
 
 const windowStates = new Map()
 
