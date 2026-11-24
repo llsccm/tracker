@@ -1,3 +1,5 @@
+import { bindPointerDrag } from './pointerDrag'
+
 const boundPenetrationDocs = new WeakSet()
 
 export function addDragHint() {
@@ -20,7 +22,6 @@ export function initDragElement(globalConfig, globalState, requestWindowResize) 
   const sidebarHint = document.getElementById('sidebarHint')
   if (!draggable || !container) return
 
-  let activePointerId = null
   let hasMoved = false
   let startX = 0
   let startY = 0
@@ -47,10 +48,8 @@ export function initDragElement(globalConfig, globalState, requestWindowResize) 
   }
 
   const startDrag = (e) => {
-    if (activePointerId !== null || e.isPrimary === false) return
-    if (e.button !== undefined && e.button !== 0) return
     // 忽略折叠按钮，避免 setPointerCapture 劫持子按钮的 click 派发
-    if (e.target?.closest?.('#toggle-me')) return
+    if (e.target?.closest?.('#toggle-me')) return false
 
     const current = readTranslate(container)
     translateX = current.x
@@ -63,7 +62,6 @@ export function initDragElement(globalConfig, globalState, requestWindowResize) 
     baseTop = rect.top - current.y
     containerWidth = rect.width || 230
 
-    activePointerId = e.pointerId ?? 0
     hasMoved = false
     startX = e.clientX ?? 0
     startY = e.clientY ?? 0
@@ -71,12 +69,9 @@ export function initDragElement(globalConfig, globalState, requestWindowResize) 
     draggable.style.cursor = 'grabbing'
     container.style.userSelect = 'none'
     container.style.willChange = 'transform'
-    draggable.setPointerCapture?.(activePointerId)
   }
 
   const onDrag = (e) => {
-    if ((e.pointerId ?? 0) !== activePointerId) return
-
     hasMoved = true
     if (sidebarHint) sidebarHint.style.display = 'flex'
 
@@ -117,11 +112,6 @@ export function initDragElement(globalConfig, globalState, requestWindowResize) 
   }
 
   const stopDrag = (e) => {
-    if ((e.pointerId ?? 0) !== activePointerId) return
-
-    const pointerId = activePointerId
-    activePointerId = null
-
     if (pendingFrame) {
       if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId)
       pendingFrame = false
@@ -132,10 +122,6 @@ export function initDragElement(globalConfig, globalState, requestWindowResize) 
     draggable.style.cursor = 'grab'
     container.style.userSelect = ''
     container.style.willChange = 'auto'
-
-    if (draggable.hasPointerCapture?.(pointerId)) {
-      draggable.releasePointerCapture?.(pointerId)
-    }
 
     if (e.type !== 'pointercancel' && e.type !== 'lostpointercapture') {
       const finalClientX = e.clientX ?? startX
@@ -150,11 +136,11 @@ export function initDragElement(globalConfig, globalState, requestWindowResize) 
     }
   }
 
-  draggable.addEventListener('pointerdown', startDrag)
-  draggable.addEventListener('pointermove', onDrag)
-  draggable.addEventListener('pointerup', stopDrag)
-  draggable.addEventListener('pointercancel', stopDrag)
-  draggable.addEventListener('lostpointercapture', stopDrag)
+  bindPointerDrag(draggable, {
+    onStart: startDrag,
+    onMove: onDrag,
+    onStop: stopDrag
+  })
 }
 
 function bindSorderPenetration() {

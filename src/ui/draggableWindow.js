@@ -1,5 +1,5 @@
 import { getLayoutViewportWidth } from './drag'
-import { subscribeWindowResize } from './windowResize'
+import { bindPointerDrag } from './pointerDrag'
 
 const windowStates = new Map()
 
@@ -87,51 +87,33 @@ function getShellStyle(id) {
 
 function bindDrag(element, handle, state) {
   state.cleanupDrag?.()
-  let pointerId = null
   let offsetX = 0
   let offsetY = 0
 
   const move = (event) => {
-    if (event.pointerId !== pointerId) return
     state.lastPosition = setPosition(element, event.clientX - offsetX, event.clientY - offsetY)
   }
 
-  const stop = (event) => {
-    if (event.pointerId !== pointerId) return
-    pointerId = null
+  const stop = () => {
     element.classList.remove('is-dragging')
-    if (handle.hasPointerCapture?.(event.pointerId)) {
-      handle.releasePointerCapture?.(event.pointerId)
-    }
   }
 
   const start = (event) => {
-    if (pointerId !== null || event.isPrimary === false || event.button !== 0) return
     const rect = element.getBoundingClientRect()
-    pointerId = event.pointerId
     offsetX = event.clientX - rect.left
     offsetY = event.clientY - rect.top
     element.classList.add('is-dragging')
-    handle.setPointerCapture?.(pointerId)
   }
 
-  handle.addEventListener('pointerdown', start)
-  handle.addEventListener('pointermove', move)
-  handle.addEventListener('pointerup', stop)
-  handle.addEventListener('pointercancel', stop)
-  handle.addEventListener('lostpointercapture', stop)
+  const cleanup = bindPointerDrag(handle, {
+    onStart: start,
+    onMove: move,
+    onStop: stop
+  })
 
   state.cleanupDrag = () => {
-    if (pointerId !== null && handle.hasPointerCapture?.(pointerId)) {
-      handle.releasePointerCapture?.(pointerId)
-    }
-    pointerId = null
-    element.classList.remove('is-dragging')
-    handle.removeEventListener('pointerdown', start)
-    handle.removeEventListener('pointermove', move)
-    handle.removeEventListener('pointerup', stop)
-    handle.removeEventListener('pointercancel', stop)
-    handle.removeEventListener('lostpointercapture', stop)
+    cleanup()
+    stop()
     state.cleanupDrag = null
   }
 }
